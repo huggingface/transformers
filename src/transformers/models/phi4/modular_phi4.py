@@ -1,53 +1,56 @@
 from typing import Callable, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
+import math
 import torch.utils.checkpoint
 from torch import nn
-import numpy as np
 
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...activations import ACT2FN, ACT2CLS
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-    BaseModelOutputWithPooling
 )
-from ...modeling_utils import PreTrainedModel
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...configuration_utils import PretrainedConfig
+from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
-
 from ..llama.modeling_llama import LlamaRotaryEmbedding
-
-from ..phi3.modeling_phi3 import Phi3RMSNorm, Phi3DecoderLayer, Phi3Model, Phi3ForCausalLM
 from ..phi3.configuration_phi3 import Phi3Config
-
-from ..siglip.modeling_siglip import SiglipVisionTransformer, SiglipEncoder, SiglipVisionEmbeddings, SiglipMLP, SiglipEncoderLayer, lecun_normal_, default_flax_embed_init
+from ..phi3.modeling_phi3 import Phi3DecoderLayer, Phi3ForCausalLM, Phi3Model, Phi3RMSNorm
 from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import (
+    SiglipEncoder,
+    SiglipEncoderLayer,
+    SiglipMLP,
+    SiglipVisionEmbeddings,
+    SiglipVisionTransformer,
+    SiglipMultiheadAttentionPoolingHead,
+    default_flax_embed_init,
+    lecun_normal_,
+)
 
 
 logger = logging.get_logger(__name__)
 
 
 class Phi4VisionConfig(SiglipVisionConfig):
-
     def __init__(
-            self,
-            hidden_size=1152,
-            intermediate_size=4304,
-            num_hidden_layers=27,
-            num_attention_heads=16,
-            num_channels=3,
-            image_size=448,
-            patch_size=14,
-            hidden_act="gelu_pytorch_tanh",
-            layer_norm_eps=1e-6,
-            attention_dropout=0.0,
-            **kwargs,
-        ):
+        self,
+        hidden_size=1152,
+        intermediate_size=4304,
+        num_hidden_layers=27,
+        num_attention_heads=16,
+        num_channels=3,
+        image_size=448,
+        patch_size=14,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
         super().__init__(
             hidden_size=hidden_size,
             intermediate_size=intermediate_size,
@@ -62,9 +65,102 @@ class Phi4VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
- 
-class Phi4Config(Phi3Config):
+        self.image_embd_layer = {
+            "crop_size": 448,
+            "embedding_cls": "tune_image",
+            "enable_gradient_checkpointing": True,
+            "hd_transform_order": "sub_glb",
+            "projection_cls": "mlp",
+            "use_hd_transform": True,
+            "with_learnable_separator": True,
+        }
 
+
+class Phi4AudioConfig(PretrainedConfig):
+
+    def __init__(
+        self,
+        hidden_size: int = 1024,  # attention_dim
+        num_attention_heads: int = 16,  # attention_heads
+        intermediate_size: int = 2048,
+        activation: str = "swish",
+        chunk_size: int = None,
+        left_chunk: int = None,
+        num_lang: int = None,
+        num_blocks: int = 6,
+        dropout_rate: float = 0.0,
+        input_layer: str = "nemo_conv",
+        causal: bool = True,
+        batch_norm: bool = False,
+        ext_pw_out_channel: int = 0,
+        ext_pw_kernel_size: int = 1,
+        depthwise_seperable_out_channel: int = 256,
+        depthwise_multiplier: int = 1,
+        chunk_se: int = 0,
+        kernel_size: int = 3,
+        conv_activation: str = "relu",
+        conv_glu_type: str = "sigmoid",
+        bias_in_glu: bool = True,
+        linear_glu_in_convm: bool = False,
+        attention_glu_type: str = "swish",
+        extra_layer_output_idx: int = -1,
+        extra_multi_layer_output_idxs: list = [],
+        activation_checkpointing: str = "",
+        relative_attention_bias_args: dict = None,
+        time_reduction: int = 4,
+        replication_pad_for_subsample_embedding: bool = False,
+        attention_group_size: int = 1,
+        encoder_embedding_config: dict = None,
+        positional_dropout_rate: float = 0.0,
+        
+    ):
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.activation = activation
+        self.chunk_size = chunk_size
+        self.left_chunk = left_chunk
+        self.num_lang = num_lang
+        self.num_blocks = num_blocks
+        self.dropout_rate = dropout_rate
+        self.input_layer = input_layer
+        self.causal = causal
+        self.batch_norm = batch_norm
+        self.ext_pw_out_channel = ext_pw_out_channel
+        self.ext_pw_kernel_size = ext_pw_kernel_size
+        self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
+        self.depthwise_multiplier = depthwise_multiplier
+        self.chunk_se = chunk_se
+        self.kernel_size = kernel_size
+        self.conv_activation = conv_activation
+        self.conv_glu_type = conv_glu_type
+        self.bias_in_glu = bias_in_glu
+        self.linear_glu_in_convm = linear_glu_in_convm
+        self.attention_glu_type = attention_glu_type
+        self.extra_layer_output_idx = extra_layer_output_idx
+        self.extra_multi_layer_output_idxs = extra_multi_layer_output_idxs
+        self.activation_checkpointing = activation_checkpointing
+        self.relative_attention_bias_args = relative_attention_bias_args
+        self.time_reduction = time_reduction
+        self.replication_pad_for_subsample_embedding = replication_pad_for_subsample_embedding
+        self.attention_group_size = attention_group_size
+        self.encoder_embedding_config = encoder_embedding_config
+        self.positional_dropout_rate = positional_dropout_rate
+
+
+        self.nemo_conv_settings = {
+            "subsampling": "dw_striding",
+            "subsampling_factor": self.time_reduction,
+            "conv_channels": 1024,
+            "activation": "relu",
+            "is_causal": False,
+        }
+        self.encoder_embedding_config = {
+            "input_size": 80,
+        }
+
+
+class Phi4Config(Phi3Config):
     def __init__(
         self,
         vocab_size=200064,
@@ -96,7 +192,6 @@ class Phi4Config(Phi3Config):
         speech_lora=None,
         **kwargs,
     ):
-        
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -130,30 +225,12 @@ class Phi4Config(Phi3Config):
         self.speech_lora = speech_lora
 
 
-
 # Special token ids
 _IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it (in `tokenizer_config.json`)
 _AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
 _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE = [-9999, -1]  # For backward compatibility
-_COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE = [float('-inf'), -10000]  # For backward compatibility
+_COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE = [float("-inf"), -10000]  # For backward compatibility
 
-
-def get_siglip_vision_model(_flash_attn_2_enabled=True, **kwargs):
-    siglip_vision_config = {
-        "hidden_size": 1152,
-        "image_size": 448,
-        "intermediate_size": 4304,
-        "model_type": "siglip_vision_model",
-        "num_attention_heads": 16,
-        "num_hidden_layers": 27,
-        "patch_size": 14,
-    }
-
-    model_config = SiglipVisionConfig(**siglip_vision_config, _flash_attn_2_enabled=_flash_attn_2_enabled, **kwargs)
-
-    vision_model = SiglipVisionModel(model_config).vision_model
-
-    return vision_model
 
 
 class Phi4VisionMLP(SiglipMLP):
@@ -170,7 +247,6 @@ def vision_eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
@@ -183,8 +259,8 @@ def vision_eager_attention_forward(
 
     return attn_output, attn_weights
 
-class Phi4VisionAttention(nn.Module):
 
+class Phi4VisionAttention(nn.Module):
     def __init__(self, config: Phi4VisionConfig):
         super().__init__()
         self.config = config
@@ -197,7 +273,7 @@ class Phi4VisionAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.attention_ropout = config.attention_dropout
+        self.attention_dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -237,14 +313,18 @@ class Phi4VisionAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
+
 class Phi4VisionEncoderLayer(SiglipEncoderLayer):
     def __init__(self, config: Phi4VisionConfig):
         super().__init__(config)
         self.self_attn = Phi4VisionAttention(config)
         self.mlp = Phi4VisionMLP(config)
 
+
 class Phi4VisionEncoder(SiglipEncoder):
-    pass
+    def __init__(self, config: Phi4VisionConfig):
+        super().__init__()
+        self.layers = nn.ModuleList([Phi4VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
 class Phi4VisionPreTrainedModel(PreTrainedModel):
@@ -268,17 +348,17 @@ class Phi4VisionPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, Phi4VisionAttention):
-            nn.init.xavier_uniform_(module.q_proj.weight)
-            nn.init.xavier_uniform_(module.k_proj.weight)
-            nn.init.xavier_uniform_(module.v_proj.weight)
-            nn.init.xavier_uniform_(module.out_proj.weight)
+            nn.init.normal_(module.q_proj.weight)
+            nn.init.normal_(module.k_proj.weight)
+            nn.init.normal_(module.v_proj.weight)
+            nn.init.normal_(module.out_proj.weight)
             nn.init.zeros_(module.q_proj.bias)
             nn.init.zeros_(module.k_proj.bias)
             nn.init.zeros_(module.v_proj.bias)
             nn.init.zeros_(module.out_proj.bias)
         elif isinstance(module, Phi4VisionMLP):
-            nn.init.xavier_uniform_(module.fc1.weight)
-            nn.init.xavier_uniform_(module.fc2.weight)
+            nn.init.normal_(module.fc1.weight)
+            nn.init.normal_(module.fc2.weight)
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -289,14 +369,86 @@ class Phi4VisionPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-class Phi4VisionEmbeddings(SiglipVisionEmbeddings):
-    pass
+
+class Phi4VisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
+    
+    def __init__(self, config: Phi4VisionConfig):
+        nn.Module.__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches_per_side = self.image_size // self.patch_size
+        self.num_patches = self.num_patches_per_side**2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+
+    def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
+        batch_size = pixel_values.size(0)
+
+        patch_embeds = self.patch_embedding(pixel_values)
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        max_im_h, max_im_w = pixel_values.size(2), pixel_values.size(3)
+        max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
+        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
+        position_ids = torch.full(
+            size=(
+                batch_size,
+                max_nb_patches_h * max_nb_patches_w,
+            ),
+            fill_value=0,
+        )
+
+        for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
+            nb_patches_h = p_attn_mask[:, 0].sum()
+            nb_patches_w = p_attn_mask[0].sum()
+
+            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
+            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
+
+            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
+            position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
+
+        position_ids = position_ids.to(self.position_embedding.weight.device)
+
+        embeddings = embeddings + self.position_embedding(position_ids)
+        return embeddings
+
+
+class Phi4VisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+
+    def forward(self, hidden_state, attention_mask):
+        batch_size = hidden_state.shape[0]
+        probe = self.probe.repeat(batch_size, 1, 1)
+
+        hidden_state = self.attention(
+            query=probe, key=hidden_state, value=hidden_state, key_padding_mask=~attention_mask
+        )[0]
+
+        residual = hidden_state
+        hidden_state = self.layernorm(hidden_state)
+        hidden_state = residual + self.mlp(hidden_state)
+
+        return hidden_state[:, 0]
+
 
 class Phi4VisionModel(SiglipVisionTransformer, Phi4VisionPreTrainedModel):
-
     config_class = Phi4VisionConfig
     main_input_name = "pixel_values"
-    
+
     def __init__(self, config: Phi4VisionConfig):
         Phi4VisionPreTrainedModel.__init__(config)
         self.config = config
@@ -305,35 +457,58 @@ class Phi4VisionModel(SiglipVisionTransformer, Phi4VisionPreTrainedModel):
         self.embeddings = Phi4VisionEmbeddings(config)
         self.encoder = Phi4VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.head = Phi4VisionMultiheadAttentionPoolingHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
-        
+
     def forward(
         self,
         pixel_values,
+        patch_attention_mask: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        batch_size = pixel_values.size(0)
+        if patch_attention_mask is None:
+            patch_attention_mask = torch.ones(
+                size=(
+                    batch_size,
+                    pixel_values.size(2) // self.config.patch_size,
+                    pixel_values.size(3) // self.config.patch_size,
+                ),
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+
+        hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
+
+        patch_attention_mask = patch_attention_mask.view(batch_size, -1)
+        # The call to `_upad_input` in `_flash_attention_forward` is expensive
+        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
+        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
+        if not torch.any(~patch_attention_mask):
+            attention_mask=None
+        else:
+            attention_mask = (
+                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+                if not self.config._flash_attn_2_enabled
+                else patch_attention_mask
+            )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -342,12 +517,17 @@ class Phi4VisionModel(SiglipVisionTransformer, Phi4VisionPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
+        pooled_output = self.head(
+            hidden_state=last_hidden_state,
+            attention_mask=patch_attention_mask,
+        )
+
         if not return_dict:
-            return (last_hidden_state, None) + encoder_outputs[1:]
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
-            pooler_output=None,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -360,102 +540,62 @@ class Phi4MMImageEmbedding(nn.Module):
         super().__init__()
 
         # n_embed or hidden_size
-        hidden_size = config.n_embd if hasattr(config, 'n_embd') else config.hidden_size
-        if hasattr(config, 'embd_pdrop') or hasattr(config, 'embed_pdrop'):
-            embd_drop = config.embd_pdrop if hasattr(config, 'embd_pdrop') else config.embed_pdrop
-            self.drop = nn.Dropout(embd_drop)
-        else:
-            self.drop = None
+        hidden_size = config.hidden_size
+        self.drop = nn.Dropout(config.embd_pdrop)
 
-        logger.info(f"create image tower {config.img_processor}")
-        enable_gradient_checkpointing = kwargs.get('enable_gradient_checkpointing', False)
-
-        # Load SigLIP model
-        self.img_processor = get_siglip_vision_model(
-            _flash_attn_2_enabled=config._attn_implementation == 'flash_attention_2'
-        )
+        self.img_processor = Phi4VisionModel(config.vision_config)
 
         pe_weight = self.img_processor.embeddings.position_embedding.weight
         L, D = pe_weight.size()
         H = int(math.sqrt(L))
         assert H**2 == L
-        if H % 2 != 0: #and kwargs.get('image_token_compression_cls', None) is None:
+        if H % 2 != 0:
             self.img_processor_padding = nn.ReflectionPad2d((0, 1, 0, 1))
             H += 1
-        image_dim_out = D
-        # ((448/14)//2)**2
-        self.num_img_tokens = (H//2)**2
+        self.num_img_tokens = (H // 2) ** 2
         self.base_feat_height_target = H
 
-        if enable_gradient_checkpointing:
-            self.img_processor.encoder.gradient_checkpointing = True
-
-        self.image_dim_out = image_dim_out
+        self.image_dim_out = D
         self.img_sizes = None
         self.image_attention_mask = None
 
         # global_gn and sub_gn for hd transform, serves as line separator
-        self.use_hd_transform = kwargs.get('use_hd_transform', False)
-        self.with_learnable_separator = kwargs.get('with_learnable_separator', False)
-        self.hd_transform_order = kwargs.get('hd_transform_order', 'glb_sub')
-        self.freeze_img_processor = kwargs.get('freeze_img_processor', False)
-        self.crop_size = kwargs.get('crop_size', 336)
-        logger.info(f'freeze_img_processor = {self.freeze_img_processor}')
+        self.use_hd_transform = config.vision_config.image_embd_layer["use_hd_transform"]
+        self.with_learnable_separator = config.vision_config.image_embd_layer["with_learnable_separator"]
+        self.hd_transform_order = config.vision_config.image_embd_layer["hd_transform_order"]
+        self.freeze_img_processor = False
+        self.crop_size = config.vision_config.image_embd_layer["crop_size"]
+        assert (
+            self.use_hd_transform == self.with_learnable_separator
+        ), "use_hd_transform and with_learnable_separator should have same value"
 
         # image token compression
-        self.image_token_compression_cls = kwargs.get('image_token_compression_cls', None)
-        if self.image_token_compression_cls == 'avg_pool_2d':
-            self.image_token_compression = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.base_feat_height_reduction = 1
-            self.base_feat_height_target = self.base_feat_height_target // 2
-        elif self.image_token_compression_cls is None:
-            self.image_token_compression = None
-            self.base_feat_height_reduction = 2
-        else:
-            raise NotImplementedError(f'image_token_compression_cls = {self.image_token_compression_cls}, not implemented')
+        self.image_token_compression = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.base_feat_height_reduction = 1
+        self.base_feat_height_target = self.base_feat_height_target // 2
 
-        # with_hd_transform and with_learnable_separator should have same value
-        assert self.use_hd_transform == self.with_learnable_separator, 'use_hd_transform and with_learnable_separator should have same value'
         if self.with_learnable_separator:
-            assert self.use_hd_transform, 'learnable separator is only for hd transform'
             # 1024 * 4, merge spatial to channel dimension
             self.glb_GN = nn.Parameter(torch.zeros([1, 1, self.image_dim_out * self.base_feat_height_reduction**2]))
             self.sub_GN = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out * self.base_feat_height_reduction**2]))
-            logger.info(f'learnable separator enabled for hd transform, hd_transform_order = {self.hd_transform_order}')
 
-        projection_cls = kwargs.get('projection_cls', 'linear')
-        if projection_cls == 'linear':
-            self.img_projection = nn.Linear(image_dim_out, hidden_size)
-        elif projection_cls == 'mlp' and self.use_hd_transform:
+        projection_cls = config.vision_config.image_embd_layer["projection_cls"]
+        if projection_cls == "linear":
+            self.img_projection = nn.Linear(self.image_dim_out, hidden_size)
+        elif projection_cls == "mlp":
             dim_projection = hidden_size
-            depth = 2
-            layers = [nn.Linear(image_dim_out * self.base_feat_height_reduction**2, dim_projection)]
-            for _ in range(1, depth):
-                layers.extend([nn.GELU(),
-                                nn.Linear(dim_projection, dim_projection)])
-            self.img_projection = nn.Sequential(*layers)
-        elif projection_cls == 'mlp':
-            # follow llava-v1.5's implementation
-            # (do not use image_projection and image_proj_norm)
-            dim_projection = hidden_size
-            depth = 2
-            layers = [nn.Linear(image_dim_out, dim_projection)]
-            for _ in range(1, depth):
-                layers.extend([nn.GELU(),
-                                nn.Linear(dim_projection, dim_projection)])
+            first_dim = self.image_dim_out * self.base_feat_height_reduction**2 if self.use_hd_transform else self.image_dim_out
+            layers = [nn.Linear(first_dim, dim_projection)]
+            layers.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
             self.img_projection = nn.Sequential(*layers)
         else:
-            raise NotImplementedError(f'projection_cls = {projection_cls}, not implemented')
+            raise NotImplementedError(f"projection_cls = {projection_cls}, not implemented")
 
         self.vocab_size = config.vocab_size
         self.img_features = None
 
-        if isinstance(config.img_processor, dict):
-            self.layer_idx = config.img_processor.get('layer_idx', -2)
-            self.type_feature = config.img_processor.get('type_feature', 'patch')
-        else:
-            self.layer_idx = -2
-            self.type_feature = 'patch'
+        self.layer_idx = -2
+        self.type_feature = "patch"
 
     def set_img_features(self, img_features: torch.FloatTensor) -> None:
         self.img_features = img_features
@@ -467,101 +607,33 @@ class Phi4MMImageEmbedding(nn.Module):
         self.image_attention_mask = image_attention_mask
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
-        LAYER_IDX = self.layer_idx
-        TYPE_FEATURE = self.type_feature
 
-        if self.freeze_img_processor:
-            with torch.no_grad():
-                if attention_mask is not None:
-                    img_processor_output = self.img_processor(img_embeds, output_hidden_states=True, patch_attention_mask=attention_mask)
-                else:
-                    img_processor_output = self.img_processor(img_embeds, output_hidden_states=True)
-                img_feature = img_processor_output.hidden_states[LAYER_IDX]
-        else:
-            if attention_mask is not None:
-                img_processor_output = self.img_processor(img_embeds, output_hidden_states=True, patch_attention_mask=attention_mask)
-            else:
-                img_processor_output = self.img_processor(img_embeds, output_hidden_states=True)
-            img_feature = img_processor_output.hidden_states[LAYER_IDX]
+        img_processor_output = self.img_processor(
+            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=True
+        )
+        img_feature = img_processor_output.hidden_states[self.layer_idx]
 
-        if TYPE_FEATURE == "patch":
-            patch_feature = img_feature
-            if self.image_token_compression is not None:
-                # reshape to 2D tensor
-                width = int(math.sqrt(patch_feature.size(1)))
-                patch_feature = patch_feature.view(-1, width, width, patch_feature.size(-1))
-                # convert to NCHW
-                patch_feature = patch_feature.permute(0, 3, 1, 2)
-                if getattr(self, 'img_processor_padding', None) is not None:
-                    patch_feature = self.img_processor_padding(patch_feature)
-                patch_feature = self.image_token_compression(patch_feature)
-                # convert to NHWC
-                patch_feature = patch_feature.permute(0, 2, 3, 1)
-                patch_feature = patch_feature.view(-1, patch_feature.size(1) * patch_feature.size(2), patch_feature.size(-1))
-            elif getattr(self, 'img_processor_padding', None) is not None:
-                width = int(math.sqrt(patch_feature.size(1)))
-                patch_feature = patch_feature.view(-1, width, width, patch_feature.size(-1))
-                # convert to NCHW
-                patch_feature = patch_feature.permute(0, 3, 1, 2)
-                patch_feature = self.img_processor_padding(patch_feature)
-                # convert to NHWC
-                patch_feature = patch_feature.permute(0, 2, 3, 1)
-                patch_feature = patch_feature.view(-1, patch_feature.size(1) * patch_feature.size(2), patch_feature.size(-1))
-            return patch_feature
+        patch_feature = img_feature
+        # reshape to 2D tensor
+        width = int(math.sqrt(patch_feature.size(1)))
+        patch_feature = patch_feature.view(-1, width, width, patch_feature.size(-1))
+        # convert to NCHW
+        patch_feature = patch_feature.permute(0, 3, 1, 2)
+        if getattr(self, "img_processor_padding", None) is not None:
+            patch_feature = self.img_processor_padding(patch_feature)
+        patch_feature = self.image_token_compression(patch_feature)
+        # convert to NHWC
+        patch_feature = patch_feature.permute(0, 2, 3, 1)
+        patch_feature = patch_feature.view(
+            -1, patch_feature.size(1) * patch_feature.size(2), patch_feature.size(-1)
+        )
+        return patch_feature
 
-        if TYPE_FEATURE == "cls_patch":
-            if self.image_token_compression is not None:
-                # reshape to 2D tensor
-                patch_feature = img_feature[:, 1:]
-                cls_feature = img_feature[:, 0]
-                width = math.sqrt(patch_feature.size(1))
-                patch_feature = patch_feature.view(-1, width, width, patch_feature.size(-1))
-                patch_feature = self.image_token_compression(patch_feature)
-                patch_feature = patch_feature.view(-1, patch_feature.size(-2) * patch_feature.size(-1))
-                img_feature = torch.cat([cls_feature, patch_feature], dim=1)
-            return img_feature
-
-        logger.info(f'processed img feature size = {img_feature.size()}')
-        raise NotImplementedError
-
-    def spatiotemporal_pool(self, x, num_img_tokens, batch_size=1, T=1):
-
-        if self.image_pos_embed is not None:
-            x = x.view(batch_size * T, -1, x.shape[-1])
-            num_tokens = x.shape[-2]
-            h, w = int(num_tokens ** 0.5), int(num_tokens ** 0.5)
-            assert h * w == num_tokens, 'only support square feature maps for now'
-            x = x.view(batch_size * T, h, w, x.shape[-1])
-            pos_embed = self.image_pos_embed(x)
-            x = x + pos_embed
-            x = x.view(batch_size, T * h * w, x.shape[-1])
-
-        if self.visual_temporal_embed is not None:
-            visual_temporal_embed = self.visual_temporal_embed(x.view(batch_size, T, -1, x.shape[-1])[:, :, 0])
-            x = x.view(batch_size, T, -1, x.shape[-1]) + visual_temporal_embed.view(1, T, 1, x.shape[-1])
-
-        new_x = []
-        # [bsz, T * H' * W', C] -> [bsz, T, C]
-        spatial_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=2)
-        new_x.append(spatial_avg_pool_x)
-
-        # [bsz, T * H' * W', C] -> [bsz, H'*W', C]
-        temporal_avg_pool_x = x.view(batch_size, T, -1, x.shape[-1]).mean(dim=1)
-        new_x.append(temporal_avg_pool_x)
-
-        x = torch.cat(new_x, dim=1).view(-1, self.image_dim_out)
-        num_img_tokens += T
-        return x, num_img_tokens
-
-    def forward(self, input_ids: torch.LongTensor, input_embeds: torch.FloatTensor, image_sizes=None, **kwargs) -> torch.FloatTensor:
-
-        if isinstance(input_ids, tuple):
-            # # pipeline parallel
-            input_ids, input_embeds = input_ids
-
+    def forward(
+        self, input_ids: torch.LongTensor, input_embeds: torch.FloatTensor, image_sizes=None, **kwargs
+    ) -> torch.FloatTensor:
+        
         img_embeds = input_embeds
-        if image_sizes is None and 'image_sizes' in kwargs:
-            image_sizes = kwargs['image_sizes']
         img_sizes = image_sizes
 
         if self.img_features is not None:
@@ -573,14 +645,13 @@ class Phi4MMImageEmbedding(nn.Module):
 
         dtype = self.img_processor.embeddings.patch_embedding.weight.dtype
         if img_embeds is not None:
-            # convert to bf16
             img_embeds = img_embeds.to(dtype)
 
         if self.image_attention_mask is not None:
             image_attention_mask = self.image_attention_mask.clone()
             self.image_attention_mask = None
-        elif 'image_attention_mask' in kwargs:
-            image_attention_mask = kwargs['image_attention_mask']
+        elif "image_attention_mask" in kwargs:
+            image_attention_mask = kwargs["image_attention_mask"]
         else:
             image_attention_mask = None
         input_shape = input_ids.size()
@@ -590,7 +661,6 @@ class Phi4MMImageEmbedding(nn.Module):
             positions = torch.nonzero(input_ids == _IMAGE_SPECIAL_TOKEN_ID, as_tuple=False)
             positions_tuple = torch.nonzero(input_ids == _IMAGE_SPECIAL_TOKEN_ID, as_tuple=True)
 
-        # logger.info(f'position size: {positions.size()} ...')
         fake_image_forward = False
         select = False
         hd_transform = False
@@ -602,153 +672,959 @@ class Phi4MMImageEmbedding(nn.Module):
             target_device = self.img_projection.bias.device
             target_dtype = self.img_projection.bias.dtype
 
-        num_img_tokens = self.num_img_tokens
         if len(positions.tolist()) > 0:
-            if self.use_hd_transform and img_sizes is not None and len(img_sizes):
-                hd_transform = True
-                assert img_embeds.ndim == 5, f'(branch 1) img_embeds size: {img_embeds.size()}, expect 5D tensor for hd transform'
-                # img_embeds: (num_images, max_num_crops, 3, H, W)
-                # img_sizes: (num_images, 2).view(1, -1)
-
-                bs = img_embeds.shape[0]
-                # Nx(HW)xC
-                if image_attention_mask is not None and len(image_attention_mask) > 0:
-                    img_features = self.get_img_features(img_embeds.flatten(0, 1), attention_mask=image_attention_mask.type(torch.BoolTensor).flatten(0,1).to(target_device))
-                else:
-                    img_features = self.get_img_features(img_embeds.flatten(0, 1))
-
-                base_feat_height_target = self.base_feat_height_target
-                base_resolution = self.crop_size
-                base_feat_height_reduction = self.base_feat_height_reduction
-
-                base_feat_height = base_feat_width = int(np.sqrt(img_features.shape[1]))
-
-                assert base_feat_height == base_feat_height_target and base_feat_width == base_feat_height_target, f'base_feat_height: {base_feat_height}, base_feat_width: {base_feat_width}, expect {base_feat_height_target} features for hd transform'
-
-                # bs x max_num_crops x (24x24) x C
-                img_features = img_features.view(bs, -1, base_feat_height * base_feat_width, self.image_dim_out)
-                C = self.image_dim_out
-                H = base_feat_height
-
-                output_imgs = []
-                output_len = []
-                # training is tensor, inference is list
-                if isinstance(img_sizes, torch.Tensor):
-                    img_sizes = img_sizes.view(-1, 2)
-                for _bs in range(bs):
-                    h, w = img_sizes[_bs]
-                    h = h // base_resolution
-                    w = w // base_resolution
-                    B_ = h * w
-
-                    # 1 x (24x24) x 1024
-                    global_img_feature = img_features[_bs, :1]
-
-                    # 1 x 12 x 12 x 4096
-                    glb_img = global_img_feature.reshape(1,H,H,C).reshape(1,H//base_feat_height_reduction,base_feat_height_reduction,H//base_feat_height_reduction,base_feat_height_reduction,C).contiguous().permute(0,1,3,2,4,5).reshape(1,H//base_feat_height_reduction,H//base_feat_height_reduction,base_feat_height_reduction*base_feat_height_reduction*C).contiguous()
-                    temp_glb_GN = self.sub_GN.repeat(1, H//base_feat_height_reduction, 1, 1)
-
-                    # 1 x 156 x 4096
-                    glb_img = torch.cat([glb_img, temp_glb_GN], dim=2).reshape(1,-1,base_feat_height_reduction*base_feat_height_reduction*C)
-
-                    # (max_num_crops-1) x (12x12) x C
-                    sub_img = img_features[_bs, 1:]
-                    # 16x574x1024
-                    # get rid of padding sub_img
-                    sub_img = sub_img[:B_]
-
-                    # (num_crops, 12, 2, 12, 2, 1024) -> (num_crops, 12, 12, 2, 2, 1024) -> (num_crops, 12*12, 4*1024)
-                    sub_img = sub_img.reshape(B_,H,H,C).reshape(B_,H//base_feat_height_reduction,base_feat_height_reduction,H//base_feat_height_reduction,base_feat_height_reduction,C).contiguous().permute(0,1,3,2,4,5).reshape(B_,-1,base_feat_height_reduction*base_feat_height_reduction*C).contiguous()
-                    sub_img = sub_img.reshape(1, h, w, base_feat_height // base_feat_height_reduction, base_feat_width // base_feat_height_reduction, -1).permute(0,1,3,2,4,5).reshape(1,h*base_feat_height//base_feat_height_reduction,w*base_feat_width//base_feat_height_reduction,base_feat_height_reduction*base_feat_height_reduction*C)
-
-                    if image_attention_mask is not None and len(image_attention_mask) > 0:
-                        reshaped_image_attention_mask = image_attention_mask[_bs,1:B_+1,0::2,0::2].reshape(1, h, w, base_feat_height // base_feat_height_reduction, base_feat_width // base_feat_height_reduction).permute(0,1,3,2,4).reshape(1,h*base_feat_height//base_feat_height_reduction,w*base_feat_width//base_feat_height_reduction)
-                        useful_height = int(reshaped_image_attention_mask[0,:,0].sum().item())
-                        useful_width = int(reshaped_image_attention_mask[0,0,:].sum().item())
-                        sub_img = sub_img[:,:useful_height, :useful_width]
-                        temp_sub_GN = self.sub_GN.repeat(1, useful_height, 1, 1)
-                        temp_len = int(image_attention_mask[_bs,:B_+1,0::2,0::2].sum().item()) + (useful_height+1) + base_feat_height//base_feat_height_reduction
-                    else:
-                        temp_sub_GN = self.sub_GN.repeat(1, h*base_feat_height//base_feat_height_reduction, 1, 1)
-                        temp_len = int((h*w+1)*self.num_img_tokens+ 1 + (h+1)*base_feat_height//base_feat_height_reduction)
-
-                    sub_img = torch.cat([sub_img, temp_sub_GN], dim=2).reshape(1,-1,base_feat_height_reduction*base_feat_height_reduction*C)
-                    # (1, num_img_tokens, 1024*4)
-
-                    # glb + sub
-                    if self.hd_transform_order == 'glb_sub':
-                        output_imgs.append(torch.cat([glb_img, self.glb_GN, sub_img], dim=1))
-                    elif self.hd_transform_order == 'sub_glb':
-                        output_imgs.append(torch.cat([sub_img, self.glb_GN, glb_img], dim=1))
-                    else:
-                        raise NotImplementedError(f'hd_transform_order = {self.hd_transform_order}, not implemented')
-
-                    #temp_len = int((h*w+1)*144 + 1 + (h+1)*12)
-                    assert temp_len == output_imgs[-1].shape[1], f'temp_len: {temp_len}, output_imgs[-1].shape[1]: {output_imgs[-1].shape[1]}'
-                    output_len.append(temp_len)
-
-                num_img_tokens = output_len
-                img_set_tensor = []
-                for _output_img in output_imgs:
-                    img_feature_proj = self.img_projection(_output_img.to(target_device).to(target_dtype))
-                    img_set_tensor.append(img_feature_proj)
-                #logger.info(f'img_embeds size: {img_embeds.size()}, image sizes: {img_sizes} loading time {datetime.now() - start_time}')
-                #assert sum(num_img_tokens) == len(g_values), f'(branch 1) sum(num_img_tokens): {sum(num_img_tokens)}, g_values size: {len(g_values)}, g_values {g_values}'
-
-            else:
-                raise NotImplementedError
             select = True
-        else:
-            # # create a fake image tensor
-            # # TODO: need define image size for different vision model
-            if self.training:
-                img_embeds = torch.zeros(1, 3, self.crop_size, self.crop_size, dtype=target_dtype, device=input_ids.device)
+            hd_transform = True
+            assert (
+                img_embeds.ndim == 5
+            ), f"(branch 1) img_embeds size: {img_embeds.size()}, expect 5D tensor for hd transform"
 
-                tt = (
-                    self.get_img_features(img_embeds)
-                    .to(target_device)
-                    .to(target_dtype)
-                    .reshape(-1, 1024)
+            bs = img_embeds.shape[0]
+            # Nx(HW)xC
+            img_features = self.get_img_features(
+                img_embeds.flatten(0, 1),
+                attention_mask=image_attention_mask.type(torch.BoolTensor).flatten(0, 1).to(target_device),
+            )
+
+            base_feat_height_target = self.base_feat_height_target
+            base_resolution = self.crop_size
+            base_feat_height_reduction = self.base_feat_height_reduction
+
+            base_feat_height = base_feat_width = int(np.sqrt(img_features.shape[1]))
+
+            assert (
+                base_feat_height == base_feat_height_target and base_feat_width == base_feat_height_target
+            ), f"base_feat_height: {base_feat_height}, base_feat_width: {base_feat_width}, expect {base_feat_height_target} features for hd transform"
+
+            # bs x max_num_crops x (24x24) x C
+            img_features = img_features.view(bs, -1, base_feat_height * base_feat_width, self.image_dim_out)
+            C = self.image_dim_out
+            H = base_feat_height
+
+            output_imgs = []
+            output_len = []
+            # training is tensor, inference is list
+            if isinstance(img_sizes, torch.Tensor):
+                img_sizes = img_sizes.view(-1, 2)
+            for _bs in range(bs):
+                h, w = img_sizes[_bs]
+                h = h // base_resolution
+                w = w // base_resolution
+                B_ = h * w
+
+                # 1 x (24x24) x 1024
+                global_img_feature = img_features[_bs, :1]
+
+                # 1 x 12 x 12 x 4096
+                glb_img = (
+                    global_img_feature.reshape(1, H, H, C)
+                    .reshape(
+                        1,
+                        H // base_feat_height_reduction,
+                        base_feat_height_reduction,
+                        H // base_feat_height_reduction,
+                        base_feat_height_reduction,
+                        C,
+                    )
+                    .contiguous()
+                    .permute(0, 1, 3, 2, 4, 5)
+                    .reshape(
+                        1,
+                        H // base_feat_height_reduction,
+                        H // base_feat_height_reduction,
+                        base_feat_height_reduction * base_feat_height_reduction * C,
+                    )
+                    .contiguous()
                 )
+                temp_glb_GN = self.sub_GN.repeat(1, H // base_feat_height_reduction, 1, 1)
+
+                # 1 x 156 x 4096
+                glb_img = torch.cat([glb_img, temp_glb_GN], dim=2).reshape(
+                    1, -1, base_feat_height_reduction * base_feat_height_reduction * C
+                )
+
+                # (max_num_crops-1) x (12x12) x C
+                sub_img = img_features[_bs, 1:]
+                # 16x574x1024
+                # get rid of padding sub_img
+                sub_img = sub_img[:B_]
+
+                # (num_crops, 12, 2, 12, 2, 1024) -> (num_crops, 12, 12, 2, 2, 1024) -> (num_crops, 12*12, 4*1024)
+                sub_img = (
+                    sub_img.reshape(B_, H, H, C)
+                    .reshape(
+                        B_,
+                        H // base_feat_height_reduction,
+                        base_feat_height_reduction,
+                        H // base_feat_height_reduction,
+                        base_feat_height_reduction,
+                        C,
+                    )
+                    .contiguous()
+                    .permute(0, 1, 3, 2, 4, 5)
+                    .reshape(B_, -1, base_feat_height_reduction * base_feat_height_reduction * C)
+                    .contiguous()
+                )
+                sub_img = (
+                    sub_img.reshape(
+                        1,
+                        h,
+                        w,
+                        base_feat_height // base_feat_height_reduction,
+                        base_feat_width // base_feat_height_reduction,
+                        -1,
+                    )
+                    .permute(0, 1, 3, 2, 4, 5)
+                    .reshape(
+                        1,
+                        h * base_feat_height // base_feat_height_reduction,
+                        w * base_feat_width // base_feat_height_reduction,
+                        base_feat_height_reduction * base_feat_height_reduction * C,
+                    )
+                )
+
+                if image_attention_mask is not None and len(image_attention_mask) > 0:
+                    reshaped_image_attention_mask = (
+                        image_attention_mask[_bs, 1 : B_ + 1, 0::2, 0::2]
+                        .reshape(
+                            1,
+                            h,
+                            w,
+                            base_feat_height // base_feat_height_reduction,
+                            base_feat_width // base_feat_height_reduction,
+                        )
+                        .permute(0, 1, 3, 2, 4)
+                        .reshape(
+                            1,
+                            h * base_feat_height // base_feat_height_reduction,
+                            w * base_feat_width // base_feat_height_reduction,
+                        )
+                    )
+                    useful_height = int(reshaped_image_attention_mask[0, :, 0].sum().item())
+                    useful_width = int(reshaped_image_attention_mask[0, 0, :].sum().item())
+                    sub_img = sub_img[:, :useful_height, :useful_width]
+                    temp_sub_GN = self.sub_GN.repeat(1, useful_height, 1, 1)
+                    temp_len = (
+                        int(image_attention_mask[_bs, : B_ + 1, 0::2, 0::2].sum().item())
+                        + (useful_height + 1)
+                        + base_feat_height // base_feat_height_reduction
+                    )
+                else:
+                    temp_sub_GN = self.sub_GN.repeat(1, h * base_feat_height // base_feat_height_reduction, 1, 1)
+                    temp_len = int(
+                        (h * w + 1) * self.num_img_tokens
+                        + 1
+                        + (h + 1) * base_feat_height // base_feat_height_reduction
+                    )
+
+                sub_img = torch.cat([sub_img, temp_sub_GN], dim=2).reshape(
+                    1, -1, base_feat_height_reduction * base_feat_height_reduction * C
+                )
+                # (1, num_img_tokens, 1024*4)
+
+                # glb + sub
+                if self.hd_transform_order == "glb_sub":
+                    output_imgs.append(torch.cat([glb_img, self.glb_GN, sub_img], dim=1))
+                elif self.hd_transform_order == "sub_glb":
+                    output_imgs.append(torch.cat([sub_img, self.glb_GN, glb_img], dim=1))
+                else:
+                    raise NotImplementedError(f"hd_transform_order = {self.hd_transform_order}, not implemented")
+
+                # temp_len = int((h*w+1)*144 + 1 + (h+1)*12)
+                assert (
+                    temp_len == output_imgs[-1].shape[1]
+                ), f"temp_len: {temp_len}, output_imgs[-1].shape[1]: {output_imgs[-1].shape[1]}"
+                output_len.append(temp_len)
+
+            img_set_tensor = []
+            for _output_img in output_imgs:
+                img_feature_proj = self.img_projection(_output_img.to(target_device).to(target_dtype))
+                img_set_tensor.append(img_feature_proj)
+            # logger.info(f'img_embeds size: {img_embeds.size()}, image sizes: {img_sizes} loading time {datetime.now() - start_time}')
+            # assert sum(num_img_tokens) == len(g_values), f'(branch 1) sum(num_img_tokens): {sum(num_img_tokens)}, g_values size: {len(g_values)}, g_values {g_values}'
+
+        else:
+            # create a fake image tensor
+            if self.training:
+                img_embeds = torch.zeros(
+                    1, 3, self.crop_size, self.crop_size, dtype=target_dtype, device=input_ids.device
+                )
+
+                tt = self.get_img_features(img_embeds).to(target_device).to(target_dtype).reshape(-1, 1024)
                 if self.use_hd_transform:
-                    img_set_tensor = self.img_projection(tt.reshape(-1, self.image_dim_out*self.base_feat_height_reduction**2) * self.glb_GN[0] * self.sub_GN[0, 0])
+                    img_set_tensor = self.img_projection(
+                        tt.reshape(-1, self.image_dim_out * self.base_feat_height_reduction**2)
+                        * self.glb_GN[0]
+                        * self.sub_GN[0, 0]
+                    )
                 else:
                     img_set_tensor = self.img_projection(tt)  # adapted visual features.
                 fake_image_forward = True
 
         # we use the token embedding layer from the huggingface model, this is REQUIRED to make sure we are using the loaded weights.
-        hidden_states = kwargs['wte'](input_ids)
+        hidden_states = kwargs["wte"](input_ids)
 
         if select:
-            if hd_transform:
-                # new implementation without in-place operation
-                # Ref: https://huggingface.co/microsoft/Phi-3.5-vision-instruct/blob/4a0d683eba9f1d0cbfb6151705d1ee73c25a80ca/modeling_phi3_v.py#L233
-                # Ref: https://pytorch.org/docs/stable/generated/torch.Tensor.index_put.html
-                # Ref: https://pytorch.org/docs/stable/generated/torch.Tensor.index_put_.html#torch.Tensor.index_put_
-                # img_set_tensor: a list of tensors, each tensor has shape (1, N_tokens, C)
-                assert all([_img_set_tensor.shape[0] == 1 for _img_set_tensor in img_set_tensor]), 'img_set_tensor should have shape (1, N_tokens, C)'
-                # Shape: (merged_N_tokens, C)
-                merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
-                merged_img_set_tensor = merged_img_set_tensor.to(hidden_states.dtype).to(hidden_states.device)
-                # Temporarily disable autocast to avoid issue on bf16 tensors
-                # Ref: https://github.com/pytorch/pytorch/issues/132715
-                with torch.autocast(device_type=hidden_states.device.type, enabled=False):
-                    new_hidden_states = hidden_states.index_put(
-                        indices=positions_tuple,
-                        values=merged_img_set_tensor,
-                        accumulate=False
-                    )
-                hidden_states = new_hidden_states
-            else:
-                raise NotImplementedError
+            # img_set_tensor: a list of tensors, each tensor has shape (1, N_tokens, C)
+            assert all(
+                [_img_set_tensor.shape[0] == 1 for _img_set_tensor in img_set_tensor]
+            ), "img_set_tensor should have shape (1, N_tokens, C)"
+            # Shape: (merged_N_tokens, C)
+            merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
+            merged_img_set_tensor = merged_img_set_tensor.to(hidden_states.dtype).to(hidden_states.device)
+            # Temporarily disable autocast to avoid issue on bf16 tensors
+            # Ref: https://github.com/pytorch/pytorch/issues/132715
+            with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+                new_hidden_states = hidden_states.index_put(
+                    indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
+                )
+            hidden_states = new_hidden_states
 
         if fake_image_forward and self.training:
-            hidden_states = hidden_states + (0 * img_set_tensor[0].to(hidden_states.dtype).to(hidden_states.device)).sum()
+            hidden_states = (
+                hidden_states + (0 * img_set_tensor[0].to(hidden_states.dtype).to(hidden_states.device)).sum()
+            )
 
         if self.drop is not None:
             hidden_states = self.drop(hidden_states)
 
         return hidden_states
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################################################## AUDIO #############################################
+
+
+
+
+
+
+
+
+class Phi4AudioMLP(nn.Module):
+    def __init__(
+        self,
+        config
+    ):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+        self.act_fn = ACT2FN[config.bias_in_glu]
+        # ALL AFTER THIS WAS INSIDE A nn.Sequntial CALLED `net` -> KEY CONVERSION
+        # gate_up_proj was additionally inside a GLULinear module with `linear` name inside
+        self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, config.bias_in_glu)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.dropout_rate),
+
+    def forward(self, hidden_states):
+        up_states = self.gate_up_proj(hidden_states)
+        up_states, gate = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.act_fn(gate)
+        up_states = self.dropout(up_states)
+        hidden_states = self.down_proj(up_states)
+        out = self.dropout(out)
+    
+        return out
+    
+
+def audio_eager_attention_forward(
+    module: nn.Module,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Phi4AudioAttention(nn.Module):
+
+   
+    def __init__(self, config):
+        self.config = config
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.dropout_rate
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        mask: Optional[torch.Tensor],
+        relative_attention_bias: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        
+        attention_mask = None
+        if mask is not None:
+            mask = mask.unsqueeze(1)
+            if relative_attention_bias is not None:
+                attention_mask = mask + relative_attention_bias
+            else:
+                attention_mask = mask
+
+        attention_interface: Callable = audio_eager_attention_forward
+        if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output
+    
+
+class Phi4AudioDepthWiseSeperableConv1d(nn.Module):
+    def __init__(self, config, padding=0):
+        super().__init__()
+        self.dw_conv = nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size * config.depthwise_multiplier,
+            config.kernel_size,
+            1,
+            padding=padding,
+            groups=config.hidden_size,
+        )
+        self.pw_conv = nn.Conv1d(
+            config.hidden_size * config.depthwise_multiplier, config.depthwise_seperable_out_channel, 1, 1, 0
+        )
+        
+    def forward(self, x):
+        x = self.dw_conv(x)
+        x = self.pw_conv(x)
+        return x
+    
+
+class Phi4AudioGluPointWiseConv(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.output_dim = config.ext_pw_out_channel
+        kernel_size = config.ext_pw_kernel_size
+
+        self.ext_pw_conv_1d = nn.Conv1d(
+            config.hidden_size,
+            config.ext_pw_out_channel * 2,
+            kernel_size,
+            1,
+            padding=(kernel_size - 1) if config.causal else (kernel_size - 1) // 2
+        )
+        
+        self.glu_act = ACT2FN[config.glu_type]
+
+        if config.bias_in_glu:
+            self.b1 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
+            self.b2 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
+
+    def forward(self, x):
+        # to be consistent with GLULinear, we assume the input always has the #channel (#dim) in the last dimension of the
+        # tensor, so need to switch the dimension first for 1D-Conv case
+        x = x.permute([0, 2, 1])
+        x = self.ext_pw_conv_1d(x)
+        if self.bias_in_glu:
+            x = (x[:, 0 : self.output_dim, :] + self.b1) * self.glu_act(
+                x[:, self.output_dim : self.output_dim * 2, :] + self.b2
+            )
+        else:
+            x = (x[:, 0 : self.output_dim, :]) * self.glu_act(
+                x[:, self.output_dim : self.output_dim * 2, :]
+            )
+
+        x = x.permute([0, 2, 1])
+        return x
+    
+
+class Phi4AudioConvModule(nn.Module):
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.batch_norm = config.batch_norm
+        self.kernel_size = config.kernel_size
+
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+        self.glu = Phi4AudioGluPointWiseConv(config)
+        self.ln1 = nn.Linear(config.ext_pw_out_channel, config.hidden_size) if config.hidden_size != config.ext_pw_out_channel else nn.Identity()
+
+        if config.causal and config.export:
+            padding = 0
+        elif config.causal:
+            padding = config.kernel_size - 1
+        else:
+            padding = (config.kernel_size - 1) // 2
+        self.dw_sep_conv_1d = Phi4AudioDepthWiseSeperableConv1d(config, padding=padding)
+
+        if config.hidden_size != config.depthwise_seperable_out_channel:
+            self.ln2 = nn.Linear(config.depthwise_seperable_out_channel, config.hidden_size)
+        if config.batch_norm:
+            self.bn_layer = nn.BatchNorm1d(config.hidden_size)
+
+        self.act = ACT2FN[config.activation]
+
+        self.ext_pw_conv_1d = nn.Conv1d(
+            config.hidden_size,
+            config.ext_pw_out_channel,
+            config.ext_pw_kernel_size,
+            1,
+            padding=config.ext_pw_kernel_size - 1 if config.causal else (config.ext_pw_kernel_size - 1) // 2,
+        )
+        self.fix_len1 = True if config.causal and config.ext_pw_kernel_size > 1 else False
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def forward(self, x):
+        x = self.layer_norm(x)
+        x = self.glu(x)
+        if self.causal and self.ext_pw_kernel_size > 1:
+            x = x[:, : -(self.ext_pw_kernel_size - 1), :]
+        x = self.ln1(x)
+
+        x = x.permute([0, 2, 1])
+
+        x = self.dw_sep_conv_1d(x)
+        if self.causal and self.kernel_size > 1:
+            x = x[:, :, : -(self.kernel_size - 1)]
+        if hasattr(self, "ln2"):
+            x = x.permute([0, 2, 1])
+            x = self.ln2(x)
+            x = x.permute([0, 2, 1])
+        if self.batch_norm:
+            x = self.bn_layer(x)
+        x = self.act(x)
+
+        x = self.ext_pw_conv_1d(x)
+        if self.fix_len1:
+            x = x[:, :, : -(self.ext_pw_kernel_size - 1)]
+
+        if self.apply_ln1:
+            x = x.permute([0, 2, 1])
+            x = self.ln1(x)
+            x = x.permute([0, 2, 1])
+
+        x = x.permute([0, 2, 1])
+        x = self.dropout(x)
+        return x
+    
+
+
+class Phi4AudioConformerEncoderLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.feed_forward_in = Phi4AudioMLP(config)
+        self.self_attn = Phi4AudioAttention(config)
+        self.conv = Phi4AudioConvModule(config)
+        self.feed_forward_out = Phi4AudioMLP(config)
+        self.layer_norm_att = nn.LayerNorm(config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+
+    def forward(
+        self,
+        x,
+        pos_k,
+        pos_v,
+        mask,
+        relative_attention_bias: Optional[torch.Tensor] = None,
+    ):
+        """ConformerEncoder forward.
+
+        Args:
+            x: torch.Tensor
+                input feature of shape (batch, max_time_in, size)
+            pos_k: torch.Tensor
+                positional key embedding.
+            mask: torch.Tensor
+                mask for x (batch, max_time_in)
+            relative_attention_bias: Optional[torch.Tensor]
+                bias added to attention logits w.r.t. relative positions (1, n_head, time1, time2)
+        """
+        x = x + 0.5 * self.feed_forward_in(x)
+        norm_x = self.layer_norm_att(x)
+
+        x = x + self.self_attn(
+            norm_x,
+            pos_k,
+            pos_v,
+            mask,
+            relative_attention_bias=relative_attention_bias,
+        )
+        x = x + self.conv(x)
+        x = x + 0.5 * self.feed_forward_out(x)
+
+        out = self.layer_norm(x)
+
+        return out
+    
+
+class Phi4AudioNemoConvSubsampling(torch.nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()
+        self.subsampling_factor = self.config.nemo_conv_settings["subsampling_factor"]
+
+        if self.subsampling_factor % 2 != 0:
+            raise ValueError("Sampling factor should be a multiply of 2!")
+        self.sampling_num = int(math.log(self.subsampling_factor, 2))
+
+        self.act_fn = ACT2CLS[self.config.nemo_conv_settings["activation"]]
+        
+        conv_channels = self.config.nemo_conv_settings["conv_channels"]
+        layers = []
+
+        layers.append(
+            torch.nn.Conv2d(
+                in_channels=1,
+                out_channels=conv_channels,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+            )
+        )
+        layers.append(self.act_fn)
+
+        for _ in range(self.sampling_num - 1):
+            layers.append(
+                torch.nn.Conv2d(
+                    in_channels=conv_channels,
+                    out_channels=conv_channels,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    groups=conv_channels,
+                )
+            )
+            layers.append(
+                torch.nn.Conv2d(
+                    in_channels=conv_channels,
+                    out_channels=conv_channels,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                    groups=1,
+                )
+            )
+            layers.append(self.act_fn)
+
+        self.conv = torch.nn.Sequential(*layers)
+
+        in_length = torch.tensor(config.hidden_size, dtype=torch.float)
+        out_length = calc_length(
+            lengths=in_length,
+            all_paddings=2,
+            kernel_size=3,
+            stride=2,
+            ceil_mode=False,
+            repeat_num=self.sampling_num,
+        )
+        self.out = torch.nn.Linear(conv_channels * int(out_length), config.hidden_size)
+
+    def forward(self, x, mask):
+        """
+        Forward method for NeMo subsampling.
+
+        Args:
+            x[Batch, Time, Filters]: torch.Tensor
+                input tensor
+            x_mask: torch.Tensor
+                input mask
+
+        Returns:
+            x: torch.Tensor
+                Resulting tensor from subsampling (B, T // time_reduction_factor, feat_out)
+            pad_mask: torch.Tensor
+                tensor of padded hidden state sequences (B, 1, T // time_reduction_factor)
+        """
+        # Unsqueeze Channel Axis
+        x = x.unsqueeze(1)
+
+        x = self.conv(x)
+
+        # Flatten Channel and Frequency Axes
+        b, c, t, f = x.size()
+        x = self.out(x.transpose(1, 2).reshape(b, t, -1))
+
+        if mask is None:
+            return x, None
+
+        max_audio_length = x.shape[1]
+        feature_lens = mask.sum(1)
+        padding_length = torch.ceil(feature_lens / self.subsampling_factor)
+        pad_mask = (
+            torch.arange(0, max_audio_length, device=x.device).expand(padding_length.size(0), -1)
+            < padding_length.unsqueeze(1)
+        )
+        return x, pad_mask.unsqueeze(1)
+
+    
+def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_num=1):
+    """Calculates the output length of a Tensor passed through a convolution or max pooling layer"""
+    add_pad: float = all_paddings - kernel_size
+    one: float = 1.0
+    for i in range(repeat_num):
+        lengths = torch.div(lengths.to(dtype=torch.float) + add_pad, stride) + one
+        if ceil_mode:
+            lengths = torch.ceil(lengths)
+        else:
+            lengths = torch.floor(lengths)
+    return lengths.to(dtype=torch.int)
+
+
+class Phi4AudioRelativeAttentionLogitBias(nn.Module):
+   
+    def __init__(self, config):
+        super().__init__()
+
+        self.num_heads = config.num_attention_heads
+        self.max_distance = config.relative_attention_bias_args.get("t5_bias_max_distance", 1000)
+        self.symmetric = config.relative_attention_bias_args.get("t5_bias_symmetric", False)
+        self.num_buckets = self.max_distance
+        if not self.symmetric:
+            self.num_buckets *= 2
+        self.bias_values = nn.Embedding(self.num_buckets, self.num_heads)
+
+    def forward(self, x):
+        # instantiate bias compatible with shape of x
+        max_pos = x.size(1)
+        context_position = torch.arange(max_pos, device=x.device, dtype=torch.long)[:, None]
+        memory_position = torch.arange(max_pos, device=x.device, dtype=torch.long)[None, :]
+        relative_position = memory_position - context_position
+        # clipping to a maximum distance using ops that play well with ONNX export
+        relative_position = relative_position.masked_fill(
+            relative_position < -self.max_distance, -self.max_distance
+        )
+        relative_position = relative_position.masked_fill(
+            relative_position > self.max_distance - 1, self.max_distance - 1
+        )
+
+        # mapping from relative position to index in the bias parameter
+        bias_idx = relative_position
+        if self.symmetric:
+            bias_idx = bias_idx.abs()
+        else:
+            bias_idx += self.num_buckets // 2
+
+        t5_rel_att_bias = self.bias_values(bias_idx)  # [L, L, H]
+        t5_rel_att_bias = t5_rel_att_bias.permute(2, 0, 1).unsqueeze(0)  # [1, H, L, L]
+
+        return t5_rel_att_bias
+
+
+class Phi4AudioMeanVarianceNormLayer(nn.Module):
+    """Mean/variance normalization layer.
+
+    Will substract mean and multiply input by inverted standard deviation.
+    Typically used as a very first layer in a model.
+
+    Args:
+        input_size: int
+            layer input size.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.register_buffer("global_mean", torch.zeros(config.encoder_embedding_config["input_size"]))
+        self.register_buffer("global_invstd", torch.ones(config.encoder_embedding_config["input_size"]))
+
+    def forward(self, x):
+        return (x - self.global_mean) * self.global_invstd
+    
+
+class Phi4AudioConformerEncoder(nn.Module):
+
+    extra_multi_layer_output_idxs: List[int]
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.encoder_embedding = Phi4AudioMeanVarianceNormLayer(config)
+        self.embed = Phi4AudioNemoConvSubsampling(config)
+        self.relative_attention_bias_layer = Phi4AudioRelativeAttentionLogitBias(config)
+        self.encoders = nn.ModuleList([Phi4AudioConformerEncoderLayer(config) for _ in range(config.num_blocks)])
+
+    def _chunk_size_selection(self, chunk_size=None, left_chunk=None):
+        """If chunk size is a list, we will randomly select a chunk size."""
+
+        if chunk_size is None:
+            chunk_size = self.chunk_size
+        if left_chunk is None:
+            left_chunk = self.left_chunk
+        if isinstance(chunk_size, list):
+            # Variable chunk size during training
+            chunk_size_index = int(torch.randint(low=0, high=len(chunk_size), size=(1,)))
+            chunk_size_train_eff = chunk_size[chunk_size_index]
+            if not isinstance(left_chunk, list):
+                raise ValueError("Since chunk_size is a list, left_chunk must be a list")
+            if len(left_chunk) != len(chunk_size):
+                raise ValueError(
+                    "The length of left_chunk must be the same as length of chunk_size."
+                )
+            left_chunk_train_eff = left_chunk[chunk_size_index]
+        else:
+            chunk_size_train_eff = chunk_size
+            left_chunk_train_eff = left_chunk
+
+        return chunk_size_train_eff, left_chunk_train_eff
+
+    def _streaming_mask(self, seq_len, batch_size, chunk_size, left_chunk):
+        chunk_size_train_eff, left_chunk_train_eff = self._chunk_size_selection(
+            chunk_size, left_chunk
+        )
+
+        # Create mask matrix for streaming
+        # S stores start index. if chunksize is 18, s is [0,18,36,....]
+        chunk_start_idx = np.arange(0, seq_len, chunk_size_train_eff)
+        # avoid randomness when run evaluation or decoding
+        if self.training and np.random.rand() > 0.5:
+            # Either first or last chunk is not complete.
+            # If only the last one is not complete, EOS is not effective
+            chunk_start_idx = seq_len - chunk_start_idx
+            chunk_start_idx = chunk_start_idx[::-1]
+            chunk_start_idx = chunk_start_idx[:-1]
+            chunk_start_idx = np.insert(chunk_start_idx, 0, 0)
+
+        enc_streaming_mask = (
+            adaptive_enc_mask(seq_len, chunk_start_idx, left_window=left_chunk_train_eff)
+            .unsqueeze(0)
+            .expand([batch_size, -1, -1])
+        )
+        return enc_streaming_mask
+
+    def forward_embeddings(self, xs_pad, masks):
+        """Forwarding the inputs through the top embedding layers
+
+        Args:
+            xs_pad: torch.Tensor
+                input tensor
+            masks: torch.Tensor
+                input mask
+        """
+        # pylint: disable=R0915
+        # get new lens.
+        seq_len = math.ceil(xs_pad.shape[1] / self.config.time_reduction)
+        if seq_len <= 0:
+            raise ValueError(
+                f"""The squence length after time reduction is invalid: {seq_len}.
+                Your input feature is too short. Consider filtering out the very
+                short sentence from data loader""",
+            )
+
+        batch_size = xs_pad.shape[0]
+
+        enc_streaming_mask = self._streaming_mask(
+            seq_len, batch_size, self.config.chunk_size, self.config.left_chunk
+        )
+
+        if xs_pad.is_cuda:
+            enc_streaming_mask = enc_streaming_mask.cuda()
+            xs_pad = xs_pad.cuda()
+
+        input_tensor = xs_pad
+        input_tensor, masks = self.embed(input_tensor, masks)
+
+        streaming_mask = enc_streaming_mask
+        if streaming_mask is not None and masks is not None:
+            hs_mask = masks & streaming_mask
+        elif masks is not None:
+            hs_mask = masks
+        else:
+            hs_mask = streaming_mask
+
+        return input_tensor, hs_mask, masks
+
+    def calculate_hs_mask(self, xs_pad, device, mask):
+        max_audio_length = xs_pad.shape[1]
+        batch_size = xs_pad.shape[0]
+        enc_streaming_mask = self._streaming_mask(
+            max_audio_length, batch_size, self.chunk_size, self.left_chunk
+        )
+        enc_streaming_mask = enc_streaming_mask.to(device)
+        if mask is None:
+            return enc_streaming_mask
+
+        feature_lens = mask.sum(1)
+        padding_length = feature_lens
+        pad_mask = (
+            torch.arange(0, max_audio_length, device=device).expand(padding_length.size(0), -1)
+            < padding_length.unsqueeze(1)
+        )
+        pad_mask = pad_mask.unsqueeze(1)
+        pad_mask = pad_mask & enc_streaming_mask
+        return pad_mask
+
+    def forward(self, xs_pad, masks):
+        """Conformer Forward function
+
+        Args:
+            xs_pad: torch.Tensor
+                input tensor
+            masks: torch.Tensor
+                post-embedding input lengths
+        """
+        xs_pad = self.encoder_embedding(xs_pad)
+        input_tensor, hs_mask, masks = self.forward_embeddings(xs_pad, masks)
+
+        unfolded = False
+        ori_bz, seq_len, D = input_tensor.shape
+        max_seq_len = 500 #maxium position for absolute positional encoding
+        if seq_len > max_seq_len:
+            # audio sequence is longer than max_seq_len, unfold it into chunks of max_seq_len
+            unfolded = True
+            # the unfold op will drop residual frames, pad it to the multiple of max_seq_len
+            if seq_len % max_seq_len > 0:
+                chunk_pad_size = max_seq_len - (seq_len % max_seq_len)
+            else:
+                chunk_pad_size = 0
+            if chunk_pad_size > 0:
+                input_tensor_pad = F.pad(input_tensor, (0, 0, 0, chunk_pad_size), "constant", 0)
+                input_tensor = input_tensor_pad.to(input_tensor.device)
+
+            input_tensor = unfold_tensor(input_tensor, max_seq_len)
+            if masks is not None:
+                # revise hs_mask here because the previous calculated hs_mask did not consider extra pad
+                subsampled_pad_mask = masks.squeeze(1) # [bz, subsampled_unmask_seq_len]
+                extra_padded_subsamlped_pad_mask = F.pad(subsampled_pad_mask, (0, chunk_pad_size), "constant", False) # extra padding to the pad mask
+                extra_padded_subsamlped_pad_mask = extra_padded_subsamlped_pad_mask.unsqueeze(-1).float()
+                masks_unfold = unfold_tensor(extra_padded_subsamlped_pad_mask, max_seq_len) # unfold the pad mask like we did to the input tensor
+                masks_unfold = masks_unfold.squeeze(-1).bool() # unfold op does not support bool tensor
+            else:
+                masks_unfold = None
+            hs_mask = self.calculate_hs_mask(input_tensor, input_tensor.device, masks_unfold) # calculate hs_mask based on the unfolded pad mask
+
+        relative_attention_bias = self.relative_attention_bias_layer(input_tensor)
+
+        for layer in self.encoders:
+            input_tensor = layer(
+                input_tensor,
+                hs_mask,
+                relative_attention_bias=relative_attention_bias,
+            )
+
+        if unfolded:
+            embed_dim = input_tensor.shape[-1]
+            input_tensor = input_tensor.reshape(ori_bz, -1, embed_dim)
+            # if we ever padded before unfolding, we need to remove the padding
+            if chunk_pad_size > 0:
+                input_tensor = input_tensor[:, :-chunk_pad_size, :]
+
+        return input_tensor, masks
+
+
+def unfold_tensor(xs_pad, max_seq_len):
+    """
+    For a given tensor with shape of (N, T, D), if sequence length T is longer than max_seq_len,
+    this function unfold it to a (NT', max_seq_len, D) where T' is T // max_seq_len.
+    Args:
+        xs_pad: N, T, D
+    """
+    _, _, D = xs_pad.shape
+    xs_pad = xs_pad.transpose(-1, -2) # convert to N, D, T
+    # N x D x 1 x T => N x (D x max_seq_len) x T'
+    xs_pad = F.unfold(
+        xs_pad[..., None, :],
+        kernel_size=(1, max_seq_len),
+        stride=(1, max_seq_len),
+    )
+
+    new_bsz, _, slen = xs_pad.shape
+    # N x D x max_seq_len x T'
+    xs_pad = xs_pad.view(new_bsz, -1, max_seq_len, slen)
+    # N x T' x max_seq_len x D
+    xs_pad = xs_pad.permute(0, 3, 2, 1).contiguous()
+    # NT' x max_seq_len x D
+    xs_pad = xs_pad.view(-1, max_seq_len, D)
+    return xs_pad
+
+
+def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
+    """
+    The function is very important for Transformer Transducer Streaming mode
+    Args:
+        xs_len (int): sequence length
+        chunk_start_idx (list): first idx of each chunk, such as [0,18,36,48]. It also supports adaptive chunk size [0,10,15,45]
+        left_window (int): how many left chunks can be seen
+        right_window (int): how many right chunks can be seen. It is used for chunk overlap model.
+        Returns:
+            mask (torch.Tensor): a mask tensor for streaming model
+            Torch 1.0.1
+            tensor([[1., 1., 0., 0.],
+                    [0., 1., 1., 0.],
+                    [0., 0., 1., 1.]])
+            Torch 1.4.1
+            tensor([[True., True., False., False.],
+                    [False., True., True., False.],
+                    [False., False., True., True.]])
+    """
+    chunk_start_idx = torch.Tensor(
+        chunk_start_idx
+    ).long()  # first idx of each chunk, such as [0,18,36,48].
+    start_pad = torch.nn.functional.pad(
+        chunk_start_idx, (1, 0)
+    )  # append 0 to the beginning, so it becomes [0, 0, 18, 36, 48]
+    end_pad = torch.nn.functional.pad(
+        chunk_start_idx, (0, 1), value=x_len
+    )  # append x_len to the end, so it becomes [0,18,36,48, x_len]
+    seq_range = torch.arange(0, x_len).unsqueeze(-1)  # seq_range size: [x_len, 1]
+    idx = ((seq_range < end_pad) & (seq_range >= start_pad)).nonzero()[:, 1]  # idx size: [x_len]
+    boundary = end_pad[idx]  # boundary size: [x_len]
+    seq_range_expand = (
+        torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)
+    )  # seq_range_expand size [x_len, x_len]
+    idx_left = idx - left_window
+    idx_left[idx_left < 0] = 0
+    boundary_left = start_pad[idx_left]
+    mask_left = seq_range_expand >= boundary_left.unsqueeze(-1)
+    idx_right = idx + right_window
+    idx_right[idx_right > len(chunk_start_idx)] = len(chunk_start_idx)
+    boundary_right = end_pad[idx_right]
+    mask_right = seq_range_expand < boundary_right.unsqueeze(-1)
+    return mask_left & mask_right
+
 
 
 class Phi4MMAudioEmbedding(nn.Module):
@@ -758,19 +1634,19 @@ class Phi4MMAudioEmbedding(nn.Module):
         super().__init__()
         self.config = config
         # n_embed or hidden_size for text LM
-        hidden_size = config.n_embd if hasattr(config, 'n_embd') else config.hidden_size
+        hidden_size = config.n_embd if hasattr(config, "n_embd") else config.hidden_size
 
-        if hasattr(config, 'embd_pdrop') or hasattr(config, 'embed_pdrop'):
-            embd_drop = config.embd_pdrop if hasattr(config, 'embd_pdrop') else config.embed_pdrop
+        if hasattr(config, "embd_pdrop") or hasattr(config, "embed_pdrop"):
+            embd_drop = config.embd_pdrop if hasattr(config, "embd_pdrop") else config.embed_pdrop
             self.drop = nn.Dropout(embd_drop)
         else:
             self.drop = None
 
-        audio_dim_out = None # Set this variable according to the actual audio processor
+        audio_dim_out = None  # Set this variable according to the actual audio processor
         logger.info(f"create audio processor {config.audio_processor}")
         self.layer_idx = -2
 
-        if isinstance(config.audio_processor, dict) and config.audio_processor.get('name', None) == "cascades":
+        if isinstance(config.audio_processor, dict) and config.audio_processor.get("name", None) == "cascades":
             encoder_config = config.audio_processor.get("config", None)
             assert encoder_config is not None
             self.encoder = ConformerEncoder(**encoder_config)
@@ -789,20 +1665,20 @@ class Phi4MMAudioEmbedding(nn.Module):
         self.audio_dim_out = audio_dim_out
         self.audio_dim_in = n_mels
 
-        self.freeze_audio_processor = kwargs.get('freeze_audio_processor', False)
-        logger.info(f'freeze_audio_processor = {self.freeze_audio_processor}')
+        self.freeze_audio_processor = kwargs.get("freeze_audio_processor", False)
+        logger.info(f"freeze_audio_processor = {self.freeze_audio_processor}")
 
-        self.downsample_rate = kwargs.get('downsample_rate', 1)
+        self.downsample_rate = kwargs.get("downsample_rate", 1)
 
-        enable_gradient_checkpointing = kwargs.get('enable_gradient_checkpointing', False)
+        enable_gradient_checkpointing = kwargs.get("enable_gradient_checkpointing", False)
         if enable_gradient_checkpointing:
             self.encoder.gradient_checkpointing_enable()
-            logger.info(f'gradient checkpointing enabled for audio processor')
+            logger.info("gradient checkpointing enabled for audio processor")
 
-        projection_cls = kwargs.get('projection_cls', 'linear')
-        if projection_cls == 'linear':
+        projection_cls = kwargs.get("projection_cls", "linear")
+        if projection_cls == "linear":
             self.audio_projection = nn.Linear(audio_dim_out, hidden_size)
-        elif projection_cls == 'mlp':
+        elif projection_cls == "mlp":
             # follow llava-v1.5's implementation
             # (do not use image_projection and image_proj_norm)
             dim_projection = hidden_size
@@ -819,12 +1695,11 @@ class Phi4MMAudioEmbedding(nn.Module):
                 layers_for_vision.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
             audio_projection_for_vision = nn.Sequential(*layers_for_vision)
 
-            self.audio_projection = nn.ModuleDict({
-                'speech': audio_projection_for_speech,
-                'vision': audio_projection_for_vision
-            })
+            self.audio_projection = nn.ModuleDict(
+                {"speech": audio_projection_for_speech, "vision": audio_projection_for_vision}
+            )
         else:
-            raise NotImplementedError(f'projection_cls = {projection_cls}, not implemented')
+            raise NotImplementedError(f"projection_cls = {projection_cls}, not implemented")
 
         self.vocab_size = config.vocab_size
         self.input_embeds = None
@@ -832,7 +1707,7 @@ class Phi4MMAudioEmbedding(nn.Module):
 
     def post_init(self, audio_config):
         # execute after the from_pretrained() initialization of the phi4mm model
-        if audio_config.get('name', None) == "cascades":
+        if audio_config.get("name", None) == "cascades":
             init_model_config = audio_config.get("init_model", {})
             self.encoder.post_init(init_model_config)
             # remove the init model in config so it is not saved in the config.
@@ -846,8 +1721,12 @@ class Phi4MMAudioEmbedding(nn.Module):
     def set_audio_embed_sizes(self, audio_embed_sizes: torch.LongTensor) -> None:
         self.audio_embed_sizes = audio_embed_sizes
 
-    def get_audio_features(self, input_embeds: torch.FloatTensor, audio_attention_mask: torch.Tensor, audio_projection_mode: str='speech'):
-
+    def get_audio_features(
+        self,
+        input_embeds: torch.FloatTensor,
+        audio_attention_mask: torch.Tensor,
+        audio_projection_mode: str = "speech",
+    ):
         if self.freeze_audio_processor:
             with torch.no_grad():
                 audio_features, masks = self.encoder(input_embeds, audio_attention_mask)
@@ -863,12 +1742,20 @@ class Phi4MMAudioEmbedding(nn.Module):
 
         return audio_set_tensor
 
-    def forward(self, input_ids: torch.LongTensor, input_embeds: torch.FloatTensor, audio_embed_sizes=None, audio_attention_mask=None, audio_projection_mode='speech', **kwargs) -> torch.FloatTensor:
-        '''
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        input_embeds: torch.FloatTensor,
+        audio_embed_sizes=None,
+        audio_attention_mask=None,
+        audio_projection_mode="speech",
+        **kwargs,
+    ) -> torch.FloatTensor:
+        """
         arguments:
             input_ids: input text ids (B, U)
             input_embeds: audio features (B, T, D)  B: num audios in a sequence
-        '''
+        """
         if self.input_embeds is not None:
             input_embeds = self.input_embeds.clone()
         if self.audio_embed_sizes is not None:
@@ -905,12 +1792,12 @@ class Phi4MMAudioEmbedding(nn.Module):
                 audio_attention_mask = audio_embeds.new_ones(audio_embeds.size()[:2]).long()
                 audio_set_tensor = self.get_audio_features(audio_embeds, audio_attention_mask, audio_projection_mode)
 
-        hidden_states = kwargs['wte'](input_ids)
+        hidden_states = kwargs["wte"](input_ids)
 
         if len(positions.tolist()) > 0:
-
-            assert audio_embed_sizes.sum().item() == len(positions), \
-                f"please ensure the encoder outputs have the same length as defined in input_ids! \n audio_embed_sizes.sum().item(): {audio_embed_sizes.sum().item()} \n len(positions): {len(positions)} \n audio_embed_sizes: {audio_embed_sizes} \n positions: {positions} \n input_ids.shape \n {input_ids.shape}"
+            assert (
+                audio_embed_sizes.sum().item() == len(positions)
+            ), f"please ensure the encoder outputs have the same length as defined in input_ids! \n audio_embed_sizes.sum().item(): {audio_embed_sizes.sum().item()} \n len(positions): {len(positions)} \n audio_embed_sizes: {audio_embed_sizes} \n positions: {positions} \n input_ids.shape \n {input_ids.shape}"
 
             # new implementation without in-place operation
             # Ref: https://huggingface.co/microsoft/Phi-3.5-vision-instruct/blob/4a0d683eba9f1d0cbfb6151705d1ee73c25a80ca/modeling_phi3_v.py#L233
@@ -918,23 +1805,22 @@ class Phi4MMAudioEmbedding(nn.Module):
             # Ref: https://pytorch.org/docs/stable/generated/torch.Tensor.index_put_.html#torch.Tensor.index_put_
             # audio_set_tensor: shape (N_audios, N_padded_tokens, C)
             # Shape: (merged_N_tokens, C)
-            merged_audio_set_tensor = torch.cat([
-                audio_set_tensor[i, :audio_embed_sizes[i], :]
-                for i in range(len(audio_embed_sizes))
-            ], dim=0)
+            merged_audio_set_tensor = torch.cat(
+                [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
+            )
             merged_audio_set_tensor = merged_audio_set_tensor.to(hidden_states.dtype).to(hidden_states.device)
             # Temporarily disable autocast to avoid issue on bf16 tensors
             # Ref: https://github.com/pytorch/pytorch/issues/132715
             with torch.autocast(device_type=hidden_states.device.type, enabled=False):
                 new_hidden_states = hidden_states.index_put(
-                    indices=positions_tuple,
-                    values=merged_audio_set_tensor,
-                    accumulate=False
+                    indices=positions_tuple, values=merged_audio_set_tensor, accumulate=False
                 )
             hidden_states = new_hidden_states
         else:
             if self.training:
-                hidden_states  = hidden_states + (0 * audio_set_tensor[:,0].to(hidden_states.dtype).to(hidden_states.device)).sum()
+                hidden_states = (
+                    hidden_states + (0 * audio_set_tensor[:, 0].to(hidden_states.dtype).to(hidden_states.device)).sum()
+                )
 
         if self.drop is not None:
             hidden_states = self.drop(hidden_states)
@@ -943,7 +1829,31 @@ class Phi4MMAudioEmbedding(nn.Module):
 
 
 
-class Phi4MMImageAudioEmbedding(nn.Module):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#################################################### TEXT ####################################################
+
+
+
+
+
+
+
+class Phi4ImageAudioEmbedding(nn.Module):
     """Image-audio embedding."""
 
     def __init__(self, config: PretrainedConfig, **kwargs) -> None:
@@ -951,13 +1861,13 @@ class Phi4MMImageAudioEmbedding(nn.Module):
 
         self.vocab_size = config.vocab_size
 
-        self.image_input_id = kwargs.get('image_input_id', -1)
-        self.audio_input_id = kwargs.get('audio_input_id', -10000)
-        assert self.image_input_id != self.audio_input_id, 'image_input_id and audio_input_id should be different'
+        self.image_input_id = kwargs.get("image_input_id", -1)
+        self.audio_input_id = kwargs.get("audio_input_id", -10000)
+        assert self.image_input_id != self.audio_input_id, "image_input_id and audio_input_id should be different"
 
-        self.image_embd_layer_kwargs = kwargs['image_embd_layer']
+        self.image_embd_layer_kwargs = kwargs["image_embd_layer"]
         self.image_embed = Phi4MMImageEmbedding(config, **self.image_embd_layer_kwargs)
-        self.audio_embd_layer_kwargs = kwargs['audio_embd_layer']
+        self.audio_embd_layer_kwargs = kwargs["audio_embd_layer"]
         self.audio_embed = Phi4MMAudioEmbedding(config, **self.audio_embd_layer_kwargs)
 
         self.input_image_embeds = None
@@ -990,13 +1900,13 @@ class Phi4MMImageAudioEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         input_embeds,
-        input_image_embeds: Optional[torch.FloatTensor]=None,
-        input_audio_embeds: Optional[torch.FloatTensor]=None,
+        input_image_embeds: Optional[torch.FloatTensor] = None,
+        input_audio_embeds: Optional[torch.FloatTensor] = None,
         image_sizes=None,
         image_attention_mask=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        audio_projection_mode='speech',
+        audio_projection_mode="speech",
         wte=None,
     ) -> torch.FloatTensor:
         MAX_INPUT_ID = int(1e9)
@@ -1039,10 +1949,14 @@ class Phi4MMImageAudioEmbedding(nn.Module):
         # backward compatibility
         with torch.no_grad():
             new_input_ids = input_ids.clone()
-            new_input_ids[(input_ids >= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[0]) &
-                        (input_ids <= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[1])] = _IMAGE_SPECIAL_TOKEN_ID
-            new_input_ids[(input_ids >= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[0]) &
-                        (input_ids <= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[1])] = _AUDIO_SPECIAL_TOKEN_ID
+            new_input_ids[
+                (input_ids >= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[0])
+                & (input_ids <= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[1])
+            ] = _IMAGE_SPECIAL_TOKEN_ID
+            new_input_ids[
+                (input_ids >= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[0])
+                & (input_ids <= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[1])
+            ] = _AUDIO_SPECIAL_TOKEN_ID
             input_ids = new_input_ids
 
         with torch.no_grad():
@@ -1059,7 +1973,7 @@ class Phi4MMImageAudioEmbedding(nn.Module):
                 input_embeds=input_image_embeds,
                 image_sizes=image_sizes,
                 wte=wte,
-                image_attention_mask=image_attention_mask
+                image_attention_mask=image_attention_mask,
             )
         if input_audio_embeds is not None:
             audio_hidden_states = self.audio_embed(
@@ -1076,7 +1990,9 @@ class Phi4MMImageAudioEmbedding(nn.Module):
         #               actually, in the debug code above, the non-image-audio tokens from image_hidden_states and audio_hidden_states should be the same
         if input_image_embeds is not None and input_audio_embeds is not None:
             dtype = image_hidden_states.dtype
-            hidden_states = image_hidden_states * image_position_mask.to(dtype).unsqueeze(-1) + audio_hidden_states * non_image_position_mask.to(dtype).unsqueeze(-1)
+            hidden_states = image_hidden_states * image_position_mask.to(dtype).unsqueeze(
+                -1
+            ) + audio_hidden_states * non_image_position_mask.to(dtype).unsqueeze(-1)
         elif input_image_embeds is not None:
             hidden_states = image_hidden_states
         elif input_audio_embeds is not None:
@@ -1090,6 +2006,7 @@ class Phi4MMImageAudioEmbedding(nn.Module):
 
 class Phi4RotaryEmbedding(LlamaRotaryEmbedding):
     pass
+
 
 class Phi4RMSNorm(Phi3RMSNorm):
     pass
@@ -1116,10 +2033,7 @@ class Phi4Model(Phi3Model, nn.Module):
 
         self.embed_tokens_extend = None
         if isinstance(config.embd_layer, dict):
-            embedding_config = {
-                'embedding_cls': config.embd_layer['embedding_cls'],
-                **config.embd_layer
-            }
+            embedding_config = {"embedding_cls": config.embd_layer["embedding_cls"], **config.embd_layer}
             self.embed_tokens_extend = Phi4ImageAudioEmbedding(config, **embedding_config)
 
         self.layers = nn.ModuleList(
@@ -1163,7 +2077,6 @@ class Phi4Model(Phi3Model, nn.Module):
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1288,36 +2201,38 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
         # LoRA related settings
         assert getattr(config, "vision_lora", None) is not None
         from peft import LoraConfig, get_peft_model
+
         vision_lora_config = LoraConfig(
-            r=config.vision_lora['r'],
-            lora_alpha=config.vision_lora['lora_alpha'],
-            target_modules=config.vision_lora['layer'],
-            lora_dropout=config.vision_lora['dp'],
+            r=config.vision_lora["r"],
+            lora_alpha=config.vision_lora["lora_alpha"],
+            target_modules=config.vision_lora["layer"],
+            lora_dropout=config.vision_lora["dp"],
             task_type="CAUSAL_LM",
         )
         peft_model = get_peft_model(self.model, vision_lora_config, adapter_name="vision")
-        self.config.vision_lora['r'] = config.vision_lora['r']
-        self.config.vision_lora['lora_alpha'] = config.vision_lora['lora_alpha']
-        self.config.vision_lora['layer'] = config.vision_lora['layer']
-        self.config.vision_lora['dp'] = config.vision_lora['dp']
+        self.config.vision_lora["r"] = config.vision_lora["r"]
+        self.config.vision_lora["lora_alpha"] = config.vision_lora["lora_alpha"]
+        self.config.vision_lora["layer"] = config.vision_lora["layer"]
+        self.config.vision_lora["dp"] = config.vision_lora["dp"]
 
         assert getattr(config, "speech_lora", None) is not None
         speech_lora_config = LoraConfig(
-            r=config.speech_lora['r'],
-            lora_alpha=config.speech_lora['lora_alpha'],
-            target_modules=config.speech_lora['layer'],
-            lora_dropout=config.speech_lora['dp'],
+            r=config.speech_lora["r"],
+            lora_alpha=config.speech_lora["lora_alpha"],
+            target_modules=config.speech_lora["layer"],
+            lora_dropout=config.speech_lora["dp"],
             task_type="CAUSAL_LM",
         )
         peft_model.base_model.active_adapter.append("speech")
         peft_model.add_adapter("speech", speech_lora_config)
-        self.config.speech_lora['r'] = config.speech_lora['r']
-        self.config.speech_lora['lora_alpha'] = config.speech_lora['lora_alpha']
-        self.config.speech_lora['layer'] = config.speech_lora['layer']
-        self.config.speech_lora['dp'] = config.speech_lora['dp']
+        self.config.speech_lora["r"] = config.speech_lora["r"]
+        self.config.speech_lora["lora_alpha"] = config.speech_lora["lora_alpha"]
+        self.config.speech_lora["layer"] = config.speech_lora["layer"]
+        self.config.speech_lora["dp"] = config.speech_lora["dp"]
 
     def set_lora_adapter(self, adapter_name) -> None:
         from peft.tuners.lora.layer import LoraLayer
+
         for module in self.modules():
             if isinstance(module, LoraLayer):
                 if module.merged:
@@ -1330,6 +2245,7 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
         # Ref: peft/tuners/tuners_utils.py - enable_adapters()
         # Ref: peft/tuners/lora/layer.py
         from peft.tuners.lora.layer import LoraLayer
+
         for module in self.modules():
             if isinstance(module, LoraLayer):
                 # disable grads on all adapter layers
@@ -1406,14 +2322,14 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
         input_mode = InputMode(input_mode)
 
         if input_mode in [InputMode.VISION_SPEECH, InputMode.VISION]:
-            self.set_lora_adapter('vision')
-            audio_projection_mode = 'vision'
+            self.set_lora_adapter("vision")
+            audio_projection_mode = "vision"
         elif input_mode == InputMode.SPEECH:
-            self.set_lora_adapter('speech')
-            audio_projection_mode = 'speech'
+            self.set_lora_adapter("speech")
+            audio_projection_mode = "speech"
         elif input_mode == InputMode.LANGUAGE:
             self.unset_lora_adapter()
-            audio_projection_mode = 'speech'
+            audio_projection_mode = "speech"
         else:
             raise ValueError(f"Invalid input_mode: {input_mode}")
 
@@ -1474,7 +2390,7 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
         position_ids=None,
         use_cache=True,
         num_logits_to_keep=None,
-        **kwargs
+        **kwargs,
     ):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
         # process
