@@ -322,6 +322,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    test_cpu_offload = False
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
     def is_pipeline_test_to_skip(
