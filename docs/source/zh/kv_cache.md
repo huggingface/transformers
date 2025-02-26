@@ -24,7 +24,7 @@ Transformers支持多种缓存方法，通过利用“Cache”类来抽象和管
 
 ## 什么是缓存，以及我们为何需要关注它？
 
-想象一下，你正在与某人进行对话，而每次回应时，你不得不从头开始回忆之前说过的话。这种方式既缓慢又低效，对吧？在Transformer模型的世界中，也存在类似的概念，这就引入了缓存 keys 和 values 的重要性。从现在起，我将这一概念称为KV缓存（KV Cache、key-value cache）。
+想象一下，你正在与某人进行对话，而每次回应时，你不得不从头开始回忆之前说过的话。这种方式既缓慢又低效，对吧？在Transformer模型的世界中，也存在类似的概念，这就引入了缓存 keys 和 values 的重要性。从现在起，我将这一概念称为KV缓存（KV Cache, key-value cache）。
 
 KV 缓存的存在是为了优化自回归模型中的文本生成的过程，这些模型逐个预测文本的token。由于模型一次只能生成一个token，且每个新的预测都依赖于之前的上下文，这一过程可能相当缓慢。这意味着，要预测生成过程中的第1000个token，你需要前999个token的信息，这些信息以矩阵乘法的方式通过那些token的表示传递过来。然而，要预测第1001个token时，你同样需要前999个token的信息，再加上第1000个token的额外信息。正是在这一环节，key-value 缓存 派上了用场，它通过存储之前的计算结果，以便在后继token中复用，从而避免了重复计算，优化了序列生成过程。
 
@@ -96,7 +96,6 @@ KV 缓存的存在是为了优化自回归模型中的文本生成的过程，�
 ## 使用 Cache 生成
 
 在 🤗 Transformers 中，我们支持各种 Cache 类型以在不同模型和任务中优化性能。默认情况下，所有模型都会使用缓存进行生成，
-with the [`~DynamicCache`] class being the default cache for most models. It allows us to dynamically grow cache size, by saving more and more keys and values as we generate. If for some reason you don't want to use caches, you can pass `use_cache=False` into the `generate()` method.
 其中 [`~DynamicCache`] 类是大多数模型的默认缓存。它允许我们在生成过程中动态增加缓存大小，通过保存更多的键和值。如果你出于某些原因不想使用缓存，可以将 `use_cache=False` 传递给 `generate()` 方法。
 
 参见下表，了解不同缓存类型之间的差异，并根据你的需求选择最适合的类型。建议在初始化的模型应在调用模型之前进行初始化，并作为关键字参数传递给模型。在其他所有情况下，你可以直接定义所需的 `cache_implementation`，我们会为你处理其余部分。
@@ -115,15 +114,14 @@ with the [`~DynamicCache`] class being the default cache for most models. It all
 
 ### 可量化的缓存
 
-Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
-Key 和 value 的缓存可能会占据大量内存，成为长上下文生成的瓶颈，尤其是对于大规模语言模型。在使用 `generate()` 时量化缓存可以显著减少内存需求，但代价是速度变慢。
+Key 和 value 的缓存可能会占据大量内存，成为[长上下文生成的瓶颈](https://huggingface.co/blog/llama31#inference-memory-requirements)，尤其是对于大规模语言模型。
 在使用 `generate()` 时量化缓存可以显著减少内存需求，但代价是速度变慢。
 
-`transformers` 中的 KV 缓存量化主要受到了论文 ["KIVI: 一种无需调优的异构 2 位量化方法用于 KV 缓存"](https://arxiv.org/abs/2402.02750) 的启发，并当前支持 `~QuantoQuantizedCache` 和 `~HQQQuantizedCache` 类。有关内部机制的更多信息，请参阅该论文。
+`transformers` 中的 KV 缓存量化主要受到了论文 ["KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"](https://arxiv.org/abs/2402.02750) 的启发，并当前支持 [`~QuantoQuantizedCache`] 和 [`~HQQQuantizedCache`] 类。有关内部机制的更多信息，请参阅该论文。
 
 要启用 KV 缓存的量化，需要在 `generation_config` 中指定 `cache_implementation="quantized"`。
-与量化相关的参数应该通过 `dict` 或者 `~QuantizedCacheConfig` 类的实例传递给 `generation_config`。
-需要在 `~QuantizedCacheConfig` 中指定使用的量化后端，默认是 `quanto`。
+与量化相关的参数应该通过 `dict` 或者 [`~QuantizedCacheConfig`] 类的实例传递给 `generation_config`。
+需要在 [`~QuantizedCacheConfig`] 中指定使用的量化后端，默认是 `quanto`。
 
 如果使用 `quanto` 后端，建议在缓存配置中将 `axis-key` 和 `axis-value` 参数设置为 `0`；如果使用 `HQQ` 后端，则应将这些参数设置为 `1`。对于其他配置参数，请使用默认值，除非运行时出现内存不足的情况。遇到这种情况，您可以考虑减少剩余长度。
 
@@ -146,10 +144,9 @@ Key 和 value 的缓存可能会占据大量内存，成为长上下文生成的
 I like rock music because it's a great way to express myself. I like the way it makes me feel, the
 ```
 
-### Offloaded Cache
-## 可卸载的缓存
+### 可卸载的缓存
 
-类似地，`~OffloadedCache` 策略旨在减少 GPU VRAM 的使用量。
+类似地，[`~OffloadedCache`] 策略旨在减少 GPU VRAM 的使用量。
 它通过将大部分层的 KV 缓存移到 CPU 来实现这一目标。
 随着模型的 `forward()` 方法遍历各层，该策略将在 GPU 上维护当前层的缓存，并异步预取下一层的缓存，同时将上一层的缓存发送回 CPU。
 与 KV 缓存量化不同，该策略始终会产生与默认 KV 缓存实现相同的结果，
@@ -185,9 +182,7 @@ Fun fact: The shortest war in history was between Britain and Zanzibar on August
 
 </Tip>
 
-The example below shows how KV cache offloading can be used as a fallback strategy.
 以下示例展示了如何使用KV缓存卸载作为备用策略。
-
 ```python
 >>> import torch
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -216,13 +211,12 @@ The example below shows how KV cache offloading can be used as a fallback strate
 ```
 
 在拥有50 GB内存的GPU上，运行此代码，在成功生成40个beams之前将输出
-
 ```
 CUDA out of memory. Tried to allocate 4.83 GiB. GPU
 retrying with cache_implementation='offloaded'
 ```
 
-## 静态缓存
+### 静态缓存
 
 由于“动态缓存”在每一步生成过程中动态增长，这会妨碍你充分利用即时编译（JIT）优化的优势。
 而[`~StaticCache`]则预先分配了keys和values的最大空间，使得在生成至最大长度前无需调整缓存大小。请参阅以下使用示例。
