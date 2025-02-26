@@ -4540,8 +4540,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return key, False
 
-    @classmethod
-    def _fix_state_dict_keys_on_load(cls, state_dict):
+    def _fix_state_dict_keys_on_load(self, state_dict):
         """Fixes state dict keys by replacing legacy parameter names with their modern equivalents.
         Logs if any parameters have been renamed.
         """
@@ -4551,13 +4550,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for key in state_dict_keys:
             # TODO refactor a lot of things to make sure this is only done once
             new_key = key
-            if len(cls.base_model_prefix) > 0:
-                if not hasattr(cls, cls.base_model_prefix) and key.startswith(cls.base_model_prefix):
+            print(f"{hasattr(self, self.base_model_prefix)}, {self}, {self.base_model_prefix}")
+            if len(self.base_model_prefix) > 0:
+                if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
                     new_key = ".".join(key.split(".")[1:])
-                elif hasattr(cls, cls.base_model_prefix) and not key.startswith(cls.base_model_prefix):
-                    new_key = f"{cls.base_model_prefix}.{key}"
+                elif hasattr(self, self.base_model_prefix) and not key.startswith(self.base_model_prefix):
+                    print("adding the key to base model keys")
+                    new_key = f"{self.base_model_prefix}.{key}"
 
-            new_key, has_changed = cls._fix_state_dict_key_on_load(new_key)
+            new_key, has_changed = self._fix_state_dict_key_on_load(new_key)
 
             state_dict[new_key] = state_dict.pop(key)
 
@@ -4894,8 +4895,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model_to_load, state_dict, start_prefix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
-                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
+                print(model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers))
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
@@ -4984,7 +4985,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         assign_to_params_buffers = check_support_param_buffer_assignment(
                             model_to_load, state_dict, start_prefix
                         )
-                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
+                    fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
                     error_msgs += model_to_load.load_state_dict(
                         fixed_state_dict, strict=False, assign=assign_to_params_buffers
                     )
