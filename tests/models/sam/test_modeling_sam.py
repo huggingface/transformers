@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SamModel, SamProcessor
+    from transformers import SamModel, SamProcessor, SamVisionEncoder
 
 
 if is_vision_available():
@@ -42,6 +42,7 @@ if is_vision_available():
 class SamVisionTester:
     def __init__(
         self,
+        parent,
         hidden_size=36,
         intermediate_size=72,
         projection_dim=62,
@@ -68,6 +69,7 @@ class SamVisionTester:
         mlp_dim=None,
         batch_size=2,
     ):
+        self.parent = parent
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
@@ -125,6 +127,203 @@ class SamVisionTester:
         config = self.get_config()
 
         return config, pixel_values
+
+    def create_and_check_model(self, config, pixel_values):
+        model = SamVisionEncoder(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        output_size = self.image_size // self.patch_size
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.output_channels, output_size, output_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class SamVisionTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (SamVisionEncoder,) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    test_torchscript = False
+    _is_composite = True
+
+    def setUp(self):
+        self.model_tester = SamVisionTester(self)
+        common_properties = ["initializer_range"] # TODO
+        self.config_tester = ConfigTester(
+            self, config_class=SamVisionConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        expected_attention_shape = (
+            self.model_tester.batch_size,
+            self.model_tester.num_attention_heads,
+            196,
+            196,
+        )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-4:]),
+                list(expected_attention_shape),
+            )
+
+    @unittest.skip(reason="SamModel does not support training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="SamModel does not support training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    @unittest.skip(reason="SamModel does not support training")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        model_name = "facebook/sam-vit-huge"
+        model = SamModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @require_torch_sdpa
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(reason="SAM model can't be compiled dynamic yet")
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
+
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+
+                # Root model determines SDPA support
+                attn_impl = "sdpa" if model._supports_sdpa else "eager"
+
+                # Check config propagation to submodels that support it
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                # Verify SDPA/eager layer presence
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+
+                if not has_sdpa and attn_impl == "sdpa":
+                    raise ValueError("The SDPA model should have SDPA attention layers")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
 
 
 class SamPromptEncoderTester:
@@ -271,7 +470,7 @@ class SamModelTester:
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
-        self.vision_tester = SamVisionTester()
+        self.vision_tester = SamVisionTester(parent)
         self.prompt_encoder_tester = SamPromptEncoderTester()
         self.mask_decoder_tester = SamMaskDecoderTester()
 
