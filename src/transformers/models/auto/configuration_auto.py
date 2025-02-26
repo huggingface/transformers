@@ -425,6 +425,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deberta", "DeBERTa"),
         ("deberta-v2", "DeBERTa-v2"),
         ("decision_transformer", "Decision Transformer"),
+        ("deepseek_v2", "DeepSeek-V2"),
         ("deepseek_v3", "DeepSeek-V3"),
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
