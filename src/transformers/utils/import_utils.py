@@ -1300,6 +1300,10 @@ def is_triton_available():
     return _triton_available
 
 
+def is_numba_available():
+    return importlib.util.find_spec("numba") is not None
+
+
 # docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:

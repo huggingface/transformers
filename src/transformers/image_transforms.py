@@ -30,6 +30,7 @@ from .image_utils import (
 from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
 from .utils.import_utils import (
     is_flax_available,
+    is_numba_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -50,6 +51,31 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
+if is_numba_available():
+    from numba import jit, prange
+
+    @jit("float32[:,:,:,:](uint8[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    def _fuse_rescale_normalize_transpose(vid_in: np.ndarray, pixel_map: np.ndarray):
+        B, H, W, C = vid_in.shape
+        vid_out = np.empty((B, C, H, W), dtype=np.float32)
+        for bs in range(B):
+            for i in prange(H):
+                for j in range(W):
+                    for dim in range(C):
+                        vid_out[bs, dim, i, j] = pixel_map[dim, vid_in[bs, i, j, dim]]
+        return vid_out
+
+    @jit("float32[:,:,:,:](uint8[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    def _fuse_rescale_normalize(vid_in: np.ndarray, pixel_map: np.ndarray):
+        B, C, H, W = vid_in.shape
+        vid_out = np.empty((B, C, H, W), dtype=np.float32)
+        for bs in prange(B):
+            for dim in range(C):
+                for i in prange(H):
+                    for j in range(W):
+                        vid_out[bs, dim, i, j] = pixel_map[dim, vid_in[bs, dim, i, j]]
+        return vid_out
 
 
 def to_channel_dimension_format(

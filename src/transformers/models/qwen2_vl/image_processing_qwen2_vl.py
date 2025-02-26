@@ -24,7 +24,6 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from numba import jit, prange
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
@@ -49,7 +48,11 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_numba_available, logging
+
+
+if is_numba_available():
+    from ...image_transforms import _fuse_rescale_normalize, _fuse_rescale_normalize_transpose
 
 
 logger = logging.get_logger(__name__)
@@ -84,28 +87,6 @@ def smart_resize(
         h_bar = math.ceil(height * beta / factor) * factor
         w_bar = math.ceil(width * beta / factor) * factor
     return h_bar, w_bar
-
-
-@jit("float32[:,:,:](uint8[:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
-def _fuse_rescale_normalize_transpose(vid_in: np.ndarray, pixel_map: np.ndarray):
-    H, W, C = vid_in.shape
-    vid_out = np.zeros((C, H, W), dtype=np.float32)
-    for i in prange(H):
-        for j in prange(W):
-            for dim in range(C):
-                vid_out[dim, i, j] = pixel_map[dim, vid_in[i, j, dim]]
-    return vid_out
-
-
-@jit("float32[:,:,:](uint8[:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
-def _fuse_rescale_normalize(vid_in: np.ndarray, pixel_map: np.ndarray):
-    C, H, W = vid_in.shape
-    vid_out = np.zeros((C, H, W), dtype=np.float32)
-    for dim in range(C):
-        for i in prange(H):
-            for j in prange(W):
-                vid_out[dim, i, j] = pixel_map[dim, vid_in[dim, i, j]]
-    return vid_out
 
 
 class Qwen2VLImageProcessor(BaseImageProcessor):
@@ -183,11 +164,11 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
     ) -> np.ndarray:
-        pixel = np.linspace(0, 255, 256, dtype=np.float32) * rescale_factor
+        pixel_map = np.ones((3, 256), dtype=np.float32)
+        pixel_map *= np.linspace(0, 255, 256, dtype=np.float32) * rescale_factor
         image_mean = np.array(image_mean, dtype=np.float32)[:, np.newaxis]
         image_std = np.array(image_std, dtype=np.float32)[:, np.newaxis]
-        pixel_map = (np.tile(pixel, (3, 1)) - image_mean) / image_std
-        return pixel_map
+        return (pixel_map - image_mean) / image_std
 
     def fuse_rescale_normalize(
         self,
@@ -273,40 +254,57 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(images[0], channel_dim=input_data_format)
         resized_height, resized_width = height, width
-        processed_images = []
-        for image in images:
-            cur_data_format = None
-
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
-                )
-                image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
-                )
-
-            if do_rescale and do_normalize:
-                image = self.fuse_rescale_normalize(
-                    image, scale=rescale_factor, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-                cur_data_format = ChannelDimension.FIRST
-            elif do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
-            elif do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-
-            image = to_channel_dimension_format(
-                image, data_format, input_channel_dim=cur_data_format or input_data_format
+        if do_resize:
+            resized_height, resized_width = smart_resize(
+                height,
+                width,
+                factor=self.patch_size * self.merge_size,
+                min_pixels=self.min_pixels,
+                max_pixels=self.max_pixels,
             )
-            processed_images.append(image)
 
-        patches = np.array(processed_images)
+        is_fuse_ops_available = is_numba_available() and data_format == ChannelDimension.FIRST
+        if do_rescale and do_normalize and is_fuse_ops_available:
+            if do_resize:
+                images = np.array(
+                    [
+                        resize(
+                            image,
+                            (resized_height, resized_width),
+                            resample=resample,
+                            input_data_format=input_data_format,
+                        )
+                        for image in images
+                    ]
+                )
+            else:
+                images = np.array(images)
+            patches = self.fuse_rescale_normalize(
+                images, scale=rescale_factor, mean=image_mean, std=image_std, input_data_format=input_data_format
+            )
+        else:
+            processed_images = []
+            for image in images:
+                if do_resize:
+                    image = resize(
+                        image,
+                        size=(resized_height, resized_width),
+                        resample=resample,
+                        input_data_format=input_data_format,
+                    )
+
+                if do_rescale:
+                    image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+
+                if do_normalize:
+                    image = self.normalize(
+                        image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    )
+
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                processed_images.append(image)
+            patches = np.array(processed_images)
+
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] % self.temporal_patch_size != 0:
