@@ -50,6 +50,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        image_embd_layer: Dict = {},
         **kwargs,
     ):
         super().__init__(
@@ -66,22 +67,14 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
-        self.image_embd_layer = {
-            "crop_size": 448,
-            "embedding_cls": "tune_image",
-            "enable_gradient_checkpointing": True,
-            "hd_transform_order": "sub_glb",
-            "projection_cls": "mlp",
-            "use_hd_transform": True,
-            "with_learnable_separator": True,
-        }
+        self.image_embd_layer = image_embd_layer
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
     def __init__(
         self,
-        hidden_size: int = 1024,  # attention_dim
-        num_attention_heads: int = 16,  # attention_heads
+        hidden_size: int = 1024,
+        num_attention_heads: int = 16,
         intermediate_size: int = 1536,
         activation: str = "swish",
         chunk_size: int = -1,
@@ -95,9 +88,9 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         depthwise_seperable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
         kernel_size: int = 3,
-        conv_activation: str = "relu",
+        conv_activation: str = "swish",
         input_size: int = 80,
-        conv_glu_type: str = "sigmoid",
+        conv_glu_type: str = "swish",
         bias_in_glu: bool = True,
         time_reduction: int = 8,
         nemo_conv_settings: Dict = {},
@@ -173,7 +166,6 @@ class Phi4MultimodalConfig(Phi3Config):
         pad_token_id=199999,
         original_max_position_embeddings=131000,
         sliding_window=None,
-        embd_layer: str = "default",
         vision_config=None,
         audio_config=None,
         **kwargs,
@@ -890,12 +882,12 @@ class Phi4MultimodalAudioMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.act_fn = ACT2FN[config.bias_in_glu]
+        self.act_fn = ACT2FN[config.activation]
         # ALL AFTER THIS WAS INSIDE A nn.Sequntial CALLED `net` -> KEY CONVERSION
         # gate_up_proj was additionally inside a GLULinear module with `linear` name inside
         self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, config.bias_in_glu)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = (nn.Dropout(config.dropout_rate),)
+        self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
         up_states = self.gate_up_proj(hidden_states)
@@ -1022,7 +1014,7 @@ class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
             padding=(kernel_size - 1) if config.causal else (kernel_size - 1) // 2,
         )
 
-        self.glu_act = ACT2FN[config.glu_type]
+        self.glu_act = ACT2FN[config.conv_glu_type]
 
         if config.bias_in_glu:
             self.b1 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
@@ -1072,7 +1064,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         if config.batch_norm:
             self.bn_layer = nn.BatchNorm1d(config.hidden_size)
 
-        self.act = ACT2FN[config.activation]
+        self.act = ACT2FN[config.conv_activation]
 
         self.ext_pw_conv_1d = nn.Conv1d(
             config.hidden_size,

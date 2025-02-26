@@ -19,7 +19,7 @@ import re
 import torch
 from safetensors.torch import load_file
 
-from transformers import Phi4MultimodalForCausalLM
+from transformers import Phi4MultimodalForCausalLM, Phi4MultimodalConfig, Phi4MultimodalVisionConfig, Phi4MultimodalAudioConfig
 
 
 # fmt: off
@@ -90,22 +90,12 @@ def convert_config(original_config: dict):
     # add
     audio_config["audio_embd_layer"] = audio_embd_layer
 
-    new_config_kwargs = {k: original_config[v] for k, v in key_mapping.items()}
-    new_config_kwargs.update({k: v for k, v in original_config.items() if k in similar_keys_to_keep})
+    # Create transformers config objects
+    audio_config = Phi4MultimodalAudioConfig(**audio_config)
+    vision_config = Phi4MultimodalAudioConfig(image_embd_layer=vision_embd_layer)
 
-    # These are not always defined depending on `params.json`
-    new_config_kwargs["sliding_window"] = original_config.get("sliding_window", None)
-    new_config_kwargs["num_key_value_heads"] = original_config.get(
-        "n_kv_heads", new_config_kwargs["num_attention_heads"]
-    )
-    new_config_kwargs["rope_theta"] = original_config.get("rope_theta", 10000.0)
-    new_config_kwargs["max_position_embeddings"] = original_config.get("max_seq_len", max_position_embeddings)
 
-    # This may sometimes be a string in `params.json`
-    if new_config_kwargs["sliding_window"] is not None:
-        new_config_kwargs["sliding_window"] = int(new_config_kwargs["sliding_window"])
-
-    new_config = MistralConfig(**new_config_kwargs)
+    new_config = Phi4MultimodalConfig(**original_config, vision_config=vision_config, audio_config=audio_config)
     return new_config
 
 
