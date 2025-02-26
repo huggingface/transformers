@@ -574,6 +574,7 @@ _import_structure = {
         "Phi4MultimodalVisionConfig",
         "Phi4MultimodalAudioConfig",
         "Phi4MultimodalProcessor",
+        "Phi4MultimodalFeatureExtractor",
     ],
     "models.llava_next_video": [
         "LlavaNextVideoConfig",
@@ -5930,6 +5931,7 @@ if TYPE_CHECKING:
     from .models.phi4_multimodal import (
         Phi4MultimodalAudioConfig,
         Phi4MultimodalConfig,
+        Phi4MultimodalFeatureExtractor,
         Phi4MultimodalProcessor,
         Phi4MultimodalVisionConfig,
     )

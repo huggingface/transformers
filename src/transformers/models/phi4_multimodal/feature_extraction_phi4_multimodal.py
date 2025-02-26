@@ -93,7 +93,7 @@ def speechlib_mel(sample_rate, n_fft, n_mels, fmin=None, fmax=None):
     return matrix
 
 
-class Phi4MultimodalAudioFeatureExtractor(SequenceFeatureExtractor):
+class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
     model_input_names = ["input_audio_embeds", "audio_embed_sizes", "audio_attention_mask"]
 
     def __init__(self, audio_compression_rate, audio_downsample_rate, audio_feat_stride, **kwargs):
@@ -264,4 +264,4 @@ class Phi4MultimodalAudioFeatureExtractor(SequenceFeatureExtractor):
         return result
 
 
-__all__ = ["Phi4MultimodalAudioFeatureExtractor"]
+__all__ = ["Phi4MultimodalFeatureExtractor"]
