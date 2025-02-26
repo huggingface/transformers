@@ -11,9 +11,10 @@ from transformers.generation.candidate_generator import (
     UniversalSpeculativeDecodingGenerator,
 )
 from transformers.generation.utils import AssistantVocabTranslatorCache
-from transformers.testing_utils import torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 
+@require_torch
 class TestAssistantToTargetTranslator(unittest.TestCase):
     def setUp(self):
         # Create mock tokenizers with predefined vocabularies
@@ -108,6 +109,7 @@ class MockTokenizer:
         return {"input_ids": input_ids}
 
 
+@require_torch
 class TestAssistantVocabTranslatorCache(unittest.TestCase):
     def setUp(self):
         # Clear the cache before each test
@@ -215,6 +217,7 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
         self.assertIsNotNone(translator_ref(), "Translator should still be alive due to strong references")
 
 
+@require_torch
 class TestUniversalSpeculativeDecoding(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
