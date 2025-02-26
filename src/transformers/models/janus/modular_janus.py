@@ -15,7 +15,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -29,6 +29,8 @@ from transformers.models.blip.image_processing_blip import BlipImageProcessor
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
+from ...generation.utils import GenerateDecoderOnlyOutput
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     resize,
     to_channel_dimension_format,
@@ -37,6 +39,7 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
     infer_channel_dimension_format,
+    make_list_of_images,
     to_numpy_array,
 )
 from ...modeling_outputs import CausalLMOutputWithPast, ModelOutput
@@ -1200,6 +1203,18 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
+    def decode_image_tokens(self, image_tokens: torch.Tensor):
+        """
+        Decodes generated image tokens from language model to continuous pixel values
+        with VQGAN module via upsampling.
+        Args:
+            image_tokens (`torch.LongTensor` of shape `(batch_size, num_of_tokens)`):
+                The tensors corresponding to the input images.
+        """
+        decoded_image = self.model.vqmodel.decode(image_tokens)
+        decoded_image = decoded_image.permute(0, 2, 3, 1)
+        return decoded_image
+
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor = None, **kwargs):
         generation_mode = kwargs.pop("generation_mode", None)
@@ -1219,20 +1234,27 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
-        # Fix me: Better way to pass generation config params rather than hardcoding.
-        generation_config.temperature = 1
-        generation_config.pad_token_id = 100002
-        generation_config.guidance_scale = 5
-
-        generation_mode = generation_config.get_generation_mode()
-        if generation_mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+        generation_method = generation_config.get_generation_mode()
+        if generation_method not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling. "
+                "Got incompatible mode for Image Generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
+
+        # init attention / hidden states / scores tuples
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+
+        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_logits = () if (return_dict_in_generate and output_logits) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         # If image is passed then perform custom pre and post processing on generated tokens.
         batch_size, seq_len = input_ids.shape
@@ -1253,7 +1275,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         outputs = None
 
         logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
-
         # Loop through the number of image tokens that need to be generated
         for i in tqdm(range(self.config.vision_config.num_image_tokens)):
             # Pass the input embeddings through the language model
@@ -1261,10 +1282,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 inputs_embeds=inputs_embeds,
                 use_cache=True,
                 past_key_values=outputs.past_key_values if i != 0 else None,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
             # Extract the last hidden state (corresponding to the most recent token)
-            hidden_state = outputs.last_hidden_state[:, -1, :]
+            hidden_state = outputs.last_hidden_state[:, -1, :].clone().float()
 
             # Generate scores using the generation head.
             scores = self.model.gen_head(hidden_state)
@@ -1278,22 +1301,34 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             generated_tokens[:, i] = next_token
 
             # Prepare embeddings for image generation.
-            next_token = next_token
             next_token = torch.cat([next_token, next_token], dim=1).view(-1)
 
             img_embeds = self.prepare_emeddings_for_image_generation(next_token)
 
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
-        # Decode generated tokens using Janus VQ model.
-        decoded_image = self.model.vqmodel.decode(generated_tokens)
+            if return_dict_in_generate:
+                if output_scores:
+                    scores += (scores,)
+                if output_logits:
+                    raw_logits += (hidden_state,)
+                if output_attentions:
+                    decoder_attentions += outputs.attentions
+                if output_hidden_states:
+                    decoder_hidden_states += outputs.hidden_states
+            # break
 
-        # Convert tensor to numpy array and then normalize, reshape the decoded image.
-        decoded_image = decoded_image.to(torch.float32).detach().numpy().transpose(0, 2, 3, 1)
-        decoded_image = np.clip((decoded_image + 1) / 2 * 255, 0, 255)
-        decoded_image = decoded_image.astype(np.uint8)
-
-        return decoded_image
+        if return_dict_in_generate:
+            return GenerateDecoderOnlyOutput(
+                sequences=generated_tokens,
+                scores=scores,
+                logits=raw_logits,
+                attentions=decoder_attentions,
+                hidden_states=decoder_hidden_states,
+                past_key_values=model_kwargs.get("past_key_values"),
+            )
+        else:
+            return generated_tokens
 
 
 def expand2square(pil_img, background_color):
@@ -1417,6 +1452,101 @@ class JanusImageProcessor(BlipImageProcessor):
             to_numpy_array(image),
             data_format if data_format is not None else input_data_format,
             input_channel_dim=ChannelDimension.LAST,
+        )
+        return image
+
+    def postprocess(
+        self,
+        images: Union[List[np.ndarray], List[torch.Tensor], List[Image.Image]],
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: List[float] = None,
+        image_std: List[float] = None,
+        input_data_format: str = None,
+        return_tensors: str = None,
+    ):
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+
+        images = make_list_of_images(images)  # Ensures input is a list
+
+        if isinstance(images[0], Image.Image):
+            return images if len(images) > 1 else images[0]
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(images[0])  # Determine format dynamically
+
+        pixel_values = []
+
+        for image in images:
+            image = to_numpy_array(image)  # Ensure NumPy format
+
+            if do_normalize:
+                image = self.unnormalize(
+                    image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
+                )
+
+            if do_rescale:
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = image.clip(0, 255).astype(np.uint8)
+
+            if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
+                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+                pixel_values.append(Image.fromarray(image))
+            else:
+                pixel_values.extend(image)
+
+        data = {"pixel_values": pixel_values}
+        return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def unnormalize(
+        self,
+        image: np.array,
+        image_mean: Union[float, Iterable[float]],
+        image_std: Union[float, Iterable[float]],
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
+        image = (image * image_std) + image_mean
+        Args:
+            image (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
+                Batch of pixel values to postprocess.
+            image_mean (`float` or `Iterable[float]`):
+                The mean to use for unnormalization.
+            image_std (`float` or `Iterable[float]`):
+                The standard deviation to use for unnormalization.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+        num_channels = 3
+
+        if isinstance(image_mean, Iterable):
+            if len(image_mean) != num_channels:
+                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(image_mean)}")
+        else:
+            image_mean = [image_mean] * num_channels
+
+        if isinstance(image_std, Iterable):
+            if len(image_std) != num_channels:
+                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(image_std)}")
+        else:
+            image_std = [image_std] * num_channels
+
+        rev_image_mean = tuple(-mean / std for mean, std in zip(image_mean, image_std))
+        rev_image_std = tuple(1 / std for std in image_std)
+        image = self.normalize(
+            image=image, mean=rev_image_mean, std=rev_image_std, input_data_format=input_data_format
         )
         return image
 

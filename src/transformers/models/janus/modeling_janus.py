@@ -24,7 +24,6 @@ import copy
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import nn
 from tqdm import tqdm
@@ -32,6 +31,7 @@ from tqdm import tqdm
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
+from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1587,6 +1587,18 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
+    def decode_image_tokens(self, image_tokens: torch.Tensor):
+        """
+        Decodes generated image tokens from language model to continuous pixel values
+        with VQGAN module via upsampling.
+        Args:
+            image_tokens (`torch.LongTensor` of shape `(batch_size, num_of_tokens)`):
+                The tensors corresponding to the input images.
+        """
+        decoded_image = self.model.vqmodel.decode(image_tokens)
+        decoded_image = decoded_image.permute(0, 2, 3, 1)
+        return decoded_image
+
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor = None, **kwargs):
         generation_mode = kwargs.pop("generation_mode", None)
@@ -1606,20 +1618,27 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
-        # Fix me: Better way to pass generation config params rather than hardcoding.
-        generation_config.temperature = 1
-        generation_config.pad_token_id = 100002
-        generation_config.guidance_scale = 5
-
-        generation_mode = generation_config.get_generation_mode()
-        if generation_mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+        generation_method = generation_config.get_generation_mode()
+        if generation_method not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling. "
+                "Got incompatible mode for Image Generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
+
+        # init attention / hidden states / scores tuples
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+
+        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_logits = () if (return_dict_in_generate and output_logits) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         # If image is passed then perform custom pre and post processing on generated tokens.
         batch_size, seq_len = input_ids.shape
@@ -1640,7 +1659,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         outputs = None
 
         logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
-
         # Loop through the number of image tokens that need to be generated
         for i in tqdm(range(self.config.vision_config.num_image_tokens)):
             # Pass the input embeddings through the language model
@@ -1648,10 +1666,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 inputs_embeds=inputs_embeds,
                 use_cache=True,
                 past_key_values=outputs.past_key_values if i != 0 else None,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
             # Extract the last hidden state (corresponding to the most recent token)
-            hidden_state = outputs.last_hidden_state[:, -1, :]
+            hidden_state = outputs.last_hidden_state[:, -1, :].clone().float()
 
             # Generate scores using the generation head.
             scores = self.model.gen_head(hidden_state)
@@ -1665,22 +1685,34 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             generated_tokens[:, i] = next_token
 
             # Prepare embeddings for image generation.
-            next_token = next_token
             next_token = torch.cat([next_token, next_token], dim=1).view(-1)
 
             img_embeds = self.prepare_emeddings_for_image_generation(next_token)
 
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
-        # Decode generated tokens using Janus VQ model.
-        decoded_image = self.model.vqmodel.decode(generated_tokens)
+            if return_dict_in_generate:
+                if output_scores:
+                    scores += (scores,)
+                if output_logits:
+                    raw_logits += (hidden_state,)
+                if output_attentions:
+                    decoder_attentions += outputs.attentions
+                if output_hidden_states:
+                    decoder_hidden_states += outputs.hidden_states
+            # break
 
-        # Convert tensor to numpy array and then normalize, reshape the decoded image.
-        decoded_image = decoded_image.to(torch.float32).detach().numpy().transpose(0, 2, 3, 1)
-        decoded_image = np.clip((decoded_image + 1) / 2 * 255, 0, 255)
-        decoded_image = decoded_image.astype(np.uint8)
-
-        return decoded_image
+        if return_dict_in_generate:
+            return GenerateDecoderOnlyOutput(
+                sequences=generated_tokens,
+                scores=scores,
+                logits=raw_logits,
+                attentions=decoder_attentions,
+                hidden_states=decoder_hidden_states,
+                past_key_values=model_kwargs.get("past_key_values"),
+            )
+        else:
+            return generated_tokens
 
 
 __all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration", "JanusModel", "JanusVQVAE"]
