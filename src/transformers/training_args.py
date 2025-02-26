@@ -451,8 +451,8 @@ class TrainingArguments:
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [wandb](https://www.wandb.com/),
-            [mlflow](https://www.mlflow.org/) and [comet](https://www.comet.com/site) logging. If not specified, will
-            be the same as `output_dir`.
+            [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and [swanlab](https://swanlab.cn)
+            logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -642,8 +642,8 @@ class TrainingArguments:
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
-            integrations.
+            `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
+            for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -1187,7 +1187,9 @@ class TrainingArguments:
 
     run_name: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional descriptor for the run. Notably used for wandb, mlflow and comet logging."},
+        metadata={
+            "help": "An optional descriptor for the run. Notably used for wandb, mlflow comet and swanlab logging."
+        },
     )
     disable_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
@@ -2848,8 +2850,8 @@ class TrainingArguments:
             report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed,
-                `"none"` for no integrations.
+                `"neptune"`, `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations
+                installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):

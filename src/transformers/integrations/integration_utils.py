@@ -2155,9 +2155,7 @@ class SwanLabCallback(TrainerCallback):
     def __init__(self):
         has_swanlab = is_swanlab_available()
         if not has_swanlab:
-            raise RuntimeError(
-                "SwanLabCallback requires swanlab to be installed. Run `pip install swanlab`."
-            )
+            raise RuntimeError("SwanLabCallback requires swanlab to be installed. Run `pip install swanlab`.")
         if has_swanlab:
             import swanlab
 
@@ -2212,17 +2210,11 @@ class SwanLabCallback(TrainerCallback):
         self._initialized = True
 
         if state.is_world_process_zero:
-            logger.info(
-                'Automatic SwanLab logging enabled, to disable set os.environ["SWANLAB_MODE"] = "disabled"'
-            )
+            logger.info('Automatic SwanLab logging enabled, to disable set os.environ["SWANLAB_MODE"] = "disabled"')
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
-                model_config = (
-                    model.config
-                    if isinstance(model.config, dict)
-                    else model.config.to_dict()
-                )
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
@@ -2246,23 +2238,14 @@ class SwanLabCallback(TrainerCallback):
 
             # add number of model parameters to wandb config
             try:
-                self._swanlab.config.update(
-                    {"model_num_parameters": model.num_parameters()}
-                )
+                self._swanlab.config.update({"model_num_parameters": model.num_parameters()})
                 # get peft model parameters
-                if (
-                    type(model).__name__ == "PeftModel"
-                    or type(model).__name__ == "PeftMixedModel"
-                ):
+                if type(model).__name__ == "PeftModel" or type(model).__name__ == "PeftMixedModel":
                     trainable_params, all_param = model.get_nb_trainable_parameters()
-                    self._swanlab.config.update(
-                        {"peft_model_trainable_params": trainable_params}
-                    )
+                    self._swanlab.config.update({"peft_model_trainable_params": trainable_params})
                     self._swanlab.config.update({"peft_model_all_param": all_param})
             except AttributeError:
-                logger.info(
-                    "Could not log the number of model parameters in SwanLab due to an AttributeError."
-                )
+                logger.info("Could not log the number of model parameters in SwanLab due to an AttributeError.")
 
             # log the initial model architecture to an artifact
             if self._log_model is not None:
@@ -2284,14 +2267,8 @@ class SwanLabCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
 
-    def on_train_end(
-        self, args, state, control, model=None, processing_class=None, **kwargs
-    ):
-        if (
-            self._log_model is not None
-            and self._initialized
-            and state.is_world_process_zero
-        ):
+    def on_train_end(self, args, state, control, model=None, processing_class=None, **kwargs):
+        if self._log_model is not None and self._initialized and state.is_world_process_zero:
             logger.warning(
                 "SwanLab does not currently support the save mode functionality. "
                 "This feature will be available in a future release."
@@ -2314,20 +2291,12 @@ class SwanLabCallback(TrainerCallback):
             for k, v in logs.items():
                 if k in single_value_scalars:
                     self._swanlab.log({f"single_value/{k}": v})
-            non_scalar_logs = {
-                k: v for k, v in logs.items() if k not in single_value_scalars
-            }
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._swanlab.log(
-                {**non_scalar_logs, "train/global_step": state.global_step}
-            )
+            self._swanlab.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
-        if (
-            self._log_model is not None
-            and self._initialized
-            and state.is_world_process_zero
-        ):
+        if self._log_model is not None and self._initialized and state.is_world_process_zero:
             logger.warning(
                 "SwanLab does not currently support the save mode functionality. "
                 "This feature will be available in a future release.",
