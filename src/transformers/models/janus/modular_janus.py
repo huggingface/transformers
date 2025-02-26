@@ -30,16 +30,16 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
 from ...image_transforms import (
-    resize, to_channel_dimension_format,
+    resize,
+    to_channel_dimension_format,
 )
 from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
-    to_numpy_array, infer_channel_dimension_format,
+    infer_channel_dimension_format,
+    to_numpy_array,
 )
-from ...modeling_outputs import (
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import CausalLMOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     is_flash_attn_2_available,
@@ -89,7 +89,7 @@ class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
 
 # ToDO: Is interpolate pos embeddings required for this model as of now passing?
 @dataclass
-class JanusVQVAEOutput:
+class JanusVQVAEOutput(ModelOutput):
     """
     Base class for Janus VQ-VAE mode model outputs.
     Args:
@@ -825,6 +825,8 @@ class JanusPreTrainedModel(PreTrainedModel):
 
 
 class JanusVQVAE(ChameleonVQVAE):
+    main_input_name = "pixel_values"
+
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__(config)
         self.decoder = JanusVQVAEDecoder(config)
@@ -874,6 +876,7 @@ class JanusVQVAE(ChameleonVQVAE):
         batch_size = pixel_values.shape[0]
         quant, emb_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
+        # Fix me as test fails ocz of not - test_save_load - TypeError: 'JanusVQVAEOutput' object is not subscriptable
         if not return_dict:
             return (decoded_pixel_values, emb_loss)
         return JanusVQVAEOutput(decoded_pixel_values, emb_loss)
@@ -913,12 +916,14 @@ class JanusVQVAEHead(nn.Module):
 
 class JanusModel(JanusPreTrainedModel):
     # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = ["JanusVisionTransformer",
-                         "JanusVisionAlignerMLP",
-                         "JanusVQVAE",
-                         "JanusVQVAEAligner",
-                         "JanusVQVAEHead"
-                         ]
+    _no_split_modules = [
+        "JanusVisionTransformer",
+        "JanusVisionAlignerMLP",
+        "JanusVQVAE",
+        "JanusVQVAEAligner",
+        "JanusVQVAEHead",
+    ]
+
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
@@ -1023,12 +1028,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
     # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = ["JanusVisionTransformer",
-                         "JanusVisionAlignerMLP",
-                         "JanusVQVAE",
-                         "JanusVQVAEAligner",
-                         "JanusVQVAEHead"
-                         ]
+    _no_split_modules = [
+        "JanusVisionTransformer",
+        "JanusVisionAlignerMLP",
+        "JanusVQVAE",
+        "JanusVQVAEAligner",
+        "JanusVQVAEHead",
+    ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1196,18 +1202,17 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor = None, **kwargs):
-
         generation_mode = kwargs.pop("generation_mode", None)
 
         if generation_mode is None:
             logger.info("Generation mode argument is not passed. Setting to default `Text` generation.")
             generation_mode = "text"
 
-        # Perform usual auto-regressive text generation using LLama model.
+        # Perform usual auto-regressive text generation.
         if generation_mode == "text":
             return super().generate(input_ids=input_ids, **kwargs)
 
-        generation_config = kwargs.pop("generation_config",None)
+        generation_config = kwargs.pop("generation_config", None)
         if generation_config is None:
             generation_config = self.generation_config
 
@@ -1239,10 +1244,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id
 
         # Generate input_embeddings from the given prompt.
-        inputs_embeds = self.get_input_embeddings()(input_tokens) # (B,seq_len,embed_dim)
+        inputs_embeds = self.get_input_embeddings()(input_tokens)  # (B,seq_len,embed_dim)
 
         # Placeholder to store generated tokens
-        generated_tokens = torch.zeros((batch_size, self.config.vision_config.num_image_tokens),dtype=input_tokens.dtype)
+        generated_tokens = torch.zeros(
+            (batch_size, self.config.vision_config.num_image_tokens), dtype=input_tokens.dtype
+        )
         outputs = None
 
         logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
@@ -1359,10 +1366,7 @@ class JanusImageProcessor(BlipImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-
-        # For consistency with parent method
         if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(image)
 
         if input_data_format == ChannelDimension.FIRST:
@@ -1371,7 +1375,8 @@ class JanusImageProcessor(BlipImageProcessor):
             height, width, _ = image.shape
         else:
             raise ValueError(
-                f"Invalid `input_data_format`. Must be one of {ChannelDimension.FIRST}, {ChannelDimension.LAST}")
+                f"Invalid `input_data_format`. Must be one of {ChannelDimension.FIRST}, {ChannelDimension.LAST}"
+            )
 
         max_size = max(height, width)
 
@@ -1384,10 +1389,9 @@ class JanusImageProcessor(BlipImageProcessor):
                 raise ValueError(
                     f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
                 )
-            # The original implementation assumes the output height and width are the same
             size = size["height"]
         elif not isinstance(size, int):
-                ValueError(f"Expected `size` to be of type `int` or `dict`. Got {type(size)}")
+            ValueError(f"Expected `size` to be of type `int` or `dict`. Got {type(size)}")
 
         delta = size / max_size
 
@@ -1409,10 +1413,13 @@ class JanusImageProcessor(BlipImageProcessor):
         # expand and pad the images to obtain a square image of dimensions `size x size`
         image = expand2square(image, self.background_color)
         # PS: to_numpy_array puts the channel dimension last
-        image = to_channel_dimension_format(to_numpy_array(image),
-                                            data_format if data_format is not None else input_data_format,
-                                            input_channel_dim=ChannelDimension.LAST)
+        image = to_channel_dimension_format(
+            to_numpy_array(image),
+            data_format if data_format is not None else input_data_format,
+            input_channel_dim=ChannelDimension.LAST,
+        )
         return image
+
 
 __all__ = [
     "JanusImageProcessor",

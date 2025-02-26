@@ -21,9 +21,9 @@ Using provided local directory: tmp/hub_code_in
 
 import argparse
 import gc
+import json
 import os
 import re
-import json
 
 import torch
 from accelerate import init_empty_weights
@@ -31,55 +31,62 @@ from huggingface_hub import snapshot_download
 
 from transformers import (
     AutoTokenizer,
-    JanusForConditionalGeneration,
-    LlamaConfig,
     JanusConfig,
+    JanusForConditionalGeneration,
     JanusVisionConfig,
-    JanusVQVAEConfig
+    JanusVQVAEConfig,
+    LlamaConfig,
 )
 from transformers.models.janus.image_processing_janus import JanusImageProcessor
 from transformers.models.janus.processing_janus import JanusProcessor
 
+
 # It is done as a list to guarantee order of application
 MAPPINGS = (
     (r"(.+)", r"model.\1"),
-    (r"(?<!gen_)vision_model", (
-        ("vision_model.vision_tower.blocks", "vision_model.encoder.layers"),
-        ("vision_model.vision_tower.pos_embed", "vision_model.embeddings.position_embeddings.weight"),
-        ("vision_model.vision_tower.patch_embed.proj", "vision_model.embeddings.patch_embeddings.projection"),
-        ("vision_model.vision_tower.norm", "vision_model.post_layernorm"),
-        ("vision_model.vision_tower.attn_pool", "vision_model.head"),
-        (r"(?<=\.)proj(?=\.|$)", "projection_layer"),
-        (r"(?<=\.)norm(?=\.|$)", "layer_norm"),
-        (r"(?<=\.)norm1(?=\.|$)", "layer_norm1"),
-        (r"(?<=\.)norm2(?=\.|$)", "layer_norm2")
-    )
-     ),
-    ("gen_vision_model", (
-        ("gen_vision_model", "vqmodel"),
-        ("decoder.conv_blocks", "decoder.up"),
-        ("encoder.conv_blocks", "encoder.down"),
-        (".res.", ".block."),
-        ("mid.0", "mid.block_1"),
-        ("mid.1", "mid.attn_1"),
-        ("mid.2", "mid.block_2"),
-    )
-     ),
-    ("aligner", (
-        ("aligner.layers.0", "aligner.fc1"),
-        ("aligner.layers.2", "aligner.hidden_layers.0"),
-    )),
+    (
+        r"(?<!gen_)vision_model",
+        (
+            ("vision_model.vision_tower.blocks", "vision_model.encoder.layers"),
+            ("vision_model.vision_tower.pos_embed", "vision_model.embeddings.position_embeddings.weight"),
+            ("vision_model.vision_tower.patch_embed.proj", "vision_model.embeddings.patch_embeddings.projection"),
+            ("vision_model.vision_tower.norm", "vision_model.post_layernorm"),
+            ("vision_model.vision_tower.attn_pool", "vision_model.head"),
+            (r"(?<=\.)proj(?=\.|$)", "projection_layer"),
+            (r"(?<=\.)norm(?=\.|$)", "layer_norm"),
+            (r"(?<=\.)norm1(?=\.|$)", "layer_norm1"),
+            (r"(?<=\.)norm2(?=\.|$)", "layer_norm2"),
+        ),
+    ),
+    (
+        "gen_vision_model",
+        (
+            ("gen_vision_model", "vqmodel"),
+            ("decoder.conv_blocks", "decoder.up"),
+            ("encoder.conv_blocks", "encoder.down"),
+            (".res.", ".block."),
+            ("mid.0", "mid.block_1"),
+            ("mid.1", "mid.attn_1"),
+            ("mid.2", "mid.block_2"),
+        ),
+    ),
+    (
+        "aligner",
+        (
+            ("aligner.layers.0", "aligner.fc1"),
+            ("aligner.layers.2", "aligner.hidden_layers.0"),
+        ),
+    ),
     ("gen_head.output_mlp_projector", "gen_head.proj_out"),
-    ("language_model", (
-        ("language_model.model", "language_model"),
-        ("model.language_model.lm_head.weight", "lm_head.weight")
-    ))
-
+    (
+        "language_model",
+        (("language_model.model", "language_model"), ("model.language_model.lm_head.weight", "lm_head.weight")),
+    ),
 )
 
 
 CHAT_TEMPLATE = (
-    "{%set seps=['\n\n','<\uFF5Cend▁of▁sentence\uFF5C>']%}"
+    "{%set seps=['\n\n','<\uff5cend▁of▁sentence\uff5c>']%}"
     "{%set i=0%}"
     "{%for message in messages%}"
     "{%if message['role']=='user'%}"
@@ -128,6 +135,7 @@ def convert_key(key, mappings=MAPPINGS):
                 key = convert_key(key, replacement)
     return key
 
+
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
     converted_state_dict = {}
@@ -138,9 +146,9 @@ def convert_state_dict_to_hf(state_dict):
     # Key not present in HF implementation
     del converted_state_dict["model.vqmodel.quantize.codebook_used"]
     # Embeddings will not have initial dimension
-    converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"] = (
-        converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"].squeeze(0)
-    )
+    converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"] = converted_state_dict[
+        "model.vision_model.embeddings.position_embeddings.weight"
+    ].squeeze(0)
 
     return converted_state_dict
 
@@ -149,7 +157,7 @@ def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir
     """
     Ensures model files are downloaded locally, downloads them if not.
     Returns path to local files.
-    
+
     Args:
         repo_id: The Hugging Face model repo ID (required if local_dir not provided)
         revision: Optional git revision to use
@@ -170,23 +178,13 @@ def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir
 
     try:
         # First try to find files locally
-        download_dir = snapshot_download(
-            repo_id,
-            revision=revision,
-            local_files_only=True,
-            local_dir=local_dir
-        )
+        download_dir = snapshot_download(repo_id, revision=revision, local_files_only=True, local_dir=local_dir)
         print(f"Found model files locally at {download_dir}")
         return download_dir
     except Exception:
         # If files not found locally, download them
         print(f"Downloading model files for {repo_id}...")
-        download_dir = snapshot_download(
-            repo_id,
-            revision=revision,
-            local_files_only=False,
-            local_dir=local_dir
-        )
+        download_dir = snapshot_download(repo_id, revision=revision, local_files_only=False, local_dir=local_dir)
         print(f"Downloaded model files to {download_dir}")
         return download_dir
 
@@ -225,13 +223,13 @@ def load_model_state_dict(input_path: str) -> dict:
 
 
 def convert_model(
-        repo_id=None,
-        local_dir=None,
-        text_model_id=None,
-        output_dir=None,
-        output_hub_path=None,
-        safe_serialization=True,
-        revision=None,
+    repo_id=None,
+    local_dir=None,
+    text_model_id=None,
+    output_dir=None,
+    output_hub_path=None,
+    safe_serialization=True,
+    revision=None,
 ):
     """Convert and save the model weights, processor, and configuration."""
     if output_dir is None and output_hub_path is None:
@@ -287,8 +285,10 @@ def convert_model(
             image_processor_kwargs[key] = preprocessor_config[key]
 
     if "image_size" in preprocessor_config:
-        image_processor_kwargs["size"] = {"height": preprocessor_config["image_size"],
-                                          "width": preprocessor_config["image_size"]}
+        image_processor_kwargs["size"] = {
+            "height": preprocessor_config["image_size"],
+            "width": preprocessor_config["image_size"],
+        }
 
     image_processor = JanusImageProcessor(**image_processor_kwargs)
 
@@ -308,18 +308,28 @@ def convert_model(
 
     # Create model configurations
     text_config_kwargs = {}
-    for key in ["vocab_size", "hidden_size", "intermediate_size", "num_hidden_layers",
-                "num_attention_heads", "num_key_value_heads", "hidden_act", "max_position_embeddings",
-                "torch_dtype"]:
+    for key in [
+        "vocab_size",
+        "hidden_size",
+        "intermediate_size",
+        "num_hidden_layers",
+        "num_attention_heads",
+        "num_key_value_heads",
+        "hidden_act",
+        "max_position_embeddings",
+        "torch_dtype",
+    ]:
         if key in config_data["language_config"]:
             text_config_kwargs[key] = config_data["language_config"][key]
 
     # Add token IDs from tokenizer
-    text_config_kwargs.update({
-        "pad_token_id": tokenizer.pad_token_id,
-        "bos_token_id": tokenizer.bos_token_id,
-        "eos_token_id": tokenizer.eos_token_id,
-    })
+    text_config_kwargs.update(
+        {
+            "pad_token_id": tokenizer.pad_token_id,
+            "bos_token_id": tokenizer.bos_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+        }
+    )
 
     text_config = LlamaConfig(**text_config_kwargs)
 
@@ -366,7 +376,9 @@ def convert_model(
 
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
-    model.generation_config.pad_token_id = tokenizer.vocab.get('<｜▁pad▁｜>') # If fixed for all janus variants then hardcode it.
+    model.generation_config.pad_token_id = tokenizer.vocab.get(
+        "<｜▁pad▁｜>"
+    )  # If fixed for all janus variants then hardcode it.
 
     # Load and convert state dict
     print("Loading state dict...")

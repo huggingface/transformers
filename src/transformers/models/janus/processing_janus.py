@@ -38,6 +38,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "and assist the user with a variety of tasks using natural language.\n\n"
 )
 
+
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
@@ -50,6 +51,7 @@ def is_image_or_image_url(elem):
 
 def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
+
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
@@ -85,7 +87,7 @@ class JanusProcessor(ProcessorMixin):
     results in errors when testing, as the ProcessorTesterMixin.get_component() method tries to load the tokenizer
     using LlamaTokenizer.from_pretrained(model_path).
     """
-    tokenizer_class = ("LlamaTokenizerFast")
+    tokenizer_class = "LlamaTokenizerFast"
 
     # ToDo: Its not getting used when loading via from_pretrained method.
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
@@ -137,7 +139,6 @@ class JanusProcessor(ProcessorMixin):
             if self.generation_mode == "image":
                 prompt += self.image_start_token
             prompt_strings.append(prompt)
-
 
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 

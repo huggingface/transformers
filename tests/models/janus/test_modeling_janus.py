@@ -14,11 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch Janus model."""
 
-
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -33,9 +31,8 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
-    require_torch,
-    require_vision,
     require_read_token,
+    require_torch,
     slow,
     torch_device,
 )
@@ -102,8 +99,7 @@ class JanusVisionText2TextModelTester:
             "initializer_range": 0.02,
             "vision_feature_select_strategy": "default",
             "vision_feature_layer": -1,
-            "aligner_projection_size": 32, # Same as text model hidden size
-
+            "aligner_projection_size": 32,  # Same as text model hidden size
         },
         use_cache=False,
         vq_num_embeds=12,
@@ -135,7 +131,7 @@ class JanusVisionText2TextModelTester:
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
         self.vq_channel_multiplier = vq_channel_multiplier
-        self.image_token_index= 0
+        self.image_token_index = 0
 
     def get_vq_config(self):
         return {
@@ -147,7 +143,7 @@ class JanusVisionText2TextModelTester:
             "channel_multiplier": self.vq_channel_multiplier,
             "initializer_range": self.initializer_range,
             "aligner_projection_size": 10,
-            "image_token_embed_size":32, # Same as text model hidden size
+            "image_token_embed_size": 32,  # Same as text model hidden size
         }
 
     def get_config(self):
@@ -178,7 +174,7 @@ class JanusVisionText2TextModelTester:
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
-        input_ids[:, :self.num_image_tokens] = self.image_token_index
+        input_ids[:, : self.num_image_tokens] = self.image_token_index
         # How to test with with iamge input as the image token id is 1000581
         # Hacky way is consider 0 as image otken idnex so modify in modelling file instead of hardcoding it
         inputs_dict = {
@@ -186,9 +182,10 @@ class JanusVisionText2TextModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
-            "generation_mode": "text", # Required to perform text generation instead of image generation.
+            "generation_mode": "text",  # Required to perform text generation instead of image generation.
         }
         return config, inputs_dict
+
     # Skip test_sdpa_can_dispatch_composite_models test for Janusforconditionalgeneration and not for Janusmodel
 
 
@@ -247,6 +244,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+
 class JanusVQModelTester:
     def __init__(
         self,
@@ -271,7 +269,7 @@ class JanusVQModelTester:
         self.num_embeds = num_embeds
         self.embed_dim = embed_dim
         self.channel_multiplier = channel_multiplier
-        self.num_patches = image_size//patch_size
+        self.num_patches = image_size // patch_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
@@ -288,7 +286,7 @@ class JanusVQModelTester:
             channel_multiplier=self.channel_multiplier,
             initializer_range=self.initializer_range,
             resolution=self.image_size,
-            num_patches=self.num_patches
+            num_patches=self.num_patches,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -347,8 +345,8 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-class JanusIntegrationTest(unittest.TestCase):
 
+class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "transformers/tmp/hub_code_out"
         # Later remove this func and repplce with hub URL
@@ -367,13 +365,14 @@ class JanusIntegrationTest(unittest.TestCase):
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20,generation_mode='text',do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
             EXPECTED_DECODED_TEXT,
         )
+
     @slow
     def test_model_text_generation_batched(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id)
@@ -395,15 +394,17 @@ class JanusIntegrationTest(unittest.TestCase):
         )
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
- 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This']
+        EXPECTED_TEXT_COMPLETION = [
+            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
+        ]
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_bitsandbytes
-    @require_read_token # BNB required if we load in 4 bit. Modify acordingly
+    @require_read_token  # BNB required if we load in 4 bit. Modify acordingly
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id)
         processor = AutoProcessor.from_pretrained(self.model_id)

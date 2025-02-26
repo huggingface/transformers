@@ -236,7 +236,6 @@ class JanusConfig(PretrainedConfig):
     }
 
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
-
         super().__init__(**kwargs)
 
         if isinstance(text_config, dict):
@@ -257,8 +256,10 @@ class JanusConfig(PretrainedConfig):
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
-            raise ValueError(f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
-                             f" Type found: {type(text_config)}")
+            raise ValueError(
+                f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
+                f" Type found: {type(text_config)}"
+            )
 
         if vision_config is None:
             logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
@@ -268,8 +269,10 @@ class JanusConfig(PretrainedConfig):
         elif isinstance(vision_config, JanusVisionConfig):
             self.vision_config = vision_config
         else:
-            raise ValueError(f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
-                             f" Type found: {type(vision_config)}")
+            raise ValueError(
+                f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
+                f" Type found: {type(vision_config)}"
+            )
 
         if vq_config is None:
             logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
@@ -279,12 +282,13 @@ class JanusConfig(PretrainedConfig):
         elif isinstance(vq_config, JanusVQVAEConfig):
             self.vq_config = vq_config
         else:
-            raise ValueError(f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
-                             f" Type found: {type(vq_config)}")
+            raise ValueError(
+                f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
+                f" Type found: {type(vq_config)}"
+            )
 
         # This dimension is required when decoding discrete image tokens to continuous input.
-        self.vq_config.num_patches = self.vision_config.image_size//self.vision_config.patch_size
-
+        self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]

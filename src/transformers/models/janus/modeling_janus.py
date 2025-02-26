@@ -32,7 +32,7 @@ from tqdm import tqdm
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast,ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -490,11 +490,13 @@ class JanusVisionMLP(nn.Module):
         hidden_states = self.dropout2(hidden_states)
         return hidden_states
 
+
 JANUS_VISION_ATTENTION_CLASSES = {
     "eager": JanusVisionAttention,
     "sdpa": JanusVisionSdpaAttention,
     "flash_attention_2": JanusVisionFlashAttention2,
 }
+
 
 class JanusVisionEncoderLayer(nn.Module):
     def __init__(self, config: JanusVisionConfig):
@@ -502,7 +504,6 @@ class JanusVisionEncoderLayer(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
-        # self.attn = JanusVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -1186,8 +1187,8 @@ JANUS_VQ_START_DOCSTRING = r"""
 )
 class JanusVQVAE(JanusPreTrainedModel):
     config_class = JanusVQVAEConfig
-    main_input_name = "pixel_values"
     _no_split_modules = ["JanusVQVAEVectorQuantizer"]
+    main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1384,7 +1385,6 @@ class JanusModel(JanusPreTrainedModel):
         if pixel_values is not None:
             image_embeds = self.get_image_embeddings(pixel_values)
             image_attention_mask = input_ids == 100581
-            # image_attention_mask = input_ids == 0
 
             # Flatten the image embeddings and mask. Refactor it to use input embeds info better
             embed_dim = inputs_embeds.shape[-1]
@@ -1592,7 +1592,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         generation_mode = kwargs.pop("generation_mode", None)
 
         if generation_mode is None:
-            logger.info("Generation mode argument is not passed. Defaulting to `Text`generation.")
+            logger.info("Generation mode argument is not passed. Setting to default `Text` generation.")
             generation_mode = "text"
 
         # Perform usual auto-regressive text generation.

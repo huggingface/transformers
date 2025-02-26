@@ -17,17 +17,19 @@
 import tempfile
 import unittest
 
-from transformers import JanusProcessor, AutoProcessor, AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
+from transformers.models.janus.convert_janus_weights_to_hf import CHAT_TEMPLATE
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-from transformers.models.janus.convert_janus_weights_to_hf import CHAT_TEMPLATE
+
 
 if is_vision_available():
-    from transformers import JanusImageProcessor
+    pass
 
 # This will be changed to HUB location once the final converted model is uploaded there
 TMP_LOCATION = "./hub_files"
+
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = JanusProcessor
@@ -71,7 +73,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        correct_prompt = ['<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:']
+        correct_prompt = ["<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:"]
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompt, correct_prompt)
@@ -98,7 +100,6 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["attention_mask"]), 1)
         self.assertEqual(len(out_dict[self.images_input_name]), 1)
 
-
         # Passing generation prompt explicitly
         messages = [
             [
@@ -114,7 +115,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {"type": "text", "text": ""},
                     ],
-                }
+                },
             ]
         ]
 
@@ -136,7 +137,9 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        correct_prompt = ['<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>:']
+        correct_prompt = [
+            "<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>:"
+        ]
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompt, correct_prompt)
 
@@ -162,14 +165,18 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "role": "user",
                     "content": [
                         {"type": "image"},
-                        {"type": "text",
-                         "text": "What about this third image? To which of the previous to is it more similar?"},
+                        {
+                            "type": "text",
+                            "text": "What about this third image? To which of the previous to is it more similar?",
+                        },
                     ],
                 },
             ]
         ]
 
-        correct_prompt = ['<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>: The first image is an equation, the second is a pie chart.<｜end▁of▁sentence｜><|User|>: <image_placeholder>\nWhat about this third image? To which of the previous to is it more similar?\n\n<|Assistant|>:']
+        correct_prompt = [
+            "<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>: The first image is an equation, the second is a pie chart.<｜end▁of▁sentence｜><|User|>: <image_placeholder>\nWhat about this third image? To which of the previous to is it more similar?\n\n<|Assistant|>:"
+        ]
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompt, correct_prompt)
 
@@ -200,11 +207,13 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {"type": "image"},
                     ],
                 },
-            ]
+            ],
         ]
 
-        correct_prompts = ['<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:',
-                           '<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:']
+        correct_prompts = [
+            "<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:",
+            "<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:",
+        ]
 
         formatted_prompts = processor.apply_chat_template(batched_messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompts, correct_prompts)
@@ -258,12 +267,13 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {"type": "image"},
                     ],
                 },
-            ]
+            ],
         ]
 
         correct_prompts = [
-            '<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>:',
-            '<|User|>: <image_placeholder>\nDescribe how the previous image compares to the following\n<image_placeholder>\n\n<|Assistant|>:']
+            "<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>:",
+            "<|User|>: <image_placeholder>\nDescribe how the previous image compares to the following\n<image_placeholder>\n\n<|Assistant|>:",
+        ]
         formatted_prompts = processor.apply_chat_template(batched_messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompts, correct_prompts)
 
@@ -289,8 +299,10 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "role": "user",
                     "content": [
                         {"type": "image"},
-                        {"type": "text",
-                         "text": "What about this third image? To which of the previous to is it more similar?"},
+                        {
+                            "type": "text",
+                            "text": "What about this third image? To which of the previous to is it more similar?",
+                        },
                     ],
                 },
             ],
@@ -316,12 +328,13 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {"type": "image"},
                     ],
                 },
-            ]
+            ],
         ]
 
         correct_prompts = [
-            '<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>: The first image is an equation, the second is a pie chart.<｜end▁of▁sentence｜><|User|>: <image_placeholder>\nWhat about this third image? To which of the previous to is it more similar?\n\n<|Assistant|>:',
-            '<|User|>: <image_placeholder>\nDescribe how the previous image compares to the following\n<image_placeholder>\n\n<|Assistant|>: The first image is a formula, the second is a plot.<｜end▁of▁sentence｜><|User|>: Which of them is closer to the following?\n<image_placeholder>\n\n<|Assistant|>:']
+            "<|User|>: Compare this image\n<image_placeholder>\nwith this image\n<image_placeholder>\n\n<|Assistant|>: The first image is an equation, the second is a pie chart.<｜end▁of▁sentence｜><|User|>: <image_placeholder>\nWhat about this third image? To which of the previous to is it more similar?\n\n<|Assistant|>:",
+            "<|User|>: <image_placeholder>\nDescribe how the previous image compares to the following\n<image_placeholder>\n\n<|Assistant|>: The first image is a formula, the second is a plot.<｜end▁of▁sentence｜><|User|>: Which of them is closer to the following?\n<image_placeholder>\n\n<|Assistant|>:",
+        ]
         formatted_prompts = processor.apply_chat_template(batched_messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompts, correct_prompts)
 
@@ -382,4 +395,3 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="np",
         )
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
-

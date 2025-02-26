@@ -72,7 +72,6 @@ class JanusImageProcessingTester:
             "do_convert_rgb": self.do_convert_rgb,
         }
 
-
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -115,7 +114,9 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"height": 384, "width": 384})
         self.assertEqual(image_processor.image_mean, [1.0, 1.0, 1.0])
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, image_mean=[1.0, 2.0, 1.0])
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42, image_mean=[1.0, 2.0, 1.0]
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.image_mean, [1.0, 2.0, 1.0])
 
