@@ -221,6 +221,8 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             images = reorder_images(processed_images_grouped, grouped_images_index)
             images = [image for images_list in images for image in images_list]
             num_patches = reorder_images(num_patches, grouped_images_index)
+        else:
+            num_patches = [1] * len(images)
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
@@ -247,7 +249,9 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
+        )
 
 
 __all__ = ["GotOcr2ImageProcessorFast"]
