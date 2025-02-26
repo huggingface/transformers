@@ -17,7 +17,7 @@ from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 
-from ...activations import ACT2CLS, ACT2FN
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
@@ -391,7 +391,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, Phi4MultimodalVisionEmbeddings):
             width = (
-                self.config.vision_config.hidden_size
+                self.config.hidden_size
                 if isinstance(self.config, Phi4MultimodalVisionConfig)
                 else self.config.hidden_size
             )
@@ -1042,6 +1042,7 @@ def audio_eager_attention_forward(
 
 class Phi4MultimodalAudioAttention(nn.Module):
     def __init__(self, config):
+        super().__init__()
         self.config = config
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.scaling = self.head_dim**-0.5
@@ -1168,12 +1169,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
             else nn.Identity()
         )
 
-        if config.causal and config.export:
-            padding = 0
-        elif config.causal:
-            padding = config.kernel_size - 1
-        else:
-            padding = (config.kernel_size - 1) // 2
+        padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
         self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
 
         if config.hidden_size != config.depthwise_seperable_out_channel:
@@ -1292,15 +1288,15 @@ def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_nu
 class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.subsampling_factor = self.config.nemo_conv_settings["subsampling_factor"]
+        self.subsampling_factor = config.nemo_conv_settings["subsampling_factor"]
 
         if self.subsampling_factor % 2 != 0:
             raise ValueError("Sampling factor should be a multiply of 2!")
         self.sampling_num = int(math.log(self.subsampling_factor, 2))
 
-        self.act_fn = ACT2CLS[self.config.nemo_conv_settings["activation"]]
+        self.act_fn = ACT2FN[config.nemo_conv_settings["activation"]]
 
-        conv_channels = self.config.nemo_conv_settings["conv_channels"]
+        conv_channels = config.nemo_conv_settings["conv_channels"]
         layers = []
 
         layers.append(
@@ -1339,7 +1335,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
 
         self.conv = torch.nn.Sequential(*layers)
 
-        in_length = torch.tensor(config.hidden_size, dtype=torch.float)
+        in_length = torch.tensor(config.hidden_size, dtype=torch.float, device="cpu")
         out_length = calc_length(
             lengths=in_length,
             all_paddings=2,
