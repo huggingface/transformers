@@ -6222,6 +6222,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_hpu_available,
         is_torch_mlu_available,
         is_torch_musa_available,
         is_torch_neuroncore_available,

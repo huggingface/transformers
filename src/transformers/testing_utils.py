@@ -140,6 +140,7 @@ from .utils import (
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
+    is_torch_hpu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -916,6 +917,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "hpu" and not is_torch_hpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -928,6 +933,8 @@ if is_torch_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
+    elif _run_third_party_device_tests and is_torch_hpu_available():
+        torch_device = "hpu"
     elif _run_third_party_device_tests and is_torch_xpu_available():
         torch_device = "xpu"
     else:
