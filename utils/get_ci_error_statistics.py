@@ -28,7 +28,7 @@ def fetch_paginated_github_data(base_url, token=None):
             page_result = requests.get(f"{base_url}?per_page=100&page={i + 2}", headers=headers).json()
             data.extend(page_result.get("jobs", page_result.get("artifacts", [])))
         return data
-    except Exception as e:
+    except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
         return []
 
