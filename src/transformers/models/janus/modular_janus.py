@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -456,8 +457,7 @@ class JanusVisionEncoderLayer(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        # self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
-        self.attn = JanusVisionAttention(config)
+        self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -1200,10 +1200,10 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         generation_mode = kwargs.pop("generation_mode", None)
 
         if generation_mode is None:
-            logger.info("Generation mode argument is not passed. Defaulting to `Text`generation.")
+            logger.info("Generation mode argument is not passed. Setting to default `Text` generation.")
             generation_mode = "text"
 
-        # Perform usual auto-regressive text generation.
+        # Perform usual auto-regressive text generation using LLama model.
         if generation_mode == "text":
             return super().generate(input_ids=input_ids, **kwargs)
 

@@ -87,6 +87,7 @@ class JanusProcessor(ProcessorMixin):
     """
     tokenizer_class = ("LlamaTokenizerFast")
 
+    # ToDo: Its not getting used when loading via from_pretrained method.
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")

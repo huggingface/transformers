@@ -14,9 +14,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch Janus model."""
 
+
 import unittest
 
+import requests
+from parameterized import parameterized
+
 from transformers import (
+    AutoProcessor,
     JanusConfig,
     JanusForConditionalGeneration,
     JanusModel,
@@ -26,7 +31,12 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
     require_torch,
+    require_vision,
+    require_read_token,
+    slow,
     torch_device,
 )
 
@@ -40,7 +50,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    pass
+    from PIL import Image
 
 
 class JanusVisionText2TextModelTester:
@@ -125,6 +135,7 @@ class JanusVisionText2TextModelTester:
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
         self.vq_channel_multiplier = vq_channel_multiplier
+        self.image_token_index= 0
 
     def get_vq_config(self):
         return {
@@ -166,16 +177,19 @@ class JanusVisionText2TextModelTester:
 
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
-        # input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        # input_ids[:, :self.num_image_tokens] = config.image_token_index
+        input_ids[input_ids == self.image_token_index] = self.pad_token_id
+        input_ids[:, :self.num_image_tokens] = self.image_token_index
+        # How to test with with iamge input as the image token id is 1000581
+        # Hacky way is consider 0 as image otken idnex so modify in modelling file instead of hardcoding it
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
-            "generation_mode": "text",
+            "generation_mode": "text", # Required to perform text generation instead of image generation.
         }
         return config, inputs_dict
+    # Skip test_sdpa_can_dispatch_composite_models test for Janusforconditionalgeneration and not for Janusmodel
 
 
 @require_torch
@@ -332,3 +346,80 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Janus VQ module has no hidden states")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
+class JanusIntegrationTest(unittest.TestCase):
+
+    def setUp(self):
+        self.model_id = "transformers/tmp/hub_code_out"
+        # Later remove this func and repplce with hub URL
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @slow
+    def test_model_text_generation(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        image = Image.open(
+            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+        )
+        prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20,generation_mode='text',do_sample=False)
+        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
+        text = processor.decode(output[0], skip_special_tokens=True)
+        self.assertEqual(
+            text,
+            EXPECTED_DECODED_TEXT,
+        )
+    @slow
+    def test_model_text_generation_batched(self):
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id)
+
+        image_1 = Image.open(
+            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+        )
+        image_2 = Image.open(
+            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+        )
+        prompts = [
+            "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?",
+            "What constellation is this image showing?<image_placeholder>\n",
+        ]
+
+        inputs = processor(images=[image_1, image_2], text=prompts, padding=True, return_tensors="pt").to(
+            model.device, torch.float16
+        )
+
+        # greedy generation outputs
+        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
+ 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This']
+        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    @require_bitsandbytes
+    @require_read_token # BNB required if we load in 4 bit. Modify acordingly
+    def test_model_text_generation_with_multi_image(self):
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id)
+
+        image_1 = Image.open(
+            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+        )
+        image_2 = Image.open(
+            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+        )
+        prompt = "What do these two images <image_placeholder> and <image_placeholder> have in common?"
+
+        inputs = processor(images=[image_1, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+
+        # greedy generation outputs
+        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
+        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

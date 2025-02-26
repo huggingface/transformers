@@ -177,10 +177,7 @@ class JanusImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-
-        # For consistency with parent method
         if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(image)
 
         if input_data_format == ChannelDimension.FIRST:
@@ -203,7 +200,6 @@ class JanusImageProcessor(BaseImageProcessor):
                 raise ValueError(
                     f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
                 )
-            # The original implementation assumes the output height and width are the same
             size = size["height"]
         elif not isinstance(size, int):
             ValueError(f"Expected `size` to be of type `int` or `dict`. Got {type(size)}")

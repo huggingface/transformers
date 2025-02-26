@@ -364,6 +364,10 @@ def convert_model(
     with init_empty_weights():
         model = JanusForConditionalGeneration(config)
 
+    model.generation_config.temperature = 1
+    model.generation_config.guidance_scale = 5
+    model.generation_config.pad_token_id = tokenizer.vocab.get('<｜▁pad▁｜>') # If fixed for all janus variants then hardcode it.
+
     # Load and convert state dict
     print("Loading state dict...")
     state_dict = load_model_state_dict(input_path)
