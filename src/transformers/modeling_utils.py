@@ -59,13 +59,13 @@ from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
+    distribute_module,
     find_pruneable_heads_and_indices,
     id_tensor_storage,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
     translate_to_torch_parallel_style,
-    distribute_module
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -752,7 +752,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
-
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
     state_dict: Dict[str, torch.Tensor],
@@ -770,7 +769,6 @@ def _load_state_dict_into_meta_model(
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
     device_mesh=None,
-    prefix=None,
     shard_file=None,
 ):
     """
@@ -802,7 +800,6 @@ def _load_state_dict_into_meta_model(
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
         for param_name, empty_param in state_dict.items():
-        
             new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[
                 0
             ]
@@ -814,7 +811,7 @@ def _load_state_dict_into_meta_model(
                 param_name = param_name[len(start_prefix) :]
 
             module_name = param_name
-            param = file_pointer.get_slice(param_name) # param name needs to stay untouched as it's in the file
+            param = file_pointer.get_slice(param_name)  # param name needs to stay untouched as it's in the file
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
             is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
@@ -892,7 +889,7 @@ def _load_state_dict_into_meta_model(
                     if isinstance(module_to_tp.weight, nn.Parameter):
                         local_parameter = torch.nn.Parameter(local_parameter)
                     module_to_tp.weight = local_parameter
-                    
+
                     input_fn = partial(
                         tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
                     )
@@ -4879,7 +4876,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     fixed_state_dict,
-                    start_prefix,
+                    cls.base_model_prefix,
                     expected_keys,
                     device_map=device_map,
                     offload_folder=offload_folder,
@@ -4892,7 +4889,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
-                    prefix=cls.base_model_prefix,
                     resolved_archive_file=resolved_archive_file,
                 )
             else:
@@ -4902,14 +4898,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                model_to_load.load_state_dict(
-                    fixed_state_dict, assign=assign_to_params_buffers
-                )
+                model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
 
+            error_msgs = []
+            mismatched_keys = []
             if not is_safetensors:
                 offload_index = {} if device_map is not None and "disk" in device_map.values() else None
             if offload_state_dict:

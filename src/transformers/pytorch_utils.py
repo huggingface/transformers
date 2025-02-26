@@ -437,7 +437,6 @@ def distribute_module(
     torch._C._log_api_usage_once("torch.dtensor.distribute_module")
 
     device_mesh = device_mesh
-    device_type = device_mesh.device_type
 
     # register input_fn as module forward pre hook
     if input_fn is not None:
@@ -445,7 +444,7 @@ def distribute_module(
         num_args = len(inspect.signature(input_fn).parameters)
         if num_args == 2:
             # input_fn only takes in inputs and device mesh
-            warnings.warn(
+            logger.warning(
                 "Deprecating input_fn that takes two arguments (inputs, device_mesh), "
                 "please use input_fn that takes in (module, inputs, device_mesh) instead!",
                 FutureWarning,
@@ -462,7 +461,7 @@ def distribute_module(
         num_args = len(inspect.signature(output_fn).parameters)
         if num_args == 2:
             # output_fn only takes in outputs and device mesh
-            warnings.warn(
+            logger.warning(
                 "Deprecating output_fn that takes two arguments (inputs, device_mesh), "
                 "please use output_fn that takes in (module, inputs, device_mesh) instead!",
                 FutureWarning,
@@ -477,4 +476,3 @@ def distribute_module(
             raise ValueError(f"output_fn should take in 3 arguments, but got {num_args} arguments!")
 
     return module
-
