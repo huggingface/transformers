@@ -571,6 +571,8 @@ _import_structure = {
     ],
     "models.phi4_multimodal": [
         "Phi4MultimodalConfig",
+        "Phi4MultimodalVisionConfig",
+        "Phi4MultimodalAudioConfig",
         "Phi4MultimodalProcessor",
     ],
     "models.llava_next_video": [
@@ -5926,8 +5928,10 @@ if TYPE_CHECKING:
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
     from .models.phi4_multimodal import (
+        Phi4MultimodalAudioConfig,
         Phi4MultimodalConfig,
         Phi4MultimodalProcessor,
+        Phi4MultimodalVisionConfig,
     )
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer

@@ -159,6 +159,8 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
 
 
 class Phi4MultimodalConfig(Phi3Config):
+    sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
+
     def __init__(
         self,
         vocab_size=200064,
@@ -182,12 +184,11 @@ class Phi4MultimodalConfig(Phi3Config):
         bos_token_id=199999,
         eos_token_id=199999,
         pad_token_id=199999,
+        original_max_position_embeddings=131000,
         sliding_window=None,
         embd_layer: str = "default",
-        img_processor=None,
-        audio_processor=None,
-        vision_lora=None,
-        speech_lora=None,
+        vision_config=None,
+        audio_config=None,
         **kwargs,
     ):
         super().__init__(
@@ -212,15 +213,22 @@ class Phi4MultimodalConfig(Phi3Config):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
+            original_max_position_embeddings=original_max_position_embeddings,
             sliding_window=sliding_window,
             **kwargs,
         )
-        del self.original_max_position_embeddings
-        self.embd_layer = embd_layer
-        self.img_processor = img_processor
-        self.audio_processor = audio_processor
-        self.vision_lora = vision_lora
-        self.speech_lora = speech_lora
+
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
 
 
 # Special token ids
@@ -2239,4 +2247,11 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         return model_inputs
 
 
-__all__ = ["Phi4MultimodalPreTrainedModel", "Phi4MultimodalModel", "Phi4MultimodalForCausalLM"]  # noqa
+__all__ = [
+    "Phi4MultimodalPreTrainedModel",  # noqa
+    "Phi4MultimodalModel",
+    "Phi4MultimodalForCausalLM",
+    "Phi4MultimodalVisionConfig",
+    "Phi4MultimodalAudioConfig",
+    "Phi4MultimodalConfig",
+]
