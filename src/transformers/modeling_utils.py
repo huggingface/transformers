@@ -4983,7 +4983,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                    error_msgs += model_to_load.load_state_dict(
+                        fixed_state_dict, strict=False, assign=assign_to_params_buffers
+                    )
                 # force memory release
                 del state_dict
                 gc.collect()
