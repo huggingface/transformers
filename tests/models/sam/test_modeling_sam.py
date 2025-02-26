@@ -226,11 +226,11 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamModel does not support training")
+    @unittest.skip(reason="SamVisionEncoder does not support training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamModel does not support training")
+    @unittest.skip(reason="SamVisionEncoder does not support training")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -246,27 +246,21 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="SamVisionEncoder has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="SamVisionEncoder has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="SamModel does not support training")
+    @unittest.skip(reason="SamVisionEncoder does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "facebook/sam-vit-huge"
-        model = SamModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
     @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
