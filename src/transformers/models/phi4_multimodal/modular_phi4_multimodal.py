@@ -82,36 +82,28 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self,
         hidden_size: int = 1024,  # attention_dim
         num_attention_heads: int = 16,  # attention_heads
-        intermediate_size: int = 2048,
+        intermediate_size: int = 1536,
         activation: str = "swish",
-        chunk_size: int = None,
-        left_chunk: int = None,
-        num_lang: int = None,
-        num_blocks: int = 6,
+        chunk_size: int = -1,
+        left_chunk: int = 18,
+        num_blocks: int = 24,
         dropout_rate: float = 0.0,
-        input_layer: str = "nemo_conv",
         causal: bool = True,
         batch_norm: bool = False,
-        ext_pw_out_channel: int = 0,
+        ext_pw_out_channel: int = 1024,
         ext_pw_kernel_size: int = 1,
-        depthwise_seperable_out_channel: int = 256,
+        depthwise_seperable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
-        chunk_se: int = 0,
         kernel_size: int = 3,
         conv_activation: str = "relu",
+        input_size: int = 80,
         conv_glu_type: str = "sigmoid",
         bias_in_glu: bool = True,
-        linear_glu_in_convm: bool = False,
-        attention_glu_type: str = "swish",
-        extra_layer_output_idx: int = -1,
-        extra_multi_layer_output_idxs: list = [],
-        activation_checkpointing: str = "",
-        relative_attention_bias_args: dict = None,
-        time_reduction: int = 4,
-        replication_pad_for_subsample_embedding: bool = False,
-        attention_group_size: int = 1,
-        encoder_embedding_config: dict = None,
-        positional_dropout_rate: float = 0.0,
+        time_reduction: int = 8,
+        nemo_conv_settings: Dict = {},
+        relative_attention_bias_args: Dict = {},
+        audio_embd_layer: Dict = {},
+        encoder_embedding_config: Dict = {},
     ):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -119,43 +111,38 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.activation = activation
         self.chunk_size = chunk_size
         self.left_chunk = left_chunk
-        self.num_lang = num_lang
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
-        self.input_layer = input_layer
         self.causal = causal
         self.batch_norm = batch_norm
         self.ext_pw_out_channel = ext_pw_out_channel
         self.ext_pw_kernel_size = ext_pw_kernel_size
         self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
-        self.chunk_se = chunk_se
         self.kernel_size = kernel_size
         self.conv_activation = conv_activation
+        self.input_size = input_size
         self.conv_glu_type = conv_glu_type
         self.bias_in_glu = bias_in_glu
-        self.linear_glu_in_convm = linear_glu_in_convm
-        self.attention_glu_type = attention_glu_type
-        self.extra_layer_output_idx = extra_layer_output_idx
-        self.extra_multi_layer_output_idxs = extra_multi_layer_output_idxs
-        self.activation_checkpointing = activation_checkpointing
-        self.relative_attention_bias_args = relative_attention_bias_args
         self.time_reduction = time_reduction
-        self.replication_pad_for_subsample_embedding = replication_pad_for_subsample_embedding
-        self.attention_group_size = attention_group_size
         self.encoder_embedding_config = encoder_embedding_config
-        self.positional_dropout_rate = positional_dropout_rate
 
         self.nemo_conv_settings = {
-            "subsampling": "dw_striding",
             "subsampling_factor": self.time_reduction,
             "conv_channels": 1024,
             "activation": "relu",
-            "is_causal": False,
         }
-        self.encoder_embedding_config = {
-            "input_size": 80,
+        # Update the default values if provided
+        self.nemo_conv_settings.update(nemo_conv_settings)
+
+        self.relative_attention_bias_args = {
+            "t5_bias_max_distance": 1000,
+            "t5_bias_symmetric": False
         }
+        self.relative_attention_bias_args.update(relative_attention_bias_args)
+
+        self.encoder_embedding_config = encoder_embedding_config
+        self.audio_embd_layer = audio_embd_layer
 
 
 class Phi4MultimodalConfig(Phi3Config):
@@ -1296,8 +1283,8 @@ class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
         super().__init__()
 
         self.num_heads = config.num_attention_heads
-        self.max_distance = config.relative_attention_bias_args.get("t5_bias_max_distance", 1000)
-        self.symmetric = config.relative_attention_bias_args.get("t5_bias_symmetric", False)
+        self.max_distance = config.relative_attention_bias_args["t5_bias_max_distance"]
+        self.symmetric = config.relative_attention_bias_args["t5_bias_symmetric"]
         self.num_buckets = self.max_distance
         if not self.symmetric:
             self.num_buckets *= 2
@@ -1354,7 +1341,6 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 
 class Phi4MultimodalAudioConformerEncoder(nn.Module):
-    extra_multi_layer_output_idxs: List[int]
 
     def __init__(self, config):
         super().__init__()
