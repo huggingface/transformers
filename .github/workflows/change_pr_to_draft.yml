@@ -3,9 +3,9 @@ name: Change PR to draft
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
-  # TODO: delete
-  pull_request:
-    types: [opened, reopened, synchronize]
+#  # TODO: delete
+#  pull_request:
+#    types: [opened, reopened, synchronize]
 
 jobs:
   get-pr-number:
