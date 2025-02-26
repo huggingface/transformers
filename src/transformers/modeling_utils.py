@@ -3438,7 +3438,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         gathered_state_dict = {}
         for key, value in state_dict.items():
             if hasattr(value, "_local_tensor"):
-                gathered_state_dict[key] = value.full_tensor()
+                gathered_state_dict[key] = value.to_local()
             gathered_state_dict[key] = value
 
         del state_dict
