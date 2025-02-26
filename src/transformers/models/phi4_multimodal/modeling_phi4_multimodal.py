@@ -512,7 +512,7 @@ class Phi4MultimodalVisionModel(nn.Module):
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 

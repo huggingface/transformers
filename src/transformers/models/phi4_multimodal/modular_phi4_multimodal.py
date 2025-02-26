@@ -431,7 +431,7 @@ class Phi4MultimodalVisionModel(SiglipVisionTransformer, Phi4MultimodalVisionPre
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        Phi4MultimodalVisionPreTrainedModel.__init__(config)
+        Phi4MultimodalVisionPreTrainedModel.__init__()
         self.config = config
         embed_dim = config.hidden_size
 

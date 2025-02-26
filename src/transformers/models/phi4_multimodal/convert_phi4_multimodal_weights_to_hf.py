@@ -21,9 +21,9 @@ from safetensors.torch import load_file
 
 from transformers import (
     Phi4MultimodalAudioConfig,
-    Phi4MultimodalVisionConfig,
     Phi4MultimodalConfig,
     Phi4MultimodalForCausalLM,
+    Phi4MultimodalVisionConfig,
 )
 
 
@@ -47,7 +47,8 @@ def map_old_key_to_new(old_key):
         if n_replace > 0:
             return new_key
 
-    raise ValueError(f"Key: {old_key} could not be mapped (check the mapping).")
+    # not part of the key mapping
+    return old_key
 
 
 def convert_state_dict(original_state_dict: dict):
