@@ -2,21 +2,19 @@ name: Change PR to draft
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
-  # TODO: delete
-  pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened]
 
 jobs:
-  get-pr-number:
+  convert_pr_to_draft:
     runs-on: ubuntu-22.04
-    name: Get PR number
+    name: Convert PR to draft
     steps:
-      - name: Get PR number
+      - name: Convert PR to draft
         shell: bash
         env:
           PR_NUMBER: ${{ github.event.number }}
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           echo $PR_NUMBER
-          gh pr ready $PR_NUMBER --repo huggingface/transformers --undo
+          gh pr ready $PR_NUMBER --repo $REPO --undo
