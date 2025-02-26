@@ -1,0 +1,22 @@
+name: Change PR to draft
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  # TODO: delete
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  get-pr-number:
+    runs-on: ubuntu-22.04
+    name: Get PR number
+    steps:
+      - name: Get PR number
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo $PR_NUMBER
+          gh pr ready $PR_NUMBER --repo huggingface/transformers --undo
