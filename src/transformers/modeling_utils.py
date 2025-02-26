@@ -406,9 +406,6 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
 
     Note: We fully disable this if we are using `deepspeed`
     """
-    if model_to_load.device.type == "meta":
-        return False
-
     if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
         return False
 
@@ -4573,7 +4570,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     renamed_keys["LayerNorm.beta"] = (key, new_key)
 
         if renamed_keys:
-            warning_msg = f"A pretrained model of type `{self.__name__}` "
+            warning_msg = f"A pretrained model of type `{self.__class__.__name__}` "
             warning_msg += "contains parameters that have been renamed internally (a few are listed below but more are present in the model):\n"
             for old_key, new_key in renamed_keys.values():
                 warning_msg += f"* `{old_key}` -> `{new_key}`\n"
@@ -4895,7 +4892,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if resolved_archive_file is not None:
                     state_dict = load_state_dict(resolved_archive_file, map_location="cpu")
                 assign_to_params_buffers = check_support_param_buffer_assignment(
-                    model_to_load, state_dict, start_prefix
+                    model_to_load, state_dict, start_prefix, cls
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
@@ -4983,12 +4980,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
-                    if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-                        for key, param in model_to_load.state_dict().items():
-                            if param.device == torch.device("meta"):
-                                set_module_tensor_to_device(
-                                    model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
-                                )
+                    state_dict = load_state_dict(shard_file, map_location="cpu", weights_only=weights_only)
                     # Sharded checkpoint or whole but low_cpu_mem_usage==True
                     if assign_to_params_buffers is None:
                         assign_to_params_buffers = check_support_param_buffer_assignment(
