@@ -120,7 +120,9 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         relative_attention_bias_args: Dict = {},
         audio_embd_layer: Dict = {},
         encoder_embedding_config: Dict = {},
+        **kwargs,
     ):
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size

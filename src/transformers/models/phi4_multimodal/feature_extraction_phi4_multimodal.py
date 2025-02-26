@@ -104,7 +104,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         audio_compression_rate: int = 8,
         audio_downsample_rate: int = 1,
         audio_feat_stride: int = 1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
