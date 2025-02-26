@@ -369,6 +369,23 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return F.normalize(image, mean, std)
 
+    @lru_cache(maxsize=10)
+    def _fuse_mean_std_and_rescale_factor(
+        self,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        device: Optional["torch.device"] = None,
+    ) -> tuple:
+        if do_rescale and do_normalize:
+            # Fused rescale and normalize
+            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+            do_rescale = False
+        return image_mean, image_std, do_rescale
+
     def rescale_and_normalize(
         self,
         images: "torch.Tensor",
@@ -381,7 +398,15 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         Rescale and normalize images.
         """
-        # if/elif as we fuse rescale and normalize in `_prepare_process_arguments`
+        image_mean, image_std, do_rescale = self._fuse_mean_std_and_rescale_factor(
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            device=images.device,
+        )
+        # if/elif as we use fused rescale and normalize if both are set to True
         if do_normalize:
             images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
         elif do_rescale:
@@ -503,24 +528,23 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return processed_images
 
     @lru_cache(maxsize=10)
-    def _prepare_process_arguments(
+    def _validate_preprocess_kwargs(
         self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, tuple[float]]] = None,
+        image_std: Optional[Union[float, tuple[float]]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[SizeDict] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[SizeDict] = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        device: Optional["torch.device"] = None,
-    ) -> tuple:
+        data_format: Optional[ChannelDimension] = None,
+    ):
         """
-        Prepare the arguments for the process method.
+        validate the kwargs for the preprocess method.
         """
         validate_fast_preprocess_arguments(
             do_rescale=do_rescale,
@@ -537,23 +561,17 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format=data_format,
         )
 
-        if do_rescale and do_normalize:
-            # Fused rescale and normalize
-            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
-            image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
-            do_rescale = False
-
-        interpolation = (
+    def _set_interpolation(
+        self,
+        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
+    ) -> "F.InterpolationMode":
+        return (
             pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
-        return image_mean, image_std, do_rescale, interpolation
-
     @add_start_docstrings(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS)
     def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[DefaultFastImageProcessorPreprocessKwargs],
+        self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorPreprocessKwargs]
     ) -> BatchFeature:
         validate_kwargs(
             captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
@@ -567,53 +585,53 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-
+        # Prepare input images
         images = self._prepare_input_images(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
 
-        # Pop kwargs that need further processing or won't be used in _preprocess
-        default_to_square = kwargs.pop("default_to_square")
-        size = kwargs.pop("size")
-        crop_size = kwargs.pop("crop_size")
-        image_mean = kwargs.pop("image_mean")
-        do_rescale = kwargs.pop("do_rescale")
-        image_std = kwargs.pop("image_std")
-        data_format = kwargs.pop("data_format")
-        resample = kwargs.pop("resample")
+        # Update kwargs that need further processing before being validated
+        size = kwargs.get("size")
+        default_to_square = kwargs.get("default_to_square")
+        crop_size = kwargs.get("crop_size")
+        image_mean = kwargs.get("image_mean")
+        image_std = kwargs.get("image_std")
+        data_format = kwargs.get("data_format")
+        if size is not None:
+            kwargs["size"] = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if crop_size is not None:
+            kwargs["crop_size"] = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+        if isinstance(image_mean, list):
+            kwargs["image_mean"] = tuple(image_mean)
+        if isinstance(image_std, list):
+            kwargs["image_std"] = tuple(image_std)
+        if data_format is None:
+            kwargs["data_format"] = ChannelDimension.FIRST
 
-        # Make hashable for cache
-        size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square)) if size is not None else None
-        crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size")) if crop_size is not None else None
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        image_mean, image_std, do_rescale, interpolation = self._prepare_process_arguments(
-            size=size,
-            crop_size=crop_size,
-            resample=resample,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_rescale=do_rescale,
-            data_format=data_format if data_format is not None else ChannelDimension.FIRST,
-            device=images[0].device,
-            do_resize=kwargs.get("do_resize"),
-            do_center_crop=kwargs.get("do_center_crop"),
+        # Validate kwargs
+        self._validate_preprocess_kwargs(
+            do_rescale=kwargs.get("do_rescale"),
             rescale_factor=kwargs.get("rescale_factor"),
             do_normalize=kwargs.get("do_normalize"),
+            image_mean=kwargs.get("image_mean"),
+            image_std=kwargs.get("image_std"),
+            do_resize=kwargs.get("do_resize"),
+            size=kwargs.get("size"),
+            do_center_crop=kwargs.get("do_center_crop"),
+            crop_size=kwargs.get("crop_size"),
+            resample=kwargs.get("resample"),
             return_tensors=kwargs.get("return_tensors"),
+            data_format=kwargs.get("data_format"),
         )
 
-        return self._preprocess(
-            images=images,
-            size=size,
-            crop_size=crop_size,
-            interpolation=interpolation,
-            image_mean=image_mean,
-            do_rescale=do_rescale,
-            image_std=image_std,
-            **kwargs,
-        )
+        # torch resize uses interpolation instead of resample
+        kwargs["interpolation"] = self._set_interpolation(kwargs.pop("resample"))
+
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("default_to_square")
+        kwargs.pop("data_format")
+
+        return self._preprocess(images=images, **kwargs)
 
     def _preprocess(
         self,

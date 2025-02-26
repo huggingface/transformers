@@ -311,19 +311,20 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         image_mean = tuple(image_mean) if image_mean is not None else None
         image_std = tuple(image_std) if image_std is not None else None
 
-        image_mean, image_std, do_rescale, interpolation = self._prepare_process_arguments(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+        self._validate_preprocess_kwargs(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
             return_tensors=return_tensors,
             data_format=data_format,
-            device=device,
         )
+        interpolation = self._set_interpolation(resample)
+
         if images is not None:
             images = make_flat_list_of_images(images)
         if videos is not None:
