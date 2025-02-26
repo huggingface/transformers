@@ -24,13 +24,11 @@ if is_scipy_available():
 
 
 # Similar to the one used in `DeformableDetr` but we reduce with sum and normalize by num_boxes
-# instead of mean. It's worth noting that `num_queries` can't be obtained from `inputs`
-# as `logits` are flattened due to masked selection.
+# instead of mean.
 def sigmoid_focal_loss(
     inputs: torch.Tensor,
     targets: torch.Tensor,
     num_boxes: int,
-    num_queries: int,
     alpha: float = 0.25,
     gamma: float = 2,
 ):
@@ -45,8 +43,6 @@ def sigmoid_focal_loss(
             and 1 for the positive class).
         num_boxes (`int`):
             The total number of boxes in the batch.
-        num_queries (`int`):
-            The number of query boxes per image.
         alpha (`float`, *optional*, defaults to 0.25):
             Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
         gamma (`int`, *optional*, defaults to 2):
@@ -188,14 +184,11 @@ class GroundingDinoImageLoss(ImageLoss):
         source_logits = torch.masked_select(source_logits, text_mask)
         target_classes_onehot = torch.masked_select(target_classes_onehot, text_mask)
 
-        num_queries = source_logits.shape[0]
-
         target_classes_onehot = target_classes_onehot.float()
         loss_ce = sigmoid_focal_loss(
             inputs=source_logits,
             targets=target_classes_onehot,
             num_boxes=num_boxes,
-            num_queries=num_queries,
             alpha=self.focal_alpha,
             gamma=2,
         )
