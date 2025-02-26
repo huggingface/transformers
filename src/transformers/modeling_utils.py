@@ -816,6 +816,7 @@ def _load_state_dict_into_meta_model(
             )  # param name needs to stay untouched as it's in the file
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
+            param_casting_dtype = None
             is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
             if dtype is not None and empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
                 if (
@@ -826,7 +827,7 @@ def _load_state_dict_into_meta_model(
                     param_casting_dtype = torch.float32
                 else:
                     param_casting_dtype = dtype
-
+                
             if device_mesh is not None:  # In this case, the param is already on the correct device!
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
@@ -934,7 +935,7 @@ def _load_state_dict_into_meta_model(
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
-        path, name = weights_name.rsplit(".")
+        path, name = weights_name.rsplit(".", 1)
         weights_name = f"{path}.{variant}.{name}"
     return weights_name
 
@@ -4989,7 +4990,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                    error_msgs += model_to_load.load_state_dict(
+                    model_to_load.load_state_dict(
                         fixed_state_dict, strict=False, assign=assign_to_params_buffers
                     )
                 # force memory release
