@@ -3662,6 +3662,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if self._tp_size is not None:
             state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
+        # if using tensor parallel we need to gather the tensors in state dict
+        gathered_state_dict = {}
+        for key, value in state_dict.items():
+            if hasattr(value, "_local_tensor"):
+                gathered_state_dict[key] = value.full_tensor()
+            gathered_state_dict[key] = value
+
+        del state_dict
+        state_dict = gathered_state_dict
+
         if safe_serialization:
             # TODO: fix safe_serialization for tied weights
             # Safetensors does not allow tensor aliasing.
