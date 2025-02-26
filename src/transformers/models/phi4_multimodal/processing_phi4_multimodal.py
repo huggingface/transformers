@@ -15,37 +15,30 @@
 """
 Processor class for Phi4Multimodal
 """
+
 import re
-from typing import List, Optional, Tuple, Union
-import math
 from enum import Enum
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
-import scipy
 import torch
-import torchvision
 
-from transformers import AutoFeatureExtractor, AutoImageProcessor
-from transformers.feature_extraction_sequence_utils import SequenceFeatureExtractor
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
+from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import (
     ImageInput,
-    make_list_of_images,
-    valid_images,
 )
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from transformers.utils import TensorType, logging
-from torch.nn.utils.rnn import pad_sequence
 
 
 logger = logging.get_logger(__name__)
 
 # Special tokens
-_COMPATIBLE_IMAGE_SPECIAL_TOKEN_PATTERN = r'<\|image_\d+\|>'  # For backward compatibility
-_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN = r'<\|audio_\d+\|>'  # For backward compatibility
-_IMAGE_SPECIAL_TOKEN = '<|endoftext10|>'
-_AUDIO_SPECIAL_TOKEN = '<|endoftext11|>'
+_COMPATIBLE_IMAGE_SPECIAL_TOKEN_PATTERN = r"<\|image_\d+\|>"  # For backward compatibility
+_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN = r"<\|audio_\d+\|>"  # For backward compatibility
+_IMAGE_SPECIAL_TOKEN = "<|endoftext10|>"
+_AUDIO_SPECIAL_TOKEN = "<|endoftext11|>"
 _IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it (in `tokenizer_config.json`)
 _AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
 
@@ -186,7 +179,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             input_image_embeds = images["input_image_embeds"]
             image_sizes = images["image_sizes"]
             image_attention_mask = images["image_attention_mask"]
-            num_img_tokens = images['num_img_tokens']
+            num_img_tokens = images["num_img_tokens"]
         else:
             input_image_embeds = torch.tensor([])
             image_sizes = torch.tensor([])
@@ -209,7 +202,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             text = [text]
         assert isinstance(text, list)
         processed_text = [re.sub(_COMPATIBLE_IMAGE_SPECIAL_TOKEN_PATTERN, _IMAGE_SPECIAL_TOKEN, t) for t in text]
-        processed_text = [re.sub(_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN, _AUDIO_SPECIAL_TOKEN, t) for t in processed_text]
+        processed_text = [
+            re.sub(_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN, _AUDIO_SPECIAL_TOKEN, t) for t in processed_text
+        ]
 
         input_ids_list = [self.tokenizer(t).input_ids for t in processed_text]
 
@@ -231,7 +226,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
                     i += 1
                     continue
                 tokens = [token_id] * token_count
-                input_ids = input_ids[:i] + tokens + input_ids[i + 1:]
+                input_ids = input_ids[:i] + tokens + input_ids[i + 1 :]
                 i += token_count
             input_ids = torch.tensor(input_ids, dtype=torch.long)
             new_input_ids_list.append(input_ids)
@@ -240,20 +235,16 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         input_ids = input_ids.new_full((len(new_input_ids_list), max_len), self.tokenizer.pad_token_id)
         # batched inference requires left padding
         for i in range(len(new_input_ids_list)):
-            input_ids[i, max_len - len(new_input_ids_list[i]):] = new_input_ids_list[i]
+            input_ids[i, max_len - len(new_input_ids_list[i]) :] = new_input_ids_list[i]
 
         # If the below assertion fails, it might be that input pure-text
         # messages contain image/audio special tokens literally
         # (<|endoftext10|>, <|endoftext11|>).
-        assert (
-            img_cnt == len(num_img_tokens)
-        ), (
+        assert img_cnt == len(num_img_tokens), (
             f"Number of image tokens in prompt_token_ids ({img_cnt}) "
             f"does not match number of images ({len(num_img_tokens)})"
         )
-        assert (
-            audio_cnt == len(audio_embed_sizes)
-        ), (
+        assert audio_cnt == len(audio_embed_sizes), (
             f"Number of audio tokens in prompt_token_ids ({audio_cnt}) "
             f"does not match number of audios ({len(audio_embed_sizes)})"
         )
@@ -274,9 +265,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             "attention_mask": attention_mask,
         }
 
-        return BatchFeature(
-            data=data
-        )
+        return BatchFeature(data=data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

@@ -1,23 +1,24 @@
+import math
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import math
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN, ACT2CLS
-from ...cache_utils import Cache, DynamicCache
+from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
+
+from ...activations import ACT2CLS, ACT2FN
+from ...cache_utils import DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...configuration_utils import PretrainedConfig
-from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
-from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import Phi3DecoderLayer, Phi3ForCausalLM, Phi3Model, Phi3RMSNorm
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -25,9 +26,9 @@ from ..siglip.modeling_siglip import (
     SiglipEncoder,
     SiglipEncoderLayer,
     SiglipMLP,
+    SiglipMultiheadAttentionPoolingHead,
     SiglipVisionEmbeddings,
     SiglipVisionTransformer,
-    SiglipMultiheadAttentionPoolingHead,
     default_flax_embed_init,
     lecun_normal_,
 )
@@ -77,7 +78,6 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
-
     def __init__(
         self,
         hidden_size: int = 1024,  # attention_dim
@@ -112,7 +112,6 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         attention_group_size: int = 1,
         encoder_embedding_config: dict = None,
         positional_dropout_rate: float = 0.0,
-        
     ):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -146,7 +145,6 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.attention_group_size = attention_group_size
         self.encoder_embedding_config = encoder_embedding_config
         self.positional_dropout_rate = positional_dropout_rate
-
 
         self.nemo_conv_settings = {
             "subsampling": "dw_striding",
@@ -230,7 +228,6 @@ _IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it 
 _AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
 _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE = [-9999, -1]  # For backward compatibility
 _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE = [float("-inf"), -10000]  # For backward compatibility
-
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
@@ -324,7 +321,9 @@ class Phi4MultimodalVisionEncoderLayer(SiglipEncoderLayer):
 class Phi4MultimodalVisionEncoder(SiglipEncoder):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__()
-        self.layers = nn.ModuleList([Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
 
 
 class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
@@ -371,7 +370,6 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
 
 
 class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
-    
     def __init__(self, config: Phi4MultimodalVisionConfig):
         nn.Module.__init__()
         self.config = config
@@ -429,7 +427,6 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
 
 
 class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
-
     def forward(self, hidden_state, attention_mask):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
@@ -498,7 +495,7 @@ class Phi4MultimodalVisionModel(SiglipVisionTransformer, Phi4MultimodalVisionPre
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
-            attention_mask=None
+            attention_mask = None
         else:
             attention_mask = (
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
@@ -584,7 +581,11 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             self.img_projection = nn.Linear(self.image_dim_out, hidden_size)
         elif projection_cls == "mlp":
             dim_projection = hidden_size
-            first_dim = self.image_dim_out * self.base_feat_height_reduction**2 if self.use_hd_transform else self.image_dim_out
+            first_dim = (
+                self.image_dim_out * self.base_feat_height_reduction**2
+                if self.use_hd_transform
+                else self.image_dim_out
+            )
             layers = [nn.Linear(first_dim, dim_projection)]
             layers.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
             self.img_projection = nn.Sequential(*layers)
@@ -607,7 +608,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self.image_attention_mask = image_attention_mask
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
-
         img_processor_output = self.img_processor(
             img_embeds, patch_attention_mask=attention_mask, output_hidden_states=True
         )
@@ -624,15 +624,12 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         patch_feature = self.image_token_compression(patch_feature)
         # convert to NHWC
         patch_feature = patch_feature.permute(0, 2, 3, 1)
-        patch_feature = patch_feature.view(
-            -1, patch_feature.size(1) * patch_feature.size(2), patch_feature.size(-1)
-        )
+        patch_feature = patch_feature.view(-1, patch_feature.size(1) * patch_feature.size(2), patch_feature.size(-1))
         return patch_feature
 
     def forward(
         self, input_ids: torch.LongTensor, input_embeds: torch.FloatTensor, image_sizes=None, **kwargs
     ) -> torch.FloatTensor:
-        
         img_embeds = input_embeds
         img_sizes = image_sizes
 
@@ -891,34 +888,11 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         return hidden_states
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ########################################################## AUDIO #############################################
 
 
-
-
-
-
-
-
 class Phi4MultimodalAudioMLP(nn.Module):
-    def __init__(
-        self,
-        config
-    ):
+    def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.act_fn = ACT2FN[config.bias_in_glu]
@@ -926,7 +900,7 @@ class Phi4MultimodalAudioMLP(nn.Module):
         # gate_up_proj was additionally inside a GLULinear module with `linear` name inside
         self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, config.bias_in_glu)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.dropout_rate),
+        self.dropout = (nn.Dropout(config.dropout_rate),)
 
     def forward(self, hidden_states):
         up_states = self.gate_up_proj(hidden_states)
@@ -935,9 +909,9 @@ class Phi4MultimodalAudioMLP(nn.Module):
         up_states = self.dropout(up_states)
         hidden_states = self.down_proj(up_states)
         out = self.dropout(out)
-    
+
         return out
-    
+
 
 def audio_eager_attention_forward(
     module: nn.Module,
@@ -963,8 +937,6 @@ def audio_eager_attention_forward(
 
 
 class Phi4MultimodalAudioAttention(nn.Module):
-
-   
     def __init__(self, config):
         self.config = config
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -976,7 +948,6 @@ class Phi4MultimodalAudioAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
-
 
     def forward(
         self,
@@ -991,7 +962,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        
+
         attention_mask = None
         if mask is not None:
             mask = mask.unsqueeze(1)
@@ -1002,7 +973,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
 
         attention_interface: Callable = audio_eager_attention_forward
         if self.config._attn_implementation != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, _ = attention_interface(
             self,
@@ -1018,7 +989,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output
-    
+
 
 class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
     def __init__(self, config, padding=0):
@@ -1039,7 +1010,7 @@ class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
         x = self.dw_conv(x)
         x = self.pw_conv(x)
         return x
-    
+
 
 class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
     def __init__(self, config):
@@ -1053,9 +1024,9 @@ class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
             config.ext_pw_out_channel * 2,
             kernel_size,
             1,
-            padding=(kernel_size - 1) if config.causal else (kernel_size - 1) // 2
+            padding=(kernel_size - 1) if config.causal else (kernel_size - 1) // 2,
         )
-        
+
         self.glu_act = ACT2FN[config.glu_type]
 
         if config.bias_in_glu:
@@ -1072,16 +1043,13 @@ class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
                 x[:, self.output_dim : self.output_dim * 2, :] + self.b2
             )
         else:
-            x = (x[:, 0 : self.output_dim, :]) * self.glu_act(
-                x[:, self.output_dim : self.output_dim * 2, :]
-            )
+            x = (x[:, 0 : self.output_dim, :]) * self.glu_act(x[:, self.output_dim : self.output_dim * 2, :])
 
         x = x.permute([0, 2, 1])
         return x
-    
+
 
 class Phi4MultimodalAudioConvModule(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1090,7 +1058,11 @@ class Phi4MultimodalAudioConvModule(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
-        self.ln1 = nn.Linear(config.ext_pw_out_channel, config.hidden_size) if config.hidden_size != config.ext_pw_out_channel else nn.Identity()
+        self.ln1 = (
+            nn.Linear(config.ext_pw_out_channel, config.hidden_size)
+            if config.hidden_size != config.ext_pw_out_channel
+            else nn.Identity()
+        )
 
         if config.causal and config.export:
             padding = 0
@@ -1149,7 +1121,6 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         x = x.permute([0, 2, 1])
         x = self.dropout(x)
         return x
-    
 
 
 class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
@@ -1199,10 +1170,9 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
         out = self.layer_norm(x)
 
         return out
-    
+
 
 class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
-    
     def __init__(self, config):
         super().__init__()
         self.subsampling_factor = self.config.nemo_conv_settings["subsampling_factor"]
@@ -1212,7 +1182,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
         self.sampling_num = int(math.log(self.subsampling_factor, 2))
 
         self.act_fn = ACT2CLS[self.config.nemo_conv_settings["activation"]]
-        
+
         conv_channels = self.config.nemo_conv_settings["conv_channels"]
         layers = []
 
@@ -1294,13 +1264,12 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
         max_audio_length = x.shape[1]
         feature_lens = mask.sum(1)
         padding_length = torch.ceil(feature_lens / self.subsampling_factor)
-        pad_mask = (
-            torch.arange(0, max_audio_length, device=x.device).expand(padding_length.size(0), -1)
-            < padding_length.unsqueeze(1)
-        )
+        pad_mask = torch.arange(0, max_audio_length, device=x.device).expand(
+            padding_length.size(0), -1
+        ) < padding_length.unsqueeze(1)
         return x, pad_mask.unsqueeze(1)
 
-    
+
 def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_num=1):
     """Calculates the output length of a Tensor passed through a convolution or max pooling layer"""
     add_pad: float = all_paddings - kernel_size
@@ -1315,7 +1284,6 @@ def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_nu
 
 
 class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
-   
     def __init__(self, config):
         super().__init__()
 
@@ -1334,9 +1302,7 @@ class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
         memory_position = torch.arange(max_pos, device=x.device, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
         # clipping to a maximum distance using ops that play well with ONNX export
-        relative_position = relative_position.masked_fill(
-            relative_position < -self.max_distance, -self.max_distance
-        )
+        relative_position = relative_position.masked_fill(relative_position < -self.max_distance, -self.max_distance)
         relative_position = relative_position.masked_fill(
             relative_position > self.max_distance - 1, self.max_distance - 1
         )
@@ -1368,15 +1334,18 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
     # TODO: IT APPEARS THEY NEVER UPDATE THIS SO PROBABLY REMOVE
     def __init__(self, config):
         super().__init__()
-        self.register_buffer("global_mean", torch.zeros(config.encoder_embedding_config["input_size"]), persistent=False)
-        self.register_buffer("global_invstd", torch.ones(config.encoder_embedding_config["input_size"]), persistent=False)
+        self.register_buffer(
+            "global_mean", torch.zeros(config.encoder_embedding_config["input_size"]), persistent=False
+        )
+        self.register_buffer(
+            "global_invstd", torch.ones(config.encoder_embedding_config["input_size"]), persistent=False
+        )
 
     def forward(self, x):
         return (x - self.global_mean) * self.global_invstd
-    
+
 
 class Phi4MultimodalAudioConformerEncoder(nn.Module):
-
     extra_multi_layer_output_idxs: List[int]
 
     def __init__(self, config):
@@ -1386,7 +1355,9 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
         self.encoder_embedding = Phi4MultimodalAudioMeanVarianceNormLayer(config)
         self.embed = Phi4MultimodalAudioNemoConvSubsampling(config)
         self.relative_attention_bias_layer = Phi4MultimodalAudioRelativeAttentionLogitBias(config)
-        self.encoders = nn.ModuleList([Phi4MultimodalAudioConformerEncoderLayer(config) for _ in range(config.num_blocks)])
+        self.encoders = nn.ModuleList(
+            [Phi4MultimodalAudioConformerEncoderLayer(config) for _ in range(config.num_blocks)]
+        )
 
     def _chunk_size_selection(self, chunk_size=None, left_chunk=None):
         """If chunk size is a list, we will randomly select a chunk size."""
@@ -1402,9 +1373,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
             if not isinstance(left_chunk, list):
                 raise ValueError("Since chunk_size is a list, left_chunk must be a list")
             if len(left_chunk) != len(chunk_size):
-                raise ValueError(
-                    "The length of left_chunk must be the same as length of chunk_size."
-                )
+                raise ValueError("The length of left_chunk must be the same as length of chunk_size.")
             left_chunk_train_eff = left_chunk[chunk_size_index]
         else:
             chunk_size_train_eff = chunk_size
@@ -1413,9 +1382,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
         return chunk_size_train_eff, left_chunk_train_eff
 
     def _streaming_mask(self, seq_len, batch_size, chunk_size, left_chunk):
-        chunk_size_train_eff, left_chunk_train_eff = self._chunk_size_selection(
-            chunk_size, left_chunk
-        )
+        chunk_size_train_eff, left_chunk_train_eff = self._chunk_size_selection(chunk_size, left_chunk)
 
         # Create mask matrix for streaming
         # S stores start index. if chunksize is 18, s is [0,18,36,....]
@@ -1457,9 +1424,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
 
         batch_size = xs_pad.shape[0]
 
-        enc_streaming_mask = self._streaming_mask(
-            seq_len, batch_size, self.config.chunk_size, self.config.left_chunk
-        )
+        enc_streaming_mask = self._streaming_mask(seq_len, batch_size, self.config.chunk_size, self.config.left_chunk)
 
         if xs_pad.is_cuda:
             enc_streaming_mask = enc_streaming_mask.cuda()
@@ -1481,19 +1446,16 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
     def calculate_hs_mask(self, xs_pad, device, mask):
         max_audio_length = xs_pad.shape[1]
         batch_size = xs_pad.shape[0]
-        enc_streaming_mask = self._streaming_mask(
-            max_audio_length, batch_size, self.chunk_size, self.left_chunk
-        )
+        enc_streaming_mask = self._streaming_mask(max_audio_length, batch_size, self.chunk_size, self.left_chunk)
         enc_streaming_mask = enc_streaming_mask.to(device)
         if mask is None:
             return enc_streaming_mask
 
         feature_lens = mask.sum(1)
         padding_length = feature_lens
-        pad_mask = (
-            torch.arange(0, max_audio_length, device=device).expand(padding_length.size(0), -1)
-            < padding_length.unsqueeze(1)
-        )
+        pad_mask = torch.arange(0, max_audio_length, device=device).expand(
+            padding_length.size(0), -1
+        ) < padding_length.unsqueeze(1)
         pad_mask = pad_mask.unsqueeze(1)
         pad_mask = pad_mask & enc_streaming_mask
         return pad_mask
@@ -1512,7 +1474,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
 
         unfolded = False
         ori_bz, seq_len, D = input_tensor.shape
-        max_seq_len = 500 #maxium position for absolute positional encoding
+        max_seq_len = 500  # maxium position for absolute positional encoding
         if seq_len > max_seq_len:
             # audio sequence is longer than max_seq_len, unfold it into chunks of max_seq_len
             unfolded = True
@@ -1528,14 +1490,20 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
             input_tensor = unfold_tensor(input_tensor, max_seq_len)
             if masks is not None:
                 # revise hs_mask here because the previous calculated hs_mask did not consider extra pad
-                subsampled_pad_mask = masks.squeeze(1) # [bz, subsampled_unmask_seq_len]
-                extra_padded_subsamlped_pad_mask = F.pad(subsampled_pad_mask, (0, chunk_pad_size), "constant", False) # extra padding to the pad mask
+                subsampled_pad_mask = masks.squeeze(1)  # [bz, subsampled_unmask_seq_len]
+                extra_padded_subsamlped_pad_mask = F.pad(
+                    subsampled_pad_mask, (0, chunk_pad_size), "constant", False
+                )  # extra padding to the pad mask
                 extra_padded_subsamlped_pad_mask = extra_padded_subsamlped_pad_mask.unsqueeze(-1).float()
-                masks_unfold = unfold_tensor(extra_padded_subsamlped_pad_mask, max_seq_len) # unfold the pad mask like we did to the input tensor
-                masks_unfold = masks_unfold.squeeze(-1).bool() # unfold op does not support bool tensor
+                masks_unfold = unfold_tensor(
+                    extra_padded_subsamlped_pad_mask, max_seq_len
+                )  # unfold the pad mask like we did to the input tensor
+                masks_unfold = masks_unfold.squeeze(-1).bool()  # unfold op does not support bool tensor
             else:
                 masks_unfold = None
-            hs_mask = self.calculate_hs_mask(input_tensor, input_tensor.device, masks_unfold) # calculate hs_mask based on the unfolded pad mask
+            hs_mask = self.calculate_hs_mask(
+                input_tensor, input_tensor.device, masks_unfold
+            )  # calculate hs_mask based on the unfolded pad mask
 
         relative_attention_bias = self.relative_attention_bias_layer(input_tensor)
 
@@ -1564,7 +1532,7 @@ def unfold_tensor(xs_pad, max_seq_len):
         xs_pad: N, T, D
     """
     _, _, D = xs_pad.shape
-    xs_pad = xs_pad.transpose(-1, -2) # convert to N, D, T
+    xs_pad = xs_pad.transpose(-1, -2)  # convert to N, D, T
     # N x D x 1 x T => N x (D x max_seq_len) x T'
     xs_pad = F.unfold(
         xs_pad[..., None, :],
@@ -1601,9 +1569,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
                     [False., True., True., False.],
                     [False., False., True., True.]])
     """
-    chunk_start_idx = torch.Tensor(
-        chunk_start_idx
-    ).long()  # first idx of each chunk, such as [0,18,36,48].
+    chunk_start_idx = torch.Tensor(chunk_start_idx).long()  # first idx of each chunk, such as [0,18,36,48].
     start_pad = torch.nn.functional.pad(
         chunk_start_idx, (1, 0)
     )  # append 0 to the beginning, so it becomes [0, 0, 18, 36, 48]
@@ -1613,9 +1579,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     seq_range = torch.arange(0, x_len).unsqueeze(-1)  # seq_range size: [x_len, 1]
     idx = ((seq_range < end_pad) & (seq_range >= start_pad)).nonzero()[:, 1]  # idx size: [x_len]
     boundary = end_pad[idx]  # boundary size: [x_len]
-    seq_range_expand = (
-        torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)
-    )  # seq_range_expand size [x_len, x_len]
+    seq_range_expand = torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)  # seq_range_expand size [x_len, x_len]
     idx_left = idx - left_window
     idx_left[idx_left < 0] = 0
     boundary_left = start_pad[idx_left]
@@ -1625,7 +1589,6 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     boundary_right = end_pad[idx_right]
     mask_right = seq_range_expand < boundary_right.unsqueeze(-1)
     return mask_left & mask_right
-
 
 
 class Phi4MultimodalAudioEmbedding(nn.Module):
@@ -1778,29 +1741,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         return hidden_states
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #################################################### TEXT ####################################################
-
-
-
-
-
 
 
 class Phi4MultimodalImageAudioEmbedding(nn.Module):
@@ -2095,16 +2036,17 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
             all_hidden_states += (hidden_states,)
 
         output = BaseModelOutputWithPast(
-                last_hidden_state=hidden_states,
-                past_key_values=past_key_values if use_cache else None,
-                hidden_states=all_hidden_states,
-                attentions=all_self_attns,
-            )
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
         return output if return_dict else output.to_tuple()
 
 
-
 from enum import Enum
+
+
 class InputMode(Enum):
     LANGUAGE = 0
     VISION = 1
@@ -2297,4 +2239,4 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         return model_inputs
 
 
-__all__ = ["Phi4MultimodalForCausalLM"]
+__all__ = ["Phi4MultimodalPreTrainedModel", "Phi4MultimodalModel", "Phi4MultimodalForCausalLM"]  # noqa

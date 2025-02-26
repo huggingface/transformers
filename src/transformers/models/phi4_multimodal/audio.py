@@ -6,12 +6,13 @@
 # activation_checkpointing.py
 """helper function for activation checkpointing"""
 
-from typing import Union, Dict, Callable
 from functools import partial
+from typing import Callable, Dict, Union
+
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    CheckpointImpl,
     checkpoint_wrapper,
     offload_wrapper,
-    CheckpointImpl,
 )
 
 
@@ -19,26 +20,20 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
 """cascade basic blocks"""
 
 import math
+from typing import Optional, Tuple
+
 import backoff
-import random
 import numpy as np
-from typing import Optional, Tuple, Union
 import torch
-from torch import nn
-from torch import Tensor
 import torch.nn.functional as F
+from torch import Tensor, nn
 
 
 # conformer_encoder.py
 """ConformerEncoder Module"""
 
-from typing import Optional, Tuple, List, Literal
 import abc
-import math
-import numpy as np
-
-import torch
-from torch import nn, Tensor
+from typing import List, Literal
 
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
@@ -156,6 +151,7 @@ class Block(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
 
+
 def get_activation(name="relu"):
     """Select an activation function by name
 
@@ -176,6 +172,7 @@ def get_activation(name="relu"):
         return torch.nn.Sigmoid()
     return nn.Identity()
 
+
 def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     """
     The function is very important for Transformer Transducer Streaming mode
@@ -195,9 +192,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
                     [False., True., True., False.],
                     [False., False., True., True.]])
     """
-    chunk_start_idx = torch.Tensor(
-        chunk_start_idx
-    ).long()  # first idx of each chunk, such as [0,18,36,48].
+    chunk_start_idx = torch.Tensor(chunk_start_idx).long()  # first idx of each chunk, such as [0,18,36,48].
     start_pad = torch.nn.functional.pad(
         chunk_start_idx, (1, 0)
     )  # append 0 to the beginning, so it becomes [0, 0, 18, 36, 48]
@@ -207,9 +202,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     seq_range = torch.arange(0, x_len).unsqueeze(-1)  # seq_range size: [x_len, 1]
     idx = ((seq_range < end_pad) & (seq_range >= start_pad)).nonzero()[:, 1]  # idx size: [x_len]
     boundary = end_pad[idx]  # boundary size: [x_len]
-    seq_range_expand = (
-        torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)
-    )  # seq_range_expand size [x_len, x_len]
+    seq_range_expand = torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)  # seq_range_expand size [x_len, x_len]
     idx_left = idx - left_window
     idx_left[idx_left < 0] = 0
     boundary_left = start_pad[idx_left]
@@ -219,6 +212,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     boundary_right = end_pad[idx_right]
     mask_right = seq_range_expand < boundary_right.unsqueeze(-1)
     return mask_left & mask_right
+
 
 class Swish(nn.Module):
     """Implement Swish activation module.
@@ -238,6 +232,7 @@ class Swish(nn.Module):
                 Input.
         """
         return x * self.act_fn(x)
+
 
 class GLU(nn.Module):
     """Implement Gated Linear Unit (GLU) module"""
@@ -271,6 +266,7 @@ class GLU(nn.Module):
         half_x, gate = x.chunk(2, dim=self.dim)
         return half_x * self.act_fn(gate)
 
+
 # TODO: Abdel, this can be improved using GLU module
 class GLUPointWiseConv(nn.Module):
     """GLUPointWiseConv module
@@ -298,22 +294,16 @@ class GLUPointWiseConv(nn.Module):
 
     """
 
-    def __init__(
-        self, input_dim, output_dim, kernel_size, glu_type="sigmoid", bias_in_glu=True, causal=False
-    ):
+    def __init__(self, input_dim, output_dim, kernel_size, glu_type="sigmoid", bias_in_glu=True, causal=False):
         super().__init__()
 
         self.glu_type = glu_type
         self.output_dim = output_dim
         self.bias_in_glu = bias_in_glu
         if causal:
-            self.ext_pw_conv_1d = nn.Conv1d(
-                input_dim, output_dim * 2, kernel_size, 1, padding=(kernel_size - 1)
-            )
+            self.ext_pw_conv_1d = nn.Conv1d(input_dim, output_dim * 2, kernel_size, 1, padding=(kernel_size - 1))
         else:
-            self.ext_pw_conv_1d = nn.Conv1d(
-                input_dim, output_dim * 2, kernel_size, 1, padding=(kernel_size - 1) // 2
-            )
+            self.ext_pw_conv_1d = nn.Conv1d(input_dim, output_dim * 2, kernel_size, 1, padding=(kernel_size - 1) // 2)
 
         if glu_type == "sigmoid":
             self.glu_act = nn.Sigmoid()
@@ -345,18 +335,14 @@ class GLUPointWiseConv(nn.Module):
                     x[:, self.output_dim : self.output_dim * 2, :] + self.b2
                 )
             else:
-                x = (x[:, 0 : self.output_dim, :]) * (
-                    x[:, self.output_dim : self.output_dim * 2, :]
-                )
+                x = (x[:, 0 : self.output_dim, :]) * (x[:, self.output_dim : self.output_dim * 2, :])
         else:
             if self.bias_in_glu:
                 x = (x[:, 0 : self.output_dim, :] + self.b1) * self.glu_act(
                     x[:, self.output_dim : self.output_dim * 2, :] + self.b2
                 )
             else:
-                x = (x[:, 0 : self.output_dim, :]) * self.glu_act(
-                    x[:, self.output_dim : self.output_dim * 2, :]
-                )
+                x = (x[:, 0 : self.output_dim, :]) * self.glu_act(x[:, self.output_dim : self.output_dim * 2, :])
 
         x = x.permute([0, 2, 1])
         return x
@@ -405,9 +391,7 @@ class DepthWiseSeperableConv1d(nn.Module):
         )
 
         if depthwise_seperable_out_channel != 0:
-            self.pw_conv = nn.Conv1d(
-                input_dim * depthwise_multiplier, depthwise_seperable_out_channel, 1, 1, 0
-            )
+            self.pw_conv = nn.Conv1d(input_dim * depthwise_multiplier, depthwise_seperable_out_channel, 1, 1, 0)
         else:
             self.pw_conv = nn.Identity()
         self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
@@ -584,9 +568,7 @@ class ConvModule(nn.Module):
                 self.fix_len1 = False
 
             if self.linear_glu_in_convm:
-                self.glu = GLULinear(
-                    self.input_dim, self.ext_pw_out_channel, self.glu_type, self.bias_in_glu
-                )
+                self.glu = GLULinear(self.input_dim, self.ext_pw_out_channel, self.glu_type, self.bias_in_glu)
             else:
                 self.glu = GLUPointWiseConv(
                     self.input_dim,
@@ -658,6 +640,7 @@ class ConvModule(nn.Module):
         x = self.dropout(x)
         return x
 
+
 class GLULinear(nn.Module):
     """Linear + GLU module
 
@@ -693,6 +676,7 @@ class GLULinear(nn.Module):
         """
         x = self.linear(x)
         return self.glu_act(x)
+
 
 class FeedForward(nn.Module):
     """FeedForward Module.
@@ -743,13 +727,12 @@ class FeedForward(nn.Module):
                 input tensor.
         """
         out = self.net(self.layer_norm(x))
-    
+
         return out
 
+
 #### positional encoding starts here
-def _pre_hook(
-    state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-):
+def _pre_hook(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
     """Perform pre-hook in load_state_dict for backward compatibility.
 
     Note:
@@ -760,6 +743,7 @@ def _pre_hook(
     k = prefix + "pe"
     if k in state_dict:
         state_dict.pop(k)
+
 
 class T5RelativeAttentionLogitBias(nn.Module):
     """
@@ -819,9 +803,7 @@ class T5RelativeAttentionLogitBias(nn.Module):
         memory_position = torch.arange(maxpos, device=x.device, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
         # clipping to a maximum distance using ops that play well with ONNX export
-        relative_position = relative_position.masked_fill(
-            relative_position < -self.max_distance, -self.max_distance
-        )
+        relative_position = relative_position.masked_fill(relative_position < -self.max_distance, -self.max_distance)
         relative_position = relative_position.masked_fill(
             relative_position > self.max_distance - 1, self.max_distance - 1
         )
@@ -870,6 +852,7 @@ class T5RelativeAttentionLogitBias(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
+
 class AbsolutePositionalEncoding(nn.Module):
     """Absolute Positional encoding module.
     This module implement Absolute sinusoidal positional encoding
@@ -909,8 +892,7 @@ class AbsolutePositionalEncoding(nn.Module):
         pe = torch.zeros(x.size(1), self.d_model)
         position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32)
-            * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
         )
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
@@ -932,7 +914,9 @@ class AbsolutePositionalEncoding(nn.Module):
         x = x * self.xscale + self.pe[:, : x.size(1)]
         return self.dropout(x)
 
+
 #### forward embedding layers starts here
+
 
 @backoff.on_exception(backoff.expo, Exception, max_tries=10)
 def np_loadtxt_with_retry(filepath):
@@ -944,6 +928,7 @@ def np_loadtxt_with_retry(filepath):
     """
     result = np.loadtxt(filepath, dtype="f")
     return result
+
 
 class MeanVarianceNormLayer(nn.Module):
     """Mean/variance normalization layer.
@@ -992,9 +977,8 @@ class MeanVarianceNormLayer(nn.Module):
 
         if cuside_features:
             self.global_mean.data = torch.cat((self.global_mean.data, self.global_mean.data), 0)
-            self.global_invstd.data = torch.cat(
-                (self.global_invstd.data, self.global_invstd.data), 0
-            )
+            self.global_invstd.data = torch.cat((self.global_invstd.data, self.global_invstd.data), 0)
+
 
 class CausalConv1D(nn.Conv1d):
     """
@@ -1032,11 +1016,7 @@ class CausalConv1D(nn.Conv1d):
             if isinstance(padding, int):
                 self._left_padding = padding
                 self._right_padding = padding
-            elif (
-                isinstance(padding, list)
-                and len(padding) == 2
-                and padding[0] + padding[1] == kernel_size - 1
-            ):
+            elif isinstance(padding, list) and len(padding) == 2 and padding[0] + padding[1] == kernel_size - 1:
                 self._left_padding = padding[0]
                 self._right_padding = padding[1]
             else:
@@ -1515,10 +1495,9 @@ class NemoConvSubsampling(torch.nn.Module):
         if self.is_causal and self.subsampling_causal_cond:
             feature_lens_remainder = feature_lens % self.subsampling_factor
             padding_length[feature_lens_remainder != 1] += 1
-        pad_mask = (
-            torch.arange(0, max_audio_length, device=x.device).expand(padding_length.size(0), -1)
-            < padding_length.unsqueeze(1)
-        )
+        pad_mask = torch.arange(0, max_audio_length, device=x.device).expand(
+            padding_length.size(0), -1
+        ) < padding_length.unsqueeze(1)
         return x, pad_mask.unsqueeze(1)
 
     def reset_parameters(self):
@@ -1592,9 +1571,7 @@ class NemoConvSubsampling(torch.nn.Module):
             x = self.channel_chunked_conv(self.conv[i * 3 + 2], new_c, x)  # conv2D, depthwise
 
             # splitting pointwise convs by time
-            x = torch.cat(
-                [self.conv[i * 3 + 3](chunk) for chunk in torch.split(x, new_t, 2)], 2
-            )  # conv2D, pointwise
+            x = torch.cat([self.conv[i * 3 + 3](chunk) for chunk in torch.split(x, new_t, 2)], 2)  # conv2D, pointwise
             x = self.conv[i * 3 + 4](x)  # activation
         return x
 
@@ -1660,6 +1637,7 @@ def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_nu
             lengths = torch.floor(lengths)
     return lengths.to(dtype=torch.int)
 
+
 ####  multihead attention starts here
 class AttModule(nn.Module):
     """Attention abstraction module"""
@@ -1700,6 +1678,7 @@ class AttBlock(Block, AttModule):
     def memory_dims(self, max_len=False):
         """memory dimensions"""
         return (1, self.input_size)
+
 
 def masked_softmax(
     scores,
@@ -1776,12 +1755,12 @@ class MultiHeadedAttention(nn.Module):
         assert n_head % group_size == 0, "group_size must divide n_head"
         self.g = group_size
         self.h_k = n_head // group_size
-        
+
         self.linear_q = nn.Linear(n_feat, attention_inner_dim)
         self.linear_k = nn.Linear(n_feat, attention_inner_dim // group_size)
         self.linear_v = nn.Linear(n_value, attention_inner_dim // group_size)
         self.linear_out = nn.Linear(attention_inner_dim // group_size, n_value)
-        
+
         self.attn = torch.jit.Attribute(None, Optional[Tensor])
         self.dropout = nn.Dropout(p=dropout_rate)
         self.dropout_rate = dropout_rate
@@ -1838,7 +1817,7 @@ class MultiHeadedAttention(nn.Module):
         )
         k = k.transpose(1, 2)  # (batch, head_k, time2, d_k)
         v = v.transpose(1, 2)  # (batch, head_k, time2, d_k)
-        
+
         if self.use_pt_scaled_dot_product_attention and not torch.jit.is_scripting():
             attn_mask = None
             if mask is not None:
@@ -1850,9 +1829,7 @@ class MultiHeadedAttention(nn.Module):
                 if mask.dtype != q.dtype:
                     attn_mask = attn_mask.to(q.dtype)
 
-            with torch.backends.cuda.sdp_kernel(
-                enable_flash=True, enable_math=True, enable_mem_efficient=True
-            ):
+            with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=True, enable_mem_efficient=True):
                 x = torch.nn.functional.scaled_dot_product_attention(
                     q,
                     k,
@@ -1870,9 +1847,7 @@ class MultiHeadedAttention(nn.Module):
                 if self.h != self.h_k:
                     B = torch.einsum("b g h t d, t s d -> b h t s", q, pos_k)
                 else:
-                    reshape_q = (
-                        q.contiguous().view(n_batch * self.h, -1, self.d_k).transpose(0, 1)
-                    )  # (t1,nh,dk)
+                    reshape_q = q.contiguous().view(n_batch * self.h, -1, self.d_k).transpose(0, 1)  # (t1,nh,dk)
                     B = torch.matmul(reshape_q, pos_k.transpose(-2, -1))  # pos_k: (t1,dk,t2)
                     B = B.transpose(0, 1).view(n_batch, self.h, pos_k.size(0), pos_k.size(1))
                 scores = A + B
@@ -1890,9 +1865,7 @@ class MultiHeadedAttention(nn.Module):
             x = torch.matmul(p_attn.to(v.dtype), v)  # (batch, head, time1, d_k)
             if pos_v is not None:
                 reshape_attn = (
-                    p_attn.contiguous()
-                    .view(n_batch * self.h, pos_v.size(0), pos_v.size(1))
-                    .transpose(0, 1)
+                    p_attn.contiguous().view(n_batch * self.h, pos_v.size(0), pos_v.size(1)).transpose(0, 1)
                 )  # (t1, bh, t2)
 
                 attn_v = (
@@ -1902,9 +1875,7 @@ class MultiHeadedAttention(nn.Module):
                     .view(n_batch, self.h, pos_v.size(0), self.d_k)
                 )
                 x = x + attn_v
-        x = (
-            x.transpose(1, 2).contiguous().view(n_batch, -1, self.h_k * self.d_k)
-        )  # (batch, time1, d_model)
+        x = x.transpose(1, 2).contiguous().view(n_batch, -1, self.h_k * self.d_k)  # (batch, time1, d_model)
 
         return self.linear_out(x)  # (batch, time1, d_model)
 
@@ -1917,7 +1888,7 @@ def unfold_tensor(xs_pad, max_seq_len):
         xs_pad: N, T, D
     """
     _, _, D = xs_pad.shape
-    xs_pad = xs_pad.transpose(-1, -2) # convert to N, D, T
+    xs_pad = xs_pad.transpose(-1, -2)  # convert to N, D, T
     # N x D x 1 x T => N x (D x max_seq_len) x T'
     xs_pad = F.unfold(
         xs_pad[..., None, :],
@@ -1934,6 +1905,7 @@ def unfold_tensor(xs_pad, max_seq_len):
     xs_pad = xs_pad.view(-1, max_seq_len, D)
     return xs_pad
 
+
 # conformer_encoder.py
 class MultiSequential(torch.nn.Sequential):
     """Multi-input multi-output torch.nn.Sequential"""
@@ -1945,6 +1917,7 @@ class MultiSequential(torch.nn.Sequential):
             args = m(*args)
         return args
 
+
 def repeat(repeat_num, module_gen_fn):
     """repeat module N times
 
@@ -1954,6 +1927,7 @@ def repeat(repeat_num, module_gen_fn):
     :rtype: MultiSequential
     """
     return MultiSequential(*[module_gen_fn(i) for i in range(repeat_num)])
+
 
 class ConformerEncoderLayer(nn.Module):
     """ConformerEncoder Layer module.
@@ -2174,7 +2148,8 @@ class ConformerEncoderLayer(nn.Module):
         out = self.layer_norm(x)
 
         return out, pos_k, pos_v, mask
-        
+
+
 class TransformerEncoderBase(abc.ABC, nn.Module):
     """The Base class for Transformer based encoders
 
@@ -2291,9 +2266,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
             if nemo_conv_settings:
                 default_nemo_conv_settings.update(nemo_conv_settings)
                 for i in ["subsampling_factor", "feat_in", "feat_out"]:
-                    assert (
-                        i not in nemo_conv_settings
-                    ), "{i} should be specified outside of the NeMo dictionary"
+                    assert i not in nemo_conv_settings, "{i} should be specified outside of the NeMo dictionary"
 
             self.embed = NemoConvSubsampling(
                 **default_nemo_conv_settings,
@@ -2307,9 +2280,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
             relative_attention_bias_args.get("type") if relative_attention_bias_args else None
         )
         if self.relative_attention_bias_type == "t5":
-            assert (
-                self.num_heads % self.attention_group_size == 0
-            ), "attention_group_size must divide n_head"
+            assert self.num_heads % self.attention_group_size == 0, "attention_group_size must divide n_head"
             self.relative_attention_bias_layer = T5RelativeAttentionLogitBias(
                 self.num_heads // self.attention_group_size,
                 max_distance=relative_attention_bias_args.get("t5_bias_max_distance", 1000),
@@ -2318,10 +2289,8 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
         else:
             raise NotImplementedError
 
-    
     def post_init(self, init_model_config):
-
-        pretrained_speech_encoder_path = init_model_config.get('pretrained_speech_encoder_path', None)
+        pretrained_speech_encoder_path = init_model_config.get("pretrained_speech_encoder_path", None)
         if pretrained_speech_encoder_path:
             model_state = torch.load(pretrained_speech_encoder_path, map_location="cpu")
             encoder_state_dict = {}
@@ -2329,16 +2298,16 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
                 if "encoder." in k:
                     tmp_k = k.replace("encoder.", "")
                     encoder_state_dict[tmp_k] = v
-            
+
             if hasattr(self, "encoder_embedding"):
                 del self.encoder_embedding
             self.load_state_dict(encoder_state_dict)
-        
+
         if not hasattr(self, "encoder_embedding"):
             self.encoder_embedding = MeanVarianceNormLayer(self.encoder_embedding_config["input_size"])
-       
-        mean_file = init_model_config.get('mean_file', None)
-        invstd_file = init_model_config.get('invstd_file', None)
+
+        mean_file = init_model_config.get("mean_file", None)
+        invstd_file = init_model_config.get("invstd_file", None)
         if mean_file is not None and invstd_file is not None:
             self.encoder_embedding.load_mean_invstd(mean_file, invstd_file)
 
@@ -2392,9 +2361,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
             if not isinstance(left_chunk, list):
                 raise ValueError("Since chunk_size is a list, left_chunk must be a list")
             if len(left_chunk) != len(chunk_size):
-                raise ValueError(
-                    "The length of left_chunk must be the same as length of chunk_size."
-                )
+                raise ValueError("The length of left_chunk must be the same as length of chunk_size.")
             left_chunk_train_eff = left_chunk[chunk_size_index]
         else:
             chunk_size_train_eff = chunk_size
@@ -2416,7 +2383,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
     def _forward_embeddings_core(self, input_tensor, masks):
         embed_class = self._get_embed_class(self.embed)
         assert isinstance(embed_class, NemoConvSubsampling)
-        input_tensor, masks = self.embed(input_tensor, masks)    
+        input_tensor, masks = self.embed(input_tensor, masks)
         return input_tensor, masks
 
     def _position_embedding(self, input_tensor):
@@ -2427,9 +2394,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
         return pos_k, pos_v
 
     def _streaming_mask(self, seq_len, batch_size, chunk_size, left_chunk):
-        chunk_size_train_eff, left_chunk_train_eff = self._chunk_size_selection(
-            chunk_size, left_chunk
-        )
+        chunk_size_train_eff, left_chunk_train_eff = self._chunk_size_selection(chunk_size, left_chunk)
 
         # Create mask matrix for streaming
         # S stores start index. if chunksize is 18, s is [0,18,36,....]
@@ -2473,9 +2438,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
 
         batch_size = xs_pad.shape[0]
 
-        enc_streaming_mask = self._streaming_mask(
-            seq_len, batch_size, self.chunk_size, self.left_chunk
-        )
+        enc_streaming_mask = self._streaming_mask(seq_len, batch_size, self.chunk_size, self.left_chunk)
 
         if xs_pad.is_cuda:
             enc_streaming_mask = enc_streaming_mask.cuda()
@@ -2493,9 +2456,7 @@ class TransformerEncoderBase(abc.ABC, nn.Module):
             hs_mask = streaming_mask
 
         if chunk_size_nc is not None:
-            enc_streaming_mask_nc = self._streaming_mask(
-                seq_len, batch_size, chunk_size_nc, left_chunk_nc
-            )
+            enc_streaming_mask_nc = self._streaming_mask(seq_len, batch_size, chunk_size_nc, left_chunk_nc)
             if xs_pad.is_cuda:
                 enc_streaming_mask_nc = enc_streaming_mask_nc.cuda()
             if masks is not None:
@@ -2772,9 +2733,7 @@ class ConformerEncoder(TransformerEncoderBase):
 
         self.encoders = repeat(
             num_blocks,
-            lambda i: encoder_checkpoint_wrapper(
-                activation_checkpointing, ConformerEncoderLayer, i
-            )(
+            lambda i: encoder_checkpoint_wrapper(activation_checkpointing, ConformerEncoderLayer, i)(
                 ConformerEncoderLayer(
                     d_model=attention_dim,
                     ext_pw_out_channel=ext_pw_out_channel,
@@ -2815,19 +2774,16 @@ class ConformerEncoder(TransformerEncoderBase):
     def calculate_hs_mask(self, xs_pad, device, mask):
         max_audio_length = xs_pad.shape[1]
         batch_size = xs_pad.shape[0]
-        enc_streaming_mask = self._streaming_mask(
-            max_audio_length, batch_size, self.chunk_size, self.left_chunk
-        )
+        enc_streaming_mask = self._streaming_mask(max_audio_length, batch_size, self.chunk_size, self.left_chunk)
         enc_streaming_mask = enc_streaming_mask.to(device)
         if mask is None:
             return enc_streaming_mask
 
         feature_lens = mask.sum(1)
         padding_length = feature_lens
-        pad_mask = (
-            torch.arange(0, max_audio_length, device=device).expand(padding_length.size(0), -1)
-            < padding_length.unsqueeze(1)
-        )
+        pad_mask = torch.arange(0, max_audio_length, device=device).expand(
+            padding_length.size(0), -1
+        ) < padding_length.unsqueeze(1)
         pad_mask = pad_mask.unsqueeze(1)
         pad_mask = pad_mask & enc_streaming_mask
         return pad_mask
@@ -2847,7 +2803,7 @@ class ConformerEncoder(TransformerEncoderBase):
 
         unfolded = False
         ori_bz, seq_len, D = input_tensor.shape
-        max_seq_len = 500 #maxium position for absolute positional encoding
+        max_seq_len = 500  # maxium position for absolute positional encoding
         if seq_len > max_seq_len:
             # audio sequence is longer than max_seq_len, unfold it into chunks of max_seq_len
             unfolded = True
@@ -2863,22 +2819,25 @@ class ConformerEncoder(TransformerEncoderBase):
             input_tensor = unfold_tensor(input_tensor, max_seq_len)
             if masks is not None:
                 # revise hs_mask here because the previous calculated hs_mask did not consider extra pad
-                subsampled_pad_mask = masks.squeeze(1) # [bz, subsampled_unmask_seq_len]
-                extra_padded_subsamlped_pad_mask = F.pad(subsampled_pad_mask, (0, chunk_pad_size), "constant", False) # extra padding to the pad mask
+                subsampled_pad_mask = masks.squeeze(1)  # [bz, subsampled_unmask_seq_len]
+                extra_padded_subsamlped_pad_mask = F.pad(
+                    subsampled_pad_mask, (0, chunk_pad_size), "constant", False
+                )  # extra padding to the pad mask
                 extra_padded_subsamlped_pad_mask = extra_padded_subsamlped_pad_mask.unsqueeze(-1).float()
-                masks_unfold = unfold_tensor(extra_padded_subsamlped_pad_mask, max_seq_len) # unfold the pad mask like we did to the input tensor
-                masks_unfold = masks_unfold.squeeze(-1).bool() # unfold op does not support bool tensor
+                masks_unfold = unfold_tensor(
+                    extra_padded_subsamlped_pad_mask, max_seq_len
+                )  # unfold the pad mask like we did to the input tensor
+                masks_unfold = masks_unfold.squeeze(-1).bool()  # unfold op does not support bool tensor
             else:
                 masks_unfold = None
-            hs_mask = self.calculate_hs_mask(input_tensor, input_tensor.device, masks_unfold) # calculate hs_mask based on the unfolded pad mask
+            hs_mask = self.calculate_hs_mask(
+                input_tensor, input_tensor.device, masks_unfold
+            )  # calculate hs_mask based on the unfolded pad mask
         layer_emb = None
 
         relative_attention_bias = self.init_relative_attention_bias(input_tensor)
 
-        _simplified_path = (
-            self.extra_layer_output_idx == -1
-            and relative_attention_bias is None
-        )
+        _simplified_path = self.extra_layer_output_idx == -1 and relative_attention_bias is None
 
         if _simplified_path:
             input_tensor, *_ = self.encoders(input_tensor, pos_k, pos_v, hs_mask)
@@ -2900,8 +2859,7 @@ class ConformerEncoder(TransformerEncoderBase):
             # if we ever padded before unfolding, we need to remove the padding
             if chunk_pad_size > 0:
                 input_tensor = input_tensor[:, :-chunk_pad_size, :]
-        return input_tensor, masks #, layer_emb
+        return input_tensor, masks  # , layer_emb
 
     def gradient_checkpointing_enable(self):
         pass
-

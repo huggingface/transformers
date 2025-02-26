@@ -124,6 +124,7 @@ else:
             ("owlvit", ("OwlViTImageProcessor",)),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor",)),
+            ("phi4_multimodal", "Phi4MultimodalImageProcessor"),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor",)),

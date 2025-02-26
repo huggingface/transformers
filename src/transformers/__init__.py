@@ -569,6 +569,10 @@ _import_structure = {
         "LlavaNextConfig",
         "LlavaNextProcessor",
     ],
+    "models.phi4_multimodal": [
+        "Phi4MultimodalConfig",
+        "Phi4MultimodalProcessor",
+    ],
     "models.llava_next_video": [
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
@@ -1282,6 +1286,7 @@ else:
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
         ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
@@ -2800,6 +2805,12 @@ else:
         [
             "LlavaNextForConditionalGeneration",
             "LlavaNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.phi4_multimodal"].extend(
+        [
+            "Phi4MultiModalForCausalLM",
+            "Phi4MultiModalPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next_video"].extend(
@@ -5914,6 +5925,10 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phi4_multimodal import (
+        Phi4MultimodalConfig,
+        Phi4MultimodalProcessor,
+    )
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
@@ -6537,6 +6552,7 @@ if TYPE_CHECKING:
         from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
+        from .models.phi4_multimodal import Phi4MultimodalImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
@@ -8152,6 +8168,10 @@ if TYPE_CHECKING:
             Phi3ForTokenClassification,
             Phi3Model,
             Phi3PreTrainedModel,
+        )
+        from .models.phi4_multimodal import (
+            Phi4MultimodalForCausalLM,
+            Phi4MultiModalPreTrainedModel,
         )
         from .models.phimoe import (
             PhimoeForCausalLM,

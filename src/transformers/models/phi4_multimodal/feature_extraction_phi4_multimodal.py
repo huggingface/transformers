@@ -15,28 +15,17 @@
 """
 Processor class for Phi4Multimodal
 """
-import re
+
 from typing import List, Optional, Tuple, Union
-import math
-from enum import Enum
 
 import numpy as np
 import scipy
 import torch
-import torchvision
-
-from transformers import AutoFeatureExtractor, AutoImageProcessor
-from transformers.feature_extraction_sequence_utils import SequenceFeatureExtractor
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
-from transformers.image_utils import (
-    ImageInput,
-    make_list_of_images,
-    valid_images,
-)
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from transformers.utils import TensorType, logging
 from torch.nn.utils.rnn import pad_sequence
+
+from transformers.feature_extraction_sequence_utils import SequenceFeatureExtractor
+from transformers.image_processing_utils import BatchFeature
+from transformers.utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -149,12 +138,12 @@ class Phi4MultimodalAudioFeatureExtractor(SequenceFeatureExtractor):
             returned_audio_embed_sizes.append(torch.tensor(audio_embed_size).long())
             audio_frames_list.append(audio_frames)
 
-        returned_input_audio_embeds = pad_sequence(
-            returned_input_audio_embeds, batch_first=True
-        )
+        returned_input_audio_embeds = pad_sequence(returned_input_audio_embeds, batch_first=True)
         returned_audio_embed_sizes = torch.stack(returned_audio_embed_sizes, dim=0)
         audio_frames = torch.tensor(audio_frames_list)
-        returned_audio_attention_mask = torch.arange(0, audio_frames.max()).unsqueeze(0) < audio_frames.unsqueeze(1) if len(audios) > 1 else None
+        returned_audio_attention_mask = (
+            torch.arange(0, audio_frames.max()).unsqueeze(0) < audio_frames.unsqueeze(1) if len(audios) > 1 else None
+        )
 
         data = {
             "input_audio_embeds": returned_input_audio_embeds,
@@ -273,6 +262,6 @@ class Phi4MultimodalAudioFeatureExtractor(SequenceFeatureExtractor):
         result = integer if remainder == 0 else integer + 1  # qformer compression
 
         return result
-    
+
 
 __all__ = ["Phi4MultimodalAudioFeatureExtractor"]
