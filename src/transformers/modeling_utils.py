@@ -3243,6 +3243,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if is_deepspeed_zero3_enabled() and is_quantized:
             init_contexts.append(set_quantized_state())
+        return init_contexts
 
     @classmethod
     @restore_default_torch_dtype
