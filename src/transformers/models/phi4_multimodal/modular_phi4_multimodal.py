@@ -17,7 +17,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     logging,
 )
@@ -29,6 +29,7 @@ from ..siglip.modeling_siglip import (
     SiglipEncoderLayer,
     SiglipMLP,
     SiglipMultiheadAttentionPoolingHead,
+    SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
     default_flax_embed_init,
     lecun_normal_,
@@ -311,7 +312,7 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
         )
 
 
-class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
+class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     config_class = Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
