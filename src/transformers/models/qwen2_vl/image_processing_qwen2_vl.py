@@ -181,10 +181,13 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         mean = tuple(mean) if isinstance(mean, list) else mean
         pixel_map = self._get_pixel_map(scale, tuple(mean), tuple(std))
         if input_data_format == ChannelDimension.FIRST:
-            image = fast_rescale_normalize(image, pixel_map)
+            B, C, H, W = image.shape
+            fuse_ops = fast_rescale_normalize
         elif input_data_format == ChannelDimension.LAST:
-            image = fast_rescale_normalize_transpose(image, pixel_map)
-        return image
+            B, H, W, C = image.shape
+            fuse_ops = fast_rescale_normalize_transpose
+        image_out = np.empty((B, C, H, W), dtype=np.float32)
+        return fuse_ops(image, image_out, pixel_map)
 
     def _preprocess(
         self,
