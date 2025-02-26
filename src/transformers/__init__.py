@@ -1017,6 +1017,7 @@ _import_structure = {
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
+        "is_torch_hpu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
         "is_torch_xla_available",
