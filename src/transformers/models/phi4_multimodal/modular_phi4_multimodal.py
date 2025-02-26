@@ -18,7 +18,9 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    logging,
+)
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import Phi3DecoderLayer, Phi3ForCausalLM, Phi3Model, Phi3RMSNorm
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -28,7 +30,6 @@ from ..siglip.modeling_siglip import (
     SiglipMLP,
     SiglipMultiheadAttentionPoolingHead,
     SiglipVisionEmbeddings,
-    SiglipVisionTransformer,
     default_flax_embed_init,
     lecun_normal_,
 )
@@ -411,6 +412,10 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
 
 
 class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+    def __init__(self, config: Phi4MultimodalVisionConfig):
+        super().__init__(config)
+        self.mlp = Phi4MultimodalVisionMLP(config)
+
     def forward(self, hidden_state, attention_mask):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
@@ -426,12 +431,12 @@ class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttention
         return hidden_state[:, 0]
 
 
-class Phi4MultimodalVisionModel(SiglipVisionTransformer, Phi4MultimodalVisionPreTrainedModel):
+class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     config_class = Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        Phi4MultimodalVisionPreTrainedModel.__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
 
