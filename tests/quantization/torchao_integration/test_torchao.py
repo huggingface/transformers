@@ -24,7 +24,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
-    require_torchao,
     require_torchao_version_greater_or_equal,
 )
 from transformers.utils import is_torch_available, is_torchao_available
@@ -67,7 +66,6 @@ def check_forward(test_module, model, batch_size=1, context_size=1024):
     test_module.assertEqual(out.shape[1], context_size)
 
 
-@require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
 class TorchAoConfigTest(unittest.TestCase):
     def test_to_dict(self):
@@ -109,7 +107,6 @@ class TorchAoConfigTest(unittest.TestCase):
         quantization_config.to_json_string(use_diff=False)
 
 
-@require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
 class TorchAoTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
@@ -302,7 +299,6 @@ class TorchAoGPUTest(TorchAoTest):
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
 
-@require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"

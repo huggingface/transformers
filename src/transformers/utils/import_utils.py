@@ -113,7 +113,6 @@ _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
-_coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
 _cv2_available = importlib.util.find_spec("cv2") is not None
 _yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
@@ -142,8 +141,6 @@ _levenshtein_available = _is_package_available("Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
 _nltk_available = _is_package_available("nltk")
-_onnx_available = _is_package_available("onnx")
-_openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
@@ -167,7 +164,6 @@ _pyctcdecode_available = _is_package_available("pyctcdecode")
 _pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
-_pytorch_quantization_available = _is_package_available("pytorch_quantization")
 _rjieba_available = _is_package_available("rjieba")
 _sacremoses_available = _is_package_available("sacremoses")
 _safetensors_available = _is_package_available("safetensors")
@@ -618,20 +614,8 @@ def is_tf_available():
     return _tf_available
 
 
-def is_coloredlogs_available():
-    return _coloredlogs_available
-
-
 def is_tf2onnx_available():
     return _tf2onnx_available
-
-
-def is_onnx_available():
-    return _onnx_available
-
-
-def is_openai_available():
-    return _openai_available
 
 
 def is_flax_available():
@@ -651,31 +635,6 @@ def is_ftfy_available():
 
 def is_g2p_en_available():
     return _g2p_en_available
-
-
-@lru_cache()
-def is_torch_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-
-    if not _torch_available:
-        return False
-    if importlib.util.find_spec("torch_xla") is not None:
-        if check_device:
-            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-            try:
-                import torch_xla.core.xla_model as xm
-
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-        return True
-    return False
 
 
 @lru_cache
@@ -773,24 +732,6 @@ def is_torch_musa_available(check_device=False):
     return hasattr(torch, "musa") and torch.musa.is_available()
 
 
-def is_torchdynamo_available():
-    if not is_torch_available():
-        return False
-
-    return version.parse(_torch_version) >= version.parse("2.0.0")
-
-
-def is_torch_compile_available():
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    # We don't do any version check here to support nighlies marked as 1.14. Ultimately needs to check version against
-    # 2.0 but let's do it later.
-    return hasattr(torch, "compile")
-
-
 def is_torchdynamo_compiling():
     if not is_torch_available():
         return False
@@ -833,6 +774,7 @@ def is_psutil_available():
 
 
 def is_py3nvml_available():
+    logger.warning_once("`is_py3nvml_available` is deprecated and will be removed in v4.51.")
     return _py3nvml_available
 
 
@@ -969,6 +911,7 @@ def is_flash_attn_2_available():
         return False
 
 
+# TODO: replace by `is_flash_attn_greater_or_equal`
 @lru_cache()
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
@@ -1132,10 +1075,6 @@ def is_in_notebook():
         return False
 
 
-def is_pytorch_quantization_available():
-    return _pytorch_quantization_available
-
-
 def is_tensorflow_probability_available():
     return _tensorflow_probability_available
 
@@ -1248,10 +1187,6 @@ def is_sudachi_available():
     return _sudachipy_available
 
 
-def get_sudachi_version():
-    return _sudachipy_version
-
-
 def is_sudachi_projection_available():
     if not is_sudachi_available():
         return False
@@ -1263,10 +1198,6 @@ def is_sudachi_projection_available():
 
 def is_jumanpp_available():
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
-
-
-def is_cython_available():
-    return importlib.util.find_spec("pyximport") is not None
 
 
 def is_jieba_available():
@@ -1498,13 +1429,6 @@ G2P_EN_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
-PYTORCH_QUANTIZATION_IMPORT_ERROR = """
-{0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
-`pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
-Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
 TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 {0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
 explained here: https://github.com/tensorflow/probability. Please note that you may need to restart your runtime after installation.
@@ -1642,12 +1566,6 @@ PRETTY_MIDI_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
-
-CYTHON_IMPORT_ERROR = """
-{0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
-Cython`. Please note that you may need to restart your runtime after installation.
-"""
-
 JIEBA_IMPORT_ERROR = """
 {0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
 jieba`. Please note that you may need to restart your runtime after installation.
@@ -1691,7 +1609,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
-        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
@@ -1709,7 +1626,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
-        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),

@@ -272,8 +272,6 @@ extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
-# `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
-extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
@@ -383,7 +381,7 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
-# TODO: when we remove `agents` from `transformers`, review entries in `_deps`.
+# NOTE: when we remove `agents` from `transformers`, review entries in `_deps`.
 extras["agents"] = deps_list(
     "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
@@ -397,7 +395,7 @@ install_requires = [
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
-    deps["regex"],  # for OpenAI GPT
+    deps["regex"],
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
     deps["safetensors"],

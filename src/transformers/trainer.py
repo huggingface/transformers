@@ -165,7 +165,6 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
-    is_torch_compile_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -796,10 +795,6 @@ class Trainer:
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
-
-        # torch.compile
-        if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
         self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:

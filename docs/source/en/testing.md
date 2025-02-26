@@ -453,7 +453,6 @@ decorators are used to set the requirements of tests CPU/GPU/XPU/TPU-wise:
 - `require_torch_multi_gpu` - as `require_torch` plus requires at least 2 GPUs
 - `require_torch_non_multi_gpu` - as `require_torch` plus requires 0 or 1 GPUs
 - `require_torch_up_to_2_gpus` - as `require_torch` plus requires 0 or 1 or 2 GPUs
-- `require_torch_xla` - as `require_torch` plus requires at least 1 TPU
 
 Let's depict the GPU requirements in the following table:
 
@@ -1228,7 +1227,7 @@ import numpy as np
 np.random.seed(seed)
 
 # tf RNG
-import tensorflow as tf 
+import tensorflow as tf
 
 tf.random.set_seed(seed)
 ```
