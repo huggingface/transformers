@@ -21,6 +21,7 @@ from safetensors.torch import load_file
 
 from transformers import (
     Phi4MultimodalAudioConfig,
+    Phi4MultimodalVisionConfig,
     Phi4MultimodalConfig,
     Phi4MultimodalForCausalLM,
 )
@@ -87,7 +88,7 @@ def convert_config(original_config: dict):
 
     # Create transformers config objects
     audio_config = Phi4MultimodalAudioConfig(**audio_config)
-    vision_config = Phi4MultimodalAudioConfig(image_embd_layer=vision_embd_layer)
+    vision_config = Phi4MultimodalVisionConfig(image_embd_layer=vision_embd_layer)
 
     new_config = Phi4MultimodalConfig(**original_config, vision_config=vision_config, audio_config=audio_config)
     return new_config

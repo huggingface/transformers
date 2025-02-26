@@ -2811,8 +2811,8 @@ else:
     )
     _import_structure["models.phi4_multimodal"].extend(
         [
-            "Phi4MultiModalForCausalLM",
-            "Phi4MultiModalPreTrainedModel",
+            "Phi4MultimodalForCausalLM",
+            "Phi4MultimodalPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next_video"].extend(
@@ -8175,7 +8175,7 @@ if TYPE_CHECKING:
         )
         from .models.phi4_multimodal import (
             Phi4MultimodalForCausalLM,
-            Phi4MultiModalPreTrainedModel,
+            Phi4MultimodalPreTrainedModel,
         )
         from .models.phimoe import (
             PhimoeForCausalLM,
