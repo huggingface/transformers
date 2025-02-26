@@ -723,7 +723,7 @@ class ReactAgent(Agent):
     """
 
     @_deprecate_method(
-        "4.51.0",
+        version="4.51.0",
         message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
     )
     def __init__(
@@ -781,7 +781,7 @@ class ReactAgent(Agent):
             return f"Error in generating final llm output: {e}."
 
     @_deprecate_method(
-        "4.51.0",
+        version="4.51.0",
         message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
     )
     def run(self, task: str, stream: bool = False, reset: bool = True, **kwargs):
@@ -1236,7 +1236,7 @@ LENGTH_TRUNCATE_REPORTS = 1000
 
 class ManagedAgent:
     @_deprecate_method(
-        "4.51.0",
+        version="4.51.0",
         message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
     )
     def __init__(self, agent, name, description, additional_prompting=None, provide_run_summary=False):

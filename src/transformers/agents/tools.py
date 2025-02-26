@@ -134,14 +134,14 @@ class Tool:
     output_type: type
 
     @_deprecate_method(
-        "4.51.0",
+        version="4.51.0",
         message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
     )
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
     @_deprecate_method(
-        "4.51.0",
+        version="4.51.0",
         message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
     )
     def __init_subclass__(cls, **kwargs):
