@@ -802,6 +802,7 @@ def _load_state_dict_into_meta_model(
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
         for param_name, empty_param in state_dict.items():
+        
             new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[
                 0
             ]
@@ -813,7 +814,7 @@ def _load_state_dict_into_meta_model(
                 param_name = param_name[len(start_prefix) :]
 
             module_name = param_name
-            param = file_pointer.get_slice(param_name)
+            param = file_pointer.get_slice(param_name) # param name needs to stay untouched as it's in the file
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
             is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
@@ -857,9 +858,8 @@ def _load_state_dict_into_meta_model(
                         "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
                     )
 
-                prefix = "model"
-                if prefix is not None:
-                    param_name_ = new_param_name.replace(f"{prefix}.", "")
+                if start_prefix is not None:
+                    param_name_ = new_param_name.replace(f"{start_prefix}.", "")
 
                 current_module_plan = None
                 full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
@@ -875,36 +875,24 @@ def _load_state_dict_into_meta_model(
                     if "rowwise" == current_module_plan:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
                         shard = Shard(1)
-                        local_parameter = DTensor.from_local(
-                            param.to(dtype=param_casting_dtype),
-                            device_mesh=device_mesh,
-                            placements=[shard] * device_mesh.ndim,
-                        )
-                        if isinstance(module_to_tp.weight, nn.Parameter):
-                            local_parameter = torch.nn.Parameter(local_parameter)
-                        module_to_tp.weight = local_parameter
                         tp_layer.desired_input_layouts = (Shard(-1),)
                     elif "colwise" == current_module_plan:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                        module_to_tp.weight = torch.nn.Parameter(
-                            DTensor.from_local(
-                                param.to(dtype=param_casting_dtype),
-                                device_mesh=device_mesh,
-                                placements=[shard] * device_mesh.ndim,
-                            )
-                        )
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                        module_to_tp.weight = torch.nn.Parameter(
-                            DTensor.from_local(
-                                param.to(dtype=param_casting_dtype),
-                                device_mesh=device_mesh,
-                                placements=[shard] * device_mesh.ndim,
-                            )
+                    local_parameter = torch.nn.Parameter(
+                        DTensor.from_local(
+                            param.to(dtype=param_casting_dtype),
+                            device_mesh=device_mesh,
+                            placements=[shard] * device_mesh.ndim,
                         )
-
+                    )
+                    if isinstance(module_to_tp.weight, nn.Parameter):
+                        local_parameter = torch.nn.Parameter(local_parameter)
+                    module_to_tp.weight = local_parameter
+                    
                     input_fn = partial(
                         tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
                     )
@@ -913,7 +901,7 @@ def _load_state_dict_into_meta_model(
                     )
                     distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
                 else:
-                    missing_keys, unexpected_keys = module_to_tp.load_state_dict(
+                    module_to_tp.load_state_dict(
                         {new_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
                     )
             else:
@@ -946,7 +934,7 @@ def _load_state_dict_into_meta_model(
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
                     module = model.get_submodule(new_param_name.rsplit(".", 1)[0])
-                    _, unexpected_keys = module.load_state_dict(
+                    module.load_state_dict(
                         {new_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)},
                         False,
                         True,
@@ -4470,7 +4458,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)
-            # TODO @ArthurZucker not sure if we need this for all cases, this errors out in some of my tests
 
         # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
         # not part of the state_dict (persistent=False)
@@ -4913,21 +4900,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
-                if state_dict is not None and next(iter(state_dict.values())).device == torch.device("meta"):
-                    with open(resolved_archive_file, "rb") as f:
-                        data = f.read()
-                    state_dict.update(load(data))
+                # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                missing_keys, unexpected_keys = model_to_load.load_state_dict(
+                model_to_load.load_state_dict(
                     fixed_state_dict, assign=assign_to_params_buffers
                 )
-                error_msgs += missing_keys
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
 
-            mismatched_keys = []
             if not is_safetensors:
                 offload_index = {} if device_map is not None and "disk" in device_map.values() else None
             if offload_state_dict:
@@ -5010,7 +4992,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     # properly read the state dict now:
-                    with open(resolved_archive_file, "rb") as f:
+                    with open(shard_file, "rb") as f:
                         data = f.read()
                     state_dict.update(load(data))
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
