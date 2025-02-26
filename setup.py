@@ -112,7 +112,6 @@ _deps = [
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
-    "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
@@ -126,7 +125,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-timeout",
     "pytest-xdist",
@@ -262,7 +261,7 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
-extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
+extras["onnxruntime"] = deps_list("onnxruntime")
 extras["onnx"] = deps_list("tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
@@ -390,6 +389,7 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
+# TODO: when we remove `agents` from `transformers`, review entries in `_deps`.
 extras["agents"] = deps_list(
     "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
