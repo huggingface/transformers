@@ -4550,21 +4550,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
             # TODO refactor a lot of things to make sure this is only done once
+            has_changed = True
             if len(cls.base_model_prefix) > 0:
                 if not hasattr(cls, cls.base_model_prefix) and key.startswith(cls.base_model_prefix):
-                    new_key = key.replace(cls.base_model_prefix, "")
+                    new_key = '.'.join(key.split('.')[1:])
                 elif hasattr(cls, cls.base_model_prefix) and not key.startswith(cls.base_model_prefix):
                     new_key = f"{cls.base_model_prefix}.{key}"
 
-            new_key, has_changed = cls._fix_state_dict_key_on_load(key)
+            new_key, change_ = cls._fix_state_dict_key_on_load(new_key)
             if has_changed:
                 state_dict[new_key] = state_dict.pop(key)
 
                 # track gamma/beta rename for logging
-                if key.endswith("LayerNorm.gamma"):
-                    renamed_keys["LayerNorm.gamma"] = (key, new_key)
-                elif key.endswith("LayerNorm.beta"):
-                    renamed_keys["LayerNorm.beta"] = (key, new_key)
+                if change_:
+                    if key.endswith("LayerNorm.gamma"):
+                        renamed_keys["LayerNorm.gamma"] = (key, new_key)
+                    elif key.endswith("LayerNorm.beta"):
+                        renamed_keys["LayerNorm.beta"] = (key, new_key)
 
         if renamed_keys:
             warning_msg = f"A pretrained model of type `{cls.__name__}` "
@@ -4893,7 +4895,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                model_to_load.load_state_dict(
+                        fixed_state_dict, strict=False, assign=assign_to_params_buffers
+                )
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
