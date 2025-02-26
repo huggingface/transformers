@@ -73,6 +73,11 @@ class SamHQProcessor(ProcessorMixin):
 
     def __init__(self, image_processor):
         super().__init__(image_processor)
+        # Ensure image_processor is properly initialized
+        if not hasattr(self, "image_processor"):
+            raise ValueError("image_processor was not properly initialized")
+        if not hasattr(self.image_processor, "size"):
+            raise ValueError("image_processor.size is not set")
         self.target_size = self.image_processor.size["longest_edge"]
 
     def __call__(

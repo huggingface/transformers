@@ -18,7 +18,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from ..sam.image_processing_sam import *
     from .configuration_sam_hq import *
     from .modeling_sam_hq import *
     from .processing_samhq import *
