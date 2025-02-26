@@ -95,7 +95,6 @@ from transformers.testing_utils import (
     require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
-    require_torchdynamo,
     require_vision,
     require_wandb,
     run_test_using_subprocess,
@@ -3961,7 +3960,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_non_xpu
     @require_torch_non_multi_gpu
-    @require_torchdynamo
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
         import torchdynamo
@@ -4004,7 +4002,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
-    @require_torchdynamo
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         import torchdynamo
