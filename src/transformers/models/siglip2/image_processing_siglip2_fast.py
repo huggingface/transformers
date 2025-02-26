@@ -150,9 +150,9 @@ class Siglip2FastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreproc
     r"Constructs a fast Siglip2 image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
-        patch_size (`int`, *optional*, defaults to `self.patch_size`):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch the image will be split to.
-        max_num_patches (`int`, *optional*, defaults to `self.max_num_patches`):
+        max_num_patches (`int`, *optional*, defaults to 256):
             The image will be resized to have at most this number of patches,
             and then padded in "patch" dimension to match this number exactly.
     """,

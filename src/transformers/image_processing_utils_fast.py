@@ -440,7 +440,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         for kwarg_name in self.unused_kwargs:
             if kwarg_name in kwargs:
                 logger.warning_once(f"This processor does not use the `{kwarg_name}` parameter. It will be ignored.")
-                kwargs[kwarg_name] = None
+                kwargs.pop(kwarg_name)
         return kwargs
 
     def _prepare_images_structure(
