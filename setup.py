@@ -91,10 +91,9 @@ _deps = [
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
-    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
-    "GitPython<3.1.19",
+    "GitPython",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.26.0,<1.0",
     "importlib_metadata",
@@ -109,11 +108,10 @@ _deps = [
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "librosa",
-    "natten>=0.14.6,<0.15.0",
+    "natten>=0.14.6",
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
-    "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "opencv-python",
@@ -247,15 +245,9 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf"] = deps_list("tensorflow", "tf2onnx", "tensorflow-text", "keras-nlp")
 extras["tf-cpu"] = deps_list(
-    "keras",
-    "tensorflow-cpu",
-    "onnxconverter-common",
-    "tf2onnx",
-    "tensorflow-text",
-    "keras-nlp",
-    "tensorflow-probability",
+    "keras", "tensorflow-cpu", "tf2onnx", "tensorflow-text", "keras-nlp", "tensorflow-probability"
 )
 
 extras["torch"] = deps_list("torch", "accelerate")
@@ -271,7 +263,7 @@ else:
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
+extras["onnx"] = deps_list("tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
