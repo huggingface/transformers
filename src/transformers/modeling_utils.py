@@ -3057,7 +3057,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 shard_state_dict = {name: "" for name in shard}
                 for module_name in shard:
                     # skip to collect this weight again
-                    if shard_state_dict.get(module_name) != '':
+                    if shard_state_dict.get(module_name) != "":
                         continue
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
