@@ -16,6 +16,7 @@ jobs:
         shell: bash
         env:
           PR_NUMBER: ${{ github.event.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo $PR_NUMBER
           gh pr ready $PR_NUMBER --undo
