@@ -14,11 +14,9 @@
 # limitations under the License.
 
 import copy
-import threading
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -31,11 +29,7 @@ if is_sklearn_available():
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
-from .logits_process import (
-    LogitsProcessorList,
-    MinLengthLogitsProcessor,
-    SuppressTokensLogitsProcessor,
-)
+from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
 
 if TYPE_CHECKING:
@@ -682,16 +676,13 @@ class AssistantToTargetTranslator:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
-        target_vocab_size: Optional[int] = None,
+        target_vocab_size: Optional[int] = None, # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
         prune = False
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
         self._assistant_model_device: str = assistant_model.device
-        if target_vocab_size is None:
-            self.target_vocab_size: int = len(self._target_tokenizer.get_vocab())
-        else:
-            self.target_vocab_size: int = target_vocab_size
+        self.target_vocab_size: int = target_vocab_size
         self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
             self._get_assistant_to_target_input_ids()
         )
@@ -793,7 +784,6 @@ class AssistantVocabTranslatorCache:
     pre-processing time, and this cache allows us to avoid recomputing them.
     """
 
-    _lock = threading.Lock()
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
@@ -804,11 +794,10 @@ class AssistantVocabTranslatorCache:
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int] = None,
     ) -> AssistantToTargetTranslator:
-        with cls._lock:
-            assistant_dict = cls._cache.get(target_tokenizer)
-            if assistant_dict is None:
-                assistant_dict = weakref.WeakKeyDictionary()
-                cls._cache[target_tokenizer] = assistant_dict
+        assistant_dict = cls._cache.get(target_tokenizer)
+        if assistant_dict is None:
+            assistant_dict = weakref.WeakKeyDictionary()
+            cls._cache[target_tokenizer] = assistant_dict
 
             mapping = assistant_dict.get(assistant_tokenizer)
             if mapping is None:
@@ -817,7 +806,7 @@ class AssistantVocabTranslatorCache:
                 )
                 assistant_dict[assistant_tokenizer] = mapping
 
-            return mapping
+        return mapping
 
     @classmethod
     def cleanup(cls):
@@ -826,17 +815,16 @@ class AssistantVocabTranslatorCache:
         This removes entries where either the target_tokenizer or assistant_tokenizer
         has been garbage collected.
         """
-        with cls._lock:
-            # Remove entries from the outer cache where the target_tokenizer is no longer alive
-            dead_keys = [key for key in cls._cache if key is None]
-            for key in dead_keys:
-                del cls._cache[key]
+        # Remove entries from the outer cache where the target_tokenizer is no longer alive
+        dead_keys = [key for key in cls._cache if key is None]
+        for key in dead_keys:
+            del cls._cache[key]
 
-            # For each assistant_dict, remove entries where assistant_tokenizer is no longer alive
-            for assistant_dict in cls._cache.values():
-                dead_keys = [key for key in assistant_dict if key is None]
-                for key in dead_keys:
-                    del assistant_dict[key]
+        # For each assistant_dict, remove entries where assistant_tokenizer is no longer alive
+        for assistant_dict in cls._cache.values():
+            dead_keys = [key for key in assistant_dict if key is None]
+            for key in dead_keys:
+                del assistant_dict[key]
 
 
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
@@ -853,14 +841,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         assistant_tokenizer: "PreTrainedTokenizerBase",
         generation_config: "GenerationConfig",
         model_kwargs: Dict,
-        target_vocab_size: int,
+        atm_translator: AssistantToTargetTranslator,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
         # Initialize translator before parent class
-        self._atm_translator = AssistantVocabTranslatorCache.get_translator(
-            target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size
-        )
+        self._atm_translator = atm_translator
         super().__init__(
             input_ids,
             assistant_model,
@@ -874,7 +860,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # Track sequence lengths and previous assistant IDs
         self._target_seq_len_with_candidates: int = 0
         self._prev_assistant_ids: Optional[torch.LongTensor] = None
-        self.target_vocab_size = target_vocab_size
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
