@@ -28,6 +28,7 @@ from packaging import version
 
 from ..utils import (
     is_auto_awq_available,
+    is_compressed_tensors_available,
     is_gptqmodel_available,
     is_hqq_available,
     is_torch_available,
@@ -1254,9 +1255,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         run_compressed: bool = True,
         **kwargs,
     ):
-        from compressed_tensors.config import SparsityCompressionConfig
-        from compressed_tensors.quantization import QuantizationConfig
-
+        if is_compressed_tensors_available():
+            from compressed_tensors.config import SparsityCompressionConfig
+            from compressed_tensors.quantization import QuantizationConfig
+        else:
+            raise ImportError(
+                "compressed_tensors is not installed. Please install it with `pip install compressed-tensors`."
+            )
         self.quantization_config = None
         self.sparsity_config = None
 
