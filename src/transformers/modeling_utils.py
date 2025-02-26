@@ -13,8 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import collections
 import copy
 import functools
@@ -1750,9 +1748,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if importlib.util.find_spec("flash_attn") is None:
                 if is_torch_npu_available():
-                    recommend_message_npu = (
-                        "Ascend NPU recommends using flash attention by setting attn_implementation='sdpa'."
-                    )
+                    recommend_message_npu = "You should use attn_implementation='sdpa' instead when using NPU. "
                     raise ImportError(
                         f"{preface} the package flash_attn is not supported on Ascend NPU. {recommend_message_npu}"
                     )
