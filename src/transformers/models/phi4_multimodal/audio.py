@@ -4,6 +4,8 @@
 #!/usr/bin/env python3
 
 # activation_checkpointing.py
+
+# ruff: noqa
 """helper function for activation checkpointing"""
 
 from functools import partial

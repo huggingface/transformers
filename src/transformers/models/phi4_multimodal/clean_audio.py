@@ -1,3 +1,4 @@
+# ruff: noqa
 import math
 from typing import Callable, List, Optional
 

@@ -908,7 +908,7 @@ class Phi4MultimodalAudioMLP(nn.Module):
         up_states = up_states * self.act_fn(gate)
         up_states = self.dropout(up_states)
         hidden_states = self.down_proj(up_states)
-        out = self.dropout(out)
+        out = self.dropout(hidden_states)
 
         return out
 
@@ -928,7 +928,7 @@ def audio_eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
