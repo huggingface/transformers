@@ -970,12 +970,12 @@ class Phi4MultimodalAudioMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.act_fn = ACT2FN[config.bias_in_glu]
+        self.act_fn = ACT2FN[config.activation]
         # ALL AFTER THIS WAS INSIDE A nn.Sequntial CALLED `net` -> KEY CONVERSION
         # gate_up_proj was additionally inside a GLULinear module with `linear` name inside
         self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, config.bias_in_glu)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = (nn.Dropout(config.dropout_rate),)
+        self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
         up_states = self.gate_up_proj(hidden_states)
@@ -1102,7 +1102,7 @@ class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
             padding=(kernel_size - 1) if config.causal else (kernel_size - 1) // 2,
         )
 
-        self.glu_act = ACT2FN[config.glu_type]
+        self.glu_act = ACT2FN[config.conv_glu_type]
 
         if config.bias_in_glu:
             self.b1 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
@@ -1152,7 +1152,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         if config.batch_norm:
             self.bn_layer = nn.BatchNorm1d(config.hidden_size)
 
-        self.act = ACT2FN[config.activation]
+        self.act = ACT2FN[config.conv_activation]
 
         self.ext_pw_conv_1d = nn.Conv1d(
             config.hidden_size,
@@ -1363,8 +1363,8 @@ class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
         super().__init__()
 
         self.num_heads = config.num_attention_heads
-        self.max_distance = config.relative_attention_bias_args.get("t5_bias_max_distance", 1000)
-        self.symmetric = config.relative_attention_bias_args.get("t5_bias_symmetric", False)
+        self.max_distance = config.relative_attention_bias_args["t5_bias_max_distance"]
+        self.symmetric = config.relative_attention_bias_args["t5_bias_symmetric"]
         self.num_buckets = self.max_distance
         if not self.symmetric:
             self.num_buckets *= 2
@@ -1488,8 +1488,6 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
 
 
 class Phi4MultimodalAudioConformerEncoder(nn.Module):
-    extra_multi_layer_output_idxs: List[int]
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -2951,4 +2949,4 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Phi4MultimodalPreTrainedModel", "Phi4MultimodalModel", "Phi4MultimodalForCausalLM"]  # noqa
+__all__ = ["Phi4MultimodalPreTrainedModel", "Phi4MultimodalModel", "Phi4MultimodalForCausalLM"]

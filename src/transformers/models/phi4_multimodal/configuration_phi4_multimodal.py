@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_phi4_multimodal.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 
@@ -71,6 +72,7 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        image_embd_layer: Dict = {},
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -86,52 +88,36 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
-        self.image_embd_layer = {
-            "crop_size": 448,
-            "embedding_cls": "tune_image",
-            "enable_gradient_checkpointing": True,
-            "hd_transform_order": "sub_glb",
-            "projection_cls": "mlp",
-            "use_hd_transform": True,
-            "with_learnable_separator": True,
-        }
+        self.image_embd_layer = image_embd_layer
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
     def __init__(
         self,
-        hidden_size: int = 1024,  # attention_dim
-        num_attention_heads: int = 16,  # attention_heads
-        intermediate_size: int = 2048,
+        hidden_size: int = 1024,
+        num_attention_heads: int = 16,
+        intermediate_size: int = 1536,
         activation: str = "swish",
-        chunk_size: int = None,
-        left_chunk: int = None,
-        num_lang: int = None,
-        num_blocks: int = 6,
+        chunk_size: int = -1,
+        left_chunk: int = 18,
+        num_blocks: int = 24,
         dropout_rate: float = 0.0,
-        input_layer: str = "nemo_conv",
         causal: bool = True,
         batch_norm: bool = False,
-        ext_pw_out_channel: int = 0,
+        ext_pw_out_channel: int = 1024,
         ext_pw_kernel_size: int = 1,
-        depthwise_seperable_out_channel: int = 256,
+        depthwise_seperable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
-        chunk_se: int = 0,
         kernel_size: int = 3,
-        conv_activation: str = "relu",
-        conv_glu_type: str = "sigmoid",
+        conv_activation: str = "swish",
+        input_size: int = 80,
+        conv_glu_type: str = "swish",
         bias_in_glu: bool = True,
-        linear_glu_in_convm: bool = False,
-        attention_glu_type: str = "swish",
-        extra_layer_output_idx: int = -1,
-        extra_multi_layer_output_idxs: list = [],
-        activation_checkpointing: str = "",
-        relative_attention_bias_args: dict = None,
-        time_reduction: int = 4,
-        replication_pad_for_subsample_embedding: bool = False,
-        attention_group_size: int = 1,
-        encoder_embedding_config: dict = None,
-        positional_dropout_rate: float = 0.0,
+        time_reduction: int = 8,
+        nemo_conv_settings: Dict = {},
+        relative_attention_bias_args: Dict = {},
+        audio_embd_layer: Dict = {},
+        encoder_embedding_config: Dict = {},
     ):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -139,43 +125,35 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.activation = activation
         self.chunk_size = chunk_size
         self.left_chunk = left_chunk
-        self.num_lang = num_lang
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
-        self.input_layer = input_layer
         self.causal = causal
         self.batch_norm = batch_norm
         self.ext_pw_out_channel = ext_pw_out_channel
         self.ext_pw_kernel_size = ext_pw_kernel_size
         self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
-        self.chunk_se = chunk_se
         self.kernel_size = kernel_size
         self.conv_activation = conv_activation
+        self.input_size = input_size
         self.conv_glu_type = conv_glu_type
         self.bias_in_glu = bias_in_glu
-        self.linear_glu_in_convm = linear_glu_in_convm
-        self.attention_glu_type = attention_glu_type
-        self.extra_layer_output_idx = extra_layer_output_idx
-        self.extra_multi_layer_output_idxs = extra_multi_layer_output_idxs
-        self.activation_checkpointing = activation_checkpointing
-        self.relative_attention_bias_args = relative_attention_bias_args
         self.time_reduction = time_reduction
-        self.replication_pad_for_subsample_embedding = replication_pad_for_subsample_embedding
-        self.attention_group_size = attention_group_size
         self.encoder_embedding_config = encoder_embedding_config
-        self.positional_dropout_rate = positional_dropout_rate
 
         self.nemo_conv_settings = {
-            "subsampling": "dw_striding",
             "subsampling_factor": self.time_reduction,
             "conv_channels": 1024,
             "activation": "relu",
-            "is_causal": False,
         }
-        self.encoder_embedding_config = {
-            "input_size": 80,
-        }
+        # Update the default values if provided
+        self.nemo_conv_settings.update(nemo_conv_settings)
+
+        self.relative_attention_bias_args = {"t5_bias_max_distance": 1000, "t5_bias_symmetric": False}
+        self.relative_attention_bias_args.update(relative_attention_bias_args)
+
+        self.encoder_embedding_config = encoder_embedding_config
+        self.audio_embd_layer = audio_embd_layer
 
 
 class Phi4MultimodalConfig(PretrainedConfig):
@@ -276,6 +254,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
 
     def __init__(
         self,
@@ -300,12 +279,10 @@ class Phi4MultimodalConfig(PretrainedConfig):
         bos_token_id=199999,
         eos_token_id=199999,
         pad_token_id=199999,
+        original_max_position_embeddings=131000,
         sliding_window=None,
-        embd_layer: str = "default",
-        img_processor=None,
-        audio_processor=None,
-        vision_lora=None,
-        speech_lora=None,
+        vision_config=None,
+        audio_config=None,
         **kwargs,
     ):
         super().__init__(
@@ -330,6 +307,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
+        self.original_max_position_embeddings = original_max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
@@ -339,11 +317,18 @@ class Phi4MultimodalConfig(PretrainedConfig):
         self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
-        self.embd_layer = embd_layer
-        self.img_processor = img_processor
-        self.audio_processor = audio_processor
-        self.vision_lora = vision_lora
-        self.speech_lora = speech_lora
+
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
 
     def _rope_scaling_adjustment(self):
         """
@@ -398,3 +383,6 @@ class Phi4MultimodalConfig(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_long_factor)}"
             )
+
+
+__all__ = ["Phi4MultimodalVisionConfig", "Phi4MultimodalAudioConfig", "Phi4MultimodalConfig"]

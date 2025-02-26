@@ -1,5 +1,5 @@
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -128,10 +128,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         # Update the default values if provided
         self.nemo_conv_settings.update(nemo_conv_settings)
 
-        self.relative_attention_bias_args = {
-            "t5_bias_max_distance": 1000,
-            "t5_bias_symmetric": False
-        }
+        self.relative_attention_bias_args = {"t5_bias_max_distance": 1000, "t5_bias_symmetric": False}
         self.relative_attention_bias_args.update(relative_attention_bias_args)
 
         self.encoder_embedding_config = encoder_embedding_config
@@ -1333,7 +1330,6 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
 
 class Phi4MultimodalAudioConformerEncoder(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.config = config
