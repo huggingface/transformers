@@ -205,7 +205,6 @@ class AutoformerModelTester:
 @require_torch
 class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
-    all_generative_model_classes = (AutoformerForPrediction,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False

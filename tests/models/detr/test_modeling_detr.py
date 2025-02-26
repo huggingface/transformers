@@ -22,7 +22,6 @@ from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -169,7 +168,7 @@ class DetrModelTester:
 
 
 @require_torch
-class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DetrModel,
@@ -194,6 +193,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_head_masking = False
     test_missing_keys = False
     zero_init_hidden_state = True
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -683,7 +683,12 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(results["segmentation"].shape, expected_shape)
         torch.testing.assert_close(results["segmentation"][:3, :3], expected_slice_segmentation, rtol=1e-4, atol=1e-4)
         self.assertTrue(len(results["segments_info"]), expected_number_of_segments)
-        self.assertDictEqual(results["segments_info"][0], expected_first_segment)
+
+        predicted_first_segment = results["segments_info"][0]
+        self.assertEqual(predicted_first_segment["id"], expected_first_segment["id"])
+        self.assertEqual(predicted_first_segment["label_id"], expected_first_segment["label_id"])
+        self.assertEqual(predicted_first_segment["was_fused"], expected_first_segment["was_fused"])
+        self.assertAlmostEqual(predicted_first_segment["score"], expected_first_segment["score"], places=3)
 
 
 @require_vision

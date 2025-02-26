@@ -32,7 +32,6 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-import transformers
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
@@ -58,6 +57,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -74,9 +74,8 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    hub_retry,
     is_flaky,
-    is_pt_flax_cross_test,
-    is_pt_tf_cross_test,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -86,6 +85,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
@@ -100,14 +100,14 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     is_accelerate_available,
-    is_flax_available,
-    is_tf_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_sdpa_available,
 )
-from transformers.utils.generic import ContextManagers, ModelOutput
+from transformers.utils.generic import ContextManagers
+
+from .generation.test_utils import GenerationTesterMixin
 
 
 if is_accelerate_available():
@@ -125,19 +125,6 @@ if is_torch_available():
     from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
-
-
-if is_tf_available():
-    import tensorflow as tf
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-    from tests.utils.test_modeling_flax_utils import check_models_equal
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
 
 if is_torch_fx_available():
     from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
@@ -211,7 +198,6 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    all_generative_model_classes = ()
     fx_compatible = False
     test_torchscript = True
     test_pruning = True
@@ -221,12 +207,27 @@ class ModelTesterMixin:
     test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
+    test_torch_exportable = False
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    # Note: for all mixins that utilize the Hub in some way, we should ensure that
+    # they contain the `hub_retry` decorator in case of failures.
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for attr_name in dir(cls):
+            if attr_name.startswith("test_"):
+                attr = getattr(cls, attr_name)
+                if callable(attr):
+                    setattr(cls, attr_name, hub_retry(attr))
+
+    @property
+    def all_generative_model_classes(self):
+        return tuple(model_class for model_class in self.all_model_classes if model_class.can_generate())
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -275,6 +276,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
@@ -1186,6 +1188,10 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
+                    elif "Siglip2" in model_class.__name__:
+                        outputs = model(**inputs)
+                        example_inputs = [t for t in inputs.values() if isinstance(t, torch.Tensor)]
+                        traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
 
@@ -2544,482 +2550,9 @@ class ModelTesterMixin:
 
         return new_tf_outputs, new_pt_outputs
 
-    # Copied from tests.test_modeling_tf_common.TFModelTesterMixin.check_pt_tf_outputs
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
-
-        Args:
-            model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Mainly used for providing more informative
-                error messages.
-            name (`str`): The name of the output. For example, `output.hidden_states`, `output.attentions`, etc.
-            attributes (`Tuple[str]`): The names of the output's element if the output is a tuple/list with each element
-                being a named field in the output.
-        """
-
-        self.assertEqual(type(name), str)
-        if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
-
-        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
-        if isinstance(tf_outputs, ModelOutput):
-            self.assertTrue(
-                isinstance(pt_outputs, ModelOutput),
-                f"{name}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is",
-            )
-
-            # Don't copy this block to model specific test file!
-            # TODO: remove this method and this line after issues are fixed
-            tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
-
-            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
-            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
-
-            self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
-
-            # convert to the case of `tuple`
-            # appending each key to the current (string) `name`
-            attributes = tuple([f"{name}.{k}" for k in tf_keys])
-            self.check_pt_tf_outputs(
-                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
-            )
-
-        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
-        elif type(tf_outputs) in [tuple, list]:
-            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{name}: Output types differ between TF and PyTorch")
-            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{name}: Output lengths differ between TF and PyTorch")
-
-            if attributes is not None:
-                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(
-                    len(attributes),
-                    len(tf_outputs),
-                    f"{name}: The tuple `attributes` should have the same length as `tf_outputs`",
-                )
-            else:
-                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `name`
-                attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
-
-            for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
-                if isinstance(pt_output, DynamicCache):
-                    pt_output = pt_output.to_legacy_cache()
-                self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
-
-        elif isinstance(tf_outputs, tf.Tensor):
-            self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `tf_outputs` is"
-            )
-
-            tf_outputs = tf_outputs.numpy()
-            pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-            self.assertEqual(
-                tf_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between TF and PyTorch"
-            )
-
-            # deal with NumPy's scalars to make replacing nan values by 0 work.
-            if np.isscalar(tf_outputs):
-                tf_outputs = np.array([tf_outputs])
-                pt_outputs = np.array([pt_outputs])
-
-            tf_nans = np.isnan(tf_outputs)
-            pt_nans = np.isnan(pt_outputs)
-
-            pt_outputs[tf_nans] = 0
-            tf_outputs[tf_nans] = 0
-            pt_outputs[pt_nans] = 0
-            tf_outputs[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(
-                max_diff,
-                tol,
-                f"{name}: Difference between PyTorch and TF is {max_diff} (>= {tol}) for {model_class.__name__}",
-            )
-        else:
-            raise ValueError(
-                "`tf_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `tf.Tensor`. Got"
-                f" {type(tf_outputs)} instead."
-            )
-
-    def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-        tf_inputs_dict = {}
-        for key, tensor in pt_inputs_dict.items():
-            # skip key that does not exist in tf
-            if isinstance(tensor, bool):
-                tf_inputs_dict[key] = tensor
-            elif key == "input_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            elif key == "pixel_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            elif key == "input_features":
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            # other general float inputs
-            elif tensor.is_floating_point():
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-            else:
-                tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
-
-        return tf_inputs_dict
-
-    def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-        tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-
-        # send pytorch inputs to the correct device
-        pt_inputs_dict = {
-            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
-        }
-
-        # send pytorch model to the correct device
-        pt_model.to(torch_device)
-
-        # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
-        pt_model.eval()
-
-        with torch.no_grad():
-            pt_outputs = pt_model(**pt_inputs_dict)
-        tf_outputs = tf_model(tf_inputs_dict)
-
-        # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
-        # Change it here to a scalar to match PyTorch models' loss
-        tf_loss = getattr(tf_outputs, "loss", None)
-        if tf_loss is not None:
-            tf_outputs.loss = tf.math.reduce_mean(tf_loss)
-
-        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(pt_model))
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        import transformers
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
-            if not hasattr(transformers, tf_model_class_name):
-                self.skipTest(reason="transformers does not have TF version of this model yet")
-
-            # Output all for aggressive testing
-            config.output_hidden_states = True
-            config.output_attentions = self.has_attentions
-
-            # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
-            # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
-            # TODO: Use a uniform value for all models, make sure all tests pass without this processing, and remove it.
-            self._make_attention_mask_non_null(inputs_dict)
-
-            tf_model_class = getattr(transformers, tf_model_class_name)
-
-            pt_model = model_class(config).eval()
-            tf_model = tf_model_class(config)
-
-            pt_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            pt_inputs_dict_with_labels = self._prepare_for_class(
-                inputs_dict,
-                model_class,
-                # Not all models accept "labels" in the forward pass (yet :) )
-                return_labels=True if "labels" in inspect.signature(model_class.forward).parameters.keys() else False,
-            )
-
-            # make sure only tf inputs are forward that actually exist in function args
-            tf_input_keys = set(inspect.signature(tf_model.call).parameters.keys())
-
-            # remove all head masks
-            tf_input_keys.discard("head_mask")
-            tf_input_keys.discard("cross_attn_head_mask")
-            tf_input_keys.discard("decoder_head_mask")
-
-            pt_inputs_dict = {k: v for k, v in pt_inputs_dict.items() if k in tf_input_keys}
-            pt_inputs_dict_with_labels = {k: v for k, v in pt_inputs_dict_with_labels.items() if k in tf_input_keys}
-
-            # For some models (e.g. base models), there is no label returned.
-            # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
-            if not set(pt_inputs_dict_with_labels.keys()).symmetric_difference(pt_inputs_dict.keys()):
-                pt_inputs_dict_with_labels = None
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-            # Here requires `tf_inputs_dict` to build `tf_model`
-            tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
-            )
-            pt_model = transformers.load_tf2_model_in_pytorch_model(
-                pt_model, tf_model, allow_missing_keys=allow_missing_keys
-            )
-
-            # Original test: check without `labels`
-            self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
-            # check with `labels`
-            if pt_inputs_dict_with_labels:
-                self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict_with_labels)
-
-            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
-                torch.save(pt_model.state_dict(), pt_checkpoint_path)
-                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(
-                    tf_model, pt_checkpoint_path, allow_missing_keys=allow_missing_keys
-                )
-
-                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
-                tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
-                    pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
-                )
-
-            # Original test: check without `labels`
-            self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
-            # check with `labels`
-            if pt_inputs_dict_with_labels:
-                self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict_with_labels)
-
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
-
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
-        """
-        Args:
-            model_class: The class of the model that is currently testing. For example, ..., etc.
-            Currently unused, but it could make debugging easier and faster.
-
-            names: A string, or a list of strings. These specify what fx_outputs/pt_outputs represent in the model outputs.
-                Currently unused, but in the future, we could use this information to make the error message clearer
-                by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
-        """
-        self.assertEqual(type(name), str)
-        if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
-
-        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
-        if isinstance(fx_outputs, ModelOutput):
-            self.assertTrue(
-                isinstance(pt_outputs, ModelOutput),
-                f"{name}: `pt_outputs` should an instance of `ModelOutput` when `fx_outputs` is",
-            )
-
-            fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-            self.assertEqual(fx_keys, pt_keys, f"{name}: Output keys differ between Flax and PyTorch")
-
-            # convert to the case of `tuple`
-            # appending each key to the current (string) `name`
-            attributes = tuple([f"{name}.{k}" for k in fx_keys])
-            self.check_pt_flax_outputs(
-                fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
-            )
-
-        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
-        elif type(fx_outputs) in [tuple, list]:
-            self.assertEqual(
-                type(fx_outputs), type(pt_outputs), f"{name}: Output types differ between Flax and PyTorch"
-            )
-            self.assertEqual(
-                len(fx_outputs), len(pt_outputs), f"{name}: Output lengths differ between Flax and PyTorch"
-            )
-
-            if attributes is not None:
-                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(
-                    len(attributes),
-                    len(fx_outputs),
-                    f"{name}: The tuple `attributes` should have the same length as `fx_outputs`",
-                )
-            else:
-                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `name`
-                attributes = tuple([f"{name}_{idx}" for idx in range(len(fx_outputs))])
-
-            for fx_output, pt_output, attr in zip(fx_outputs, pt_outputs, attributes):
-                self.check_pt_flax_outputs(fx_output, pt_output, model_class, tol=tol, name=attr)
-
-        elif isinstance(fx_outputs, jnp.ndarray):
-            self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `fx_outputs` is"
-            )
-
-            # Using `np.asarray` gives `ValueError: assignment destination is read-only` at the line `fx_outputs[fx_nans] = 0`.
-            fx_outputs = np.array(fx_outputs)
-            pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-            self.assertEqual(
-                fx_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between Flax and PyTorch"
-            )
-
-            # deal with NumPy's scalars to make replacing nan values by 0 work.
-            if np.isscalar(fx_outputs):
-                fx_outputs = np.array([fx_outputs])
-                pt_outputs = np.array([pt_outputs])
-
-            fx_nans = np.isnan(fx_outputs)
-            pt_nans = np.isnan(pt_outputs)
-
-            pt_outputs[fx_nans] = 0
-            fx_outputs[fx_nans] = 0
-            pt_outputs[pt_nans] = 0
-            fx_outputs[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
-            self.assertLessEqual(
-                max_diff, tol, f"{name}: Difference between PyTorch and Flax is {max_diff} (>= {tol})."
-            )
-        else:
-            raise ValueError(
-                "`fx_outputs` should be an instance of `ModelOutput`, a `tuple`, or an instance of `jnp.ndarray`. Got"
-                f" {type(fx_outputs)} instead."
-            )
-
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs_loaded, pt_outputs, model_class)
-
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    self.skipTest(reason="No Flax model exists for this class")
-
-                # Output all for aggressive testing
-                config.output_hidden_states = True
-                config.output_attentions = self.has_attentions
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                # send pytorch inputs to the correct device
-                pt_inputs = {
-                    k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()
-                }
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # send pytorch model to the correct device
-                pt_model.to(torch_device)
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs)
-                fx_outputs = fx_model(**fx_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(
-                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
-                    )
-
-                # send pytorch model to the correct device
-                pt_model_loaded.to(torch_device)
-                pt_model_loaded.eval()
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-
-                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
-
-                self.assertEqual(fx_keys, pt_keys)
-                self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3519,6 +3052,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
                 "UniSpeechSatForSequenceClassification",
@@ -4319,10 +3853,6 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
-                self.skipTest(
-                    reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
-                )
             if config.model_type in ["paligemma"]:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
@@ -4643,53 +4173,6 @@ class ModelTesterMixin:
                 tol = torch.finfo(torch.float16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    @is_pt_tf_cross_test
-    def test_tf_from_pt_safetensors(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
-            if not hasattr(transformers, tf_model_class_name):
-                self.skipTest(reason="transformers does not have this model in TF version yet")
-
-            tf_model_class = getattr(transformers, tf_model_class_name)
-
-            pt_model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname, safe_serialization=True)
-                tf_model_1 = tf_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                pt_model.save_pretrained(tmpdirname, safe_serialization=False)
-                tf_model_2 = tf_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                # Check models are equal
-                for p1, p2 in zip(tf_model_1.weights, tf_model_2.weights):
-                    self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
-    @is_pt_flax_cross_test
-    def test_flax_from_pt_safetensors(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            flax_model_class_name = "Flax" + model_class.__name__  # Add the "Flax at the beginning
-            if not hasattr(transformers, flax_model_class_name):
-                self.skipTest(reason="transformers does not have this model in Flax version yet")
-
-            flax_model_class = getattr(transformers, flax_model_class_name)
-
-            pt_model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname, safe_serialization=True)
-                flax_model_1 = flax_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                pt_model.save_pretrained(tmpdirname, safe_serialization=False)
-                flax_model_2 = flax_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                # Check models are equal
-                self.assertTrue(check_models_equal(flax_model_1, flax_model_2))
-
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -4772,6 +4255,9 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
             set_model_for_less_flaky_test(model)
+
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
 
             (
                 input_ids,
@@ -4865,6 +4351,72 @@ class ModelTesterMixin:
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
 
+    @slow
+    @require_torch_greater_or_equal("2.5")
+    def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
+        """
+        Test if model can be exported with torch.export.export()
+
+        Args:
+            config (PretrainedConfig):
+                Config to use for the model, if None, use default config from model_tester
+            inputs_dict (dict):
+                Inputs to use for the model, if None, use default inputs from model_tester
+            tolerance (float):
+                `atol` for torch.allclose(), defined in signature for test overriding
+        """
+        if not self.test_torch_exportable:
+            self.skipTest(reason="test_torch_exportable=False for this model.")
+
+        def recursively_check(eager_outputs, exported_outputs):
+            is_tested = False
+            if isinstance(eager_outputs, torch.Tensor):
+                torch.testing.assert_close(eager_outputs, exported_outputs, atol=tolerance, rtol=tolerance)
+                return True
+            elif isinstance(eager_outputs, (tuple, list)):
+                for eager_output, exported_output in zip(eager_outputs, exported_outputs):
+                    is_tested = is_tested or recursively_check(eager_output, exported_output)
+                return is_tested
+            elif isinstance(eager_outputs, dict):
+                for key in eager_outputs:
+                    is_tested = is_tested or recursively_check(eager_outputs[key], exported_outputs[key])
+                return is_tested
+            return is_tested
+
+        default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config = config or default_config
+        inputs_dict = inputs_dict or default_inputs_dict
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__.endswith("ForPreTraining"):
+                continue
+
+            with self.subTest(model_class.__name__):
+                model = model_class(config).eval().to(torch_device)
+
+                # Export model
+                exported_model = torch.export.export(
+                    model,
+                    args=(),
+                    kwargs=inputs_dict,
+                    strict=True,
+                )
+
+                # Run exported model and eager model
+                with torch.no_grad():
+                    # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
+                    torch.manual_seed(1234)
+                    eager_outputs = model(**inputs_dict)
+                    torch.manual_seed(1234)
+                    exported_outputs = exported_model.module().forward(**inputs_dict)
+
+                # Check if outputs are close:
+                # is_tested is a boolean flag idicating if we comapre any outputs,
+                # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
+                # In case of outputs are different the error will be rasied in `recursively_check` function.
+                is_tested = recursively_check(eager_outputs, exported_outputs)
+                self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
+
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
@@ -4877,6 +4429,33 @@ class ModelTesterMixin:
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(inputs_dict["input_ids"].to(torch_device))
+
+    def test_generation_tester_mixin_inheritance(self):
+        """
+        Ensures that we have the generation tester mixin if the model can generate. The test will fail otherwise,
+        forcing the mixin to be added -- and ensuring proper test coverage
+        """
+        if len(self.all_generative_model_classes) > 0:
+            self.assertTrue(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can call `generate` from `GenerationMixin`, so one of two things must happen: 1) the "
+                    "tester must inherit from `GenerationTesterMixin` to run `generate` tests, or 2) if the model "
+                    "doesn't fully support the original `generate` or has a custom `generate` with partial feature "
+                    "support, the tester must overwrite `all_generative_model_classes` to skip the failing classes "
+                    "(make sure to comment why). If `all_generative_model_classes` is overwritten as `()`, then we "
+                    "need to remove the `GenerationTesterMixin` inheritance -- no `generate` tests are being run."
+                ),
+            )
+        else:
+            self.assertFalse(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can't call `generate`, so its tester can't inherit `GenerationTesterMixin`. (If you "
+                    "think the model should be able to `generate`, the model may be missing the `GenerationMixin` "
+                    "inheritance)"
+                ),
+            )
 
 
 global_rng = random.Random()

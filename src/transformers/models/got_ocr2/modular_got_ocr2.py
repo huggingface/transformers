@@ -170,8 +170,6 @@ class GotOcr2Config(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 151859):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 576):
@@ -199,13 +197,11 @@ class GotOcr2Config(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=151859,
         image_seq_length=576,
         pad_token_id=-1,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
         self.pad_token_id = pad_token_id
@@ -852,7 +848,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
