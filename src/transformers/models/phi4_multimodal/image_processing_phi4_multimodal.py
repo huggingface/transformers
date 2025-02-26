@@ -34,14 +34,6 @@ from transformers.utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
-# Special tokens
-_COMPATIBLE_IMAGE_SPECIAL_TOKEN_PATTERN = r"<\|image_\d+\|>"  # For backward compatibility
-_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN = r"<\|audio_\d+\|>"  # For backward compatibility
-_IMAGE_SPECIAL_TOKEN = "<|endoftext10|>"
-_AUDIO_SPECIAL_TOKEN = "<|endoftext11|>"
-_IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it (in `tokenizer_config.json`)
-_AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
-
 
 class InputMode(Enum):
     LANGUAGE = 0
@@ -89,13 +81,13 @@ class Phi4MultimodalImageProcessor(BaseImageProcessor):
             aspect_ratio = orig_width / orig_height
 
             # calculate the existing image aspect ratio
-            target_ratios = set(
+            target_ratios = {
                 (i, j)
                 for n in range(min_num, max_num + 1)
                 for i in range(1, n + 1)
                 for j in range(1, n + 1)
                 if i * j <= max_num and i * j >= min_num
-            )
+            }
             target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
             # find the closest aspect ratio to the target

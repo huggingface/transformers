@@ -83,21 +83,30 @@ def convert_config(original_config: dict):
     audio_embd_layer = embd_layer["audio_embd_layer"]
     vision_embd_layer = embd_layer["image_embd_layer"]
 
+    # Keep only some of the subdict
+    keep_audio_embd_layer = ["downsample_rate", "projection_cls"]
+    keep_vision_embd_layer = ["use_hd_transform", "crop_size", "hd_transform_order", "projection_cls"]
+    audio_embd_layer = {k: v for k, v in audio_embd_layer.items() if k in keep_audio_embd_layer}
+    vision_embd_layer = {k: v for k, v in vision_embd_layer.items() if k in keep_vision_embd_layer}
+
     audio_config = original_config.pop("audio_processor")["config"]
     # remove
     audio_config.pop("activation_checkpointing", None)
     audio_config.pop("cnn_layer_norm", None)
     audio_config.pop("input_layer", None)
+    audio_config.pop("encoder_embedding_config", None)
     # rename
     audio_config["hidden_size"] = audio_config.pop("attention_dim")
     audio_config["num_attention_heads"] = audio_config.pop("attention_heads")
     audio_config["intermediate_size"] = audio_config.pop("linear_units")
+    audio_config["nemo_conv_channels"] = audio_config.pop("nemo_conv_settings")["conv_channels"]
+    audio_config["bias_max_distance"] = audio_config.pop("relative_attention_bias_args")["t5_bias_max_distance"]
     # add
-    audio_config["audio_embd_layer"] = audio_embd_layer
+    audio_config = {**audio_config, **audio_embd_layer}
 
     # Create transformers config objects
     audio_config = Phi4MultimodalAudioConfig(**audio_config)
-    vision_config = Phi4MultimodalVisionConfig(image_embd_layer=vision_embd_layer)
+    vision_config = Phi4MultimodalVisionConfig(**vision_embd_layer)
 
     new_config = Phi4MultimodalConfig(**original_config, vision_config=vision_config, audio_config=audio_config)
     return new_config

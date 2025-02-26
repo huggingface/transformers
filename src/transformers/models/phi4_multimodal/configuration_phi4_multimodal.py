@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_phi4_multimodal.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 
@@ -72,7 +71,10 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        image_embd_layer: Dict = {},
+        use_hd_transform: bool = True,
+        crop_size: int = 448,
+        hd_transform_order: str = "sub_glb",
+        projection_cls: str = "mlp",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -87,8 +89,10 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-
-        self.image_embd_layer = image_embd_layer
+        self.use_hd_transform = use_hd_transform
+        self.crop_size = crop_size
+        self.hd_transform_order = hd_transform_order
+        self.projection_cls = projection_cls
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
@@ -116,10 +120,12 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         conv_glu_type: str = "swish",
         bias_in_glu: bool = True,
         time_reduction: int = 8,
-        nemo_conv_settings: Dict = {},
-        relative_attention_bias_args: Dict = {},
-        audio_embd_layer: Dict = {},
-        encoder_embedding_config: Dict = {},
+        bias_max_distance: int = 1000,
+        bias_symmetric: bool = False,
+        nemo_activation: str = "relu",
+        nemo_conv_channels: int = 1024,
+        downsample_rate: int = 1,
+        projection_cls: str = "mlp",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -143,21 +149,12 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.conv_glu_type = conv_glu_type
         self.bias_in_glu = bias_in_glu
         self.time_reduction = time_reduction
-        self.encoder_embedding_config = encoder_embedding_config
-
-        self.nemo_conv_settings = {
-            "subsampling_factor": self.time_reduction,
-            "conv_channels": 1024,
-            "activation": "relu",
-        }
-        # Update the default values if provided
-        self.nemo_conv_settings.update(nemo_conv_settings)
-
-        self.relative_attention_bias_args = {"t5_bias_max_distance": 1000, "t5_bias_symmetric": False}
-        self.relative_attention_bias_args.update(relative_attention_bias_args)
-
-        self.encoder_embedding_config = encoder_embedding_config
-        self.audio_embd_layer = audio_embd_layer
+        self.bias_max_distance = bias_max_distance
+        self.bias_symmetric = bias_symmetric
+        self.nemo_activation = nemo_activation
+        self.nemo_conv_channels = nemo_conv_channels
+        self.downsample_rate = downsample_rate
+        self.projection_cls = projection_cls
 
 
 class Phi4MultimodalConfig(PretrainedConfig):

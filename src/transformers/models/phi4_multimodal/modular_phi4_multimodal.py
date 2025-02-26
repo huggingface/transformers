@@ -1,5 +1,6 @@
 import math
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from enum import Enum
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -54,7 +55,10 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        image_embd_layer: Dict = {},
+        use_hd_transform: bool = True,
+        crop_size: int = 448,
+        hd_transform_order: str = "sub_glb",
+        projection_cls: str = "mlp",
         **kwargs,
     ):
         super().__init__(
@@ -70,8 +74,10 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
             attention_dropout=attention_dropout,
             **kwargs,
         )
-
-        self.image_embd_layer = image_embd_layer
+        self.use_hd_transform = use_hd_transform
+        self.crop_size = crop_size
+        self.hd_transform_order = hd_transform_order
+        self.projection_cls = projection_cls
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
@@ -99,10 +105,12 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         conv_glu_type: str = "swish",
         bias_in_glu: bool = True,
         time_reduction: int = 8,
-        nemo_conv_settings: Dict = {},
-        relative_attention_bias_args: Dict = {},
-        audio_embd_layer: Dict = {},
-        encoder_embedding_config: Dict = {},
+        bias_max_distance: int = 1000,
+        bias_symmetric: bool = False,
+        nemo_activation: str = "relu",
+        nemo_conv_channels: int = 1024,
+        downsample_rate: int = 1,
+        projection_cls: str = "mlp",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,21 +134,12 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.conv_glu_type = conv_glu_type
         self.bias_in_glu = bias_in_glu
         self.time_reduction = time_reduction
-        self.encoder_embedding_config = encoder_embedding_config
-
-        self.nemo_conv_settings = {
-            "subsampling_factor": self.time_reduction,
-            "conv_channels": 1024,
-            "activation": "relu",
-        }
-        # Update the default values if provided
-        self.nemo_conv_settings.update(nemo_conv_settings)
-
-        self.relative_attention_bias_args = {"t5_bias_max_distance": 1000, "t5_bias_symmetric": False}
-        self.relative_attention_bias_args.update(relative_attention_bias_args)
-
-        self.encoder_embedding_config = encoder_embedding_config
-        self.audio_embd_layer = audio_embd_layer
+        self.bias_max_distance = bias_max_distance
+        self.bias_symmetric = bias_symmetric
+        self.nemo_activation = nemo_activation
+        self.nemo_conv_channels = nemo_conv_channels
+        self.downsample_rate = downsample_rate
+        self.projection_cls = projection_cls
 
 
 class Phi4MultimodalConfig(Phi3Config):
@@ -530,7 +529,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
 class Phi4MultimodalImageEmbedding(nn.Module):
     """Image embedding."""
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: Phi4MultimodalConfig):
         super().__init__()
 
         # n_embed or hidden_size
@@ -554,26 +553,21 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self.image_attention_mask = None
 
         # global_gn and sub_gn for hd transform, serves as line separator
-        self.use_hd_transform = config.vision_config.image_embd_layer["use_hd_transform"]
-        self.with_learnable_separator = config.vision_config.image_embd_layer["with_learnable_separator"]
-        self.hd_transform_order = config.vision_config.image_embd_layer["hd_transform_order"]
-        self.freeze_img_processor = False
-        self.crop_size = config.vision_config.image_embd_layer["crop_size"]
-        assert (
-            self.use_hd_transform == self.with_learnable_separator
-        ), "use_hd_transform and with_learnable_separator should have same value"
+        self.use_hd_transform = config.vision_config.use_hd_transform
+        self.hd_transform_order = config.vision_config.hd_transform_order
+        self.crop_size = config.vision_config.crop_size
 
         # image token compression
         self.image_token_compression = nn.AvgPool2d(kernel_size=2, stride=2)
         self.base_feat_height_reduction = 1
         self.base_feat_height_target = self.base_feat_height_target // 2
 
-        if self.with_learnable_separator:
+        if self.use_hd_transform:
             # 1024 * 4, merge spatial to channel dimension
             self.glb_GN = nn.Parameter(torch.zeros([1, 1, self.image_dim_out * self.base_feat_height_reduction**2]))
             self.sub_GN = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out * self.base_feat_height_reduction**2]))
 
-        projection_cls = config.vision_config.image_embd_layer["projection_cls"]
+        projection_cls = config.vision_config.projection_cls
         if projection_cls == "linear":
             self.img_projection = nn.Linear(self.image_dim_out, hidden_size)
         elif projection_cls == "mlp":
@@ -657,7 +651,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
         fake_image_forward = False
         select = False
-        hd_transform = False
 
         if isinstance(self.img_projection, nn.Sequential):
             target_device = self.img_projection[0].bias.device
@@ -668,7 +661,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
         if len(positions.tolist()) > 0:
             select = True
-            hd_transform = True
             assert (
                 img_embeds.ndim == 5
             ), f"(branch 1) img_embeds size: {img_embeds.size()}, expect 5D tensor for hd transform"
@@ -861,7 +853,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         if select:
             # img_set_tensor: a list of tensors, each tensor has shape (1, N_tokens, C)
             assert all(
-                [_img_set_tensor.shape[0] == 1 for _img_set_tensor in img_set_tensor]
+                _img_set_tensor.shape[0] == 1 for _img_set_tensor in img_set_tensor
             ), "img_set_tensor should have shape (1, N_tokens, C)"
             # Shape: (merged_N_tokens, C)
             merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
@@ -1166,15 +1158,15 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
 class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.subsampling_factor = config.nemo_conv_settings["subsampling_factor"]
+        self.subsampling_factor = config.time_reduction
 
         if self.subsampling_factor % 2 != 0:
             raise ValueError("Sampling factor should be a multiply of 2!")
         self.sampling_num = int(math.log(self.subsampling_factor, 2))
 
-        self.act_fn = ACT2FN[config.nemo_conv_settings["activation"]]
+        self.act_fn = ACT2FN[config.nemo_activation]
 
-        conv_channels = config.nemo_conv_settings["conv_channels"]
+        conv_channels = config.nemo_conv_channels
         layers = []
 
         layers.append(
@@ -1279,8 +1271,8 @@ class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
         super().__init__()
 
         self.num_heads = config.num_attention_heads
-        self.max_distance = config.relative_attention_bias_args["t5_bias_max_distance"]
-        self.symmetric = config.relative_attention_bias_args["t5_bias_symmetric"]
+        self.max_distance = config.bias_max_distance
+        self.symmetric = config.bias_symmetric
         self.num_buckets = self.max_distance
         if not self.symmetric:
             self.num_buckets *= 2
@@ -1324,8 +1316,8 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.register_buffer("global_mean", torch.zeros(config.encoder_embedding_config["input_size"]))
-        self.register_buffer("global_invstd", torch.ones(config.encoder_embedding_config["input_size"]))
+        self.register_buffer("global_mean", torch.zeros(config.input_size))
+        self.register_buffer("global_invstd", torch.ones(config.input_size))
 
     def forward(self, x):
         return (x - self.global_mean) * self.global_invstd
@@ -1559,7 +1551,6 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     )  # append x_len to the end, so it becomes [0,18,36,48, x_len]
     seq_range = torch.arange(0, x_len).unsqueeze(-1)  # seq_range size: [x_len, 1]
     idx = ((seq_range < end_pad) & (seq_range >= start_pad)).nonzero()[:, 1]  # idx size: [x_len]
-    boundary = end_pad[idx]  # boundary size: [x_len]
     seq_range_expand = torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)  # seq_range_expand size [x_len, x_len]
     idx_left = idx - left_window
     idx_left[idx_left < 0] = 0
@@ -1596,9 +1587,9 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 
         self.freeze_audio_processor = False
 
-        self.downsample_rate = config.audio_config.audio_embd_layer["downsample_rate"]
+        self.downsample_rate = config.audio_config.downsample_rate
 
-        projection_cls = config.audio_config.audio_embd_layer["projection_cls"]
+        projection_cls = config.audio_config.projection_cls
         if projection_cls == "linear":
             self.audio_projection = nn.Linear(audio_dim_out, hidden_size)
         elif projection_cls == "mlp":
@@ -1728,7 +1719,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 class Phi4MultimodalImageAudioEmbedding(nn.Module):
     """Image-audio embedding."""
 
-    def __init__(self, config: PretrainedConfig) -> None:
+    def __init__(self, config: Phi4MultimodalConfig) -> None:
         super().__init__()
 
         self.vocab_size = config.vocab_size
@@ -1737,8 +1728,8 @@ class Phi4MultimodalImageAudioEmbedding(nn.Module):
         self.audio_input_id = -10000
         assert self.image_input_id != self.audio_input_id, "image_input_id and audio_input_id should be different"
 
-        self.image_embed = Phi4MultimodalImageEmbedding(config)
-        self.audio_embed = Phi4MultimodalAudioEmbedding(config)
+        self.image_embed = Phi4MultimodalImageEmbedding(config.vision_config)
+        self.audio_embed = Phi4MultimodalAudioEmbedding(config.audio_config)
 
         self.input_image_embeds = None
         self.image_sizes = None
@@ -2029,9 +2020,6 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
             attentions=all_self_attns,
         )
         return output if return_dict else output.to_tuple()
-
-
-from enum import Enum
 
 
 class InputMode(Enum):
