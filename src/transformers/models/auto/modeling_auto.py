@@ -301,6 +301,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
         ("swinv2", "Swinv2Model"),
+        ("swissai", "SwissAIModel"),
         ("switch_transformers", "SwitchTransformersModel"),
         ("t5", "T5Model"),
         ("table-transformer", "TableTransformerModel"),
