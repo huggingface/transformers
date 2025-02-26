@@ -20,8 +20,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_phi4 import *
-    from .modeling_phi4 import *
+    from .configuration_phi4_multimodal import *
+    from .modeling_phi4_multimodal import *
+    from .processing_phi4_multimodal import *
+    from .feature_extraction_phi4_multimodal import *
+    from .image_processing_phi4_multimodal import *
 else:
     import sys
 

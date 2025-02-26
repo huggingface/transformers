@@ -36,7 +36,7 @@ from ...utils import (
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
-from .configuration_phi4 import Phi4Config, Phi4VisionConfig
+from .configuration_phi4_multimodal import Phi4Config, Phi4VisionConfig
 
 
 logger = logging.get_logger(__name__)

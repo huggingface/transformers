@@ -36,7 +36,7 @@ from ..siglip.modeling_siglip import (
 logger = logging.get_logger(__name__)
 
 
-class Phi4VisionConfig(SiglipVisionConfig):
+class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     def __init__(
         self,
         hidden_size=1152,
@@ -76,7 +76,7 @@ class Phi4VisionConfig(SiglipVisionConfig):
         }
 
 
-class Phi4AudioConfig(PretrainedConfig):
+class Phi4MultimodalAudioConfig(PretrainedConfig):
 
     def __init__(
         self,
@@ -160,7 +160,7 @@ class Phi4AudioConfig(PretrainedConfig):
         }
 
 
-class Phi4Config(Phi3Config):
+class Phi4MultimodalConfig(Phi3Config):
     def __init__(
         self,
         vocab_size=200064,
@@ -233,7 +233,7 @@ _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE = [float("-inf"), -10000]  # For backwa
 
 
 
-class Phi4VisionMLP(SiglipMLP):
+class Phi4MultimodalVisionMLP(SiglipMLP):
     pass
 
 
@@ -260,8 +260,8 @@ def vision_eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Phi4VisionAttention(nn.Module):
-    def __init__(self, config: Phi4VisionConfig):
+class Phi4MultimodalVisionAttention(nn.Module):
+    def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -314,40 +314,40 @@ class Phi4VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi4VisionEncoderLayer(SiglipEncoderLayer):
-    def __init__(self, config: Phi4VisionConfig):
+class Phi4MultimodalVisionEncoderLayer(SiglipEncoderLayer):
+    def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__(config)
-        self.self_attn = Phi4VisionAttention(config)
-        self.mlp = Phi4VisionMLP(config)
+        self.self_attn = Phi4MultimodalVisionAttention(config)
+        self.mlp = Phi4MultimodalVisionMLP(config)
 
 
-class Phi4VisionEncoder(SiglipEncoder):
-    def __init__(self, config: Phi4VisionConfig):
+class Phi4MultimodalVisionEncoder(SiglipEncoder):
+    def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__()
-        self.layers = nn.ModuleList([Phi4VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
-class Phi4VisionPreTrainedModel(PreTrainedModel):
-    config_class = Phi4VisionConfig
+class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
+    config_class = Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
     supports_gradient_checkpointing = True
 
-    _no_split_modules = ["Phi4VisionEncoderLayer"]
+    _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, Phi4VisionEmbeddings):
+        if isinstance(module, Phi4MultimodalVisionEmbeddings):
             width = (
                 self.config.vision_config.hidden_size
-                if isinstance(self.config, Phi4VisionConfig)
+                if isinstance(self.config, Phi4MultimodalVisionConfig)
                 else self.config.hidden_size
             )
             nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
-        elif isinstance(module, Phi4VisionAttention):
+        elif isinstance(module, Phi4MultimodalVisionAttention):
             nn.init.normal_(module.q_proj.weight)
             nn.init.normal_(module.k_proj.weight)
             nn.init.normal_(module.v_proj.weight)
@@ -356,7 +356,7 @@ class Phi4VisionPreTrainedModel(PreTrainedModel):
             nn.init.zeros_(module.k_proj.bias)
             nn.init.zeros_(module.v_proj.bias)
             nn.init.zeros_(module.out_proj.bias)
-        elif isinstance(module, Phi4VisionMLP):
+        elif isinstance(module, Phi4MultimodalVisionMLP):
             nn.init.normal_(module.fc1.weight)
             nn.init.normal_(module.fc2.weight)
             nn.init.normal_(module.fc1.bias, std=1e-6)
@@ -370,9 +370,9 @@ class Phi4VisionPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class Phi4VisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
+class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
     
-    def __init__(self, config: Phi4VisionConfig):
+    def __init__(self, config: Phi4MultimodalVisionConfig):
         nn.Module.__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -428,7 +428,7 @@ class Phi4VisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
         return embeddings
 
 
-class Phi4VisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+class Phi4MultimodalVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
     def forward(self, hidden_state, attention_mask):
         batch_size = hidden_state.shape[0]
@@ -445,19 +445,19 @@ class Phi4VisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHea
         return hidden_state[:, 0]
 
 
-class Phi4VisionModel(SiglipVisionTransformer, Phi4VisionPreTrainedModel):
-    config_class = Phi4VisionConfig
+class Phi4MultimodalVisionModel(SiglipVisionTransformer, Phi4MultimodalVisionPreTrainedModel):
+    config_class = Phi4MultimodalVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: Phi4VisionConfig):
-        Phi4VisionPreTrainedModel.__init__(config)
+    def __init__(self, config: Phi4MultimodalVisionConfig):
+        Phi4MultimodalVisionPreTrainedModel.__init__(config)
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = Phi4VisionEmbeddings(config)
-        self.encoder = Phi4VisionEncoder(config)
+        self.embeddings = Phi4MultimodalVisionEmbeddings(config)
+        self.encoder = Phi4MultimodalVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.head = Phi4VisionMultiheadAttentionPoolingHead(config)
+        self.head = Phi4MultimodalVisionMultiheadAttentionPoolingHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -533,17 +533,17 @@ class Phi4VisionModel(SiglipVisionTransformer, Phi4VisionPreTrainedModel):
         )
 
 
-class Phi4MMImageEmbedding(nn.Module):
+class Phi4MultimodalImageEmbedding(nn.Module):
     """Image embedding."""
 
-    def __init__(self, config: PretrainedConfig, **kwargs) -> None:
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
 
         # n_embed or hidden_size
         hidden_size = config.hidden_size
         self.drop = nn.Dropout(config.embd_pdrop)
 
-        self.img_processor = Phi4VisionModel(config.vision_config)
+        self.img_processor = Phi4MultimodalVisionModel(config.vision_config)
 
         pe_weight = self.img_processor.embeddings.position_embedding.weight
         L, D = pe_weight.size()
@@ -914,7 +914,7 @@ class Phi4MMImageEmbedding(nn.Module):
 
 
 
-class Phi4AudioMLP(nn.Module):
+class Phi4MultimodalAudioMLP(nn.Module):
     def __init__(
         self,
         config
@@ -962,7 +962,7 @@ def audio_eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Phi4AudioAttention(nn.Module):
+class Phi4MultimodalAudioAttention(nn.Module):
 
    
     def __init__(self, config):
@@ -1020,7 +1020,7 @@ class Phi4AudioAttention(nn.Module):
         return attn_output
     
 
-class Phi4AudioDepthWiseSeperableConv1d(nn.Module):
+class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
     def __init__(self, config, padding=0):
         super().__init__()
         self.dw_conv = nn.Conv1d(
@@ -1034,14 +1034,14 @@ class Phi4AudioDepthWiseSeperableConv1d(nn.Module):
         self.pw_conv = nn.Conv1d(
             config.hidden_size * config.depthwise_multiplier, config.depthwise_seperable_out_channel, 1, 1, 0
         )
-        
+
     def forward(self, x):
         x = self.dw_conv(x)
         x = self.pw_conv(x)
         return x
     
 
-class Phi4AudioGluPointWiseConv(nn.Module):
+class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1080,7 +1080,7 @@ class Phi4AudioGluPointWiseConv(nn.Module):
         return x
     
 
-class Phi4AudioConvModule(nn.Module):
+class Phi4MultimodalAudioConvModule(nn.Module):
 
     def __init__(self, config):
         super().__init__()
@@ -1089,7 +1089,7 @@ class Phi4AudioConvModule(nn.Module):
         self.kernel_size = config.kernel_size
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.glu = Phi4AudioGluPointWiseConv(config)
+        self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
         self.ln1 = nn.Linear(config.ext_pw_out_channel, config.hidden_size) if config.hidden_size != config.ext_pw_out_channel else nn.Identity()
 
         if config.causal and config.export:
@@ -1098,7 +1098,7 @@ class Phi4AudioConvModule(nn.Module):
             padding = config.kernel_size - 1
         else:
             padding = (config.kernel_size - 1) // 2
-        self.dw_sep_conv_1d = Phi4AudioDepthWiseSeperableConv1d(config, padding=padding)
+        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
 
         if config.hidden_size != config.depthwise_seperable_out_channel:
             self.ln2 = nn.Linear(config.depthwise_seperable_out_channel, config.hidden_size)
@@ -1152,14 +1152,14 @@ class Phi4AudioConvModule(nn.Module):
     
 
 
-class Phi4AudioConformerEncoderLayer(nn.Module):
+class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.feed_forward_in = Phi4AudioMLP(config)
-        self.self_attn = Phi4AudioAttention(config)
-        self.conv = Phi4AudioConvModule(config)
-        self.feed_forward_out = Phi4AudioMLP(config)
+        self.feed_forward_in = Phi4MultimodalAudioMLP(config)
+        self.self_attn = Phi4MultimodalAudioAttention(config)
+        self.conv = Phi4MultimodalAudioConvModule(config)
+        self.feed_forward_out = Phi4MultimodalAudioMLP(config)
         self.layer_norm_att = nn.LayerNorm(config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
@@ -1201,7 +1201,7 @@ class Phi4AudioConformerEncoderLayer(nn.Module):
         return out
     
 
-class Phi4AudioNemoConvSubsampling(torch.nn.Module):
+class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     
     def __init__(self, config):
         super().__init__()
@@ -1314,7 +1314,7 @@ def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_nu
     return lengths.to(dtype=torch.int)
 
 
-class Phi4AudioRelativeAttentionLogitBias(nn.Module):
+class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
    
     def __init__(self, config):
         super().__init__()
@@ -1354,7 +1354,7 @@ class Phi4AudioRelativeAttentionLogitBias(nn.Module):
         return t5_rel_att_bias
 
 
-class Phi4AudioMeanVarianceNormLayer(nn.Module):
+class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
     """Mean/variance normalization layer.
 
     Will substract mean and multiply input by inverted standard deviation.
@@ -1365,16 +1365,17 @@ class Phi4AudioMeanVarianceNormLayer(nn.Module):
             layer input size.
     """
 
+    # TODO: IT APPEARS THEY NEVER UPDATE THIS SO PROBABLY REMOVE
     def __init__(self, config):
         super().__init__()
-        self.register_buffer("global_mean", torch.zeros(config.encoder_embedding_config["input_size"]))
-        self.register_buffer("global_invstd", torch.ones(config.encoder_embedding_config["input_size"]))
+        self.register_buffer("global_mean", torch.zeros(config.encoder_embedding_config["input_size"]), persistent=False)
+        self.register_buffer("global_invstd", torch.ones(config.encoder_embedding_config["input_size"]), persistent=False)
 
     def forward(self, x):
         return (x - self.global_mean) * self.global_invstd
     
 
-class Phi4AudioConformerEncoder(nn.Module):
+class Phi4MultimodalAudioConformerEncoder(nn.Module):
 
     extra_multi_layer_output_idxs: List[int]
 
@@ -1382,10 +1383,10 @@ class Phi4AudioConformerEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.encoder_embedding = Phi4AudioMeanVarianceNormLayer(config)
-        self.embed = Phi4AudioNemoConvSubsampling(config)
-        self.relative_attention_bias_layer = Phi4AudioRelativeAttentionLogitBias(config)
-        self.encoders = nn.ModuleList([Phi4AudioConformerEncoderLayer(config) for _ in range(config.num_blocks)])
+        self.encoder_embedding = Phi4MultimodalAudioMeanVarianceNormLayer(config)
+        self.embed = Phi4MultimodalAudioNemoConvSubsampling(config)
+        self.relative_attention_bias_layer = Phi4MultimodalAudioRelativeAttentionLogitBias(config)
+        self.encoders = nn.ModuleList([Phi4MultimodalAudioConformerEncoderLayer(config) for _ in range(config.num_blocks)])
 
     def _chunk_size_selection(self, chunk_size=None, left_chunk=None):
         """If chunk size is a list, we will randomly select a chunk size."""
@@ -1627,93 +1628,56 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
 
 
 
-class Phi4MMAudioEmbedding(nn.Module):
+class Phi4MultimodalAudioEmbedding(nn.Module):
     """Audio embedding."""
 
-    def __init__(self, config: PretrainedConfig, **kwargs) -> None:
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.config = config
         # n_embed or hidden_size for text LM
-        hidden_size = config.n_embd if hasattr(config, "n_embd") else config.hidden_size
+        hidden_size = config.hidden_size
 
-        if hasattr(config, "embd_pdrop") or hasattr(config, "embed_pdrop"):
-            embd_drop = config.embd_pdrop if hasattr(config, "embd_pdrop") else config.embed_pdrop
-            self.drop = nn.Dropout(embd_drop)
-        else:
-            self.drop = None
+        embd_drop = config.embd_pdrop
+        self.drop = nn.Dropout(embd_drop)
 
         audio_dim_out = None  # Set this variable according to the actual audio processor
-        logger.info(f"create audio processor {config.audio_processor}")
         self.layer_idx = -2
 
-        if isinstance(config.audio_processor, dict) and config.audio_processor.get("name", None) == "cascades":
-            encoder_config = config.audio_processor.get("config", None)
-            assert encoder_config is not None
-            self.encoder = ConformerEncoder(**encoder_config)
+        self.encoder = Phi4MultimodalAudioConformerEncoder(config.audio_config)
+        audio_dim_out = config.audio_config.hidden_size
+        n_mels = config.audio_config.input_size
 
-            # fake initialization, create encoder_embedding layer only so that
-            # in decoding, all parameters can be loaded in from_pretrained_function
-            # in training, we do post init after from_pretrained function to make sure the correct initialization
-            self.encoder.post_init({})
-
-            audio_dim_out = encoder_config["attention_dim"]
-            n_mels = encoder_config["input_size"]
-        else:
-            raise NotImplementedError
-
-        assert audio_dim_out is not None, "Remember to set values for audio_dim_out"
         self.audio_dim_out = audio_dim_out
         self.audio_dim_in = n_mels
 
-        self.freeze_audio_processor = kwargs.get("freeze_audio_processor", False)
-        logger.info(f"freeze_audio_processor = {self.freeze_audio_processor}")
+        self.freeze_audio_processor = False
 
-        self.downsample_rate = kwargs.get("downsample_rate", 1)
+        self.downsample_rate = config.audio_config.audio_embd_layer["downsample_rate"]
 
-        enable_gradient_checkpointing = kwargs.get("enable_gradient_checkpointing", False)
-        if enable_gradient_checkpointing:
-            self.encoder.gradient_checkpointing_enable()
-            logger.info("gradient checkpointing enabled for audio processor")
-
-        projection_cls = kwargs.get("projection_cls", "linear")
+        projection_cls = config.audio_config.audio_embd_layer["projection_cls"]
         if projection_cls == "linear":
             self.audio_projection = nn.Linear(audio_dim_out, hidden_size)
         elif projection_cls == "mlp":
             # follow llava-v1.5's implementation
             # (do not use image_projection and image_proj_norm)
             dim_projection = hidden_size
-            depth = 2
             self.linear_downsample_rate = self.downsample_rate
 
             layers_for_speech = [nn.Linear(audio_dim_out * self.linear_downsample_rate, dim_projection)]
-            for _ in range(1, depth):
-                layers_for_speech.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
+            layers_for_speech.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
             audio_projection_for_speech = nn.Sequential(*layers_for_speech)
 
             layers_for_vision = [nn.Linear(audio_dim_out * self.linear_downsample_rate, dim_projection)]
-            for _ in range(1, depth):
-                layers_for_vision.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
+            layers_for_vision.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
             audio_projection_for_vision = nn.Sequential(*layers_for_vision)
 
             self.audio_projection = nn.ModuleDict(
                 {"speech": audio_projection_for_speech, "vision": audio_projection_for_vision}
             )
-        else:
-            raise NotImplementedError(f"projection_cls = {projection_cls}, not implemented")
 
         self.vocab_size = config.vocab_size
         self.input_embeds = None
         self.audio_embed_sizes = None
-
-    def post_init(self, audio_config):
-        # execute after the from_pretrained() initialization of the phi4mm model
-        if audio_config.get("name", None) == "cascades":
-            init_model_config = audio_config.get("init_model", {})
-            self.encoder.post_init(init_model_config)
-            # remove the init model in config so it is not saved in the config.
-            # This might affect the model loading in resuming training and decoding.
-            if "init_model" in audio_config:
-                audio_config.pop("init_model")
 
     def set_audio_embeds(self, input_embeds: torch.FloatTensor) -> None:
         self.input_embeds = input_embeds
@@ -1727,18 +1691,12 @@ class Phi4MMAudioEmbedding(nn.Module):
         audio_attention_mask: torch.Tensor,
         audio_projection_mode: str = "speech",
     ):
-        if self.freeze_audio_processor:
-            with torch.no_grad():
-                audio_features, masks = self.encoder(input_embeds, audio_attention_mask)
-        else:
-            audio_features, masks = self.encoder(input_embeds, audio_attention_mask)
+        audio_features, _ = self.encoder(input_embeds, audio_attention_mask)
 
-        if isinstance(self.audio_projection, nn.Sequential):
+        if isinstance(self.audio_projection, nn.Linear):
             audio_set_tensor = self.audio_projection(audio_features)
         elif isinstance(self.audio_projection, nn.ModuleDict):
             audio_set_tensor = self.audio_projection[audio_projection_mode](audio_features)
-        else:
-            raise NotImplementedError
 
         return audio_set_tensor
 
@@ -1763,21 +1721,17 @@ class Phi4MMAudioEmbedding(nn.Module):
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
-        MAX_INPUT_ID = int(1e9)
 
         with torch.no_grad():
             positions = torch.nonzero(input_ids == _AUDIO_SPECIAL_TOKEN_ID, as_tuple=False)
             positions_tuple = torch.nonzero(input_ids == _AUDIO_SPECIAL_TOKEN_ID, as_tuple=True)
 
-        if isinstance(self.audio_projection, nn.Sequential):
+        if isinstance(self.audio_projection, nn.Linear):
             target_device = self.audio_projection[0].bias.device
             target_dtype = self.audio_projection[0].bias.dtype
         elif isinstance(self.audio_projection, nn.ModuleDict):
             target_device = self.audio_projection[audio_projection_mode][0].bias.device
             target_dtype = self.audio_projection[audio_projection_mode][0].bias.dtype
-        else:  # It's a single nn.Linear layer
-            target_device = self.audio_projection.bias.device
-            target_dtype = self.audio_projection.bias.dtype
 
         if input_embeds is not None:
             input_embeds = input_embeds.to(target_device).to(target_dtype)
@@ -1799,10 +1753,6 @@ class Phi4MMAudioEmbedding(nn.Module):
                 audio_embed_sizes.sum().item() == len(positions)
             ), f"please ensure the encoder outputs have the same length as defined in input_ids! \n audio_embed_sizes.sum().item(): {audio_embed_sizes.sum().item()} \n len(positions): {len(positions)} \n audio_embed_sizes: {audio_embed_sizes} \n positions: {positions} \n input_ids.shape \n {input_ids.shape}"
 
-            # new implementation without in-place operation
-            # Ref: https://huggingface.co/microsoft/Phi-3.5-vision-instruct/blob/4a0d683eba9f1d0cbfb6151705d1ee73c25a80ca/modeling_phi3_v.py#L233
-            # Ref: https://pytorch.org/docs/stable/generated/torch.Tensor.index_put.html
-            # Ref: https://pytorch.org/docs/stable/generated/torch.Tensor.index_put_.html#torch.Tensor.index_put_
             # audio_set_tensor: shape (N_audios, N_padded_tokens, C)
             # Shape: (merged_N_tokens, C)
             merged_audio_set_tensor = torch.cat(
@@ -1853,22 +1803,20 @@ class Phi4MMAudioEmbedding(nn.Module):
 
 
 
-class Phi4ImageAudioEmbedding(nn.Module):
+class Phi4MultimodalImageAudioEmbedding(nn.Module):
     """Image-audio embedding."""
 
-    def __init__(self, config: PretrainedConfig, **kwargs) -> None:
+    def __init__(self, config: PretrainedConfig) -> None:
         super().__init__()
 
         self.vocab_size = config.vocab_size
 
-        self.image_input_id = kwargs.get("image_input_id", -1)
-        self.audio_input_id = kwargs.get("audio_input_id", -10000)
+        self.image_input_id = -1
+        self.audio_input_id = -10000
         assert self.image_input_id != self.audio_input_id, "image_input_id and audio_input_id should be different"
 
-        self.image_embd_layer_kwargs = kwargs["image_embd_layer"]
-        self.image_embed = Phi4MMImageEmbedding(config, **self.image_embd_layer_kwargs)
-        self.audio_embd_layer_kwargs = kwargs["audio_embd_layer"]
-        self.audio_embed = Phi4MMAudioEmbedding(config, **self.audio_embd_layer_kwargs)
+        self.image_embed = Phi4MultimodalImageEmbedding(config)
+        self.audio_embed = Phi4MultimodalAudioEmbedding(config)
 
         self.input_image_embeds = None
         self.image_sizes = None
@@ -1909,9 +1857,6 @@ class Phi4ImageAudioEmbedding(nn.Module):
         audio_projection_mode="speech",
         wte=None,
     ) -> torch.FloatTensor:
-        MAX_INPUT_ID = int(1e9)
-        assert -MAX_INPUT_ID < self.audio_input_id < self.image_input_id
-
         # override image and audio embeddings and sizes from object itself
         # this is for inference
         # ref: phyagi/eval/utils/text_generation_vision_audio_pipeline.py
@@ -1919,10 +1864,10 @@ class Phi4ImageAudioEmbedding(nn.Module):
             assert input_image_embeds is None
             input_image_embeds = self.input_image_embeds.clone()
             # NOTE weijian: set input_image_embeds to None after first call in for eval stage
-            #               during evaluation, it will call model's forward() multiple times
-            #               the first time input_ids contains the prompt (including <|image_{}|>) and input_embeds exists
-            #               from the second time, the input_ids will only contain the generated text
-            #               thus, the input_image_embeds is no longer needed
+            # during evaluation, it will call model's forward() multiple times
+            # the first time input_ids contains the prompt (including <|image_{}|>) and input_embeds exists
+            # from the second time, the input_ids will only contain the generated text
+            # thus, the input_image_embeds is no longer needed
             self.input_image_embeds = None
 
         if self.image_sizes is not None:
@@ -1987,7 +1932,7 @@ class Phi4ImageAudioEmbedding(nn.Module):
 
         # merge image and audio hidden states
         # NOTE weijian: for non-image-audio tokens, here we use audio hidden states
-        #               actually, in the debug code above, the non-image-audio tokens from image_hidden_states and audio_hidden_states should be the same
+        # actually, in the debug code above, the non-image-audio tokens from image_hidden_states and audio_hidden_states should be the same
         if input_image_embeds is not None and input_audio_embeds is not None:
             dtype = image_hidden_states.dtype
             hidden_states = image_hidden_states * image_position_mask.to(dtype).unsqueeze(
@@ -2004,26 +1949,22 @@ class Phi4ImageAudioEmbedding(nn.Module):
         return hidden_states
 
 
-class Phi4RotaryEmbedding(LlamaRotaryEmbedding):
+class Phi4MultimodalRMSNorm(Phi3RMSNorm):
     pass
 
 
-class Phi4RMSNorm(Phi3RMSNorm):
+class Phi4MultimodalDecoderLayer(Phi3DecoderLayer):
     pass
 
 
-class Phi4DecoderLayer(Phi3DecoderLayer):
-    pass
-
-
-class Phi4Model(Phi3Model, nn.Module):
+class Phi4MultimodalModel(Phi3Model, nn.Module):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MMDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
     Args:
-        config: Phi4MMConfig
+        config: Phi4MultimodalMMConfig
     """
 
-    def __init__(self, config: Phi4Config):
+    def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -2031,16 +1972,12 @@ class Phi4Model(Phi3Model, nn.Module):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
 
-        self.embed_tokens_extend = None
-        if isinstance(config.embd_layer, dict):
-            embedding_config = {"embedding_cls": config.embd_layer["embedding_cls"], **config.embd_layer}
-            self.embed_tokens_extend = Phi4ImageAudioEmbedding(config, **embedding_config)
+        self.embed_tokens_extend = Phi4MultimodalImageAudioEmbedding(config)
 
         self.layers = nn.ModuleList(
-            [Phi4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Phi4MultimodalDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._attn_implementation = config._attn_implementation
-        self.norm = Phi4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -2085,19 +2022,8 @@ class Phi4Model(Phi3Model, nn.Module):
                 )
                 use_cache = False
 
-        # kept for BC (non `Cache` `past_key_values` inputs)
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
-                )
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens_extend(
@@ -2130,7 +2056,6 @@ class Phi4Model(Phi3Model, nn.Module):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -2160,9 +2085,6 @@ class Phi4Model(Phi3Model, nn.Module):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -2172,88 +2094,35 @@ class Phi4Model(Phi3Model, nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        output = BaseModelOutputWithPast(
+                last_hidden_state=hidden_states,
+                past_key_values=past_key_values if use_cache else None,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
+            )
+        return output if return_dict else output.to_tuple()
 
 
-class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
+
+from enum import Enum
+class InputMode(Enum):
+    LANGUAGE = 0
+    VISION = 1
+    SPEECH = 2
+    VISION_SPEECH = 3
+
+
+class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Phi4Model(config)
+        self.model = Phi4MultimodalModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-        # LoRA related settings
-        assert getattr(config, "vision_lora", None) is not None
-        from peft import LoraConfig, get_peft_model
-
-        vision_lora_config = LoraConfig(
-            r=config.vision_lora["r"],
-            lora_alpha=config.vision_lora["lora_alpha"],
-            target_modules=config.vision_lora["layer"],
-            lora_dropout=config.vision_lora["dp"],
-            task_type="CAUSAL_LM",
-        )
-        peft_model = get_peft_model(self.model, vision_lora_config, adapter_name="vision")
-        self.config.vision_lora["r"] = config.vision_lora["r"]
-        self.config.vision_lora["lora_alpha"] = config.vision_lora["lora_alpha"]
-        self.config.vision_lora["layer"] = config.vision_lora["layer"]
-        self.config.vision_lora["dp"] = config.vision_lora["dp"]
-
-        assert getattr(config, "speech_lora", None) is not None
-        speech_lora_config = LoraConfig(
-            r=config.speech_lora["r"],
-            lora_alpha=config.speech_lora["lora_alpha"],
-            target_modules=config.speech_lora["layer"],
-            lora_dropout=config.speech_lora["dp"],
-            task_type="CAUSAL_LM",
-        )
-        peft_model.base_model.active_adapter.append("speech")
-        peft_model.add_adapter("speech", speech_lora_config)
-        self.config.speech_lora["r"] = config.speech_lora["r"]
-        self.config.speech_lora["lora_alpha"] = config.speech_lora["lora_alpha"]
-        self.config.speech_lora["layer"] = config.speech_lora["layer"]
-        self.config.speech_lora["dp"] = config.speech_lora["dp"]
-
-    def set_lora_adapter(self, adapter_name) -> None:
-        from peft.tuners.lora.layer import LoraLayer
-
-        for module in self.modules():
-            if isinstance(module, LoraLayer):
-                if module.merged:
-                    warnings.warn("Adapter cannot be set when the model is merged. Unmerging the model first.")
-                    module.unmerge()
-                module.set_adapter(adapter_name)
-                module._disable_adapters = False
-
-    def unset_lora_adapter(self) -> None:
-        # Ref: peft/tuners/tuners_utils.py - enable_adapters()
-        # Ref: peft/tuners/lora/layer.py
-        from peft.tuners.lora.layer import LoraLayer
-
-        for module in self.modules():
-            if isinstance(module, LoraLayer):
-                # disable grads on all adapter layers
-                # TODO weijian: may use enable_adapters() instead
-                for layer_name in module.adapter_layer_names:
-                    layer = getattr(module, layer_name)
-                    layer.requires_grad_(False)
-                module._disable_adapters = True
 
     def forward(
         self,
@@ -2275,23 +2144,26 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
         Returns:
+
         Example:
         ```python
-        >>> from transformers import AutoTokenizer, Phi4MMForCausalLM
-        >>> model = Phi4MMForCausalLM.from_pretrained("TBA")
+        >>> from transformers import AutoTokenizer, Phi4MultimodalForCausalLM
+        >>> model = Phi4MultimodalForCausalLM.from_pretrained("TBA")
         >>> tokenizer = AutoTokenizer.from_pretrained("TBA")
         >>> prompt = "This is an example script ."
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -2322,13 +2194,10 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
         input_mode = InputMode(input_mode)
 
         if input_mode in [InputMode.VISION_SPEECH, InputMode.VISION]:
-            self.set_lora_adapter("vision")
             audio_projection_mode = "vision"
         elif input_mode == InputMode.SPEECH:
-            self.set_lora_adapter("speech")
             audio_projection_mode = "speech"
         elif input_mode == InputMode.LANGUAGE:
-            self.unset_lora_adapter()
             audio_projection_mode = "speech"
         else:
             raise ValueError(f"Invalid input_mode: {input_mode}")
@@ -2355,7 +2224,8 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -2425,3 +2295,6 @@ class Phi4ForCausalLM(Phi3ForCausalLM, nn.Module):
             **kwargs,
         )
         return model_inputs
+
+
+__all__ = ["Phi4MultimodalForCausalLM"]
