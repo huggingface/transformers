@@ -733,7 +733,7 @@ class TrainingArguments:
             distributed training. Important: this will negatively impact the performance, so only use it for debugging.
         torchdynamo (`str`, *optional*):
             If set, the backend compiler for TorchDynamo. Possible choices are `"eager"`, `"aot_eager"`, `"inductor"`,
-            `"nvfuser"`, `"aot_nvfuser"`, `"aot_cudagraphs"`, `"ofi"`, `"fx2trt"`, `"onnxrt"` and `"ipex"`.
+            `"aot_cudagraphs"`, `"ofi"`, `"fx2trt"`, `"onnxrt"` and `"ipex"`.
         ray_scope (`str`, *optional*, defaults to `"last"`):
             The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
             then use the last checkpoint of all trials, compare those, and select the best one. However, other options

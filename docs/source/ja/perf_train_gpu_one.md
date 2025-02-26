@@ -316,8 +316,6 @@ training_args = TrainingArguments(torch_compile=True, **default_args)
 
 **トレーニングおよび推論バックエンド**：
 * `dynamo.optimize("inductor")` - TorchInductorバックエンドを使用し、AotAutogradおよびcudagraphsを活用してコード生成されたTritonカーネルを使用します [詳細はこちら](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
-* `dynamo.optimize("nvfuser")` -  nvFuser with TorchScriptを使用します。 [詳細はこちら](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-* `dynamo.optimize("aot_nvfuser")` -  nvFuser with AotAutogradを使用します。 [詳細はこちら](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
 * `dynamo.optimize("aot_cudagraphs")` - AotAutogradを使用してcudagraphsを使用します。 [詳細はこちら](https://github.com/pytorch/torchdynamo/pull/757)
 
 **推論専用バックエンド**：
