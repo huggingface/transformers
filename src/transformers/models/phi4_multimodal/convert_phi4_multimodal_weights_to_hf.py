@@ -30,7 +30,6 @@ from transformers import (
 # fmt: off
 STATE_DICT_MAPPING = {
     # CausalLM keys
-    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_out.net.2": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_in.down_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.0.linear"  : r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.gate_up_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.2": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.down_proj",
 
