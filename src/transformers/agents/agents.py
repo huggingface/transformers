@@ -112,7 +112,7 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
         raise ValueError(
             f"The JSON blob you used is invalid due to the following error: {e}.\n"
             f"JSON blob was: {json_blob}, decoding failed on that specific part of the blob:\n"
-            f"'{json_blob[place-4:place+5]}'."
+            f"'{json_blob[place - 4 : place + 5]}'."
         )
     except Exception as e:
         raise ValueError(f"Error in parsing the JSON blob: {e}")
@@ -721,7 +721,11 @@ class ReactAgent(Agent):
     While the objective is not reached, the agent will perform a cycle of thinking and acting.
     The action will be parsed from the LLM output: it consists in calls to tools from the toolbox, with arguments chosen by the LLM engine.
     """
-    @_deprecate_method("4.51.0", message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)")
+
+    @_deprecate_method(
+        "4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def __init__(
         self,
         tools: List[Tool],
@@ -776,7 +780,10 @@ class ReactAgent(Agent):
         except Exception as e:
             return f"Error in generating final llm output: {e}."
 
-    @_deprecate_method("4.51.0", message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)")
+    @_deprecate_method(
+        "4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def run(self, task: str, stream: bool = False, reset: bool = True, **kwargs):
         """
         Runs the agent for the given task.
@@ -990,6 +997,7 @@ class ReactJsonAgent(ReactAgent):
     While the objective is not reached, the agent will perform a cycle of thinking and acting.
     The tool calls will be formulated by the LLM in JSON format, then parsed and executed.
     """
+
     def __init__(
         self,
         tools: List[Tool],
@@ -1100,6 +1108,7 @@ class ReactCodeAgent(ReactAgent):
     While the objective is not reached, the agent will perform a cycle of thinking and acting.
     The tool calls will be formulated by the LLM in code format, then parsed and executed.
     """
+
     def __init__(
         self,
         tools: List[Tool],
@@ -1226,7 +1235,10 @@ LENGTH_TRUNCATE_REPORTS = 1000
 
 
 class ManagedAgent:
-    @_deprecate_method("4.51.0", message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)")
+    @_deprecate_method(
+        "4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def __init__(self, agent, name, description, additional_prompting=None, provide_run_summary=False):
         self.agent = agent
         self.name = name

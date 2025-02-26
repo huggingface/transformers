@@ -74,7 +74,10 @@ llama_role_conversions = {
 
 
 class HfEngine:
-    @_deprecate_method("4.51.0", message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)")
+    @_deprecate_method(
+        "4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def __init__(self, model_id: Optional[str] = None):
         self.last_input_token_count = None
         self.last_output_token_count = None
