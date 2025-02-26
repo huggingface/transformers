@@ -19,4 +19,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo $PR_NUMBER
-          gh pr ready $PR_NUMBER --undo
+          gh pr ready $PR_NUMBER --repo huggingface/transformers --undo
