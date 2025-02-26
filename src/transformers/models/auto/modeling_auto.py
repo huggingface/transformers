@@ -25,6 +25,7 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
+from ..swissai import SwissAIForCausalLM
 
 
 logger = logging.get_logger(__name__)
@@ -631,6 +632,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
         ("stablelm", "StableLmForCausalLM"),
         ("starcoder2", "Starcoder2ForCausalLM"),
+        ("swissai", "SwissAIForCausalLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("whisper", "WhisperForCausalLM"),
@@ -2024,6 +2026,8 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
             "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
+        if config_class.model_type == "swissai":
+            return SwissAIForCausalLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
