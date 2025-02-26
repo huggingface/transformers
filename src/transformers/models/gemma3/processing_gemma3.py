@@ -21,7 +21,6 @@
 # limitations under the License.
 import itertools
 import math
-import re
 from collections.abc import Sequence
 from typing import Optional, Union, cast
 
@@ -37,14 +36,10 @@ from ...processing_utils import (
     _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class Gemma3TextKwargs(TextKwargs):
-    num_mm_tokens_per_image: int
+    pass
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
@@ -69,7 +64,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Gemma3ImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "num_mm_tokens_per_image": 256,
             "padding": False,
         },
         "images_kwargs": {
@@ -82,15 +76,9 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-IMAGE_PLACEHOLDER = "<image>"
-IMAGE_PLACEHOLDER_LEN = len(IMAGE_PLACEHOLDER)
-BEGIN_IMAGE_TOKEN = ""
-END_IMAGE_TOKEN = ""
-IMAGE_SOFT_TOKEN_PLACEHODLER = ""
-NEWLINE_TOKEN = "\n"
-PAN_AND_SCAN_PREFIX = "here is the original image"
-PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
-SPACE = " "
+IMAGE_TOKEN = "<image>"
+START_IMAGE_TOKEN = "<start_of_image>"
+END_IMAGE_TOKEN = "<end_of_image>"
 
 # Gemma 3 supports the following image input paradigms for any given prompt:
 #
@@ -183,17 +171,22 @@ class Gemma3Processor(ProcessorMixin):
         except AttributeError as e:
             raise ValueError("`image_processor` is missing the required `image_seq_length` attribute.") from e
 
-        try:
-            self.image_token_id = getattr(tokenizer, "image_token_id")
-        except AttributeError:
-            logger.warning("Image token not provided by `tokenizer`. Adding special `<image>` token.")
+        start_image_token = AddedToken(START_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=255_999
+        end_image_token = AddedToken(END_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=262_144
+        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
 
-            image_token = AddedToken(IMAGE_PLACEHOLDER, normalized=False, special=True)
-            tokens_to_add = {"additional_special_tokens": [image_token]}
-            tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_PLACEHOLDER)
+        tokens_to_add = {"additional_special_tokens": [start_image_token, end_image_token, image_token]}
+        tokenizer.add_special_tokens(tokens_to_add)
 
-        self.image_token = tokenizer.decode(self.image_token_id)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        setattr(tokenizer, "image_token_id", self.image_token_id)
+        self.image_token = tokenizer.decode([self.image_token_id])
+        self.start_image_token_id = tokenizer.convert_tokens_to_ids(START_IMAGE_TOKEN)
+        setattr(tokenizer, "start_image_token_id", self.start_image_token_id)
+        self.start_image_token = tokenizer.decode([self.start_image_token_id])
+        self.end_image_token_id = tokenizer.convert_tokens_to_ids(END_IMAGE_TOKEN)
+        setattr(tokenizer, "end_image_token_id", self.end_image_token_id)
+        self.end_image_token = tokenizer.decode([self.end_image_token_id])
 
         super().__init__(
             image_processor=image_processor,
@@ -268,7 +261,7 @@ class Gemma3Processor(ProcessorMixin):
         **kwargs: Unpack[Gemma3TextKwargs],
     ) -> BatchFeature:
         if batched_images and not text:
-            text = [" ".join([IMAGE_PLACEHOLDER] * len(images)) for images in batched_images]
+            text = [" ".join([IMAGE_TOKEN] * len(images)) for images in batched_images]
 
         if batched_images and text:
             if isinstance(text, str):
@@ -276,35 +269,6 @@ class Gemma3Processor(ProcessorMixin):
 
             if (bi_l := len(batched_images)) != (t_l := len(text)):
                 raise ValueError(f"Received inconsistently sized batches of images ({bi_l}) and text ({t_l}).")
-
-            num_mm_tokens_per_image = kwargs["num_mm_tokens_per_image"]
-            image_string_for_tokenization = (
-                NEWLINE_TOKEN
-                + BEGIN_IMAGE_TOKEN
-                + "".join([IMAGE_SOFT_TOKEN_PLACEHODLER] * num_mm_tokens_per_image)
-                + END_IMAGE_TOKEN
-                + NEWLINE_TOKEN
-            )
-
-            for prompt, images in zip(text, batched_images):
-                image_indexes = [m.start() for m in re.finditer(IMAGE_PLACEHOLDER, prompt)]
-                if (i_l := len(images)) != (iidx_l := len(image_indexes)):
-                    raise ValueError(f"Prompt contained {iidx_l} image placeholders but received {i_l} images.")
-
-                for (image, pas_images), idx in reversed(zip(images, image_indexes)):
-                    if pas_images:
-                        formatted_image_text = SPACE.join(
-                            [
-                                PAN_AND_SCAN_PREFIX,
-                                image_string_for_tokenization,
-                                PAN_AND_SCAN_POSTFIX,
-                            ]
-                            + [image_string_for_tokenization] * len(pas_images)
-                        )
-                    else:
-                        formatted_image_text = image_string_for_tokenization
-
-                    prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_PLACEHOLDER_LEN :]
 
         inputs = self.tokenizer(text=text, **kwargs)
         return BatchFeature(data={**inputs})
@@ -320,3 +284,6 @@ class Gemma3Processor(ProcessorMixin):
                 flattened_images.extend([image] + pas_images)
 
         return flattened_images
+
+
+__all__ = ["Gemma3Processor"]

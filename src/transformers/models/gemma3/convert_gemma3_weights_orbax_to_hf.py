@@ -44,8 +44,11 @@ from .configuration_gemma3 import (
     Gemma3TextConfig,
     Gemma3VisionConfig,
 )
-from .modeling_gemma3 import Gemma3ForCausalLM, Gemma3ForConditionalGeneration
-from .processing_gemma3 import Gemma3Processor
+from . import (
+    Gemma3ForCausalLM,
+    Gemma3ForConditionalGeneration,
+    Gemma3Processor,
+)
 
 # ==== Internal Constants and Classes ====
 
@@ -336,7 +339,8 @@ def _convert_transformer_weights(
             ]
             converted_weights = [weights, weights]
         elif prop == "mm_input_embedding_extra":
-            return zip([], [])
+            converted_paths = ["mm_input_embedding_extra.weight"]
+            converted_weights = [weights]
         elif prop == "mm_output_embedding":
             return zip([], [])
         else:
@@ -452,13 +456,13 @@ def convert(
     hf_tree: dict[str, torch.Tensor] = {}
 
     def update_tree(path: str, weights: np.ndarray) -> None:
-        logging.info(
-            "%s converted from shape=%s to shape=%s with dtype=%s",
-            path,
-            value.shape,
-            weights.shape,
-            weights.dtype,
-        )
+        # logging.info(
+        #     "%s converted from shape=%s to shape=%s with dtype=%s",
+        #     path,
+        #     value.shape,
+        #     weights.shape,
+        #     weights.dtype,
+        # )
         hf_tree[path] = torch.from_numpy(weights.astype("float32")).type(target_dtype)
 
     for paths, value in tree.flatten_with_path(ckpt):
@@ -487,19 +491,31 @@ def main(*args):
 
     variant = _VARIANT.value
     dtype = _PRECISION.value
-    logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
-    tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
-    # processor = Gemma3Processor(
-    #     image_processor=SiglipImageProcessor(),
-    #     tokenizer=tokenizer
-    # )
-
     config = _VARIANTS[variant]
+
+    tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
+
     if _TEXT_ONLY.value:
         config.vision_config = None
+        output_path = f"{output_path}_textonly"
+        tokenizer.save_pretrained(output_path)
+        logging.info("Saved GemmaTokenizer for %s", variant)
+        del tokenizer
+    else:
+        output_path = _OUTPUT_PATH.value
+        processor = Gemma3Processor(
+            image_processor=SiglipImageProcessor(image_seq_length=1024),
+            tokenizer=tokenizer
+        )
+        processor.save_pretrained(output_path)
+        logging.info("Saved Gemma3Processor for %s", variant)
+        del processor
+        del tokenizer
 
     logging.info("Gemma 3 (%s) configured as: %s", variant, config)
+    logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
     result = convert(_CHECKPOINT_PATH.value, config, getattr(torch, dtype))
+    logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
 
     with accelerate.init_empty_weights():
         if config.vision_config is None:
@@ -509,13 +525,11 @@ def main(*args):
 
     model.load_state_dict(result.state_tree, assign=True, strict=True)
     model.config.torch_dtype = dtype
-
-    model.save_pretrained(_OUTPUT_PATH.value, safe_serialization=True)
+    logging.info("Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.", variant, type(model).__name__)
+    model.save_pretrained(output_path, safe_serialization=True)
+    logging.info("Saved Gemma 3 (%s) to SafeTensors using %s", variant, type(model).__name__)
     del result
     del model
-
-    tokenizer.save_pretrained(_OUTPUT_PATH.value)
-    del tokenizer
 
 
 if __name__ == "__main__":

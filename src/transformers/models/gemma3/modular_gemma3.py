@@ -62,9 +62,9 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
+from ..gemma import GemmaPreTrainedModel, GemmaTokenizer
 from ..gemma.modeling_gemma import (
     GemmaMLP,
-    GemmaPreTrainedModel,
     GemmaRMSNorm,
     apply_rotary_pos_emb,
     repeat_kv,
@@ -78,11 +78,9 @@ _CONFIG_FOR_DOC = "Gemma3Config"
 
 logger = logging.get_logger(__name__)
 
-IMAGE_PLACEHOLDER = "<image>"
-IMAGE_PLACEHOLDER_LEN = len(IMAGE_PLACEHOLDER)
-BEGIN_IMAGE_TOKEN = ""
-END_IMAGE_TOKEN = ""
-IMAGE_SOFT_TOKEN_PLACEHODLER = ""
+IMAGE_TOKEN = "<image>"
+START_IMAGE_TOKEN = "<start_of_image>"
+END_IMAGE_TOKEN = "<end_of_image>"
 NEWLINE_TOKEN = "\n"
 PAN_AND_SCAN_PREFIX = "here is the original image"
 PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
@@ -254,7 +252,7 @@ class Gemma3TextConfig(PretrainedConfig):
     def __init__(
         self,
         # Config parameters found in all implementations, name differences noted
-        vocab_size: int = 256000,  # num_embed in FLAX
+        vocab_size: int = 256_000,  # num_embed in FLAX
         hidden_size: int = 2304,  # embed_dim in FLAX
         intermediate_size: int = 9216,  # hidden_dim in FLAX
         num_hidden_layers: int = 26,  # num_layers in FLAX
@@ -388,7 +386,13 @@ class Gemma3Config(PretrainedConfig):
         "vision_config": Gemma3VisionConfig,
     }
 
-    def __init__(self, text_config=None, vision_config=None, **kwargs):
+    def __init__(
+        self,
+        text_config: Optional[Gemma3TextConfig] = None,
+        vision_config: Optional[Gemma3VisionConfig] = None,
+        mm_extra_vocab_size: int = 128,
+        **kwargs,
+    ):
         if text_config is None:
             self.text_config = Gemma3TextConfig()
             logger.info(
@@ -414,11 +418,13 @@ class Gemma3Config(PretrainedConfig):
                 "to text tasks."
             )
 
+        self.mm_extra_vocab_size = mm_extra_vocab_size
+
         super().__init__(**kwargs)
 
 
 class Gemma3TextKwargs(TextKwargs):
-    num_mm_tokens_per_image: int
+    pass
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
@@ -443,7 +449,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Gemma3ImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "num_mm_tokens_per_image": 256,
             "padding": False,
         },
         "images_kwargs": {
@@ -534,19 +539,23 @@ class Gemma3Processor(ProcessorMixin):
                 "`image_processor` is missing the required `image_seq_length` attribute."
             ) from e
 
-        try:
-            self.image_token_id = getattr(tokenizer, "image_token_id")
-        except AttributeError:
-            logger.warning(
-                "Image token not provided by `tokenizer`. Adding special `<image>` token."
-            )
 
-            image_token = AddedToken(IMAGE_PLACEHOLDER, normalized=False, special=True)
-            tokens_to_add = {"additional_special_tokens": [image_token]}
-            tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_PLACEHOLDER)
+        start_image_token = AddedToken(START_IMAGE_TOKEN, normalized=False, special=True)   # Should be ID=255_999
+        end_image_token = AddedToken(END_IMAGE_TOKEN, normalized=False, special=True)       # Should be ID=262_144
+        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
 
-        self.image_token = tokenizer.decode(self.image_token_id)
+        tokens_to_add = {"additional_special_tokens": [start_image_token, end_image_token, image_token]}
+        tokenizer.add_special_tokens(tokens_to_add)
+
+        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        setattr(tokenizer, "image_token_id", self.image_token_id)
+        self.image_token = tokenizer.decode([self.image_token_id])
+        self.start_image_token_id = tokenizer.convert_tokens_to_ids(START_IMAGE_TOKEN)
+        setattr(tokenizer, "start_image_token_id", self.start_image_token_id)
+        self.start_image_token = tokenizer.decode([self.start_image_token_id])
+        self.end_image_token_id = tokenizer.convert_tokens_to_ids(END_IMAGE_TOKEN)
+        setattr(tokenizer, "end_image_token_id", self.end_image_token_id)
+        self.end_image_token = tokenizer.decode([self.end_image_token_id])
 
         super().__init__(
             image_processor=image_processor,
@@ -631,7 +640,8 @@ class Gemma3Processor(ProcessorMixin):
     ) -> BatchFeature:
         if batched_images and not text:
             text = [
-                " ".join([IMAGE_PLACEHOLDER] * len(images)) for images in batched_images
+                " ".join([IMAGE_TOKEN] * len(images))
+                for images in batched_images
             ]
 
         if batched_images and text:
@@ -642,39 +652,6 @@ class Gemma3Processor(ProcessorMixin):
                 raise ValueError(
                     f"Received inconsistently sized batches of images ({bi_l}) and text ({t_l})."
                 )
-
-            num_mm_tokens_per_image = kwargs["num_mm_tokens_per_image"]
-            image_string_for_tokenization = (
-                NEWLINE_TOKEN
-                + BEGIN_IMAGE_TOKEN
-                + "".join([IMAGE_SOFT_TOKEN_PLACEHODLER] * num_mm_tokens_per_image)
-                + END_IMAGE_TOKEN
-                + NEWLINE_TOKEN
-            )
-
-            for prompt, images in zip(text, batched_images):
-                image_indexes = [
-                    m.start() for m in re.finditer(IMAGE_PLACEHOLDER, prompt)
-                ]
-                if (i_l := len(images)) != (iidx_l := len(image_indexes)):
-                    raise ValueError(
-                        f"Prompt contained {iidx_l} image placeholders but received {i_l} images."
-                    )
-
-                for (image, pas_images), idx in reversed(zip(images, image_indexes)):
-                    if pas_images:
-                        formatted_image_text = SPACE.join(
-                            [
-                                PAN_AND_SCAN_PREFIX,
-                                image_string_for_tokenization,
-                                PAN_AND_SCAN_POSTFIX,
-                            ]
-                            + [image_string_for_tokenization] * len(pas_images)
-                        )
-                    else:
-                        formatted_image_text = image_string_for_tokenization
-
-                    prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_PLACEHOLDER_LEN :]
 
         inputs = self.tokenizer(text=text, **kwargs)
         return BatchFeature(data={**inputs})
@@ -1658,6 +1635,11 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         self.config = config
         self.language_model = Gemma3ForCausalLM(config=config.text_config)
         self.vision_model = SiglipVisionModel(config=config.vision_config)
+        self.mm_input_embedding_extra = nn.Embedding(
+            config.mm_extra_vocab_size,
+            config.vision_config.hidden_size,
+            config.pad_token_id
+        )
         self.mm_input_projection = Gemma3MultimodalInputProjection(config=config)
         self.mm_soft_emb_norm = Gemma3RMSNorm(
             config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
@@ -1673,6 +1655,11 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.get_input_embeddings with PaliGemma->Gema3
     def get_input_embeddings(self):
+        # lm_embeddings = self.language_model.get_input_embeddings()
+        # vision_embeddings = self.encode_vision(
+        #     self.mm_input_embedding_extra.weight[None, ...]
+        # ).squeeze()
+        # combined_embeddings = torch.cat([lm_embeddings, vision_embeddings], dim=0)
         return self.language_model.get_input_embeddings()
 
     # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.set_input_embeddings with PaliGemma->Gema3
@@ -1695,9 +1682,16 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    def encode_vision(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.mm_soft_emb_norm(x)
+        logger.info("x.shape after norm: %s", x.shape)
+        x = self.mm_input_projection(x)
+        logger.info("x.shape after projection: %s", x.shape)
+        return x
+
     def get_image_features(self, pixel_values: torch.FloatTensor):
         """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
+        Projects the last hidden state from the vision model into language model space.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
@@ -1706,9 +1700,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         image_outputs = self.vision_model(pixel_values)
-        selected_image_feature = image_outputs.last_hidden_state
-        image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = image_features / (self.config.text_config.hidden_size**0.5)
+        image_features = image_outputs.last_hidden_state
+        logger.info("image_features.shape after vision encoding: %s", image_features.shape)
+        image_features = self.encode_vision(image_features)
         return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
@@ -1969,6 +1963,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
 __all__ = [
     "Gemma3Config",
+    "Gemma3TextConfig",
+    "Gemma3VisionConfig",
+    "Gemma3Processor",
     "Gemma3PreTrainedModel",  # noqa: F822
     "Gemma3Model",
     "Gemma3ForCausalLM",

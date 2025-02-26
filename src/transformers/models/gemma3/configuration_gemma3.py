@@ -170,7 +170,7 @@ class Gemma3TextConfig(PretrainedConfig):
     def __init__(
         self,
         # Config parameters found in all implementations, name differences noted
-        vocab_size: int = 256000,  # num_embed in FLAX
+        vocab_size: int = 256_000,  # num_embed in FLAX
         hidden_size: int = 2304,  # embed_dim in FLAX
         intermediate_size: int = 9216,  # hidden_dim in FLAX
         num_hidden_layers: int = 26,  # num_layers in FLAX
@@ -348,7 +348,13 @@ class Gemma3Config(PretrainedConfig):
         "vision_config": Gemma3VisionConfig,
     }
 
-    def __init__(self, text_config=None, vision_config=None, **kwargs):
+    def __init__(
+        self,
+        text_config: Optional[Gemma3TextConfig] = None,
+        vision_config: Optional[Gemma3VisionConfig] = None,
+        mm_extra_vocab_size: int = 128,
+        **kwargs,
+    ):
         if text_config is None:
             self.text_config = Gemma3TextConfig()
             logger.info("text_config is None, using default Gemma3TextConfig vision config.")
@@ -370,7 +376,9 @@ class Gemma3Config(PretrainedConfig):
                 "to text tasks."
             )
 
+        self.mm_extra_vocab_size = mm_extra_vocab_size
+
         super().__init__(**kwargs)
 
 
-__all__ = ["Gemma3Config"]
+__all__ = ["Gemma3Config", "Gemma3TextConfig", "Gemma3VisionConfig"]

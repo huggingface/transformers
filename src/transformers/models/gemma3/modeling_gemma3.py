@@ -21,7 +21,7 @@
 # limitations under the License.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Union, cast
+from typing import Literal, Optional, Union, cast
 
 import torch
 import torch.nn as nn
@@ -36,14 +36,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..siglip.modeling_siglip import SiglipVisionModel
+from ..gemma import GemmaPreTrainedModel
+from ..siglip import SiglipVisionModel
 from .configuration_gemma3 import Gemma3Config, Gemma3RotaryEmbeddingConfig, Gemma3TextConfig
 
 
@@ -429,51 +429,11 @@ class Gemma3RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-GEMMA3_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Gemma3Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Gemma3 Model outputting raw hidden-states without any specific head on top.",
-    GEMMA3_START_DOCSTRING,
-)
-class Gemma3PreTrainedModel(PreTrainedModel):
-    config_class = Gemma3TextConfig
+class Gemma3PreTrainedModel(GemmaPreTrainedModel):
     base_model_prefix = "model"
+    config_class = Gemma3TextConfig
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 ATTENTION_TYPE_GLOBAL = "global"
@@ -1025,6 +985,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         self.config = config
         self.language_model = Gemma3ForCausalLM(config=config.text_config)
         self.vision_model = SiglipVisionModel(config=config.vision_config)
+        self.mm_input_embedding_extra = nn.Embedding(
+            config.mm_extra_vocab_size, config.vision_config.hidden_size, config.pad_token_id
+        )
         self.mm_input_projection = Gemma3MultimodalInputProjection(config=config)
         self.mm_soft_emb_norm = Gemma3RMSNorm(
             config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
@@ -1036,6 +999,11 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.get_input_embeddings with PaliGemma->Gema3
     def get_input_embeddings(self):
+        # lm_embeddings = self.language_model.get_input_embeddings()
+        # vision_embeddings = self.encode_vision(
+        #     self.mm_input_embedding_extra.weight[None, ...]
+        # ).squeeze()
+        # combined_embeddings = torch.cat([lm_embeddings, vision_embeddings], dim=0)
         return self.language_model.get_input_embeddings()
 
     # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.set_input_embeddings with PaliGemma->Gema3
@@ -1058,9 +1026,16 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    def encode_vision(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.mm_soft_emb_norm(x)
+        logger.info("x.shape after norm: %s", x.shape)
+        x = self.mm_input_projection(x)
+        logger.info("x.shape after projection: %s", x.shape)
+        return x
+
     def get_image_features(self, pixel_values: torch.FloatTensor):
         """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
+        Projects the last hidden state from the vision model into language model space.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
@@ -1069,9 +1044,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         image_outputs = self.vision_model(pixel_values)
-        selected_image_feature = image_outputs.last_hidden_state
-        image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = image_features / (self.config.text_config.hidden_size**0.5)
+        image_features = image_outputs.last_hidden_state
+        logger.info("image_features.shape after vision encoding: %s", image_features.shape)
+        image_features = self.encode_vision(image_features)
         return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
@@ -1083,7 +1058,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
