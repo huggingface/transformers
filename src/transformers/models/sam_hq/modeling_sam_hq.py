@@ -1285,7 +1285,13 @@ class SamHQMaskDecoder(nn.Module):
         if multimask_output:
             mask_slice = slice(1, self.num_mask_tokens - 1)
             iou_pred = iou_pred[:, :, mask_slice]
+            # Sort the IoU scores in descending order and get indices
+            iou_pred_sorted, sort_indices = torch.sort(iou_pred, dim=2, descending=True)
+            # Reorder the masks according to sorted scores
             masks_sam = masks[:, :, mask_slice, :, :]
+            masks_sam = torch.gather(masks_sam, 2, sort_indices.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, masks_sam.shape[3], masks_sam.shape[4]))
+            # Update iou_pred with sorted scores
+            iou_pred = iou_pred_sorted
         else:
             mask_slice = slice(0, 1)
             iou_pred = iou_pred[:, :, mask_slice]
