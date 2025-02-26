@@ -3597,12 +3597,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Get device with index assuming equal number of devices per host
             tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
             # This is the easiest way to dispatch to the current process device
-            print(tp_device)
             device_map = tp_device
 
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
-            print(world_size)
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
 
         if is_fsdp_enabled():
