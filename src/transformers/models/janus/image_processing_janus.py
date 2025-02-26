@@ -19,9 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
+import torch
 from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -35,6 +36,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -366,6 +368,101 @@ class JanusImageProcessor(BaseImageProcessor):
         encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         return encoded_outputs
+
+    def postprocess(
+        self,
+        images: Union[List[np.ndarray], List[torch.Tensor], List[Image.Image]],
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: List[float] = None,
+        image_std: List[float] = None,
+        input_data_format: str = None,
+        return_tensors: str = None,
+    ):
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+
+        images = make_list_of_images(images)  # Ensures input is a list
+
+        if isinstance(images[0], Image.Image):
+            return images if len(images) > 1 else images[0]
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(images[0])  # Determine format dynamically
+
+        pixel_values = []
+
+        for image in images:
+            image = to_numpy_array(image)  # Ensure NumPy format
+
+            if do_normalize:
+                image = self.unnormalize(
+                    image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
+                )
+
+            if do_rescale:
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = image.clip(0, 255).astype(np.uint8)
+
+            if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
+                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+                pixel_values.append(Image.fromarray(image))
+            else:
+                pixel_values.extend(image)
+
+        data = {"pixel_values": pixel_values}
+        return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def unnormalize(
+        self,
+        image: np.array,
+        image_mean: Union[float, Iterable[float]],
+        image_std: Union[float, Iterable[float]],
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
+        image = (image * image_std) + image_mean
+        Args:
+            image (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
+                Batch of pixel values to postprocess.
+            image_mean (`float` or `Iterable[float]`):
+                The mean to use for unnormalization.
+            image_std (`float` or `Iterable[float]`):
+                The standard deviation to use for unnormalization.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+        num_channels = 3
+
+        if isinstance(image_mean, Iterable):
+            if len(image_mean) != num_channels:
+                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(image_mean)}")
+        else:
+            image_mean = [image_mean] * num_channels
+
+        if isinstance(image_std, Iterable):
+            if len(image_std) != num_channels:
+                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(image_std)}")
+        else:
+            image_std = [image_std] * num_channels
+
+        rev_image_mean = tuple(-mean / std for mean, std in zip(image_mean, image_std))
+        rev_image_std = tuple(1 / std for std in image_std)
+        image = self.normalize(
+            image=image, mean=rev_image_mean, std=rev_image_std, input_data_format=input_data_format
+        )
+        return image
 
 
 __all__ = ["JanusImageProcessor"]

@@ -164,21 +164,8 @@ class JanusProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_process_image_text_to_text(self, generated_outputs):
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-
-        Returns:
-            `List[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(
-            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )
+    def postprocess(self, images: ImageInput, **kwargs):
+        return self.image_processor.postprocess(images, **kwargs)
 
     @property
     def model_input_names(self):
