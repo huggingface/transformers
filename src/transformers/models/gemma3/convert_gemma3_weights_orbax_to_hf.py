@@ -1,11 +1,11 @@
 r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
 python3 -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
-    --variant="gemma3_4b" \
-    --tokenizer_path='/usr/local/google/home/$USER/gemini_bpe_256k_v5_no_tags.model' \
-    --checkpoint_path='/cns/ge-d/home/gdm-g-mini-team/gemma/checkpoints/orbax/gemma2_2b_pt' \
-    --output_path='/usr/local/google/home/$USER/gemma/2b/' \
-    --alsologtostderr
+    --variant='gemma3_4b' \
+    --tokenizer_path="$HOME/gemma3/tokenizer.model" \
+    --checkpoint_path="$HOME/gemma3/gemma3_4B_pt_orbax/" \
+    --output_path="$HOME/gemma3/gemma3_4B_pt_safetensors/" \
+    --precision='bfloat16'
 
 This requires Transformers v4.38+. It was written in a way that it can be run as
 a regular non-Google3 script. So you can either `blaze run` it, or `python3` it.
@@ -36,7 +36,8 @@ from orbax import checkpoint as obc
 import torch
 import tree
 
-from ..gemma.tokenization_gemma import GemmaTokenizer
+from ..gemma import GemmaTokenizer
+from ..siglip import SiglipImageProcessor
 from .configuration_gemma3 import (
     DEFAULT_ATTENION_PATTERN,
     Gemma3Config,
@@ -44,6 +45,7 @@ from .configuration_gemma3 import (
     Gemma3VisionConfig,
 )
 from .modeling_gemma3 import Gemma3ForCausalLM, Gemma3ForConditionalGeneration
+from .processing_gemma3 import Gemma3Processor
 
 # ==== Internal Constants and Classes ====
 
@@ -67,6 +69,8 @@ _TRANSFORMER_DECODER_BLOCK = "transformer/layer_"
 _TRANSFORMER_DECODER_BLOCK_LEN = len(_TRANSFORMER_DECODER_BLOCK)
 _TRANSFORMER_EMBEDDER = "transformer/embedder"
 _TRANSFORMER_FINAL_NORM = "transformer/final_norm"
+_TRANSFORMER_POST_TRAINING_PREFIX = "rlx_networks/policy_network/"
+_TRANSFORMER_POST_TRAINING_PREFIX_LEN = len(_TRANSFORMER_POST_TRAINING_PREFIX)
 
 _VARIANT_GEMMA_3_1B = "gemma3_1b"
 _VARIANT_GEMMA_3_4B = "gemma3_4b"
@@ -172,6 +176,15 @@ _PRECISION = flags.DEFINE_enum(
     help="The floating point precision (aka dtype) of the model.",
     enum_values=set(_DTYPES.keys()),
     required=True,
+)
+
+_TEXT_ONLY = flags.DEFINE_bool(
+    name="text_only",
+    default=False,
+    help=(
+        "If True, the model is loaded and saved as a Gemma3ForCausalLM, "
+        "otherwise model saed as Gemma3ForConditionalGeneration."
+    ),
 )
 
 _TOKENIZER_PATH = flags.DEFINE_string(
@@ -305,6 +318,10 @@ def _convert_transformer_weights(
     weights: np.ndarray,
 ) -> Iterator[Sequence[str, np.ndarray]]:
     path, prop = paths
+
+    if path.startswith(_TRANSFORMER_POST_TRAINING_PREFIX):
+        path = path[_TRANSFORMER_POST_TRAINING_PREFIX_LEN:]
+
     converted_paths: list[str] = []
     converted_weights: list[Any] = []
 
@@ -326,9 +343,11 @@ def _convert_transformer_weights(
             raise ValueError(f"Upexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
         if path.endswith("/mm_input_projection"):
-            return zip([], [])
-        if path.endswith("/mm_soft_embedding_norm"):
-            return zip([], [])
+            converted_paths = ["mm_input_projection.weight"]
+            converted_weights = [weights]
+        elif path.endswith("/mm_soft_embedding_norm"):
+            converted_paths = ["mm_soft_emb_norm.weight"]
+            converted_weights = [weights]
         else:
             raise ValueError(f"Upexpected subpath, `{path}`, in Embedder.")
     elif path == _TRANSFORMER_FINAL_NORM:
@@ -467,12 +486,17 @@ def main(*args):
     dtype = _PRECISION.value
     logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
     tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
+    # processor = Gemma3Processor(
+    #     image_processor=SiglipImageProcessor(),
+    #     tokenizer=tokenizer
+    # )
 
     config = _VARIANTS[variant]
+    if _TEXT_ONLY.value:
+        config.vision_config = None
+
     logging.info("Gemma 3 (%s) configured as: %s", variant, config)
     result = convert(_CHECKPOINT_PATH.value, config, getattr(torch, dtype))
-    hf_tree = result.state_tree
-    config = result.config
 
     with accelerate.init_empty_weights():
         if config.vision_config is None:
@@ -480,11 +504,11 @@ def main(*args):
         else:
             model = Gemma3ForConditionalGeneration(config)
 
-    model.load_state_dict(hf_tree, assign=True, strict=True)
+    model.load_state_dict(result.state_tree, assign=True, strict=True)
     model.config.torch_dtype = dtype
 
     model.save_pretrained(_OUTPUT_PATH.value, safe_serialization=True)
-    del hf_tree
+    del result
     del model
 
     tokenizer.save_pretrained(_OUTPUT_PATH.value)

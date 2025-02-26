@@ -71,6 +71,16 @@ class Gemma3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+class Gemma3MultimodalInputProjection(nn.Module):
+    def __init__(self, config: Gemma3Config):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros((config.vision_config.hidden_size, config.text_config.hidden_size)))
+
+    def forward(self, x):
+        output = torch.einsum("btm,md->btd", x, self.weight)
+        return output.type_as(x)
+
+
 class Gemma3MLP(nn.Module):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__()
@@ -182,16 +192,24 @@ class Gemma3Attention(nn.Module):
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
         )
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -231,7 +249,10 @@ class Gemma3Attention(nn.Module):
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
             if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
                 seq_len = attention_mask.shape[-1]
-                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
+                key_states, value_states = (
+                    key_states[:, :, :seq_len, :],
+                    value_states[:, :, :seq_len, :],
+                )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -303,7 +324,8 @@ class Gemma3DecoderLayer(nn.Module):
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+                    torch.ones_like(attention_mask, dtype=torch.bool),
+                    diagonal=-self.sliding_window,
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
@@ -534,7 +556,9 @@ class Gemma3Model(Gemma3PreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
@@ -551,7 +575,11 @@ class Gemma3Model(Gemma3PreTrainedModel):
                     attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
                 )
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # embed positions
@@ -696,7 +724,10 @@ class Gemma3Model(Gemma3PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -866,10 +897,9 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
+            if inputs_embeds is not None or (  # Exception 1
+                is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1]
+            ):  # Exception 3
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -891,7 +921,10 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+            model_inputs = {
+                "input_ids": input_ids.clone(memory_format=torch.contiguous_format),
+                "inputs_embeds": None,
+            }
 
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
@@ -975,24 +1008,10 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class Gemma3MultiModalProjector(nn.Module):
-    def __init__(self, config: Gemma3Config):
-        super().__init__()
-        self.linear = nn.Linear(
-            config.vision_config.hidden_size,
-            config.vision_config.projection_dim,
-            bias=True,
-        )
-
-    def forward(self, image_features):
-        return self.linear(image_features)
-
-
 class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = Gemma3Config
     supports_gradient_checkpointing = True
 
-    _no_split_modules = ["Gemma3MultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
@@ -1005,8 +1024,11 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         self.config = config
         self.language_model = Gemma3ForCausalLM(config=config.text_config)
-        # self.multi_modal_projector = Gemma3MultiModalProjector(config=config)
         self.vision_model = SiglipVisionModel(config=config.vision_config)
+        self.mm_input_projection = Gemma3MultimodalInputProjection(config=config)
+        self.mm_soft_emb_norm = Gemma3RMSNorm(
+            config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
+        )
         self.vocab_size = config.text_config.vocab_size
 
         self.pad_token_id = pad_token_id if (pad_token_id := config.text_config.pad_token_id) is not None else -1
@@ -1133,7 +1155,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
@@ -1164,7 +1188,12 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
+            attention_mask,
+            token_type_ids,
+            past_key_values,
+            cache_position,
+            inputs_embeds,
+            is_training,
         )
         outputs = self.language_model(
             attention_mask=causal_mask,
@@ -1255,7 +1284,12 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self._update_causal_mask(
-                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
+                attention_mask,
+                token_type_ids,
+                past_key_values,
+                cache_position,
+                input_tensor,
+                is_training,
             )
             model_inputs["attention_mask"] = causal_mask
 

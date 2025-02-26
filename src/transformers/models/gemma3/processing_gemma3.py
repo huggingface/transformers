@@ -21,10 +21,11 @@
 # limitations under the License.
 import itertools
 import math
+import re
 from collections.abc import Sequence
 from typing import Optional, Union, cast
 
-import PIL
+import PIL.Image
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
@@ -43,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 
 class Gemma3TextKwargs(TextKwargs):
-    pass
+    num_mm_tokens_per_image: int
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
@@ -67,7 +68,10 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Gemma3TextKwargs
     images_kwargs: Gemma3ImagesKwargs
     _defaults = {
-        "text_kwargs": {"padding": False},
+        "text_kwargs": {
+            "num_mm_tokens_per_image": 256,
+            "padding": False,
+        },
         "images_kwargs": {
             "data_format": "channels_first",
             "do_pan_and_scan": False,
@@ -78,7 +82,15 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-IMAGE_TOKEN = "<image>"
+IMAGE_PLACEHOLDER = "<image>"
+IMAGE_PLACEHOLDER_LEN = len(IMAGE_PLACEHOLDER)
+BEGIN_IMAGE_TOKEN = ""
+END_IMAGE_TOKEN = ""
+IMAGE_SOFT_TOKEN_PLACEHODLER = ""
+NEWLINE_TOKEN = "\n"
+PAN_AND_SCAN_PREFIX = "here is the original image"
+PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
+SPACE = " "
 
 # Gemma 3 supports the following image input paradigms for any given prompt:
 #
@@ -176,10 +188,10 @@ class Gemma3Processor(ProcessorMixin):
         except AttributeError:
             logger.warning("Image token not provided by `tokenizer`. Adding special `<image>` token.")
 
-            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            image_token = AddedToken(IMAGE_PLACEHOLDER, normalized=False, special=True)
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_PLACEHOLDER)
 
         self.image_token = tokenizer.decode(self.image_token_id)
 
@@ -209,9 +221,19 @@ class Gemma3Processor(ProcessorMixin):
         )
 
         if images is not None:
-            images = self._process_images(images=images, **output_kwargs["images_kwargs"])
+            batched_images = self._process_images(images=images, **output_kwargs["images_kwargs"])
+            flattened_images = self._make_flat_list_of_images(batched_images=batched_images)
+            pixel_values = self.image_processor(flattened_images, **output_kwargs["images_kwargs"])["pixel_values"]
+        else:
+            batched_images = None
+            pixel_values = None
 
-        text = self._process_text(text=text, **output_kwargs["text_kwargs"])
+        batched_input = self._process_text(text=text, batched_images=batched_images, **output_kwargs["text_kwargs"])
+
+        if pixel_values is not None:
+            batched_input.update(pixel_values=pixel_values)
+
+        return batched_input
 
     def _process_images(
         self, images: Gemma3ProcessorImageInput, **kwargs: Unpack[Gemma3ImagesKwargs]
@@ -241,18 +263,60 @@ class Gemma3Processor(ProcessorMixin):
 
     def _process_text(
         self,
-        text: Optional[TextInputTypes],
-        images: Optional[BatchedPanAndScannedImage],
+        text: Optional[TextInputTypes] = None,
+        batched_images: Optional[BatchedPanAndScannedImage] = None,
         **kwargs: Unpack[Gemma3TextKwargs],
     ) -> BatchFeature:
-        return_value = BatchFeature()
+        if batched_images and not text:
+            text = [" ".join([IMAGE_PLACEHOLDER] * len(images)) for images in batched_images]
 
-        if images is not None:
-            if text is None:
-                pass
-            else:
-                pass
+        if batched_images and text:
+            if isinstance(text, str):
+                text = [text]
+
+            if (bi_l := len(batched_images)) != (t_l := len(text)):
+                raise ValueError(f"Received inconsistently sized batches of images ({bi_l}) and text ({t_l}).")
+
+            num_mm_tokens_per_image = kwargs["num_mm_tokens_per_image"]
+            image_string_for_tokenization = (
+                NEWLINE_TOKEN
+                + BEGIN_IMAGE_TOKEN
+                + "".join([IMAGE_SOFT_TOKEN_PLACEHODLER] * num_mm_tokens_per_image)
+                + END_IMAGE_TOKEN
+                + NEWLINE_TOKEN
+            )
+
+            for prompt, images in zip(text, batched_images):
+                image_indexes = [m.start() for m in re.finditer(IMAGE_PLACEHOLDER, prompt)]
+                if (i_l := len(images)) != (iidx_l := len(image_indexes)):
+                    raise ValueError(f"Prompt contained {iidx_l} image placeholders but received {i_l} images.")
+
+                for (image, pas_images), idx in reversed(zip(images, image_indexes)):
+                    if pas_images:
+                        formatted_image_text = SPACE.join(
+                            [
+                                PAN_AND_SCAN_PREFIX,
+                                image_string_for_tokenization,
+                                PAN_AND_SCAN_POSTFIX,
+                            ]
+                            + [image_string_for_tokenization] * len(pas_images)
+                        )
+                    else:
+                        formatted_image_text = image_string_for_tokenization
+
+                    prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_PLACEHOLDER_LEN :]
 
         inputs = self.tokenizer(text=text, **kwargs)
-        return_value.update(inputs)
-        return return_value
+        return BatchFeature(data={**inputs})
+
+    def _make_flat_list_of_images(
+        self,
+        batched_images: BatchedPanAndScannedImage,
+    ) -> Sequence[PIL.Image.Image]:
+        flattened_images: list[PIL.Image.Image] = []
+
+        for images in batched_images:
+            for image, pas_images in images:
+                flattened_images.extend([image] + pas_images)
+
+        return flattened_images
