@@ -802,55 +802,32 @@ def _load_state_dict_into_meta_model(
             for submodule in model.modules():
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
-        for param_name, empty_param in state_dict.items():
-            new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[
+        for serialized_param_name, empty_param in state_dict.items():
+            # param_name is the raw, serialized name
+            # new_param_name is the model's equivalent
+            module_name, empty_param = list(model._fix_state_dict_keys_on_load({serialized_param_name: empty_param}).items())[
                 0
             ]
 
-            if new_param_name not in expected_keys:
+            if module_name not in expected_keys:
                 continue
 
-            if param_name.startswith(start_prefix):
-                param_name = param_name[len(start_prefix) :]
-
-            module_name = param_name
-            param = file_pointer.get_slice(param_name)  # param name needs to stay untouched as it's in the file
+            param = file_pointer.get_slice(serialized_param_name)  # param name needs to stay untouched as it's in the file
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
             is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
             if dtype is not None and empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
                 if (
                     keep_in_fp32_modules is not None
-                    and keep_in_fp32_modules.search(new_param_name)
+                    and keep_in_fp32_modules.search(module_name)
                     and dtype == torch.float16
                 ):
                     param_casting_dtype = torch.float32
                 else:
                     param_casting_dtype = dtype
 
-            # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-            # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-            # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-            old_param = model
-            splits = param_name.split(".")
-            for split in splits:
-                # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
-                old_param = getattr(old_param, split, None)
-                if old_param is None:
-                    break
-
-            if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-                old_param = None
-
-            if old_param is not None:
-                if param_casting_dtype is None:
-                    param_casting_dtype = old_param.dtype
-
-                if old_param.is_contiguous():
-                    _param_to_contiguous = True  # TODO not taking into account anymore
-
             if device_mesh is not None:  # In this case, the param is already on the correct device!
-                layer = new_param_name.rsplit(".", 1)[0]
+                layer = module_name.rsplit(".", 1)[0]
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
                 except Exception:
@@ -858,12 +835,9 @@ def _load_state_dict_into_meta_model(
                         "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
                     )
 
-                if start_prefix is not None:
-                    param_name_ = new_param_name.replace(f"{start_prefix}.", "")
-
                 current_module_plan = None
                 full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
-                if plan := re.search(full_tp_plan_, param_name_):
+                if plan := re.search(full_tp_plan_, module_name):
                     match = re.sub("[0-9]+", "*", plan[0])
                     current_module_plan = full_tp_plan[match]
 
@@ -892,7 +866,6 @@ def _load_state_dict_into_meta_model(
                     if isinstance(module_to_tp.weight, nn.Parameter):
                         local_parameter = torch.nn.Parameter(local_parameter)
                     module_to_tp.weight = local_parameter
-
                     input_fn = partial(
                         tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
                     )
@@ -902,7 +875,7 @@ def _load_state_dict_into_meta_model(
                     distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
                 else:
                     module_to_tp.load_state_dict(
-                        {new_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
+                        {serialized_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
                     )
             else:
                 if device_map is None:
@@ -919,35 +892,35 @@ def _load_state_dict_into_meta_model(
                         param_device = device_map[module_layer.group()]
 
                 if param_device == "disk" and not is_safetensors:
-                    offload_index = offload_weight(param[:], new_param_name, offload_folder, offload_index)
+                    offload_index = offload_weight(param[:], module_name, offload_folder, offload_index)
                 elif param_device == "cpu" and state_dict_index is not None:
-                    state_dict_index = offload_weight(param[:], new_param_name, state_dict_folder, state_dict_index)
+                    state_dict_index = offload_weight(param[:], module_name, state_dict_folder, state_dict_index)
                 elif (
                     not is_quantized
                     or (not hf_quantizer.requires_parameters_quantization)
                     or (
                         not hf_quantizer.check_quantized_param(
-                            model, param, new_param_name, state_dict, param_device=param_device, device_map=device_map
+                            model, param, module_name, state_dict, param_device=param_device, device_map=device_map
                         )
                     )
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                    module = model.get_submodule(new_param_name.rsplit(".", 1)[0])
+                    module = model.get_submodule(module_name.rsplit(".", 1)[0])
                     module.load_state_dict(
-                        {new_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)},
+                        {serialized_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)},
                         False,
                         True,
                     )
                 else:
                     hf_quantizer.create_quantized_param(
-                        model, param[:], new_param_name, param_device, state_dict, unexpected_keys
+                        model, param[:], module_name, param_device, state_dict, unexpected_keys
                     )
                     # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                     # and then cast it to CPU to avoid excessive memory usage on each GPU
                     # in comparison to the sharded model across GPUs.
                     if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                        module, tensor_name = get_module_from_name(model, new_param_name)
+                        module, tensor_name = get_module_from_name(model, module_name)
                         value = getattr(module, tensor_name)
                         param_to = "cpu"
                         if is_fsdp_enabled() and not is_local_dist_rank_0():
@@ -1283,6 +1256,46 @@ class ModuleUtilsMixin:
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
+def _find_mismatched_keys(
+    state_dict,
+    model_state_dict,
+    loaded_keys,
+    original_loaded_keys,
+    add_prefix_to_model,
+    remove_prefix_from_model,
+    ignore_mismatched_sizes,
+    prefix
+):
+    mismatched_keys = []
+    if ignore_mismatched_sizes:
+        for checkpoint_key, model_key in zip(original_loaded_keys, loaded_keys):
+            # If the checkpoint is sharded, we may not have the key here.
+            if checkpoint_key not in state_dict:
+                continue
+            if remove_prefix_from_model:
+                # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
+                model_key = f"{prefix}.{model_key}"
+            elif add_prefix_to_model:
+                # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                model_key = ".".join(model_key.split(".")[1:])
+
+            if (
+                model_key in model_state_dict
+                and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+            ):
+                if (
+                    state_dict[checkpoint_key].shape[-1] == 1
+                    and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
+                ):
+                    # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
+                    # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
+                    pass
+                else:
+                    mismatched_keys.append(
+                        (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                    )
+                    del state_dict[checkpoint_key]
+    return mismatched_keys
 
 # TODO (joao): remove `GenerationMixin` inheritance in v4.50
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
@@ -4532,6 +4545,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
+            if len(cls.base_model_prefix) > 0:
+                if not hasattr(cls, cls.base_model_prefix) and key.startswith(cls.base_model_prefix):
+                    new_key = key.replace(cls.base_model_prefix, "")
+                elif hasattr(cls, cls.base_model_prefix) and not key.startswith(cls.base_model_prefix):
+                    new_key = f"{cls.base_model_prefix}.{key}"
+
             new_key, has_changed = cls._fix_state_dict_key_on_load(key)
             if has_changed:
                 state_dict[new_key] = state_dict.pop(key)
@@ -4797,45 +4816,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map is not None:
                 device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
 
-        def _find_mismatched_keys(
-            state_dict,
-            model_state_dict,
-            loaded_keys,
-            original_loaded_keys,
-            add_prefix_to_model,
-            remove_prefix_from_model,
-            ignore_mismatched_sizes,
-        ):
-            mismatched_keys = []
-            if ignore_mismatched_sizes:
-                for checkpoint_key, model_key in zip(original_loaded_keys, loaded_keys):
-                    # If the checkpoint is sharded, we may not have the key here.
-                    if checkpoint_key not in state_dict:
-                        continue
-                    if remove_prefix_from_model:
-                        # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
-                        model_key = f"{prefix}.{model_key}"
-                    elif add_prefix_to_model:
-                        # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
-                        model_key = ".".join(model_key.split(".")[1:])
-
-                    if (
-                        model_key in model_state_dict
-                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
-                    ):
-                        if (
-                            state_dict[checkpoint_key].shape[-1] == 1
-                            and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
-                        ):
-                            # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
-                            # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
-                            pass
-                        else:
-                            mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                            )
-                            del state_dict[checkpoint_key]
-            return mismatched_keys
 
         if resolved_archive_file is not None:
             folder = os.path.sep.join(resolved_archive_file[0].split(os.path.sep)[:-1])
@@ -4877,6 +4857,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 add_prefix_to_model,
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
+                prefix
             )
 
             # For GGUF models `state_dict` is never set to None as the state dict is always small
@@ -4884,7 +4865,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     fixed_state_dict,
-                    cls.base_model_prefix,
+                    start_prefix, 
                     expected_keys,
                     device_map=device_map,
                     offload_folder=offload_folder,
@@ -4963,6 +4944,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     add_prefix_to_model,
                     remove_prefix_from_model,
                     ignore_mismatched_sizes,
+                    prefix
                 )
                 if low_cpu_mem_usage:
                     if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
@@ -4975,7 +4957,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             state_dict,
-                            cls.base_model_prefix,
+                            start_prefix,
                             expected_keys,
                             device_map=device_map,
                             offload_folder=offload_folder,
@@ -4995,13 +4977,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # Sharded checkpoint or whole but low_cpu_mem_usage==True
                     if assign_to_params_buffers is None:
                         assign_to_params_buffers = check_support_param_buffer_assignment(
-                            model_to_load, meta_state_dict, start_prefix
+                            model_to_load, state_dict, start_prefix
                         )
                     # properly read the state dict now:
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict, add_prefix_to_model, remove_prefix_from_model)
                     error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
                 # force memory release
-                del state_dict, meta_state_dict
+                del state_dict
                 gc.collect()
 
             if offload_index is not None and len(offload_index) > 0:
