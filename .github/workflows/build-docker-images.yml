@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - upgrade_cuda_docker
+      - upgrade_cuda_docker_lui
   repository_dispatch:
   workflow_call:
     inputs:
