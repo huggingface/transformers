@@ -1260,7 +1260,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             from compressed_tensors.quantization import QuantizationConfig
         else:
             raise ImportError(
-                "compressed_tensors is not installed. Please install it with `pip install compressed-tensors`."
+                "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
             )
         self.quantization_config = None
         self.sparsity_config = None
