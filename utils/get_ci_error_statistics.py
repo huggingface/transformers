@@ -10,82 +10,43 @@ from collections import Counter
 import requests
 
 
-def get_jobs(workflow_run_id, token=None):
-    """Extract jobs in a GitHub Actions workflow run"""
+def fetch_paginated_github_data(base_url, token=None):
+    """General function for getting paginated data from the GitHub API."""
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = requests.get(url, headers=headers).json()
-    jobs = []
+    result = requests.get(f"{base_url}?per_page=100", headers=headers).json()
+    data = []
 
     try:
-        jobs.extend(result["jobs"])
-        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
+        data.extend(result.get("jobs", result.get("artifacts", [])))
+        total_count = result["total_count"]
+        pages_to_iterate_over = math.ceil((total_count - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            jobs.extend(result["jobs"])
-
-        return jobs
-    except Exception:
+            page_result = requests.get(f"{base_url}?per_page=100&page={i + 2}", headers=headers).json()
+            data.extend(page_result.get("jobs", page_result.get("artifacts", [])))
+        return data
+    except Exception as e:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+        return []
 
-    return []
+
+def get_jobs(workflow_run_id, token=None):
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs"
+    return fetch_paginated_github_data(url, token)
 
 
 def get_job_links(workflow_run_id, token=None):
-    """Extract job names and their job links in a GitHub Actions workflow run"""
-
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = requests.get(url, headers=headers).json()
-    job_links = {}
-
-    try:
-        job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
-
-        for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
-
-        return job_links
-    except Exception:
-        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
-
-    return {}
+    jobs = get_jobs(workflow_run_id, token)
+    return {job["name"]: job["html_url"] for job in jobs}
 
 
-def get_artifacts_links(worflow_run_id, token=None):
-    """Get all artifact links from a workflow run"""
-
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{worflow_run_id}/artifacts?per_page=100"
-    result = requests.get(url, headers=headers).json()
-    artifacts = {}
-
-    try:
-        artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
-
-        for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
-
-        return artifacts
-    except Exception:
-        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
-
-    return {}
+def get_artifacts_links(workflow_run_id, token=None):
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts"
+    artifacts = fetch_paginated_github_data(url, token)
+    return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
 
 
 def download_artifact(artifact_name, artifact_url, output_dir, token):
