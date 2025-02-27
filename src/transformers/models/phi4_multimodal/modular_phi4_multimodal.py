@@ -366,7 +366,7 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
-            out_channels=self.embed_dim,
+            out_channels=config.hidden_size,
             kernel_size=self.patch_size,
             stride=self.patch_size,
             padding="valid",
