@@ -17,7 +17,6 @@ Processor class for Phi4Multimodal
 """
 
 import math
-from enum import Enum
 from typing import Optional, Union
 
 import torch
@@ -33,13 +32,6 @@ from transformers.utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-class InputMode(Enum):
-    LANGUAGE = 0
-    VISION = 1
-    SPEECH = 2
-    VISION_SPEECH = 3
 
 
 class Phi4MultimodalImageProcessor(BaseImageProcessor):

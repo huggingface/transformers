@@ -620,6 +620,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__()
         self.config = config
+        self.layer_idx = config.vision_config.feature_layer
 
         # n_embed or hidden_size
         hidden_size = config.hidden_size
@@ -658,8 +659,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             nn.GELU(),
             nn.Linear(dim_projection, dim_projection),
         )
-
-        self.layer_idx = -2
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
         img_processor_output = self.img_processor(
@@ -1441,7 +1440,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.encoder = Phi4MultimodalAudioModel._from_config(config.audio_config)
 
-        self.layer_idx = -2
+        self.layer_idx = config.audio_config.feature_layer
         self.audio_dim_out = config.audio_config.hidden_size
         self.audio_dim_in = config.audio_config.input_size
         self.downsample_rate = config.audio_config.downsample_rate

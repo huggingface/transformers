@@ -60,6 +60,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         crop_size: int = 448,
         hd_transform_order: str = "sub_glb",
         image_token_id: int = 200010,
+        feature_layer: int = -2,
         **kwargs,
     ):
         super().__init__(
@@ -79,6 +80,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         self.crop_size = crop_size
         self.hd_transform_order = hd_transform_order
         self.image_token_id = image_token_id
+        self.feature_layer = feature_layer
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
@@ -113,6 +115,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         downsample_rate: int = 1,
         audio_token_id: int = 200011,
         initializer_range: float = 0.02,
+        feature_layer: int = -2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -143,6 +146,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.downsample_rate = downsample_rate
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.feature_layer = feature_layer
 
 
 class Phi4MultimodalConfig(Phi3Config):
@@ -155,12 +159,12 @@ class Phi4MultimodalConfig(Phi3Config):
         intermediate_size=8192,
         num_hidden_layers=32,
         num_attention_heads=32,
-        num_key_value_heads=None,
+        num_key_value_heads=8,
         resid_pdrop=0.0,
         embd_pdrop=0.0,
         attention_dropout=0.0,
         hidden_act="silu",
-        max_position_embeddings=4096,
+        max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
@@ -171,7 +175,7 @@ class Phi4MultimodalConfig(Phi3Config):
         bos_token_id=199999,
         eos_token_id=199999,
         pad_token_id=199999,
-        original_max_position_embeddings=131000,
+        original_max_position_embeddings=4096,
         sliding_window=None,
         vision_config=None,
         audio_config=None,
@@ -520,6 +524,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__()
         self.config = config
+        self.layer_idx = config.vision_config.feature_layer
 
         # n_embed or hidden_size
         hidden_size = config.hidden_size
@@ -558,8 +563,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             nn.GELU(),
             nn.Linear(dim_projection, dim_projection),
         )
-
-        self.layer_idx = -2
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
         img_processor_output = self.img_processor(
@@ -1341,7 +1344,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.encoder = Phi4MultimodalAudioModel._from_config(config.audio_config)
 
-        self.layer_idx = -2
+        self.layer_idx = config.audio_config.feature_layer
         self.audio_dim_out = config.audio_config.hidden_size
         self.audio_dim_in = config.audio_config.input_size
         self.downsample_rate = config.audio_config.downsample_rate

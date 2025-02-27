@@ -75,6 +75,7 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         crop_size: int = 448,
         hd_transform_order: str = "sub_glb",
         image_token_id: int = 200010,
+        feature_layer: int = -2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -93,6 +94,7 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.crop_size = crop_size
         self.hd_transform_order = hd_transform_order
         self.image_token_id = image_token_id
+        self.feature_layer = feature_layer
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
@@ -127,6 +129,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         downsample_rate: int = 1,
         audio_token_id: int = 200011,
         initializer_range: float = 0.02,
+        feature_layer: int = -2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -157,6 +160,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.downsample_rate = downsample_rate
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.feature_layer = feature_layer
 
 
 class Phi4MultimodalConfig(PretrainedConfig):
@@ -266,12 +270,12 @@ class Phi4MultimodalConfig(PretrainedConfig):
         intermediate_size=8192,
         num_hidden_layers=32,
         num_attention_heads=32,
-        num_key_value_heads=None,
+        num_key_value_heads=8,
         resid_pdrop=0.0,
         embd_pdrop=0.0,
         attention_dropout=0.0,
         hidden_act="silu",
-        max_position_embeddings=4096,
+        max_position_embeddings=131072,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
@@ -282,7 +286,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         bos_token_id=199999,
         eos_token_id=199999,
         pad_token_id=199999,
-        original_max_position_embeddings=131000,
+        original_max_position_embeddings=4096,
         sliding_window=None,
         vision_config=None,
         audio_config=None,
