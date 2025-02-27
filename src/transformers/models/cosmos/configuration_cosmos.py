@@ -90,7 +90,7 @@ class CosmosVQVAEConfig(PretrainedConfig):
         out_channels: int = 3,
         temporal_downsample_factor: int = 8,
         base_channels: int = 128,
-        channel_multiplier: List[int] = [2, 2, 4],
+        channel_multiplier: List[int] = [2, 4, 4],
         num_res_blocks: int = 2,
         attn_resolutions: List[int] = None,
         hidden_size: int = 512,

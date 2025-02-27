@@ -126,14 +126,14 @@ class CosmosCausalConv3d(nn.Module):
         super().__init__()
         self.time_pad = (kernel_size[0] - 1) + (1 - time_stride)
         self.padding = (padding,) * 4 + (0, 0)
-        self.conv = nn.Conv3d(in_channels, out_channels, kernel_size, stride=(time_stride, stride, stride))
+        self.conv3d = nn.Conv3d(in_channels, out_channels, kernel_size, stride=(time_stride, stride, stride))
 
     def forward(self, hidden_states: torch.Tensor):
         hidden_states_prev = hidden_states[:, :, :1, ...].repeat(1, 1, self.time_pad, 1, 1)
         hidden_states = torch.cat([hidden_states_prev, hidden_states], dim=2)
 
         hidden_states = F.pad(hidden_states, self.padding)
-        hidden_states = self.conv(hidden_states)
+        hidden_states = self.conv3d(hidden_states)
         return hidden_states
 
 
@@ -1034,7 +1034,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
     # Apply rotary embeddings on the first half or full tensor
-    # print(q.shape, q_rot.shape, cos.shape) # [1, 32, 10, 128]) torch.Size([1, 10, 1, 128
     q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
     k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
 
@@ -1095,6 +1094,9 @@ class CosmosTextAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
+        self.q_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -1123,6 +1125,9 @@ class CosmosTextAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -1729,6 +1734,7 @@ class CosmosModel(CosmosPreTrainedModel):
         """
         vq_tokens, _ = self.vqmodel.encode(pixel_values)
         vq_tokens = vq_tokens.flatten(1)  # (batch_size, seq_length)
+        vq_tokens = vq_tokens[:, :-7680]  # remove pad tokens
         return vq_tokens
 
     @torch.no_grad
@@ -1772,7 +1778,7 @@ class CosmosModel(CosmosPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
@@ -1784,9 +1790,14 @@ class CosmosModel(CosmosPreTrainedModel):
 
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
-            special_image_mask = input_ids == self.config.image_token_id
-            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
-            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+
+            if input_ids is not None:
+                special_image_mask = input_ids == self.config.image_token_id
+                image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
+                input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+            else:
+                input_ids = image_tokens
+                print(image_tokens)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
