@@ -359,10 +359,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                             pass
 
 
-    def test_dbg(self):
-        super().test_training_gradient_checkpointing()
-
-
 class JanusVQModelTester:
     def __init__(
         self,
