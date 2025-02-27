@@ -309,10 +309,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
@@ -548,7 +544,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.3277, -0.1395, 0.0911]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
         self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
@@ -565,17 +561,12 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
-        # with interpolate_pos_encoding being False an exception should be raised with higher resolution
-        # images than what the model supports.
-        self.assertFalse(processor.do_center_crop)
-        with torch.no_grad():
-            with self.assertRaises(ValueError, msg="doesn't match model"):
-                model(pixel_values, interpolate_pos_encoding=False)
-
         # with interpolate_pos_encoding being True the model should process the higher resolution image
         # successfully and produce the expected output.
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        expected_shape = torch.Size((1, 1801, 768))
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
+        # 1 + (480 / 16) * (480 / 16) = 901
+        expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)

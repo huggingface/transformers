@@ -26,6 +26,9 @@ from .configuration_phi import PhiConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "microsoft/phi-1"
+_CONFIG_FOR_DOC = "PhiConfig"
+
 
 class PhiAttention(LlamaAttention):
     def __init__(self, config: PhiConfig, layer_idx: int):
@@ -284,7 +287,9 @@ class PhiModel(LlamaModel):
 
 
 class PhiForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
 
 
 class PhiForSequenceClassification(LlamaForSequenceClassification):

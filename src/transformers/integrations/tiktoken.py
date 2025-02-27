@@ -35,11 +35,9 @@ def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
 
         dump_tiktoken_bpe(encoding._mergeable_ranks, save_file_absolute)
     except ImportError:
-        raise ValueError(
-            "`tiktoken` is required to save a `tiktoken` file. Install it with " "`pip install tiktoken`."
-        )
+        raise ValueError("`tiktoken` is required to save a `tiktoken` file. Install it with `pip install tiktoken`.")
 
     tokenizer = TikTokenConverter(
         vocab_file=save_file_absolute, pattern=encoding._pat_str, additional_special_tokens=encoding._special_tokens
-    ).tokenizer()
+    ).converted()
     tokenizer.save(output_file_absolute)

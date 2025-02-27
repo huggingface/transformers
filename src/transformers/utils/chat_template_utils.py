@@ -77,6 +77,7 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        type(None): {"type": "null"},
         Any: {},
     }
     if is_vision_available():
@@ -362,6 +363,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    if not is_jinja_available():
+        raise ImportError(
+            "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
+        )
+
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
         tags = {"generation"}

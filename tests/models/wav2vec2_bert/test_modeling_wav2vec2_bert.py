@@ -21,7 +21,6 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2BertConfig, is_torch_available
 from transformers.testing_utils import (
-    is_pt_flax_cross_test,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -423,7 +422,6 @@ class Wav2Vec2BertModelTester:
 
 
 @require_torch
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert, input_values->input_features
 class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Ignore copy
     all_model_classes = (
@@ -558,18 +556,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     # Ignore copy
     @unittest.skip(reason="Wav2Vec2Bert has no inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    # Ignore copy
-    @unittest.skip(reason="non-robust architecture does not exist in Flax")
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    # Ignore copy
-    @unittest.skip(reason="non-robust architecture does not exist in Flax")
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):

@@ -1394,10 +1394,9 @@ class CLIPModel(CLIPPreTrainedModel):
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * logit_scale.to(
-            text_embeds.device
-        )
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
+        logits_per_text = logits_per_text * self.logit_scale.exp().to(text_embeds.device)
+
         logits_per_image = logits_per_text.t()
 
         loss = None
@@ -1433,7 +1432,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
 
-        text_model = CLIPTextModel._from_config(config, attn_implementation=config._attn_implementation)
+        text_model = CLIPTextModel._from_config(config)
         self.text_model = text_model.text_model
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1514,7 +1513,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
 
-        vision_model = CLIPVisionModel._from_config(config, attn_implementation=config._attn_implementation)
+        vision_model = CLIPVisionModel._from_config(config)
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
