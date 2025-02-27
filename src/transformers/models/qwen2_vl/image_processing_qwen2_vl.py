@@ -91,7 +91,10 @@ def smart_resize(
 
 class Qwen2VLImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
+    Constructs a numpy-based Qwen2-VL image processor that dynamically resizes images based on the original images.
+
+    Note that this image processor will automatically apply jit compilation for performance optimization
+    when numba is available. Please install numba if you want to get better numpy performance on CPU.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -187,7 +190,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             B, H, W, C = image.shape
             fuse_ops = fast_rescale_normalize_transpose
         image_out = np.empty((B, C, H, W), dtype=np.float32)
-        return fuse_ops(image, image_out, pixel_map)
+        fuse_ops(image, image_out, pixel_map)
+        return image_out
 
     def _preprocess(
         self,
@@ -269,6 +273,10 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         is_fuse_ops_available = is_numba_available() and data_format == ChannelDimension.FIRST
         if do_rescale and do_normalize and is_fuse_ops_available:
             if do_resize:
+                # resized_images = np.empty((len(images), resized_height, resized_width, 3), dtype=np.uint8)
+                # for idx in range(len(images)):
+                #     cv2.resize(images[idx], (resized_width, resized_height), dst=resized_images[idx], interpolation=cv2.INTER_CUBIC)
+                # images = resized_images
                 images = np.array(
                     [
                         resize(

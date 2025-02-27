@@ -55,14 +55,17 @@ if is_flax_available():
 if is_numba_available():
     from numba import jit, prange
 
-    @jit("float32[:,:,:,:](uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    @jit("void(uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
     def fast_rescale_normalize_transpose(vid_in: np.ndarray, vid_out: np.ndarray, pixel_map: np.ndarray):
         """
-        A numba accelerated fn: do rescale, normalize and transpose image together
+        An in-place numba accelerated fn: do rescale, normalize and transpose image together.
+        This operation is in-place on image_out array for best performance.
 
         Args:
-            image (`numpy.ndarray`):
+            image_in (`numpy.ndarray`):
                 The uint8 image. Image should have (frames, height, width, num_channels) format.
+            image_out (`numpy.ndarray`):
+                The float32 array to store processed image. Image should have (frames, num_channels, height, width) format.
             pixel_map (`numpy.ndarray`):
                 The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
         """
@@ -72,21 +75,20 @@ if is_numba_available():
                 for j in range(W):
                     for dim in range(C):
                         vid_out[bs, dim, i, j] = pixel_map[dim, vid_in[bs, i, j, dim]]
-        return vid_out
 
-    @jit("float32[:,:,:,:](uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    @jit("void(uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
     def fast_rescale_normalize(vid_in: np.ndarray, vid_out: np.ndarray, pixel_map: np.ndarray):
         """
-        A numba accelerated fn: do rescale, normalize and transpose image together
+        An in-place numba accelerated fn: do rescale, normalize image together.
+        This operation is in-place on image_out array for best performance.
 
         Args:
-            image (`numpy.ndarray`):
+            image_in (`numpy.ndarray`):
                 The uint8 image. Image should have (frames, height, width, num_channels) format.
+            image_out (`numpy.ndarray`):
+                The float32 array to store processed image. Image should have (frames, num_channels, height, width) format.
             pixel_map (`numpy.ndarray`):
                 The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
-
-        Returns:
-            `numpy.ndarray`: The rescaled, normalized and transposed image have (frames, num_channels, height, width) format.
         """
         B, C, H, W = vid_in.shape
         for bs in range(B):
@@ -94,7 +96,6 @@ if is_numba_available():
                 for i in prange(H):
                     for j in range(W):
                         vid_out[bs, dim, i, j] = pixel_map[dim, vid_in[bs, dim, i, j]]
-        return vid_out
 
 
 def to_channel_dimension_format(
