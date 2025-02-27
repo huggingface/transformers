@@ -5047,8 +5047,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             shard_file=shard_file,
                         )
                         error_msgs += new_error_msgs
-                elif is_deepspeed_zero3_enabled():
-                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 else:
                     state_dict = load_state_dict(shard_file, map_location="cpu", weights_only=weights_only)
                     # Sharded checkpoint or whole but low_cpu_mem_usage==True
@@ -5057,7 +5055,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                    model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                    if is_deepspeed_zero3_enabled():
+                        error_msgs += _load_state_dict_into_zero3_model(
+                            model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
+                        )
+                    else:
+                        model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
                 # force memory release
                 del state_dict
                 gc.collect()
