@@ -31,8 +31,8 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: if [[ "$CIRCLE_PULL_REQUEST" == "" && "$CIRCLE_BRANCH" != "main" && "$CIRCLE_BRANCH" != *-release ]]; then echo "Not a PR and not the main branch, skip test!"; circleci-agent step halt; fi
-            - run: 'curl -L -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PULL_REQUEST##*/} >> github.txt'
+            - run: if [[ "$CIRCLE_PULL_REQUEST" == "" && "$CIRCLE_BRANCH" != "main" && "$CIRCLE_BRANCH" != *-release ]]; then echo "Not a PR, not the main branch and not a release branch, skip test!"; circleci-agent step halt; fi
+            - run: 'curl -L -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pulls/${CIRCLE_PULL_REQUEST##*/} >> github.txt'
             - run: cat github.txt
             - run: (python3 -c 'import json; from datetime import datetime; fp = open("github.txt"); data = json.load(fp); fp.close(); f = "%Y-%m-%dT%H:%M:%SZ"; created = datetime.strptime(data["created_at"], f); updated = datetime.strptime(data["updated_at"], f); s = (updated - created).total_seconds(); print(int(s))' || true) > elapsed.txt
             - run: if [ "$(cat elapsed.txt)" == "" ]; then echo 60 > elapsed.txt; fi
