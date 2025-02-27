@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from transformers import AdamW, GPT2LMHeadModel, get_linear_schedule_with_warmup
+from transformers import GPT2LMHeadModel, get_linear_schedule_with_warmup
 
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ def recopy_gpt2(orig_model, device, max_steps):
         },
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
-    lm_optimizer = AdamW(optimizer_grouped_parameters, lr=5e-5, eps=1e-8)
+    lm_optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=5e-5, eps=1e-8)
     lm_scheduler = get_linear_schedule_with_warmup(lm_optimizer, 0, max_steps)
     torch.cuda.empty_cache()
     return model, lm_optimizer, lm_scheduler

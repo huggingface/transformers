@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytorch_lightning as pl
+import torch
 from pytorch_lightning.utilities import rank_zero_info
 
 from transformers import (
-    AdamW,
     AutoConfig,
     AutoModel,
     AutoModelForPreTraining,
@@ -146,7 +146,7 @@ class BaseTransformer(pl.LightningModule):
             )
 
         else:
-            optimizer = AdamW(
+            optimizer = torch.optim.AdamW(
                 optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon
             )
         self.opt = optimizer

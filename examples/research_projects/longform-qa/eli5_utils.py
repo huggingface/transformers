@@ -16,7 +16,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from tqdm import tqdm
 
-from transformers import AdamW, AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer, get_linear_schedule_with_warmup
+from transformers import AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer, get_linear_schedule_with_warmup
 
 
 pd.set_option("display.max_colwidth", None)
@@ -316,7 +316,7 @@ def evaluate_qa_retriever(model, dataset, tokenizer, args):
 
 
 def train_qa_retriever(qar_model, qar_tokenizer, qar_train_dset, qar_valid_dset, qar_args):
-    qar_optimizer = AdamW(qar_model.parameters(), lr=qar_args.learning_rate, eps=1e-8)
+    qar_optimizer = torch.optim.AdamW(qar_model.parameters(), lr=qar_args.learning_rate, eps=1e-8)
     qar_scheduler = get_linear_schedule_with_warmup(
         qar_optimizer,
         num_warmup_steps=100,
@@ -493,7 +493,7 @@ def eval_qa_s2s_epoch(model, dataset, tokenizer, args):
 
 
 def train_qa_s2s(qa_s2s_model, qa_s2s_tokenizer, s2s_train_dset, s2s_valid_dset, s2s_args):
-    s2s_optimizer = AdamW(qa_s2s_model.parameters(), lr=s2s_args.learning_rate, eps=1e-8)
+    s2s_optimizer = torch.optim.AdamW(qa_s2s_model.parameters(), lr=s2s_args.learning_rate, eps=1e-8)
     s2s_scheduler = get_linear_schedule_with_warmup(
         s2s_optimizer,
         num_warmup_steps=400,
