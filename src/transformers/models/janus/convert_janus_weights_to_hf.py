@@ -130,7 +130,7 @@ def convert_key(key, mappings=MAPPINGS):
             # it is a simple replacement
             key = re.sub(pattern, replacement, key)
         else:
-            # you have to match the patter to access a new set of replacements
+            # you have to match the pattern to access a new set of replacements
             if re.search(pattern, key):
                 key = convert_key(key, replacement)
     return key

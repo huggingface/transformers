@@ -236,8 +236,6 @@ class JanusConfig(PretrainedConfig):
     }
 
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "llama")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
@@ -289,6 +287,7 @@ class JanusConfig(PretrainedConfig):
 
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
+        super().__init__(**kwargs)
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]

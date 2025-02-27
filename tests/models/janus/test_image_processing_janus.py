@@ -193,7 +193,7 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Image processor should return same pixel values, independently of input format
         self.assertTrue((encoded_images_nested == encoded_images).all())
 
-    @unittest.skip(reason="not supported")
+    @unittest.skip(reason="Not supported")
     # This test assumes the image processor can do center crop. Our processor is based on the one from Siglip
     # which does not support it. Siglip test suite does not have this test, so we skip it too.
     def test_call_numpy_4_channels(self):

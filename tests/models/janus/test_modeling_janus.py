@@ -15,9 +15,14 @@
 """Testing suite for the PyTorch Janus model."""
 
 import unittest
+import tempfile
+from functools import partial
 
 import numpy as np
 import requests
+
+def new_set(self, key, value):
+    raise AttributeError(f"Cannot modify immutable object: {key}")
 
 from transformers import (
     AutoProcessor,
@@ -244,6 +249,56 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
+
+    def test_sdpa_can_dispatch_composite_models(self):
+        # Copied from SiglipModelTesterMixin
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            # SigLip has one shared cls attr for all models, so we assign both submodels heer
+            vision_attn = language_attn = "sdpa" if model._supports_sdpa else "eager"
+
+            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "language_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.language_model.config._attn_implementation == language_attn)
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+            has_sdpa = False
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    has_sdpa = True
+                    break
+            if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                raise ValueError("The SDPA model should have SDPA attention layers")
+
+
+    def test_dbg(self):
+        super().test_training_gradient_checkpointing()
 
 
 class JanusVQModelTester:

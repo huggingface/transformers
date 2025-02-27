@@ -581,7 +581,6 @@ class JanusVisionEncoder(SiglipEncoder):
 
 class JanusVisionTransformer(SiglipVisionTransformer, nn.Module):
     config_class = JanusVisionConfig
-    _supports_sdpa = False
 
     def __init__(self, config: JanusVisionConfig):
         nn.Module.__init__()
@@ -805,7 +804,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     config_class = JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    # _no_split_modules = None # Should we pass Llama Decoder Layer?
+    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -887,6 +886,11 @@ class JanusVQVAE(ChameleonVQVAE):
 
 
 class JanusVQVAEAligner(nn.Module):
+    _no_split_modules = [
+        "JanusVQVAEAttnBlock",
+        "JanusVQVAEResnetBlock",
+        "JanusVQVAEVectorQuantizer",
+    ]
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
 
@@ -919,14 +923,6 @@ class JanusVQVAEHead(nn.Module):
 
 
 class JanusModel(JanusPreTrainedModel):
-    # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = [
-        "JanusVisionTransformer",
-        "JanusVisionAlignerMLP",
-        "JanusVQVAE",
-        "JanusVQVAEAligner",
-        "JanusVQVAEHead",
-    ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1031,14 +1027,6 @@ class JanusModel(JanusPreTrainedModel):
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
-    # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = [
-        "JanusVisionTransformer",
-        "JanusVisionAlignerMLP",
-        "JanusVQVAE",
-        "JanusVQVAEAligner",
-        "JanusVQVAEHead",
-    ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
