@@ -297,9 +297,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                 raise ValueError("The SDPA model should have SDPA attention layers")
 
 
-    def test_dbg(self):
-        super().test_training_gradient_checkpointing()
-
 
 class JanusVQModelTester:
     def __init__(
