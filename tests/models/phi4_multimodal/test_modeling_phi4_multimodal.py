@@ -195,6 +195,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
+
 @require_torch
 @slow
 class Phi4MultimodalIntegrationTest(unittest.TestCase):

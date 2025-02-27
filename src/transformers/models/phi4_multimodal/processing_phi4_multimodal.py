@@ -54,9 +54,10 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     [`~Phi4MultimodalProcessor.__call__`] and [`~Phi4MultimodalProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Phi4MultimodalImageProcessor`], *optional*):
+        image_processor ([`Phi4MultimodalImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`GPT2Tokenizer`], *optional*):
+        audio_processor (`<fill_type>`): <fill_docstring>
+        tokenizer ([`GPT2Tokenizer`]):
             The tokenizer is a required input.
     """
 
