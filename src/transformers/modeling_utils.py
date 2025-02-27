@@ -3071,6 +3071,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # init state_dict for this shard
                 shard_state_dict = {name: "" for name in shard}
                 for module_name in shard:
+                    # skip to collect this weight again
+                    if shard_state_dict.get(module_name) != "":
+                        continue
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
                     shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
@@ -4839,7 +4842,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model.expected_keys = expected_keys
         if device_map is not None:
             expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
-            caching_allocator_warmup(model, expanded_device_map, dtype)
+            if hf_quantizer is None:
+                caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
         if device_map is not None and is_safetensors:
             param_device_map = expanded_device_map
