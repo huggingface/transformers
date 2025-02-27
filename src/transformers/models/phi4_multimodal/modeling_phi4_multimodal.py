@@ -621,6 +621,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__()
+        self.config = config
 
         # n_embed or hidden_size
         hidden_size = config.hidden_size
@@ -1763,6 +1764,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
     def __init__(self, config: Phi4MultimodalConfig) -> None:
         super().__init__()
+        self.config = config
         self.image_embed = Phi4MultimodalImageEmbedding(config)
         self.audio_embed = Phi4MultimodalAudioEmbedding(config)
 
