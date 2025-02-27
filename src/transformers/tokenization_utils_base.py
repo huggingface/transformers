@@ -1712,6 +1712,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                                 "continue_final_message is set but we could not find any text to continue"
                                 "in the final message!"
                             )
+                if final_message not in rendered_chat:
+                    raise ValueError(
+                        "continue_final_message is set but the final message does not appear in the chat after "
+                        "applying the chat template! This can happen if the chat template deletes portions of "
+                        "the final message. Please verify the chat template and final message in your chat to "
+                        "ensure they are compatible."
+                    )
                 final_msg_loc = rendered_chat.rindex(final_message.strip())
                 if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
                     # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
