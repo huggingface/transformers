@@ -5841,6 +5841,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
     }
+    if not len(accelerator_device_map):
+        return
+
     parameter_count = defaultdict(lambda: 0)
     allocation_factor = 1
     if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
