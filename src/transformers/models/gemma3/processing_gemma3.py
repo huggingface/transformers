@@ -21,10 +21,12 @@
 # limitations under the License.
 import itertools
 import math
+import re
 from collections.abc import Sequence
 from typing import Optional, Union, cast
 
 import PIL.Image
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
@@ -77,8 +79,12 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 IMAGE_TOKEN = "<image>"
+IMAGE_TOKEN_LEN = len(IMAGE_TOKEN)
 START_IMAGE_TOKEN = "<start_of_image>"
 END_IMAGE_TOKEN = "<end_of_image>"
+NEWLINE_TOKEN = "\n"
+PAN_AND_SCAN_PREFIX = "Here is the original image"
+PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
 
 # Gemma 3 supports the following image input paradigms for any given prompt:
 #
@@ -179,14 +185,9 @@ class Gemma3Processor(ProcessorMixin):
         tokenizer.add_special_tokens(tokens_to_add)
 
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-        setattr(tokenizer, "image_token_id", self.image_token_id)
         self.image_token = tokenizer.decode([self.image_token_id])
-        self.start_image_token_id = tokenizer.convert_tokens_to_ids(START_IMAGE_TOKEN)
-        setattr(tokenizer, "start_image_token_id", self.start_image_token_id)
-        self.start_image_token = tokenizer.decode([self.start_image_token_id])
-        self.end_image_token_id = tokenizer.convert_tokens_to_ids(END_IMAGE_TOKEN)
-        setattr(tokenizer, "end_image_token_id", self.end_image_token_id)
-        self.end_image_token = tokenizer.decode([self.end_image_token_id])
+        self.start_image_sequence = tokenizer.convert_tokens_to_ids([NEWLINE_TOKEN, START_IMAGE_TOKEN])
+        self.end_image_sequence = tokenizer.convert_tokens_to_ids([END_IMAGE_TOKEN, NEWLINE_TOKEN])
 
         super().__init__(
             image_processor=image_processor,
@@ -215,8 +216,11 @@ class Gemma3Processor(ProcessorMixin):
 
         if images is not None:
             batched_images = self._process_images(images=images, **output_kwargs["images_kwargs"])
-            flattened_images = self._make_flat_list_of_images(batched_images=batched_images)
-            pixel_values = self.image_processor(flattened_images, **output_kwargs["images_kwargs"])["pixel_values"]
+            batch_flattened_images = self._batch_flatten_pas_images(batched_images=batched_images)
+            pixel_values = [
+                self.image_processor(prompt_images, **output_kwargs["images_kwargs"])["pixel_values"]
+                for prompt_images in batch_flattened_images
+            ]
         else:
             batched_images = None
             pixel_values = None
@@ -224,14 +228,18 @@ class Gemma3Processor(ProcessorMixin):
         batched_input = self._process_text(text=text, batched_images=batched_images, **output_kwargs["text_kwargs"])
 
         if pixel_values is not None:
-            batched_input.update(pixel_values=pixel_values)
+            batched_input.update(
+                pixel_values=torch.tensor(pixel_values),
+                image_token_mask=batched_input["input_ids"] == self.image_token_id,
+                start_image_sequence=torch.tensor(self.start_image_sequence),
+                end_image_sequence=torch.tensor(self.end_image_sequence),
+            )
 
         return batched_input
 
     def _process_images(
         self, images: Gemma3ProcessorImageInput, **kwargs: Unpack[Gemma3ImagesKwargs]
     ) -> BatchedPanAndScannedImage:
-        # Normalize image structures
         if isinstance(images, PIL.Image.Image):
             images_lists: MutableBatchedPanAndScannedImage = [[(images, [])]]
         elif isinstance(images[0], PIL.Image.Image):
@@ -241,13 +249,7 @@ class Gemma3Processor(ProcessorMixin):
             images = cast(BatchedMultiImageInput, images)
             images_lists: MutableBatchedPanAndScannedImage = [[(i, []) for i in il] for il in images]
 
-        # if not all(len(images_lists[0]) == len(l) for l in images_lists):
-        #     raise ValueError("All elements in a batch must have the same number of images.")
-
-        if kwargs["do_pan_and_scan"]:
-            if not isinstance(images_lists[0][0], PIL.Image.Image):
-                raise ValueError("Pan and scan is only supported for `Pillow.Image.Image` inputs")
-
+        if getattr(kwargs, "do_pan_and_scan", False):
             for images_list in images_lists:
                 for image, crops in images_list:
                     crops.extend(pan_and_scan(image=image, **kwargs))
@@ -270,20 +272,37 @@ class Gemma3Processor(ProcessorMixin):
             if (bi_l := len(batched_images)) != (t_l := len(text)):
                 raise ValueError(f"Received inconsistently sized batches of images ({bi_l}) and text ({t_l}).")
 
-        inputs = self.tokenizer(text=text, **kwargs)
-        return BatchFeature(data={**inputs})
+            for prompt, images in zip(text, batched_images):
+                image_indexes = [m.start() for m in re.finditer(IMAGE_TOKEN, prompt)]
 
-    def _make_flat_list_of_images(
+                if (i_l := len(images)) != (idx_l := len(image_indexes)):
+                    raise ValueError(f"Prompt contained {idx_l} image tokens but received {i_l} images.")
+
+                # Insert additional image tokens for Pan-and-Scan crops
+                for (_, pas_images), idx in reversed(zip(images, image_indexes)):
+                    if pas_images:
+                        formatted_image_text = " ".join(
+                            [PAN_AND_SCAN_PREFIX, IMAGE_TOKEN, PAN_AND_SCAN_POSTFIX] + [IMAGE_TOKEN] * len(pas_images)
+                        )
+                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_TOKEN_LEN :]
+
+        inputs = self.tokenizer(text=text, **kwargs)
+        return BatchFeature({**inputs})
+
+    def _batch_flatten_pas_images(
         self,
         batched_images: BatchedPanAndScannedImage,
-    ) -> Sequence[PIL.Image.Image]:
-        flattened_images: list[PIL.Image.Image] = []
+    ) -> Sequence[Sequence[PIL.Image.Image]]:
+        """Converts the Sequence[tuple[Image, Sequence[Image]]] into a Sequence[Image]"""
+        batch_flattened: list[list[PIL.Image.Image]] = []
 
         for images in batched_images:
+            prompt_flattened: list[PIL.Image.Image] = []
             for image, pas_images in images:
-                flattened_images.extend([image] + pas_images)
+                prompt_flattened.extend([image] + pas_images)
+            batch_flattened.append(prompt_flattened)
 
-        return flattened_images
+        return batch_flattened
 
 
 __all__ = ["Gemma3Processor"]
