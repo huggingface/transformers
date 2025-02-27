@@ -84,8 +84,6 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         use_learnable_affine_block (`bool`, *optional*, defaults to False):
             Whether to use Learnable Affine Blocks (LAB) in the network.
             LAB adds learnable scale and bias parameters after certain operations.
-        aggregation (`str`, *optional*, defaults to se):
-            Method of feature aggregation to be used after processing the input through the convolutional layers.
     """
 
     model_type = "d_fine_resnet"
@@ -113,7 +111,6 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         stage_kernel_size=[3, 3, 5, 5],
         stage_numb_of_layers=[6, 6, 6, 6],
         use_learnable_affine_block=False,
-        aggregation="se",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -139,7 +136,6 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.stage_kernel_size = stage_kernel_size
         self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
-        self.aggregation = aggregation
 
         if not (
             len(stage_in_channels)

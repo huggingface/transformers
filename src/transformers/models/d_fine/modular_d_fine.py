@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import functools
 import math
 from typing import Any, Optional
 
@@ -696,8 +695,7 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         self.model = DFineModel(config)
         scaled_dim = round(config.layer_scale * config.hidden_size)
         num_pred = config.decoder_layers
-        self.class_embed = functools.partial(nn.Linear, config.d_model, config.num_labels)
-        self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
+        self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
                 DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.max_num_bins + 1), 3)
@@ -715,6 +713,55 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def forward(**super_kwargs):
+        """
+        ```python
+        >>> from transformers import AutoImageProcessor, DFineForObjectDetection
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("vladislavbro/dfine_x_coco")
+        >>> model = DFineForObjectDetection.from_pretrained("vladislavbro/dfine_x_coco")
+
+        >>> # prepare image for the model
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 300, 80]
+
+        >>> boxes = outputs.pred_boxes
+        >>> list(boxes.shape)
+        [1, 300, 4]
+
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+        ...     0
+        ... ]
+
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        Detected cat with confidence 0.96 [344.4865,  23.4047, 639.8372, 374.2650]
+        Detected cat with confidence 0.96 [11.7123,  53.5185, 316.6395, 472.3320]
+        Detected remote with confidence 0.95 [40.4605,  73.6995, 175.6157, 117.5686]
+        Detected sofa with confidence 0.92 [0.58968, 1.88410, 640.25000, 474.74000]
+        Detected remote with confidence 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
+        ```
+        """
+        super().forward(**super_kwargs)
 
 
 def weighting_function(max_num_bins: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
