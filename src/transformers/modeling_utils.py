@@ -4959,7 +4959,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                if is_deepspeed_zero3_enabled():
+                    error_msgs += _load_state_dict_into_zero3_model(model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers)
+                else:
+                    model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
