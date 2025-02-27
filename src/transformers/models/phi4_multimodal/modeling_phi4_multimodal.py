@@ -966,44 +966,28 @@ class Phi4MultimodalAudioConvModule(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
-        self.ln1 = nn.Linear(config.ext_pw_out_channel, config.hidden_size)
-
         padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
         self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
-
-        self.ln2 = nn.Linear(config.depthwise_seperable_out_channel, config.hidden_size)
-
         self.act = ACT2FN[config.conv_activation]
 
         self.ext_pw_conv_1d = nn.Conv1d(
             config.hidden_size,
             config.ext_pw_out_channel,
-            config.ext_pw_kernel_size,
-            1,
+            kernel_size=config.ext_pw_kernel_size,
+            stride=1,
             padding=config.ext_pw_kernel_size - 1 if config.causal else (config.ext_pw_kernel_size - 1) // 2,
         )
-        self.fix_len1 = True if config.causal and config.ext_pw_kernel_size > 1 else False
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.glu(self.layer_norm(hidden_states))
-        if self.fix_len1:
-            hidden_states = hidden_states[:, : -(self.ext_pw_kernel_size - 1), :]
-
-        hidden_states = self.ln1(hidden_states)
         hidden_states = self.dw_sep_conv_1d(hidden_states.permute([0, 2, 1]))
 
         if self.config.causal and self.kernel_size > 1:
             hidden_states = hidden_states[:, :, : -(self.kernel_size - 1)]
 
-        hidden_states = self.ln2(hidden_states.permute([0, 2, 1])).permute([0, 2, 1])
         hidden_states = self.act(hidden_states)
-
         hidden_states = self.ext_pw_conv_1d(hidden_states)
-        if self.fix_len1:
-            hidden_states = hidden_states[:, :, : -(self.ext_pw_kernel_size - 1)]
-
-        hidden_states = self.ln1(hidden_states.permute([0, 2, 1]))
         out = self.dropout(hidden_states)
         return out
 
