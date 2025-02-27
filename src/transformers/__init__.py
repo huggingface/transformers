@@ -308,6 +308,7 @@ _import_structure = {
     ],
     "models.cohere": ["CohereConfig"],
     "models.cohere2": ["Cohere2Config"],
+    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor", "AyaVisionImageProcessor"],
     "models.colpali": [
         "ColPaliConfig",
         "ColPaliProcessor",
@@ -1861,6 +1862,7 @@ else:
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
     _import_structure["models.cohere2"].extend(["Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"])
+    _import_structure["models.aya_vision"].extend(["AyaVisionPreTrainedModel", "AyaVisionModel"])
     _import_structure["models.colpali"].extend(
         [
             "ColPaliForRetrieval",
@@ -5435,6 +5437,10 @@ if TYPE_CHECKING:
     )
     from .models.cohere import CohereConfig
     from .models.cohere2 import Cohere2Config
+    from .models.aya_vision import (
+        AyaVisionConfig,
+        AyaVisionProcessor,
+    )
     from .models.colpali import (
         ColPaliConfig,
         ColPaliProcessor,
@@ -6461,6 +6467,7 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
+        from .models.aya_vision import AyaVisionImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
         from .models.mask2former import Mask2FormerImageProcessor
@@ -6981,6 +6988,11 @@ if TYPE_CHECKING:
         from .models.colpali import (
             ColPaliForRetrieval,
             ColPaliPreTrainedModel,
+        )
+        from .models.aya_vision import (
+            AyaVisionPreTrainedModel,
+            AyaVisionModel
+
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
