@@ -186,7 +186,7 @@ class CosmosVQVAEEncoderDownsample(nn.Module):
         return hidden_states
 
 
-class CosmosVQVAEEncoderUpsample(nn.Module):
+class CosmosVQVAEDecoderUpsample(nn.Module):
     def __init__(self, in_channels, temporal_up: bool = True):
         super().__init__()
         self.conv1 = (
@@ -684,7 +684,7 @@ class CosmosVQVAEUpBlock(nn.Module):
             if i_level != 0:
                 i_level_reverse = self.num_resolutions - i_level - 1
                 temporal_up = 0 < i_level_reverse < self.num_temporal_ups + 1
-                up.upsample = CosmosVQVAEEncoderUpsample(block_in, temporal_up=temporal_up)
+                up.upsample = CosmosVQVAEDecoderUpsample(block_in, temporal_up=temporal_up)
 
             self.up.insert(0, up)
 
@@ -1713,7 +1713,7 @@ class CosmosModel(CosmosPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.language_model = CosmosTextModel._from_config(config.text_config)
-        self.vqmodel = CosmosVQVAE(config.vq_config)
+        self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1797,7 +1797,6 @@ class CosmosModel(CosmosPreTrainedModel):
                 input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
             else:
                 input_ids = image_tokens
-                print(image_tokens)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
