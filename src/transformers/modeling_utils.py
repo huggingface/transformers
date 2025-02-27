@@ -865,7 +865,7 @@ def _load_state_dict_into_meta_model(
                 output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
                 distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
             else:
-                module_to_tp.load_state_dict({param_type: param[:]}, False, True)
+                module_to_tp.load_state_dict({param_type: param[:]}, strict=False, assign=True)
 
         else:
             if device_map is None:
@@ -903,8 +903,8 @@ def _load_state_dict_into_meta_model(
                     param = param[:].to(param_casting_dtype)
                 module.load_state_dict(
                     {param_type: param[:].to(param_device)},
-                    False,
-                    True,
+                    strict=False,
+                    assign=True,
                 )
             else:
                 hf_quantizer.create_quantized_param(
