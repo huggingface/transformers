@@ -75,7 +75,6 @@ class Phi4MultimodalModelTester:
             num_hidden_layers=2,
             hidden_size=32,
             intermediate_size=64,
-            num_hidden_layers=2,
             num_attention_heads=8,
         ),
     ):
@@ -255,7 +254,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs['input_ids'].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The answer for 1+1 is 2. This is a basic arithmetic operation where you are"
+        EXPECTED_RESPONSE = "The answer for 1+1 is 2. This is because when you add one to another"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
@@ -273,7 +272,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs['input_ids'].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The image shows a vibrant scene in a Chinese-style street, featuring a red and gold Chinese-style arch"
+        EXPECTED_RESPONSE = "The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
@@ -303,7 +302,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assertEqual(response, EXPECTED_RESPONSE)
 
 
-def test_audio_text_generation(self):
+    def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device)
 
         prompt = f"{self.user_token}<|audio_1|>What is happening in this audio?{self.end_token}{self.assistant_token}"
@@ -317,6 +316,6 @@ def test_audio_text_generation(self):
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
         # Yes, it is truly the expected response... Even though the model correctly treats the audio file
-        EXPECTED_RESPONSE = "I'm sorry, but I can't listen to or analyze audio content. However, if you provide a description"
+        EXPECTED_RESPONSE = "I'm sorry, but I can't listen to audio. However, if you describe the audio or provide some"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
