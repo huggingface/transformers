@@ -146,10 +146,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     def get_special_image_token_id(self):
         return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
 
-    # @property
-    # def chat_template(self):
-    #     return self.tokenizer.chat_template
-
     def _convert_images_audios_text_to_inputs(
         self, images, audios, text, padding=False, truncation=None, max_length=None, return_tensors=None
     ):
@@ -246,7 +242,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         return BatchFeature(data=data)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to GPT2Tokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -254,7 +249,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to GPT2Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
@@ -263,7 +257,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
