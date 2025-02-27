@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 from functools import lru_cache, partial
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, Union
 
@@ -149,8 +150,6 @@ class DefaultFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorInitKwa
 
 
 BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
-
-    Args:
         do_resize (`bool`, *optional*, defaults to `self.do_resize`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
@@ -189,9 +188,6 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
             Whether to convert the image to RGB."""
 
 BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
-    Preprocess an image or batch of images.
-
-    Args:
         images (`ImageInput`):
             Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
             passing in images with pixel values between 0 and 1, set `do_rescale=False`.
@@ -234,6 +230,134 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
             - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         device (`torch.device`, *optional*):
             The device to process the images on. If unset, the device is inferred from the input images."""
+
+
+def get_kwargs_dict_from_docstring(docstring, obj):
+    lines = docstring.split("\n")
+    i = 0
+    indent_kwarg = " " * 8
+    indent_desc = " " * 12
+    current_kwarg = None
+    kwargs_dict = {}
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith(indent_desc):
+            kwargs_dict[current_kwarg]["desc"].append(line.strip())
+        elif line.startswith(indent_kwarg):
+            current_kwarg = line.strip().split(" ")[0]
+            header = " ".join(line.strip().split(" ")[1:])
+
+            default = header.split("defaults to ")[-1][:-2]
+            default_name = default.strip("`").split("self.")[-1]
+            if hasattr(obj, default_name):
+                header_replaced = header.replace(default, f"`{repr(getattr(obj, default_name))}`")
+            else:
+                header_replaced = header
+
+            kwargs_dict[current_kwarg] = {
+                "header_replaced": header_replaced,
+                "header": header,  # also keep the original header for the preprocess method
+                "desc": [],
+            }
+        elif line.strip() != "":
+            raise ValueError(f"Unexpected line in docstring: {line}. Check if the indentation is correct.")
+
+        i += 1
+    return kwargs_dict
+
+
+def customize_docstrings(
+    init_header: str, custom_docstring: str = "", custom_preprocess_docstring: Optional[str] = None
+):
+    """
+    Decorator to customize the docstrings of the `__init__` and `preprocess` methods of a class.
+
+    Args:
+        init_header (`str`):
+            The header to use for the `__init__` method docstring.
+        custom_docstring (`str`, *optional*, defaults to `""`):
+            The custom docstring to use for the `__init__` method. One can provide only the docs for the arguments that
+            need to be customized. The rest of the docstring is generated from the default docstring.
+        custom_preprocess_docstring (`str`, *optional*):
+            The custom docstring to use for the `preprocess` method. If not provided, the `custom_docstring` is used
+            for the `preprocess` method as well.
+    """
+
+    def docstring_decorator(obj):
+        # Parse the base docstring, replace the defaults with the actual values from the object (for the init method)
+        base_init_kwargs = get_kwargs_dict_from_docstring(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, obj)
+        base_preprocess_kwargs = get_kwargs_dict_from_docstring(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, obj)
+
+        # Parse the given custom docstring and replace the defaults with the actual values from the object (for the init method)
+        custom_kwargs = get_kwargs_dict_from_docstring(custom_docstring, obj)
+        # If a custom_preprocess_docstring is not provided, use the given custom_docstring for the preprocess method as well
+        if custom_preprocess_docstring:
+            custom_preprocess_kwargs = get_kwargs_dict_from_docstring(custom_preprocess_docstring, obj)
+        else:
+            custom_preprocess_kwargs = custom_kwargs
+
+        # Remove the doc for unused kwargs
+        unused_kwargs = getattr(obj, "unused_kwargs", [])
+        for kwarg in unused_kwargs:
+            base_init_kwargs.pop(kwarg, None)
+            base_preprocess_kwargs.pop(kwarg, None)
+
+        # Merge the base and custom kwargs, putting the custom ones first
+        all_init_kwargs = {}
+        for kwarg, values in custom_kwargs.items():
+            if kwarg not in base_init_kwargs:
+                all_init_kwargs[kwarg] = values
+        for kwarg, values in base_init_kwargs.items():
+            # if custom_kwargs overrides the doc of a base kwarg, use the custom one
+            if kwarg in custom_kwargs:
+                all_init_kwargs[kwarg] = custom_kwargs[kwarg]
+            else:
+                all_init_kwargs[kwarg] = values
+
+        # Rebuild the docstring with the merged kwargs and the given init_header
+        formatted_header = "\n    " + init_header.strip()
+        docstring = formatted_header + "\n\n" + "    Args:\n"
+        for kwarg, values in all_init_kwargs.items():
+            docstring += f"        {kwarg} {values['header_replaced']}\n"
+            for desc in values["desc"]:
+                docstring += f"            {desc}\n"
+        obj.__doc__ = docstring
+
+        # Merge the base and custom kwargs, first putting the args of the preprocess method (usually just `images`)
+        # then the custom ones, then the base ones
+        all_preprocess_kwargs = {}
+        preprocess_args = inspect.signature(obj.preprocess).parameters
+        for arg_name in preprocess_args:
+            if arg_name == "self" or arg_name == "kwargs":
+                continue
+            # if custom_kwargs overrides the doc of an arg, use the custom one
+            if arg_name in custom_preprocess_kwargs:
+                all_preprocess_kwargs[arg_name] = custom_preprocess_kwargs[arg_name]
+            elif arg_name in base_preprocess_kwargs:
+                all_preprocess_kwargs[arg_name] = base_preprocess_kwargs[arg_name]
+        for kwarg, values in custom_preprocess_kwargs.items():
+            if kwarg not in base_preprocess_kwargs:
+                all_preprocess_kwargs[kwarg] = values
+        for kwarg, values in base_preprocess_kwargs.items():
+            # if custom_kwargs overrides the doc of a base kwarg, use the custom one
+            if kwarg in custom_preprocess_kwargs:
+                all_preprocess_kwargs[kwarg] = custom_preprocess_kwargs[kwarg]
+            else:
+                all_preprocess_kwargs[kwarg] = values
+
+        # Rebuild the docstring with the merged kwargs
+        preprocess_header = "\n    Preprocess an image or batch of images."
+        docstring = preprocess_header + "\n\n" + "    Args:\n"
+        for kwarg, values in all_preprocess_kwargs.items():
+            docstring += f"        {kwarg} {values['header']}\n"
+            for desc in values["desc"]:
+                docstring += f"            {desc}\n"
+
+        obj.preprocess.__doc__ = docstring
+
+        return obj
+
+    return docstring_decorator
 
 
 @add_start_docstrings(
