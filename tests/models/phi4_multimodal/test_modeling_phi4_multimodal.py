@@ -171,6 +171,10 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @unittest.skip(reason="This one tries to use right padding as well")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
     def test_training_gradient_checkpointing(self):
         pass
@@ -183,7 +187,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Test is broken")
+    @unittest.skip(reason="Test tries to instantiate dynamiccache with an arg")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
