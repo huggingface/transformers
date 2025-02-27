@@ -1107,7 +1107,7 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
     def __init__(self, config: Phi4MultimodalAudioConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
 
         self.encoder_embedding = Phi4MultimodalAudioMeanVarianceNormLayer(config)

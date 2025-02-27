@@ -1275,7 +1275,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
     def __init__(self, config: Phi4MultimodalAudioConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
 
         self.encoder_embedding = Phi4MultimodalAudioMeanVarianceNormLayer(config)
