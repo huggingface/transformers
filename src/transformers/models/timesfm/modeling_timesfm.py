@@ -666,6 +666,32 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TimesFmPositionalEmbedding):
             pass
 
+    def generate(self, *args, **kwargs):
+        """
+        This method is disabled for TimesFM models. TimesFM models are designed for time series forecasting and should be used
+        with the forward() method instead. For forecasting, use:
+
+        ```python
+        # For basic forecasting:
+        outputs = model(input_ts=your_time_series, input_padding=your_padding, freq=your_frequency)
+
+        # For prediction with quantiles:
+        outputs = model.forward(
+            inputs=your_time_series_list,
+            freq=your_frequencies,
+            window_size=optional_window_size,
+            future_target=optional_target,
+            forecast_context_len=optional_context_length
+        )
+        ```
+
+        See the model's documentation for more details on the forward method parameters.
+        """
+        raise NotImplementedError(
+            "The generate() method is not implemented for TimesFM models as they are designed for time series "
+            "forecasting. Please use the forward() method instead. See the docstring of this method for usage examples."
+        )
+
 
 class TimesFmModel(TimesFmPreTrainedModel):
     """Patched time-series decoder without any specific output layer."""
