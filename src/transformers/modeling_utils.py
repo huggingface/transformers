@@ -5841,17 +5841,25 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
     }
     parameter_count = defaultdict(lambda: 0)
+    allocation_factor = 1
+    if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
+        allocation_factor = 2
+
     for param_name, device in accelerator_device_map.items():
         try:
             param = model.get_parameter(param_name)
         except AttributeError:
             param = model.get_buffer(param_name)
-        parameter_count[device] += int(math.prod(param.shape) * 2)
+        # hardcoded x2 factor to improve loading in distributed scenario
+        parameter_count[device] += int(math.prod(param.shape) * allocation_factor)
 
     dtype = dtype if dtype is not None else torch.float32
     # This will kick off the caching allocator to avoid having to Malloc afterwards
+    max_memory = get_max_memory()
     for device, param_count in parameter_count.items():
-        _ = torch.empty(int(param_count), dtype=dtype, device=device, requires_grad=False)
+        # allocate only if we have enough memory
+        if max_memory[device.index] > param_count * dtype_byte_size(dtype):
+            _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
