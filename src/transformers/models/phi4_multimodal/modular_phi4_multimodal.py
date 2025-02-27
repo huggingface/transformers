@@ -326,6 +326,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
