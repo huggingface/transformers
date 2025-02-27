@@ -586,6 +586,8 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         wte=None,
     ) -> torch.FloatTensor:
         img_embeds = input_embeds
+        if img_embeds is not None:
+            img_embeds = img_embeds.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
