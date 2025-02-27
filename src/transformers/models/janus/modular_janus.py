@@ -813,6 +813,15 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
 
+    # TODO: remove this, it is a temporary measure while a more robust fix is not implemented
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if hasattr(self, "config"):
+            if hasattr(self.config, "vision_config"):
+                self.config.vision_config._attn_implementation = self.config._attn_implementation
+            if hasattr(self.config, "language_config"):
+                self.config.language_config._attn_implementation = self.config._attn_implementation
+
     def _init_weights(self, module):
         std = self.config.vision_config.initializer_range
         if isinstance(module, JanusVQVAE):
