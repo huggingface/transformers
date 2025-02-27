@@ -14,15 +14,11 @@
 # limitations under the License.
 """Fast Image processor class for BLIP."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast, customize_docstrings
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import add_start_docstrings
 
 
-@add_start_docstrings(
-    "Constructs a fast BLIP image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@customize_docstrings("Constructs a fast BLIP image processor.")
 class BlipImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
     # None values left after checking can be removed

@@ -241,9 +241,9 @@ def get_kwargs_dict_from_docstring(docstring, obj):
     kwargs_dict = {}
     while i < len(lines):
         line = lines[i]
-        if line.startswith(indent_desc):
+        if line.startswith(indent_desc) and line.strip() != "":
             kwargs_dict[current_kwarg]["desc"].append(line.strip())
-        elif line.startswith(indent_kwarg):
+        elif line.startswith(indent_kwarg) and line.strip() != "":
             current_kwarg = line.strip().split(" ")[0]
             header = " ".join(line.strip().split(" ")[1:])
 

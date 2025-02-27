@@ -14,24 +14,15 @@
 # limitations under the License.
 """Fast Image processor class for ViT."""
 
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BaseImageProcessorFast,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, customize_docstrings
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-from ...utils import (
-    add_start_docstrings,
-)
 
 
-@add_start_docstrings(
-    "Constructs a fast ViT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@customize_docstrings("Constructs a fast ViT image processor.")
 class ViTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN

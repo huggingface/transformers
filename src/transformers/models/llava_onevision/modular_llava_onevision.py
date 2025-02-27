@@ -1,20 +1,21 @@
-from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
+from transformers.models.llava_next.image_processing_llava_next_fast import (
+    LlavaNextImageProcessorFast,
+    customize_docstrings,
+)
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     PILImageResampling,
 )
-from ...utils import add_start_docstrings, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-@add_start_docstrings(
+@customize_docstrings(
     "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         image_grid_pinpoints (`List[List[int]]`, *optional*):
             A list of possible resolutions to use for processing high resolution images. The best resolution is selected
