@@ -52,7 +52,7 @@ from ...utils import TensorType, is_numba_available, logging
 
 
 if is_numba_available():
-    from ...image_transforms import fast_rescale_normalize, fast_rescale_normalize_transpose
+    from ...image_transforms import fast_rescale_normalize_transpose
 
 
 logger = logging.get_logger(__name__)
@@ -173,24 +173,24 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         image_std = np.array(image_std, dtype=np.float32)[:, np.newaxis]
         return (pixel_map - image_mean) / image_std
 
-    def fuse_rescale_normalize(
+    def fuse_preprocess(
         self,
         image: np.ndarray,
         scale: float,
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
-        input_data_format: ChannelDimension,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: ChannelDimension = None,
     ):
         mean = tuple(mean) if isinstance(mean, list) else mean
-        pixel_map = self._get_pixel_map(scale, tuple(mean), tuple(std))
-        if input_data_format == ChannelDimension.FIRST:
-            B, C, H, W = image.shape
-            fuse_ops = fast_rescale_normalize
-        elif input_data_format == ChannelDimension.LAST:
-            B, H, W, C = image.shape
-            fuse_ops = fast_rescale_normalize_transpose
-        image_out = np.empty((B, C, H, W), dtype=np.float32)
-        fuse_ops(image, image_out, pixel_map)
+        std = tuple(std) if isinstance(std, list) else std
+        pixel_map = self._get_pixel_map(scale, mean, std)
+        image_out = fast_rescale_normalize_transpose(
+            image,
+            pixel_map,
+            target_channel_dim=data_format,
+            input_channel_dim=input_data_format,
+        )
         return image_out
 
     def _preprocess(
@@ -273,10 +273,6 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         is_fuse_ops_available = is_numba_available() and data_format == ChannelDimension.FIRST
         if do_rescale and do_normalize and is_fuse_ops_available:
             if do_resize:
-                # resized_images = np.empty((len(images), resized_height, resized_width, 3), dtype=np.uint8)
-                # for idx in range(len(images)):
-                #     cv2.resize(images[idx], (resized_width, resized_height), dst=resized_images[idx], interpolation=cv2.INTER_CUBIC)
-                # images = resized_images
                 images = np.array(
                     [
                         resize(
@@ -290,7 +286,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 )
             else:
                 images = np.array(images)
-            patches = self.fuse_rescale_normalize(
+            patches = self.fuse_preprocess(
                 images, scale=rescale_factor, mean=image_mean, std=image_std, input_data_format=input_data_format
             )
         else:
