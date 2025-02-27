@@ -1732,7 +1732,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
             input_ids[
                 (input_ids >= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[0])
                 & (input_ids <= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[1])
-            ] = self.config.audio_config.audio_token_ids
+            ] = self.config.audio_config.audio_token_id
 
             image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
             non_image_position_mask = ~image_position_mask
