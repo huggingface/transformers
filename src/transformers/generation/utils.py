@@ -2160,7 +2160,6 @@ class GenerationMixin:
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         use_model_defaults: Optional[bool] = None,
         recipe: Optional[str] = None,
-        trust_remote_code: Optional[bool] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2233,12 +2232,8 @@ class GenerationMixin:
             recipe (`str`, *optional*):
                 A string containing the name of a huggingface.co repository. If provided, the custom `generate`
                 function defined in that reposity's `generate.py` file will be executed instead of the standard
-                `generate` method. This feature is intended for advanced users, and the return type may be different
-                from the standard `generate` method.
-            trust_remote_code (`bool`, *optional*):
-                Whether or not to allow for custom recipes defined on the Hub in their own files. This option
-                should only be set to `True` for repositories you trust and in which you have read the code, as it will
-                execute code present on the Hub on your local machine.
+                `generate` method. Note that the logic is for generation is entirely defined in that repository, and
+                the return type may be different from the standard `generate` method.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2262,13 +2257,6 @@ class GenerationMixin:
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
         if recipe is not None:
-            if trust_remote_code is not True:
-                raise ValueError(
-                    "To run a generation recipe from the Hub, you must set `trust_remote_code=True`. This will allow "
-                    "the recipe to run arbitrary code on your machine. Only run recipes from sources you trust. You "
-                    f"can inspect the recipe code in https://hf.co/{recipe}, in the `generate.py` file."
-                )
-
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
             # methods from `GenerationMixin` through `model`.
