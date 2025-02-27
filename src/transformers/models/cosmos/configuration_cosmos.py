@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
+from ..auto import AutoConfig
 
 
 class CosmosVQVAEConfig(PretrainedConfig):
@@ -306,12 +307,13 @@ class CosmosConfig(PretrainedConfig):
 
     model_type = "cosmos"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig}
+    sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig, "text_encoder": AutoConfig}
 
     def __init__(
         self,
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
+        text_encoder: Union[Dict, AutoConfig] = None,
         image_token_id: int = 64000,
         **kwargs,
     ):
@@ -324,6 +326,11 @@ class CosmosConfig(PretrainedConfig):
             text_config = CosmosTextConfig()
         elif isinstance(text_config, dict):
             text_config = CosmosTextConfig(**text_config)
+
+        if text_encoder is None:
+            text_encoder = AutoConfig.for_model("t5")
+        elif isinstance(text_encoder, dict):
+            text_encoder = AutoConfig.for_model(**text_encoder)
 
         self.vq_config = vq_config
         self.text_config = text_config

@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -36,6 +36,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ..auto import AutoModel
 from .configuration_cosmos import CosmosConfig, CosmosTextConfig, CosmosVQVAEConfig
 
 
@@ -1084,7 +1085,7 @@ def eager_attention_forward(
 class CosmosTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: CosmosTextConfig, layer_idx: int):
+    def __init__(self, config: CosmosTextConfig, layer_idx: int, is_self_attention: bool = True):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1093,19 +1094,16 @@ class CosmosTextAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+        kv_hidden_dim = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
 
         self.q_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            kv_hidden_dim.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.k_proj = nn.Linear(kv_hidden_dim, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(kv_hidden_dim, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
@@ -1115,27 +1113,51 @@ class CosmosTextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
+        key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        is_cross_attention = key_value_states is not None
+        current_states = key_value_states if is_cross_attention else hidden_states
+
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
         query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
+            is_updated = past_key_value.is_updated.get(self.layer_idx)
+            if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
+                past_key_value = past_key_value.cross_attention_cache
+            else:
+                past_key_value = past_key_value.self_attention_cache
 
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if is_cross_attention and past_key_value is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
+        else:
+            key_states = self.k_proj(current_states).view(hidden_shape).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(hidden_shape).transpose(1, 2)
+
+            key_states = self.k_norm(key_states)
+            if past_key_value is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
+
+        if not is_cross_attention:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1167,8 +1189,13 @@ class CosmosTextDecoderLayer(nn.Module):
     def __init__(self, config: CosmosTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.config = config
 
         self.self_attn = CosmosTextAttention(config=config, layer_idx=layer_idx)
+
+        if config.insert_cross_attn:
+            self.cross_attn = CosmosTextAttention(config=config, layer_idx=layer_idx, is_self_attention=False)
+            self.cross_attn_prelayernorm = CosmosTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.mlp = CosmosTextMLP(config)
         self.input_layernorm = CosmosTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1177,13 +1204,15 @@ class CosmosTextDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -1203,6 +1232,21 @@ class CosmosTextDecoderLayer(nn.Module):
             **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        if self.config.insert_cross_attn:
+            hidden_states = self.cross_attn_prelayernorm(hidden_states)
+
+            hidden_states, self_attn_weights = self.self_attn(
+                hidden_states=hidden_states,
+                key_value_states=key_value_states,
+                attention_mask=cross_attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                **kwargs,
+            )
+            hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
@@ -1712,6 +1756,7 @@ class CosmosModel(CosmosPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        self.text_encoder = AutoModel.from_config(config.text_encoder)
         self.language_model = CosmosTextModel._from_config(config.text_config)
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
 
