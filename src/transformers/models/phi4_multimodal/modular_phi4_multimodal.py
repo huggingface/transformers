@@ -591,8 +591,8 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         input_ids = input_ids.view(-1, input_shape[-1])
 
         with torch.no_grad():
-            positions = torch.nonzero(input_ids == self.config.image_token_id, as_tuple=False)
-            positions_tuple = torch.nonzero(input_ids == self.config.image_token_id, as_tuple=True)
+            positions = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=False)
+            positions_tuple = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=True)
 
         select = False
 
@@ -1348,8 +1348,8 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         input_ids = input_ids.view(-1, input_shape[-1])
 
         with torch.no_grad():
-            positions = torch.nonzero(input_ids == self.config.audio_token_id, as_tuple=False)
-            positions_tuple = torch.nonzero(input_ids == self.config.audio_token_id, as_tuple=True)
+            positions = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=False)
+            positions_tuple = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=True)
 
         target_device = self.audio_projection[audio_projection_mode][0].bias.device
         target_dtype = self.audio_projection[audio_projection_mode][0].bias.dtype
