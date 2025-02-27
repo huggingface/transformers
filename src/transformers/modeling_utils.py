@@ -812,7 +812,9 @@ def _load_state_dict_into_meta_model(
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
-        param = file_pointer.get_slice(serialized_param_name) if is_safetensors else bin_state_dict[serialized_param_name]
+        param = (
+            file_pointer.get_slice(serialized_param_name) if is_safetensors else bin_state_dict[serialized_param_name]
+        )
         # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
         param_casting_dtype = None
@@ -860,12 +862,8 @@ def _load_state_dict_into_meta_model(
                 if isinstance(module_to_tp.weight, nn.Parameter):
                     local_parameter = torch.nn.Parameter(local_parameter)
                 module_to_tp.weight = local_parameter
-                input_fn = partial(
-                    tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
-                )
-                output_fn = partial(
-                    tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output
-                )
+                input_fn = partial(tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts)
+                output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
                 distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
             else:
                 module_to_tp.load_state_dict({param_type: param[:]}, False, True)
