@@ -119,8 +119,9 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
+|                        [D-FINE](model_doc/d_fine)                        |       ✅        |         ❌         |      ❌      |
+|                 [D-FINE-ResNet](model_doc/d_fine_resnet)                 |       ✅        |         ❌         |      ❌      |
 |                      [DAB-DETR](model_doc/dab-detr)                      |       ✅        |         ❌         |      ❌      |
-|                          [D-FINE](model_doc/d_fine)                      |       ✅        |         ❌         |      ❌      |
 |                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
