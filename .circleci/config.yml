@@ -9,7 +9,7 @@ parameters:
         default: false
 
 jobs:
-    # Ensure running with CircleCI/huggingface
+    # Ensure running with CircleCI/huggingfaceccceee
     check_circleci_user:
         docker:
             - image: python:3.10-slim
