@@ -878,8 +878,9 @@ def _load_state_dict_into_meta_model(
                     raise ValueError(f"{fixed_param_name} doesn't have any device set.")
                 param_device = device_map[module_name]
 
-            if param_device == "disk" and not is_safetensors:
-                offload_index = offload_weight(param[:], fixed_param_name, offload_folder, offload_index)
+            if param_device == "disk":
+                if not is_safetensors:
+                    offload_index = offload_weight(param[:], fixed_param_name, offload_folder, offload_index)
             elif param_device == "cpu" and state_dict_index is not None:
                 state_dict_index = offload_weight(param[:], fixed_param_name, state_dict_folder, state_dict_index)
             elif (
