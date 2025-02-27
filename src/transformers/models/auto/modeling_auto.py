@@ -250,7 +250,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("siglip", "SiglipModel"),
+        ("siglip2", "Siglip2Model"),
         ("siglip_vision_model", "SiglipVisionModel"),
+        ("smolvlm", "SmolVLMModel"),
+        ("smolvlm_vision", "SmolVLMVisionTransformer"),
         ("speech_to_text", "Speech2TextModel"),
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
@@ -721,6 +724,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("siglip", "SiglipForImageClassification"),
+        ("siglip2", "Siglip2ForImageClassification"),
         ("swiftformer", "SwiftFormerForImageClassification"),
         ("swin", "SwinForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
@@ -837,6 +841,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("pixtral", "LlavaForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
         ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
+        ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
@@ -1402,6 +1407,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
         ("siglip", "SiglipModel"),
+        ("siglip2", "Siglip2Model"),
     ]
 )
 

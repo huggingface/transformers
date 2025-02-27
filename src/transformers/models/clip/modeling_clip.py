@@ -1394,10 +1394,9 @@ class CLIPModel(CLIPPreTrainedModel):
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * logit_scale.to(
-            text_embeds.device
-        )
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
+        logits_per_text = logits_per_text * self.logit_scale.exp().to(text_embeds.device)
+
         logits_per_image = logits_per_text.t()
 
         loss = None
