@@ -17,7 +17,6 @@ Processor class for Phi4Multimodal
 """
 
 import re
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -41,13 +40,6 @@ _IMAGE_SPECIAL_TOKEN = "<|endoftext10|>"
 _AUDIO_SPECIAL_TOKEN = "<|endoftext11|>"
 _IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it (in `tokenizer_config.json`)
 _AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
-
-
-class InputMode(Enum):
-    LANGUAGE = 0
-    VISION = 1
-    SPEECH = 2
-    VISION_SPEECH = 3
 
 
 AudioInput = Tuple[Union[np.ndarray, torch.Tensor], int]
@@ -144,17 +136,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             max_length=max_length,
             return_tensors=return_tensors,
         )
-
-        # idenfity the input mode
-        if len(image_inputs) > 0 and len(audio_inputs) > 0:
-            input_mode = InputMode.VISION_SPEECH
-        elif len(image_inputs) > 0:
-            input_mode = InputMode.VISION
-        elif len(audio_inputs) > 0:
-            input_mode = InputMode.SPEECH
-        else:
-            input_mode = InputMode.LANGUAGE
-        inputs["input_mode"] = torch.tensor([input_mode.value], dtype=torch.long)
 
         return inputs
 

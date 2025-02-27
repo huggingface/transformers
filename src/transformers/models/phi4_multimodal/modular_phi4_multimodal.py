@@ -1,5 +1,4 @@
 import math
-from enum import Enum
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -58,7 +57,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         use_hd_transform: bool = True,
         crop_size: int = 448,
         hd_transform_order: str = "sub_glb",
-        projection_cls: str = "mlp",
+        image_token_id: int = 200010,
         **kwargs,
     ):
         super().__init__(
@@ -77,7 +76,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         self.use_hd_transform = use_hd_transform
         self.crop_size = crop_size
         self.hd_transform_order = hd_transform_order
-        self.projection_cls = projection_cls
+        self.image_token_id = image_token_id
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
@@ -110,7 +109,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         nemo_activation: str = "relu",
         nemo_conv_channels: int = 1024,
         downsample_rate: int = 1,
-        projection_cls: str = "mlp",
+        audio_token_id: int = 200011,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -139,7 +138,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.nemo_activation = nemo_activation
         self.nemo_conv_channels = nemo_conv_channels
         self.downsample_rate = downsample_rate
-        self.projection_cls = projection_cls
+        self.audio_token_id = audio_token_id
 
 
 class Phi4MultimodalConfig(Phi3Config):
@@ -215,8 +214,6 @@ class Phi4MultimodalConfig(Phi3Config):
 
 
 # Special token ids
-_IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it (in `tokenizer_config.json`)
-_AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
 _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE = [-9999, -1]  # For backward compatibility
 _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE = [float("-inf"), -10000]  # For backward compatibility
 
@@ -225,7 +222,7 @@ class Phi4MultimodalVisionMLP(SiglipMLP):
     pass
 
 
-def vision_eager_attention_forward(
+def simple_eager_attention_forward(
     module: nn.Module,
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -255,11 +252,6 @@ class Phi4MultimodalVisionAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
         self.scaling = self.head_dim**-0.5
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
@@ -283,7 +275,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = vision_eager_attention_forward
+        attention_interface: Callable = simple_eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -352,6 +344,10 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             nn.init.normal_(module.fc2.weight)
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, Phi4MultimodalVisionMultiheadAttentionPoolingHead):
+            nn.init.normal_(module.probe.data)
+            nn.init.normal_(module.attention.in_proj_weight.data)
+            nn.init.zeros_(module.attention.in_proj_bias.data)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -365,9 +361,8 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         nn.Module.__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
         self.patch_size = config.patch_size
+        self.num_patches_per_side = config.image_size // self.patch_size
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
@@ -376,11 +371,7 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
             stride=self.patch_size,
             padding="valid",
         )
-
-        self.num_patches_per_side = self.image_size // self.patch_size
-        self.num_patches = self.num_patches_per_side**2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.position_embedding = nn.Embedding(self.num_patches_per_side**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
         batch_size = pixel_values.size(0)
@@ -391,13 +382,7 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
         max_im_h, max_im_w = pixel_values.size(2), pixel_values.size(3)
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
         boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-        position_ids = torch.full(
-            size=(
-                batch_size,
-                max_nb_patches_h * max_nb_patches_w,
-            ),
-            fill_value=0,
-        )
+        position_ids = torch.full((batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
 
         for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
             nb_patches_h = p_attn_mask[:, 0].sum()
@@ -445,11 +430,10 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__(config)
         self.config = config
-        embed_dim = config.hidden_size
 
         self.embeddings = Phi4MultimodalVisionEmbeddings(config)
         self.encoder = Phi4MultimodalVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.head = Phi4MultimodalVisionMultiheadAttentionPoolingHead(config)
 
         # Initialize weights and apply final processing
@@ -536,7 +520,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         hidden_size = config.hidden_size
         self.drop = nn.Dropout(config.embd_pdrop)
 
-        self.img_processor = Phi4MultimodalVisionModel(config.vision_config)
+        self.img_processor = Phi4MultimodalVisionModel._from_config(config.vision_config)
 
         pe_weight = self.img_processor.embeddings.position_embedding.weight
         L, D = pe_weight.size()
@@ -546,13 +530,10 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             self.img_processor_padding = nn.ReflectionPad2d((0, 1, 0, 1))
             H += 1
         self.num_img_tokens = (H // 2) ** 2
-        self.base_feat_height_target = H
 
         self.image_dim_out = D
-        self.img_sizes = None
         self.image_attention_mask = None
 
-        # global_gn and sub_gn for hd transform, serves as line separator
         self.use_hd_transform = config.vision_config.use_hd_transform
         self.hd_transform_order = config.vision_config.hd_transform_order
         self.crop_size = config.vision_config.crop_size
@@ -560,43 +541,20 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         # image token compression
         self.image_token_compression = nn.AvgPool2d(kernel_size=2, stride=2)
         self.base_feat_height_reduction = 1
-        self.base_feat_height_target = self.base_feat_height_target // 2
 
         if self.use_hd_transform:
             # 1024 * 4, merge spatial to channel dimension
-            self.glb_GN = nn.Parameter(torch.zeros([1, 1, self.image_dim_out * self.base_feat_height_reduction**2]))
-            self.sub_GN = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out * self.base_feat_height_reduction**2]))
+            self.glb_GN = nn.Parameter(torch.zeros([1, 1, self.image_dim_out]))
+            self.sub_GN = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out]))
 
-        projection_cls = config.vision_config.projection_cls
-        if projection_cls == "linear":
-            self.img_projection = nn.Linear(self.image_dim_out, hidden_size)
-        elif projection_cls == "mlp":
-            dim_projection = hidden_size
-            first_dim = (
-                self.image_dim_out * self.base_feat_height_reduction**2
-                if self.use_hd_transform
-                else self.image_dim_out
-            )
-            layers = [nn.Linear(first_dim, dim_projection)]
-            layers.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
-            self.img_projection = nn.Sequential(*layers)
-        else:
-            raise NotImplementedError(f"projection_cls = {projection_cls}, not implemented")
-
-        self.vocab_size = config.vocab_size
-        self.img_features = None
+        dim_projection = hidden_size
+        self.img_projection = nn.Sequential(
+            nn.Linear(self.image_dim_out, dim_projection),
+            nn.GELU(),
+            nn.Linear(dim_projection, dim_projection),
+        )
 
         self.layer_idx = -2
-        self.type_feature = "patch"
-
-    def set_img_features(self, img_features: torch.FloatTensor) -> None:
-        self.img_features = img_features
-
-    def set_img_sizes(self, img_sizes: torch.LongTensor) -> None:
-        self.img_sizes = img_sizes
-
-    def set_img_attn_mask(self, image_attention_mask: torch.FloatTensor) -> None:
-        self.image_attention_mask = image_attention_mask
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
         img_processor_output = self.img_processor(
@@ -619,68 +577,38 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         return patch_feature
 
     def forward(
-        self, input_ids: torch.LongTensor, input_embeds: torch.FloatTensor, image_sizes=None, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        input_embeds: torch.FloatTensor,
+        img_sizes=None,
+        image_attention_mask=None,
+        wte=None,
     ) -> torch.FloatTensor:
         img_embeds = input_embeds
-        img_sizes = image_sizes
 
-        if self.img_features is not None:
-            img_embeds = self.img_features.clone()
-            self.img_features = None
-
-        if self.img_sizes is not None:
-            img_sizes = self.img_sizes
-
-        dtype = self.img_processor.embeddings.patch_embedding.weight.dtype
-        if img_embeds is not None:
-            img_embeds = img_embeds.to(dtype)
-
-        if self.image_attention_mask is not None:
-            image_attention_mask = self.image_attention_mask.clone()
-            self.image_attention_mask = None
-        elif "image_attention_mask" in kwargs:
-            image_attention_mask = kwargs["image_attention_mask"]
-        else:
-            image_attention_mask = None
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
         with torch.no_grad():
-            positions = torch.nonzero(input_ids == _IMAGE_SPECIAL_TOKEN_ID, as_tuple=False)
-            positions_tuple = torch.nonzero(input_ids == _IMAGE_SPECIAL_TOKEN_ID, as_tuple=True)
+            positions = torch.nonzero(input_ids == self.config.image_token_id, as_tuple=False)
+            positions_tuple = torch.nonzero(input_ids == self.config.image_token_id, as_tuple=True)
 
-        fake_image_forward = False
         select = False
 
-        if isinstance(self.img_projection, nn.Sequential):
-            target_device = self.img_projection[0].bias.device
-            target_dtype = self.img_projection[0].bias.dtype
-        else:  # It's a single nn.Linear layer
-            target_device = self.img_projection.bias.device
-            target_dtype = self.img_projection.bias.dtype
+        target_device = self.img_projection[0].bias.device
+        target_dtype = self.img_projection[0].bias.dtype
 
         if len(positions.tolist()) > 0:
             select = True
-            assert (
-                img_embeds.ndim == 5
-            ), f"(branch 1) img_embeds size: {img_embeds.size()}, expect 5D tensor for hd transform"
-
             bs = img_embeds.shape[0]
-            # Nx(HW)xC
+
             img_features = self.get_img_features(
                 img_embeds.flatten(0, 1),
                 attention_mask=image_attention_mask.type(torch.BoolTensor).flatten(0, 1).to(target_device),
             )
 
-            base_feat_height_target = self.base_feat_height_target
             base_resolution = self.crop_size
-            base_feat_height_reduction = self.base_feat_height_reduction
-
             base_feat_height = base_feat_width = int(np.sqrt(img_features.shape[1]))
-
-            assert (
-                base_feat_height == base_feat_height_target and base_feat_width == base_feat_height_target
-            ), f"base_feat_height: {base_feat_height}, base_feat_width: {base_feat_width}, expect {base_feat_height_target} features for hd transform"
 
             # bs x max_num_crops x (24x24) x C
             img_features = img_features.view(bs, -1, base_feat_height * base_feat_width, self.image_dim_out)
@@ -703,88 +631,39 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
                 # 1 x 12 x 12 x 4096
                 glb_img = (
-                    global_img_feature.reshape(1, H, H, C)
-                    .reshape(
-                        1,
-                        H // base_feat_height_reduction,
-                        base_feat_height_reduction,
-                        H // base_feat_height_reduction,
-                        base_feat_height_reduction,
-                        C,
-                    )
+                    global_img_feature.reshape(1, H, 1, H, 1, C)
                     .contiguous()
                     .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(
-                        1,
-                        H // base_feat_height_reduction,
-                        H // base_feat_height_reduction,
-                        base_feat_height_reduction * base_feat_height_reduction * C,
-                    )
+                    .reshape(1, H, H, C)
                     .contiguous()
                 )
-                temp_glb_GN = self.sub_GN.repeat(1, H // base_feat_height_reduction, 1, 1)
+                temp_glb_GN = self.sub_GN.repeat(1, H, 1, 1)
 
                 # 1 x 156 x 4096
-                glb_img = torch.cat([glb_img, temp_glb_GN], dim=2).reshape(
-                    1, -1, base_feat_height_reduction * base_feat_height_reduction * C
-                )
+                glb_img = torch.cat([glb_img, temp_glb_GN], dim=2).reshape(1, -1, C)
 
-                # (max_num_crops-1) x (12x12) x C
                 sub_img = img_features[_bs, 1:]
-                # 16x574x1024
-                # get rid of padding sub_img
                 sub_img = sub_img[:B_]
 
-                # (num_crops, 12, 2, 12, 2, 1024) -> (num_crops, 12, 12, 2, 2, 1024) -> (num_crops, 12*12, 4*1024)
                 sub_img = (
-                    sub_img.reshape(B_, H, H, C)
-                    .reshape(
-                        B_,
-                        H // base_feat_height_reduction,
-                        base_feat_height_reduction,
-                        H // base_feat_height_reduction,
-                        base_feat_height_reduction,
-                        C,
-                    )
+                    sub_img.reshape(B_, H, 1, H, 1, C)
                     .contiguous()
                     .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(B_, -1, base_feat_height_reduction * base_feat_height_reduction * C)
+                    .reshape(B_, -1, C)
                     .contiguous()
                 )
                 sub_img = (
-                    sub_img.reshape(
-                        1,
-                        h,
-                        w,
-                        base_feat_height // base_feat_height_reduction,
-                        base_feat_width // base_feat_height_reduction,
-                        -1,
-                    )
+                    sub_img.reshape(1, h, w, base_feat_height, base_feat_width, -1)
                     .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(
-                        1,
-                        h * base_feat_height // base_feat_height_reduction,
-                        w * base_feat_width // base_feat_height_reduction,
-                        base_feat_height_reduction * base_feat_height_reduction * C,
-                    )
+                    .reshape(1, h * base_feat_height, w * base_feat_width, C)
                 )
 
                 if image_attention_mask is not None and len(image_attention_mask) > 0:
                     reshaped_image_attention_mask = (
                         image_attention_mask[_bs, 1 : B_ + 1, 0::2, 0::2]
-                        .reshape(
-                            1,
-                            h,
-                            w,
-                            base_feat_height // base_feat_height_reduction,
-                            base_feat_width // base_feat_height_reduction,
-                        )
+                        .reshape(1, h, w, base_feat_height, base_feat_width)
                         .permute(0, 1, 3, 2, 4)
-                        .reshape(
-                            1,
-                            h * base_feat_height // base_feat_height_reduction,
-                            w * base_feat_width // base_feat_height_reduction,
-                        )
+                        .reshape(1, h * base_feat_height, w * base_feat_width)
                     )
                     useful_height = int(reshaped_image_attention_mask[0, :, 0].sum().item())
                     useful_width = int(reshaped_image_attention_mask[0, 0, :].sum().item())
@@ -793,69 +672,31 @@ class Phi4MultimodalImageEmbedding(nn.Module):
                     temp_len = (
                         int(image_attention_mask[_bs, : B_ + 1, 0::2, 0::2].sum().item())
                         + (useful_height + 1)
-                        + base_feat_height // base_feat_height_reduction
+                        + base_feat_height
                     )
                 else:
-                    temp_sub_GN = self.sub_GN.repeat(1, h * base_feat_height // base_feat_height_reduction, 1, 1)
-                    temp_len = int(
-                        (h * w + 1) * self.num_img_tokens
-                        + 1
-                        + (h + 1) * base_feat_height // base_feat_height_reduction
-                    )
+                    temp_sub_GN = self.sub_GN.repeat(1, h * base_feat_height, 1, 1)
+                    temp_len = int((h * w + 1) * self.num_img_tokens + 1 + (h + 1) * base_feat_height)
 
-                sub_img = torch.cat([sub_img, temp_sub_GN], dim=2).reshape(
-                    1, -1, base_feat_height_reduction * base_feat_height_reduction * C
-                )
-                # (1, num_img_tokens, 1024*4)
+                sub_img = torch.cat([sub_img, temp_sub_GN], dim=2).reshape(1, -1, C)
 
                 # glb + sub
                 if self.hd_transform_order == "glb_sub":
                     output_imgs.append(torch.cat([glb_img, self.glb_GN, sub_img], dim=1))
                 elif self.hd_transform_order == "sub_glb":
                     output_imgs.append(torch.cat([sub_img, self.glb_GN, glb_img], dim=1))
-                else:
-                    raise NotImplementedError(f"hd_transform_order = {self.hd_transform_order}, not implemented")
 
-                # temp_len = int((h*w+1)*144 + 1 + (h+1)*12)
-                assert (
-                    temp_len == output_imgs[-1].shape[1]
-                ), f"temp_len: {temp_len}, output_imgs[-1].shape[1]: {output_imgs[-1].shape[1]}"
                 output_len.append(temp_len)
 
             img_set_tensor = []
             for _output_img in output_imgs:
                 img_feature_proj = self.img_projection(_output_img.to(target_device).to(target_dtype))
                 img_set_tensor.append(img_feature_proj)
-            # logger.info(f'img_embeds size: {img_embeds.size()}, image sizes: {img_sizes} loading time {datetime.now() - start_time}')
-            # assert sum(num_img_tokens) == len(g_values), f'(branch 1) sum(num_img_tokens): {sum(num_img_tokens)}, g_values size: {len(g_values)}, g_values {g_values}'
 
-        else:
-            # create a fake image tensor
-            if self.training:
-                img_embeds = torch.zeros(
-                    1, 3, self.crop_size, self.crop_size, dtype=target_dtype, device=input_ids.device
-                )
-
-                tt = self.get_img_features(img_embeds).to(target_device).to(target_dtype).reshape(-1, 1024)
-                if self.use_hd_transform:
-                    img_set_tensor = self.img_projection(
-                        tt.reshape(-1, self.image_dim_out * self.base_feat_height_reduction**2)
-                        * self.glb_GN[0]
-                        * self.sub_GN[0, 0]
-                    )
-                else:
-                    img_set_tensor = self.img_projection(tt)  # adapted visual features.
-                fake_image_forward = True
-
-        # we use the token embedding layer from the huggingface model, this is REQUIRED to make sure we are using the loaded weights.
-        hidden_states = kwargs["wte"](input_ids)
+        # we use the token embedding layer from the base model
+        hidden_states = wte(input_ids)
 
         if select:
-            # img_set_tensor: a list of tensors, each tensor has shape (1, N_tokens, C)
-            assert all(
-                _img_set_tensor.shape[0] == 1 for _img_set_tensor in img_set_tensor
-            ), "img_set_tensor should have shape (1, N_tokens, C)"
-            # Shape: (merged_N_tokens, C)
             merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
             merged_img_set_tensor = merged_img_set_tensor.to(hidden_states.dtype).to(hidden_states.device)
             # Temporarily disable autocast to avoid issue on bf16 tensors
@@ -865,11 +706,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
                     indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
                 )
             hidden_states = new_hidden_states
-
-        if fake_image_forward and self.training:
-            hidden_states = (
-                hidden_states + (0 * img_set_tensor[0].to(hidden_states.dtype).to(hidden_states.device)).sum()
-            )
 
         if self.drop is not None:
             hidden_states = self.drop(hidden_states)
@@ -885,8 +721,6 @@ class Phi4MultimodalAudioMLP(nn.Module):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.act_fn = ACT2FN[config.activation]
-        # ALL AFTER THIS WAS INSIDE A nn.Sequntial CALLED `net` -> KEY CONVERSION
-        # gate_up_proj was additionally inside a GLULinear module with `linear` name inside
         self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, config.bias_in_glu)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -900,29 +734,6 @@ class Phi4MultimodalAudioMLP(nn.Module):
         out = self.dropout(hidden_states)
 
         return out
-
-
-def audio_eager_attention_forward(
-    module: nn.Module,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class Phi4MultimodalAudioAttention(nn.Module):
@@ -942,7 +753,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        mask: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         relative_attention_bias: Optional[torch.Tensor] = None,
         **kwargs,
     ):
@@ -953,15 +764,12 @@ class Phi4MultimodalAudioAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_mask = None
-        if mask is not None:
-            mask = mask.unsqueeze(1)
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(1)
             if relative_attention_bias is not None:
-                attention_mask = mask + relative_attention_bias
-            else:
-                attention_mask = mask
+                attention_mask = attention_mask + relative_attention_bias
 
-        attention_interface: Callable = audio_eager_attention_forward
+        attention_interface: Callable = simple_eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -1054,15 +862,16 @@ class Phi4MultimodalAudioConvModule(nn.Module):
             if config.hidden_size != config.ext_pw_out_channel
             else nn.Identity()
         )
-        self.apply_ln1 = not isinstance(self.ln1, nn.Identity)
 
         padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
         self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
 
-        if config.hidden_size != config.depthwise_seperable_out_channel:
-            self.ln2 = nn.Linear(config.depthwise_seperable_out_channel, config.hidden_size)
-        if config.batch_norm:
-            self.bn_layer = nn.BatchNorm1d(config.hidden_size)
+        self.ln2 = (
+            nn.Linear(config.depthwise_seperable_out_channel, config.hidden_size)
+            if config.hidden_size != config.depthwise_seperable_out_channel
+            else nn.Identity()
+        )
+        self.bn_layer = nn.BatchNorm1d(config.hidden_size) if config.batch_norm else nn.Identity()
 
         self.act = ACT2FN[config.conv_activation]
 
@@ -1076,38 +885,28 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         self.fix_len1 = True if config.causal and config.ext_pw_kernel_size > 1 else False
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, x):
-        x = self.layer_norm(x)
-        x = self.glu(x)
-        if self.config.causal and self.ext_pw_kernel_size > 1:
-            x = x[:, : -(self.ext_pw_kernel_size - 1), :]
-        x = self.ln1(x)
-
-        x = x.permute([0, 2, 1])
-
-        x = self.dw_sep_conv_1d(x)
-        if self.config.causal and self.kernel_size > 1:
-            x = x[:, :, : -(self.kernel_size - 1)]
-        if hasattr(self, "ln2"):
-            x = x.permute([0, 2, 1])
-            x = self.ln2(x)
-            x = x.permute([0, 2, 1])
-        if self.batch_norm:
-            x = self.bn_layer(x)
-        x = self.act(x)
-
-        x = self.ext_pw_conv_1d(x)
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.glu(self.layer_norm(hidden_states))
         if self.fix_len1:
-            x = x[:, :, : -(self.ext_pw_kernel_size - 1)]
+            hidden_states = hidden_states[:, : -(self.ext_pw_kernel_size - 1), :]
 
-        if self.apply_ln1:
-            x = x.permute([0, 2, 1])
-            x = self.ln1(x)
-            x = x.permute([0, 2, 1])
+        hidden_states = self.ln1(hidden_states)
+        hidden_states = self.dw_sep_conv_1d(hidden_states.permute([0, 2, 1]))
 
-        x = x.permute([0, 2, 1])
-        x = self.dropout(x)
-        return x
+        if self.config.causal and self.kernel_size > 1:
+            hidden_states = hidden_states[:, :, : -(self.kernel_size - 1)]
+
+        hidden_states = self.ln2(hidden_states.permute([0, 2, 1])).permute([0, 2, 1])
+        hidden_states = self.bn_layer(hidden_states)
+        hidden_states = self.act(hidden_states)
+
+        hidden_states = self.ext_pw_conv_1d(hidden_states)
+        if self.fix_len1:
+            hidden_states = hidden_states[:, :, : -(self.ext_pw_kernel_size - 1)]
+
+        hidden_states = self.ln1(hidden_states.permute([0, 2, 1]))
+        out = self.dropout(hidden_states)
+        return out
 
 
 class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
@@ -1123,34 +922,18 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
 
     def forward(
         self,
-        x,
-        mask,
+        hidden_states: torch.Tensor,
+        mask: Optional[torch.Tensor],
         relative_attention_bias: Optional[torch.Tensor] = None,
     ):
-        """ConformerEncoder forward.
+        hidden_states = hidden_states + 0.5 * self.feed_forward_in(hidden_states)
+        hidden_states = self.layer_norm_att(hidden_states)
 
-        Args:
-            x: torch.Tensor
-                input feature of shape (batch, max_time_in, size)
-            pos_k: torch.Tensor
-                positional key embedding.
-            mask: torch.Tensor
-                mask for x (batch, max_time_in)
-            relative_attention_bias: Optional[torch.Tensor]
-                bias added to attention logits w.r.t. relative positions (1, n_head, time1, time2)
-        """
-        x = x + 0.5 * self.feed_forward_in(x)
-        norm_x = self.layer_norm_att(x)
+        hidden_states = hidden_states + self.self_attn(hidden_states, mask, relative_attention_bias)
+        hidden_states = hidden_states + self.conv(hidden_states)
+        hidden_states = hidden_states + 0.5 * self.feed_forward_out(hidden_states)
 
-        x = x + self.self_attn(
-            norm_x,
-            mask,
-            relative_attention_bias=relative_attention_bias,
-        )
-        x = x + self.conv(x)
-        x = x + 0.5 * self.feed_forward_out(x)
-
-        out = self.layer_norm(x)
+        out = self.layer_norm(hidden_states)
 
         return out
 
@@ -1203,6 +986,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
             )
             layers.append(self.act_fn)
 
+        # Aggregate the layers
         self.conv = torch.nn.Sequential(*layers)
 
         in_length = torch.tensor(config.input_size, dtype=torch.float, device="cpu")
@@ -1216,41 +1000,25 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
         )
         self.out = torch.nn.Linear(conv_channels * int(out_length), config.hidden_size)
 
-    def forward(self, x, mask):
-        """
-        Forward method for NeMo subsampling.
-
-        Args:
-            x[Batch, Time, Filters]: torch.Tensor
-                input tensor
-            x_mask: torch.Tensor
-                input mask
-
-        Returns:
-            x: torch.Tensor
-                Resulting tensor from subsampling (B, T // time_reduction_factor, feat_out)
-            pad_mask: torch.Tensor
-                tensor of padded hidden state sequences (B, 1, T // time_reduction_factor)
-        """
+    def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor]):
         # Unsqueeze Channel Axis
-        x = x.unsqueeze(1)
+        hidden_states = hidden_states.unsqueeze(1)
 
-        x = self.conv(x)
+        hidden_states = self.conv(hidden_states)
 
         # Flatten Channel and Frequency Axes
-        b, c, t, f = x.size()
-        x = self.out(x.transpose(1, 2).reshape(b, t, -1))
+        b, _, t, _ = hidden_states.size()
+        hidden_states = self.out(hidden_states.transpose(1, 2).reshape(b, t, -1))
 
         if mask is None:
-            return x, None
+            return hidden_states, None
 
-        max_audio_length = x.shape[1]
+        max_audio_length = hidden_states.shape[1]
         feature_lens = mask.sum(1)
         padding_length = torch.ceil(feature_lens / self.subsampling_factor)
-        pad_mask = torch.arange(0, max_audio_length, device=x.device).expand(
-            padding_length.size(0), -1
-        ) < padding_length.unsqueeze(1)
-        return x, pad_mask.unsqueeze(1)
+        arange_ = torch.arange(0, max_audio_length, device=hidden_states.device)
+        pad_mask = arange_.expand(padding_length.size(0), -1) < padding_length.unsqueeze(1)
+        return hidden_states, pad_mask.unsqueeze(1)
 
 
 def calc_length(lengths, all_paddings, kernel_size, stride, ceil_mode, repeat_num=1):
@@ -1270,13 +1038,12 @@ class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.num_heads = config.num_attention_heads
         self.max_distance = config.bias_max_distance
         self.symmetric = config.bias_symmetric
         self.num_buckets = self.max_distance
-        if not self.symmetric:
+        if not config.bias_symmetric:
             self.num_buckets *= 2
-        self.bias_values = nn.Embedding(self.num_buckets, self.num_heads)
+        self.bias_values = nn.Embedding(self.num_buckets, config.num_attention_heads)
 
     def forward(self, x):
         # instantiate bias compatible with shape of x
@@ -1292,28 +1059,15 @@ class Phi4MultimodalAudioRelativeAttentionLogitBias(nn.Module):
 
         # mapping from relative position to index in the bias parameter
         bias_idx = relative_position
-        if self.symmetric:
-            bias_idx = bias_idx.abs()
-        else:
-            bias_idx += self.num_buckets // 2
+        bias_idx = bias_idx.abs() if self.symmetric else bias_idx + self.num_buckets // 2
 
-        t5_rel_att_bias = self.bias_values(bias_idx)  # [L, L, H]
-        t5_rel_att_bias = t5_rel_att_bias.permute(2, 0, 1).unsqueeze(0)  # [1, H, L, L]
+        att_bias = self.bias_values(bias_idx)  # [L, L, H]
+        att_bias = att_bias.permute(2, 0, 1).unsqueeze(0)  # [1, H, L, L]
 
-        return t5_rel_att_bias
+        return att_bias
 
 
 class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
-    """Mean/variance normalization layer.
-
-    Will substract mean and multiply input by inverted standard deviation.
-    Typically used as a very first layer in a model.
-
-    Args:
-        input_size: int
-            layer input size.
-    """
-
     def __init__(self, config):
         super().__init__()
         self.register_buffer("global_mean", torch.zeros(config.input_size))
@@ -1433,17 +1187,9 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
         pad_mask = pad_mask & enc_streaming_mask
         return pad_mask
 
-    def forward(self, xs_pad, masks):
-        """Conformer Forward function
-
-        Args:
-            xs_pad: torch.Tensor
-                input tensor
-            masks: torch.Tensor
-                post-embedding input lengths
-        """
-        xs_pad = self.encoder_embedding(xs_pad)
-        input_tensor, hs_mask, masks = self.forward_embeddings(xs_pad, masks)
+    def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor]):
+        hidden_states = self.encoder_embedding(hidden_states)
+        input_tensor, hs_mask, mask = self.forward_embeddings(hidden_states, mask)
 
         unfolded = False
         ori_bz, seq_len, D = input_tensor.shape
@@ -1461,9 +1207,9 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
                 input_tensor = input_tensor_pad.to(input_tensor.device)
 
             input_tensor = unfold_tensor(input_tensor, max_seq_len)
-            if masks is not None:
+            if mask is not None:
                 # revise hs_mask here because the previous calculated hs_mask did not consider extra pad
-                subsampled_pad_mask = masks.squeeze(1)  # [bz, subsampled_unmask_seq_len]
+                subsampled_pad_mask = mask.squeeze(1)  # [bz, subsampled_unmask_seq_len]
                 extra_padded_subsamlped_pad_mask = F.pad(
                     subsampled_pad_mask, (0, chunk_pad_size), "constant", False
                 )  # extra padding to the pad mask
@@ -1481,11 +1227,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
         relative_attention_bias = self.relative_attention_bias_layer(input_tensor)
 
         for layer in self.encoders:
-            input_tensor = layer(
-                input_tensor,
-                hs_mask,
-                relative_attention_bias=relative_attention_bias,
-            )
+            input_tensor = layer(input_tensor, hs_mask, relative_attention_bias=relative_attention_bias)
 
         if unfolded:
             embed_dim = input_tensor.shape[-1]
@@ -1494,7 +1236,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
             if chunk_pad_size > 0:
                 input_tensor = input_tensor[:, :-chunk_pad_size, :]
 
-        return input_tensor, masks
+        return input_tensor, mask
 
 
 def unfold_tensor(xs_pad, max_seq_len):
@@ -1564,76 +1306,33 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
 
 
 class Phi4MultimodalAudioEmbedding(nn.Module):
-    """Audio embedding."""
-
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: Phi4MultimodalConfig):
         super().__init__()
         self.config = config
-        # n_embed or hidden_size for text LM
-        hidden_size = config.hidden_size
 
-        embd_drop = config.embd_pdrop
-        self.drop = nn.Dropout(embd_drop)
-
-        audio_dim_out = None  # Set this variable according to the actual audio processor
-        self.layer_idx = -2
-
+        self.drop = nn.Dropout(config.embd_pdrop)
         self.encoder = Phi4MultimodalAudioConformerEncoder(config.audio_config)
-        audio_dim_out = config.audio_config.hidden_size
-        n_mels = config.audio_config.input_size
 
-        self.audio_dim_out = audio_dim_out
-        self.audio_dim_in = n_mels
-
-        self.freeze_audio_processor = False
-
+        self.layer_idx = -2
+        self.audio_dim_out = config.audio_config.hidden_size
+        self.audio_dim_in = config.audio_config.input_size
         self.downsample_rate = config.audio_config.downsample_rate
+        dim_projection = config.hidden_size
+        self.linear_downsample_rate = self.downsample_rate
 
-        projection_cls = config.audio_config.projection_cls
-        if projection_cls == "linear":
-            self.audio_projection = nn.Linear(audio_dim_out, hidden_size)
-        elif projection_cls == "mlp":
-            # follow llava-v1.5's implementation
-            # (do not use image_projection and image_proj_norm)
-            dim_projection = hidden_size
-            self.linear_downsample_rate = self.downsample_rate
-
-            layers_for_speech = [nn.Linear(audio_dim_out * self.linear_downsample_rate, dim_projection)]
-            layers_for_speech.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
-            audio_projection_for_speech = nn.Sequential(*layers_for_speech)
-
-            layers_for_vision = [nn.Linear(audio_dim_out * self.linear_downsample_rate, dim_projection)]
-            layers_for_vision.extend([nn.GELU(), nn.Linear(dim_projection, dim_projection)])
-            audio_projection_for_vision = nn.Sequential(*layers_for_vision)
-
-            self.audio_projection = nn.ModuleDict(
-                {"speech": audio_projection_for_speech, "vision": audio_projection_for_vision}
-            )
-
-        self.vocab_size = config.vocab_size
-        self.input_embeds = None
-        self.audio_embed_sizes = None
-
-    def set_audio_embeds(self, input_embeds: torch.FloatTensor) -> None:
-        self.input_embeds = input_embeds
-
-    def set_audio_embed_sizes(self, audio_embed_sizes: torch.LongTensor) -> None:
-        self.audio_embed_sizes = audio_embed_sizes
-
-    def get_audio_features(
-        self,
-        input_embeds: torch.FloatTensor,
-        audio_attention_mask: torch.Tensor,
-        audio_projection_mode: str = "speech",
-    ):
-        audio_features, _ = self.encoder(input_embeds, audio_attention_mask)
-
-        if isinstance(self.audio_projection, nn.Linear):
-            audio_set_tensor = self.audio_projection(audio_features)
-        elif isinstance(self.audio_projection, nn.ModuleDict):
-            audio_set_tensor = self.audio_projection[audio_projection_mode](audio_features)
-
-        return audio_set_tensor
+        audio_projection_for_speech = nn.Sequential(
+            nn.Linear(self.audio_dim_out * self.linear_downsample_rate, dim_projection),
+            nn.GELU(),
+            nn.Linear(dim_projection, dim_projection),
+        )
+        audio_projection_for_vision = nn.Sequential(
+            nn.Linear(self.audio_dim_out * self.linear_downsample_rate, dim_projection),
+            nn.GELU(),
+            nn.Linear(dim_projection, dim_projection),
+        )
+        self.audio_projection = nn.ModuleDict(
+            {"speech": audio_projection_for_speech, "vision": audio_projection_for_vision}
+        )
 
     def forward(
         self,
@@ -1644,52 +1343,26 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         audio_projection_mode="speech",
         **kwargs,
     ) -> torch.FloatTensor:
-        """
-        arguments:
-            input_ids: input text ids (B, U)
-            input_embeds: audio features (B, T, D)  B: num audios in a sequence
-        """
-        if self.input_embeds is not None:
-            input_embeds = self.input_embeds.clone()
-        if self.audio_embed_sizes is not None:
-            audio_embed_sizes = self.audio_embed_sizes.clone()
-
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
         with torch.no_grad():
-            positions = torch.nonzero(input_ids == _AUDIO_SPECIAL_TOKEN_ID, as_tuple=False)
-            positions_tuple = torch.nonzero(input_ids == _AUDIO_SPECIAL_TOKEN_ID, as_tuple=True)
+            positions = torch.nonzero(input_ids == self.config.audio_token_id, as_tuple=False)
+            positions_tuple = torch.nonzero(input_ids == self.config.audio_token_id, as_tuple=True)
 
-        if isinstance(self.audio_projection, nn.Linear):
-            target_device = self.audio_projection[0].bias.device
-            target_dtype = self.audio_projection[0].bias.dtype
-        elif isinstance(self.audio_projection, nn.ModuleDict):
-            target_device = self.audio_projection[audio_projection_mode][0].bias.device
-            target_dtype = self.audio_projection[audio_projection_mode][0].bias.dtype
+        target_device = self.audio_projection[audio_projection_mode][0].bias.device
+        target_dtype = self.audio_projection[audio_projection_mode][0].bias.dtype
 
         if input_embeds is not None:
-            input_embeds = input_embeds.to(target_device).to(target_dtype)
+            input_embeds = input_embeds.to(device=target_device, dtype=target_dtype)
 
         if len(positions.tolist()) > 0:
-            audio_set_tensor = self.get_audio_features(input_embeds, audio_attention_mask, audio_projection_mode)
-        else:
-            # # create an audio tensor
-            # To do: not sure if this is required for text only input
-            if self.training:
-                audio_embeds = torch.zeros(1, 500, self.audio_dim_in).to(target_device).to(target_dtype)
-                audio_attention_mask = audio_embeds.new_ones(audio_embeds.size()[:2]).long()
-                audio_set_tensor = self.get_audio_features(audio_embeds, audio_attention_mask, audio_projection_mode)
+            audio_features, _ = self.encoder(input_embeds, audio_attention_mask)
+            audio_set_tensor = self.audio_projection[audio_projection_mode](audio_features)
 
         hidden_states = kwargs["wte"](input_ids)
 
         if len(positions.tolist()) > 0:
-            assert (
-                audio_embed_sizes.sum().item() == len(positions)
-            ), f"please ensure the encoder outputs have the same length as defined in input_ids! \n audio_embed_sizes.sum().item(): {audio_embed_sizes.sum().item()} \n len(positions): {len(positions)} \n audio_embed_sizes: {audio_embed_sizes} \n positions: {positions} \n input_ids.shape \n {input_ids.shape}"
-
-            # audio_set_tensor: shape (N_audios, N_padded_tokens, C)
-            # Shape: (merged_N_tokens, C)
             merged_audio_set_tensor = torch.cat(
                 [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
             )
@@ -1701,11 +1374,6 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
                     indices=positions_tuple, values=merged_audio_set_tensor, accumulate=False
                 )
             hidden_states = new_hidden_states
-        else:
-            if self.training:
-                hidden_states = (
-                    hidden_states + (0 * audio_set_tensor[:, 0].to(hidden_states.dtype).to(hidden_states.device)).sum()
-                )
 
         if self.drop is not None:
             hidden_states = self.drop(hidden_states)
@@ -1716,91 +1384,33 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 #################################################### TEXT ####################################################
 
 
-class Phi4MultimodalImageAudioEmbedding(nn.Module):
+class Phi4MultimodalRMSNorm(Phi3RMSNorm):
+    pass
+
+
+class Phi4MultimodalDecoderLayer(Phi3DecoderLayer):
+    pass
+
+
+class Phi4MultimodalFeatureEmbedding(nn.Module):
     """Image-audio embedding."""
 
     def __init__(self, config: Phi4MultimodalConfig) -> None:
         super().__init__()
-
-        self.vocab_size = config.vocab_size
-
-        self.image_input_id = -1
-        self.audio_input_id = -10000
-        assert self.image_input_id != self.audio_input_id, "image_input_id and audio_input_id should be different"
-
         self.image_embed = Phi4MultimodalImageEmbedding(config)
         self.audio_embed = Phi4MultimodalAudioEmbedding(config)
-
-        self.input_image_embeds = None
-        self.image_sizes = None
-        self.image_attention_mask = None
-        self.input_audio_embeds = None
-        self.audio_embed_sizes = None
-
-    def post_init(self, audio_config):
-        # post init for audio embedding
-        # ref: model.model.embed_tokens_extend.post_init(audio_config) in phyagi/getters/model.py
-        self.audio_embed.post_init(audio_config)
-
-    def set_input_image_embeds(self, input_image_embeds: torch.FloatTensor) -> None:
-        self.input_image_embeds = input_image_embeds
-
-    def set_image_sizes(self, image_sizes: torch.LongTensor) -> None:
-        self.image_sizes = image_sizes
-
-    def set_img_attn_mask(self, image_attention_mask: torch.FloatTensor) -> None:
-        self.image_attention_mask = image_attention_mask
-
-    def set_input_audio_embeds(self, input_audio_embeds: torch.FloatTensor) -> None:
-        self.input_audio_embeds = input_audio_embeds
-
-    def set_audio_embed_sizes(self, audio_embed_sizes: torch.LongTensor) -> None:
-        self.audio_embed_sizes = audio_embed_sizes
 
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_embeds,
         input_image_embeds: Optional[torch.FloatTensor] = None,
         input_audio_embeds: Optional[torch.FloatTensor] = None,
         image_sizes=None,
         image_attention_mask=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        audio_projection_mode="speech",
         wte=None,
     ) -> torch.FloatTensor:
-        # override image and audio embeddings and sizes from object itself
-        # this is for inference
-        # ref: phyagi/eval/utils/text_generation_vision_audio_pipeline.py
-        if self.input_image_embeds is not None:
-            assert input_image_embeds is None
-            input_image_embeds = self.input_image_embeds.clone()
-            # NOTE weijian: set input_image_embeds to None after first call in for eval stage
-            # during evaluation, it will call model's forward() multiple times
-            # the first time input_ids contains the prompt (including <|image_{}|>) and input_embeds exists
-            # from the second time, the input_ids will only contain the generated text
-            # thus, the input_image_embeds is no longer needed
-            self.input_image_embeds = None
-
-        if self.image_sizes is not None:
-            assert image_sizes is None
-            image_sizes = self.image_sizes
-
-        if self.input_audio_embeds is not None:
-            assert input_audio_embeds is None
-            input_audio_embeds = self.input_audio_embeds.clone()
-            self.input_audio_embeds = None
-
-        if self.audio_embed_sizes is not None:
-            assert audio_embed_sizes is None
-            audio_embed_sizes = self.audio_embed_sizes.clone()
-
-        if self.image_attention_mask is not None:
-            assert image_attention_mask is None
-            image_attention_mask = self.image_attention_mask.clone()
-            self.image_attention_mask = None
-
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
@@ -1810,20 +1420,16 @@ class Phi4MultimodalImageAudioEmbedding(nn.Module):
             new_input_ids[
                 (input_ids >= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[0])
                 & (input_ids <= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[1])
-            ] = _IMAGE_SPECIAL_TOKEN_ID
+            ] = self.config.vision_config.image_token_id
             new_input_ids[
                 (input_ids >= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[0])
                 & (input_ids <= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[1])
-            ] = _AUDIO_SPECIAL_TOKEN_ID
+            ] = self.config.audio_config.audio_token_id
             input_ids = new_input_ids
 
         with torch.no_grad():
-            image_position_mask = input_ids == _IMAGE_SPECIAL_TOKEN_ID
+            image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
             non_image_position_mask = ~image_position_mask
-
-        assert input_embeds is None
-        if self.training:
-            assert input_image_embeds is not None or input_audio_embeds is not None
 
         if input_image_embeds is not None:
             image_hidden_states = self.image_embed(
@@ -1834,6 +1440,7 @@ class Phi4MultimodalImageAudioEmbedding(nn.Module):
                 image_attention_mask=image_attention_mask,
             )
         if input_audio_embeds is not None:
+            audio_projection_mode = "vision" if input_image_embeds is not None else "speech"
             audio_hidden_states = self.audio_embed(
                 input_ids=input_ids,
                 input_embeds=input_audio_embeds,
@@ -1844,30 +1451,16 @@ class Phi4MultimodalImageAudioEmbedding(nn.Module):
             )
 
         # merge image and audio hidden states
-        # NOTE weijian: for non-image-audio tokens, here we use audio hidden states
-        # actually, in the debug code above, the non-image-audio tokens from image_hidden_states and audio_hidden_states should be the same
         if input_image_embeds is not None and input_audio_embeds is not None:
-            dtype = image_hidden_states.dtype
-            hidden_states = image_hidden_states * image_position_mask.to(dtype).unsqueeze(
-                -1
-            ) + audio_hidden_states * non_image_position_mask.to(dtype).unsqueeze(-1)
+            hidden_states = image_hidden_states * image_position_mask + audio_hidden_states * non_image_position_mask
         elif input_image_embeds is not None:
             hidden_states = image_hidden_states
         elif input_audio_embeds is not None:
             hidden_states = audio_hidden_states
         else:
-            assert wte is not None
             hidden_states = wte(input_ids)
 
         return hidden_states
-
-
-class Phi4MultimodalRMSNorm(Phi3RMSNorm):
-    pass
-
-
-class Phi4MultimodalDecoderLayer(Phi3DecoderLayer):
-    pass
 
 
 class Phi4MultimodalModel(Phi3Model, nn.Module):
@@ -1885,7 +1478,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
 
-        self.embed_tokens_extend = Phi4MultimodalImageAudioEmbedding(config)
+        self.embed_tokens_extend = Phi4MultimodalFeatureEmbedding(config)
 
         self.layers = nn.ModuleList(
             [Phi4MultimodalDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -1909,7 +1502,6 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         input_audio_embeds: Optional[torch.FloatTensor] = None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        audio_projection_mode=None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1941,14 +1533,12 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens_extend(
                 input_ids=input_ids,
-                input_embeds=inputs_embeds,
                 input_image_embeds=input_image_embeds,
                 input_audio_embeds=input_audio_embeds,
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
                 audio_embed_sizes=audio_embed_sizes,
                 audio_attention_mask=audio_attention_mask,
-                audio_projection_mode=audio_projection_mode,
                 wte=self.embed_tokens,
             )
 
@@ -2022,13 +1612,6 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         return output if return_dict else output.to_tuple()
 
 
-class InputMode(Enum):
-    LANGUAGE = 0
-    VISION = 1
-    SPEECH = 2
-    VISION_SPEECH = 3
-
-
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -2054,7 +1637,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         input_audio_embeds: Optional[torch.FloatTensor] = None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        input_mode=None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2089,35 +1671,12 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         'This is an example script .\n Certainly! Below is a sample script that demonstrates a simple task, such as calculating the sum'
         ```"""
-        if (
-            use_cache
-            and self.config.rope_scaling
-            and cache_position is not None
-            and cache_position[0] == self.config.original_max_position_embeddings
-        ):
-            logger.warning(
-                f"If you are not using the generate method, you may encounter nonsensical outputs after the {self.config.original_max_position_embeddings}th token, as the KV cache needs to be recomputed."
-            )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if isinstance(input_mode, torch.Tensor):
-            assert len(input_mode) == 1
-            input_mode = input_mode[0].item()
-        input_mode = InputMode(input_mode)
-
-        if input_mode in [InputMode.VISION_SPEECH, InputMode.VISION]:
-            audio_projection_mode = "vision"
-        elif input_mode == InputMode.SPEECH:
-            audio_projection_mode = "speech"
-        elif input_mode == InputMode.LANGUAGE:
-            audio_projection_mode = "speech"
-        else:
-            raise ValueError(f"Invalid input_mode: {input_mode}")
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -2132,7 +1691,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
             input_audio_embeds=input_audio_embeds,
             audio_embed_sizes=audio_embed_sizes,
             audio_attention_mask=audio_attention_mask,
-            audio_projection_mode=audio_projection_mode,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2172,7 +1730,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         input_audio_embeds=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        input_mode=None,
         cache_position=None,
         position_ids=None,
         use_cache=True,
@@ -2204,7 +1761,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
             input_audio_embeds=input_audio_embeds,
             audio_embed_sizes=audio_embed_sizes,
             audio_attention_mask=audio_attention_mask,
-            input_mode=input_mode,
             cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,

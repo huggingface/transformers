@@ -84,8 +84,8 @@ def convert_config(original_config: dict):
     vision_embd_layer = embd_layer["image_embd_layer"]
 
     # Keep only some of the subdict
-    keep_audio_embd_layer = ["downsample_rate", "projection_cls"]
-    keep_vision_embd_layer = ["use_hd_transform", "crop_size", "hd_transform_order", "projection_cls"]
+    keep_audio_embd_layer = ["downsample_rate"]
+    keep_vision_embd_layer = ["use_hd_transform", "crop_size", "hd_transform_order"]
     audio_embd_layer = {k: v for k, v in audio_embd_layer.items() if k in keep_audio_embd_layer}
     vision_embd_layer = {k: v for k, v in vision_embd_layer.items() if k in keep_vision_embd_layer}
 

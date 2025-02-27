@@ -74,7 +74,7 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         use_hd_transform: bool = True,
         crop_size: int = 448,
         hd_transform_order: str = "sub_glb",
-        projection_cls: str = "mlp",
+        image_token_id: int = 200010,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -92,7 +92,7 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.use_hd_transform = use_hd_transform
         self.crop_size = crop_size
         self.hd_transform_order = hd_transform_order
-        self.projection_cls = projection_cls
+        self.image_token_id = image_token_id
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
@@ -125,7 +125,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         nemo_activation: str = "relu",
         nemo_conv_channels: int = 1024,
         downsample_rate: int = 1,
-        projection_cls: str = "mlp",
+        audio_token_id: int = 200011,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -154,7 +154,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.nemo_activation = nemo_activation
         self.nemo_conv_channels = nemo_conv_channels
         self.downsample_rate = downsample_rate
-        self.projection_cls = projection_cls
+        self.audio_token_id = audio_token_id
 
 
 class Phi4MultimodalConfig(PretrainedConfig):
