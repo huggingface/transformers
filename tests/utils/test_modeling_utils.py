@@ -485,7 +485,7 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
 
-    def test_model_from_config_torch_dtype_composite(self):
+    def test_model_from_pretrained_torch_dtype_composite(self):
         """
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
@@ -502,6 +502,16 @@ class ModelUtilsTest(TestCasePlus):
         # should be able to set torch_dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"}
+        )
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+
+        # Test if we use the `accelerate` loading with `low_cpu_mem_usage`. Test only once with any `torch_dtype`.
+        model = LlavaForConditionalGeneration.from_pretrained(
+            TINY_LLAVA,
+            torch_dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"},
+            low_cpu_mem_usage=True,
         )
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
