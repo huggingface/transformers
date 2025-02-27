@@ -3630,7 +3630,7 @@ class Trainer:
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
-            kwargs = {"device": self.args.device, "non_blocking": True}
+            kwargs = {"device": self.args.device, "non_blocking": self.args.accelerator_config.non_blocking}
             if self.is_deepspeed_enabled and (torch.is_floating_point(data) or torch.is_complex(data)):
                 # NLP models inputs are int/uint and those get adjusted to the right dtype of the
                 # embedding. Other models such as wav2vec2's inputs are already float and thus
