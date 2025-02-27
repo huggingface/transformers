@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TimesFM model."""
 
-import logging
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple, Union
@@ -25,7 +24,7 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_timesfm import TimesFmConfig
 
 
@@ -1023,7 +1022,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 freq = new_freqs
 
         if freq is None:
-            logging.info("No frequency provided via `freq`. Default to high (0).")
+            logger.info("No frequency provided via `freq`. Default to high (0).")
             freq = [0] * len(inputs)
 
         if output_attentions is None:
@@ -1124,8 +1123,4 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             return tuple(return_tuple)
 
 
-__all__ = [
-    "TimesFmModelForPrediction",
-    "TimesFmPreTrainedModel",
-    "TimesFmModel",
-]
+__all__ = ["TimesFmModelForPrediction", "TimesFmPreTrainedModel", "TimesFmModel"]
