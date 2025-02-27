@@ -637,6 +637,7 @@ class PruneReindexingLMHead(nn.Module):
         # Ensure hidden_states and pruned_lm_head weights have the same dtype
         #hidden_states = hidden_states.to(self.pruned_lm_head.weight.dtype)
         # Get logits from the pruned LM head
+        print(self.pruned_lm_head)
         pruned_logits = self.pruned_lm_head(hidden_states)
         # Map logits back to the original vocabulary
         original_logits = torch.full(
@@ -677,7 +678,7 @@ class AssistantToTargetTranslator:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int] = None, # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
-        prune = False
+        prune = True
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
