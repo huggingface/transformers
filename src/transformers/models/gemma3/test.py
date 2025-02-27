@@ -21,6 +21,7 @@ def main(*args):
     image = Image.open(requests.get(url, stream=True).raw)
 
     inputs = processor(images=image, text=prompt,  return_tensors="pt")
+    print(inputs.keys())
     inputs = inputs.to(torch.get_default_device())
 
     generate_ids = model.generate(**inputs, max_new_tokens=24)

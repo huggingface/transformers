@@ -885,6 +885,7 @@ class Gemma3DecoderLayer(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
         self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -915,6 +916,7 @@ class Gemma3DecoderLayer(nn.Module):
     ) -> tuple[
         torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]
     ]:
+        logger.info("Entering decoder layer %d", self.layer_idx)
         if (
             self.is_sliding and attention_mask is not None
         ):  # efficient SDPA and no padding
@@ -974,6 +976,7 @@ class Gemma3DecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights,)
 
+        logger.info("Exiting decoder layer %d", self.layer_idx)
         return outputs
 
 
@@ -1211,6 +1214,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
+        logger.info("Entering the decoder layers")
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1466,6 +1470,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
+        logger.info("Entering the Gemma3Model")
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -1718,7 +1723,8 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         image_features = []
-        for prompt_images in pixel_values:
+        for i, prompt_images in enumerate(pixel_values):
+            logger.info("Encoding images for prompt @ idx %d", i)
             image_outputs = self.vision_model(prompt_images)
             prompt_image_features = image_outputs.last_hidden_state
             logger.info("prompt_image_features.shape after vision model: %s", prompt_image_features.shape)
@@ -1817,6 +1823,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+            logger.info("inputs_embeds.shape = %s", inputs_embeds.shape)
 
         if cache_position is None:
             past_seen_tokens = (
@@ -1839,12 +1846,15 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
             image_mask = image_soft_token_mask.unsqueeze(-1)
             image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            logger.info("image_mask.shape = %s", image_mask.shape)
 
             if inputs_embeds[image_mask].numel() != image_features.numel():
                 raise ValueError("Number of images does not match number of special image tokens in the input text. ")
 
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            logger.info("image_features.shape = %s", image_features.shape)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+            logger.info("inputs_embeds.shape = %s", inputs_embeds.shape)
 
         # mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
@@ -1864,6 +1874,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             inputs_embeds,
             is_training,
         )
+        logger.info("Entering the language model")
         outputs = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
