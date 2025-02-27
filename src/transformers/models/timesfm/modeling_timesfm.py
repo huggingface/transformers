@@ -35,12 +35,30 @@ _CONFIG_FOR_DOC = "TimesFmConfig"
 
 @dataclass
 class TimesFmOutput(BaseModelOutput):
+    """
+    Args:
+        loc (`torch.Tensor` of shape `(batch_size, )`):
+            The mean of the time series inputs.
+        scale (`torch.Tensor` of shape `(batch_size,)`):
+            The scale of the time series inputs.
+    """
+
     loc: Optional[torch.Tensor] = None
     scale: Optional[torch.Tensor] = None
 
 
 @dataclass
 class TimesFmOutputForPrediction(BaseModelOutput):
+    """
+    Args:
+        mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The mean predictions of the time series.
+        full_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The full predictions of the time series including the mean and the quantiles.
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_target` is provided):
+            The loss of the TimesFM model.
+    """
+
     mean_predictions: Optional[torch.Tensor] = None
     full_predictions: Optional[torch.Tensor] = None
     loss: Optional[Union[torch.Tensor, float]] = None
