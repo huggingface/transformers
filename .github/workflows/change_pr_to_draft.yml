@@ -10,6 +10,7 @@ jobs:
     name: Convert PR to draft
     permissions:
       pull-requests: write
+      contents: write
     if: github.event.pull_request.draft == false
     steps:
       - name: Convert PR to draft
