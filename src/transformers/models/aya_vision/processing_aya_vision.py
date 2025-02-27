@@ -153,6 +153,8 @@ class AyaVisionProcessor(ProcessorMixin):
         )
         
         text_kwargs = output_kwargs["text_kwargs"]
+        # Get return_tensors from kwargs or default to None
+        return_tensors = kwargs.get("return_tensors", None)
 
         if not isinstance(batch_of_conversations, list):
             raise ValueError("batch_of_conversations must be a list of conversations.")
@@ -204,13 +206,13 @@ class AyaVisionProcessor(ProcessorMixin):
                     "pixel_values": padded_image_patches,
                     "image_num_patches": np.array(image_num_patches),
                 },
-                tensor_type="pt",
+                tensor_type=return_tensors,
             )
         else:
             # No images in the entire batch (text-only). Return text
             return BatchFeature(
                 data={**text_inputs},
-                tensor_type="pt",
+                tensor_type=return_tensors,
             )
 
     def encode_turns(self, turns: List[dict]) -> Union[List[int], Tuple[str, List[np.ndarray], List]]:
@@ -276,26 +278,15 @@ class AyaVisionProcessor(ProcessorMixin):
         """
         turn = copy.copy(turn)
         original_role = None
-        if self.role_map != DEFAULT_ROLE_MAP:
-            original_role = turn.get("role", "")
-            # external evaluators used in bee use different role names. need to map back to the our role names.
-            reverse_role_map = {v: k for k, v in self.role_map.items()}
-            turn["role"] = reverse_role_map.get(turn.get("role", ""), "")
         if "message" not in turn:
             raise ValueError(
                 f"Chat turn {turn!r} is missing a 'message' field. Note that the convention for platform and datatools is different from command, which uses 'content'."
             )
         normalized_role = turn.get("role", "").capitalize()
         if normalized_role not in ["User", "Chatbot", "System"]:
-            if self.role_map != DEFAULT_ROLE_MAP:
-                raise ValueError(
-                    f"Using External Evaluator. Chat turn {turn!r} has invalid or missing role. Normalized role was {normalized_role!r} (External Evaluator role was {original_role!r}) but must be one of {list(self.role_map.values())}"
-                )
-            else:
-                raise ValueError(
-                    f"Chat turn {turn!r} has invalid or missing role. Normalized role was {normalized_role!r}, but must be one of 'User', 'Chatbot', 'System'"
-                )
-
+            raise ValueError(
+                f"Chat turn {turn!r} has invalid or missing role. Normalized role was {normalized_role!r}, but must be one of 'User', 'Chatbot', 'System'"
+            )
         turn["role"] = normalized_role if original_role is None else original_role
         return turn
 
