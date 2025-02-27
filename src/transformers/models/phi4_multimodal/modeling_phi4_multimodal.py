@@ -687,7 +687,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         input_embeds: torch.FloatTensor,
-        img_sizes=None,
+        image_sizes=None,
         image_attention_mask=None,
         wte=None,
     ) -> torch.FloatTensor:
@@ -725,10 +725,10 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             output_imgs = []
             output_len = []
             # training is tensor, inference is list
-            if isinstance(img_sizes, torch.Tensor):
-                img_sizes = img_sizes.view(-1, 2)
+            if isinstance(image_sizes, torch.Tensor):
+                image_sizes = image_sizes.view(-1, 2)
             for _bs in range(bs):
-                h, w = img_sizes[_bs]
+                h, w = image_sizes[_bs]
                 h = h // base_resolution
                 w = w // base_resolution
                 B_ = h * w
