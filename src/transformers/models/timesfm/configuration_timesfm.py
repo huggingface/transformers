@@ -71,7 +71,7 @@ class TimesFmConfig(PretrainedConfig):
         min_timescale (`int`, *optional*, defaults to 1):
             The start of the geometric positional index. Determines the periodicity of
             the added signal.
-        max_timescale (`int`, *optional*, defaults to 10_000):
+        max_timescale (`int`, *optional*, defaults to 10000):
             The end of the geometric positional index. Determines the frequency of the
             added signal.
     """
