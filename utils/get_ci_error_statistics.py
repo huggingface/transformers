@@ -34,16 +34,19 @@ def fetch_paginated_github_data(base_url, token=None):
 
 
 def get_jobs(workflow_run_id, token=None):
+    """Extract jobs in a GitHub Actions workflow run"""
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs"
     return fetch_paginated_github_data(url, token)
 
 
 def get_job_links(workflow_run_id, token=None):
+    """Extract job names and their job links in a GitHub Actions workflow run"""
     jobs = get_jobs(workflow_run_id, token)
     return {job["name"]: job["html_url"] for job in jobs}
 
 
 def get_artifacts_links(workflow_run_id, token=None):
+    """Get all artifact links from a workflow run"""
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts"
     artifacts = fetch_paginated_github_data(url, token)
     return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
