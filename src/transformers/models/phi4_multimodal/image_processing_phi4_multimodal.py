@@ -1,4 +1,4 @@
-# Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -204,36 +204,35 @@ class Phi4MultimodalImageProcessor(BaseImageProcessor):
         shapes = [[im.size(1), im.size(2)] for im in hd_images]
         mask_shapes = [[mask.size(0), mask.size(1)] for mask in image_attention_masks]
         global_attention_mask = [torch.ones((1, mask_resolution, mask_resolution)) for _ in hd_images]
-        hd_images_reshape = [
-            im.reshape(1, 3, h // base_resolution, base_resolution, w // base_resolution, base_resolution)
-            .permute(0, 2, 4, 1, 3, 5)
-            .reshape(-1, 3, base_resolution, base_resolution)
-            .contiguous()
-            for im, (h, w) in zip(hd_images, shapes)
-        ]
-        attention_masks_reshape = [
-            mask.reshape(1, h // mask_resolution, mask_resolution, w // mask_resolution, mask_resolution)
-            .permute(0, 1, 3, 2, 4)
-            .reshape(-1, mask_resolution, mask_resolution)
-            .contiguous()
-            for mask, (h, w) in zip(image_attention_masks, mask_shapes)
-        ]
-        downsample_attention_masks = [
-            mask[:, 0::2, 0::2]
-            .reshape(
+
+        hd_images_reshape = []
+        for im, (h, w) in zip(hd_images, shapes):
+            im = im.reshape(1, 3, h // base_resolution, base_resolution, w // base_resolution, base_resolution)
+            im = im.permute(0, 2, 4, 1, 3, 5)
+            im = im.reshape(-1, 3, base_resolution, base_resolution)
+            hd_images_reshape.append(im.contiguous())
+
+        attention_masks_reshape = []
+        for mask, (h, w) in zip(image_attention_masks, mask_shapes):
+            mask = mask.reshape(1, h // mask_resolution, mask_resolution, w // mask_resolution, mask_resolution)
+            mask = mask.permute(0, 1, 3, 2, 4)
+            mask = mask.reshape(-1, mask_resolution, mask_resolution)
+            attention_masks_reshape.append(mask.contiguous())
+
+        downsample_attention_masks = []
+        for mask, (h, w) in zip(attention_masks_reshape, mask_shapes):
+            mask = mask[:, 0::2, 0::2]
+            mask = mask.reshape(
                 1,
                 h // mask_resolution,
                 w // mask_resolution,
                 mask_resolution // 2 + mask_resolution % 2,
                 mask_resolution // 2 + mask_resolution % 2,
             )
-            .permute(0, 1, 3, 2, 4)
-            for mask, (h, w) in zip(attention_masks_reshape, mask_shapes)
-        ]
-        downsample_attention_masks = [
-            mask.reshape(mask.size(1) * mask.size(2), mask.size(3) * mask.size(4))
-            for mask in downsample_attention_masks
-        ]
+            mask = mask.permute(0, 1, 3, 2, 4)
+            mask = mask.reshape(mask.size(1) * mask.size(2), mask.size(3) * mask.size(4))
+            downsample_attention_masks.append(mask)
+
         num_img_tokens = [
             256 + 1 + int(mask.sum().item()) + int(mask[:, 0].sum().item()) + 16 for mask in downsample_attention_masks
         ]

@@ -30,12 +30,19 @@ from transformers import (
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    # CausalLM keys
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.0.linear"  : r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.gate_up_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.2": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.down_proj",
 
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_(q|k|v)": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.\2_proj",
-    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_out": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.o_proj"
+    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_out": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.o_proj",
+
+    r"^model.embed_tokens_extend.image_embed.img_projection.0"  : r"model.embed_tokens_extend.image_embed.img_projection_up",
+    r"^model.embed_tokens_extend.image_embed.img_projection.2"  : r"model.embed_tokens_extend.image_embed.img_projection_down",
+
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.speech.0"  : r"model.embed_tokens_extend.audio_embed.audio_up_proj_for_speech",
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.speech.2"  : r"model.embed_tokens_extend.audio_embed.audio_down_proj_for_speech",
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.vision.0"  : r"model.embed_tokens_extend.audio_embed.audio_up_proj_for_vision",
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.vision.2"  : r"model.embed_tokens_extend.audio_embed.audio_down_proj_for_vision",
 }
 # fmt: on
 
@@ -94,6 +101,7 @@ def convert_config(original_config: dict):
     audio_config.pop("activation_checkpointing", None)
     audio_config.pop("cnn_layer_norm", None)
     audio_config.pop("input_layer", None)
+    audio_config.pop("batch_norm", None)
     audio_config.pop("encoder_embedding_config", None)
     # rename
     audio_config["hidden_size"] = audio_config.pop("attention_dim")

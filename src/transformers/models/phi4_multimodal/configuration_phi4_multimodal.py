@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_phi4_multimodal.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 Microsoft and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
 
 from ...configuration_utils import PretrainedConfig
 
@@ -19,19 +34,19 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1152):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 4304):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 27):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 448):
+        image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -40,11 +55,6 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        use_hd_transform (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        crop_size (`int`, *optional*, defaults to 448): <fill_docstring>
-        hd_transform_order (`str`, *optional*, defaults to `"sub_glb"`): <fill_docstring>
-        image_token_id (`int`, *optional*, defaults to 200010): <fill_docstring>
-        feature_layer (`int`, *optional*, defaults to -2): <fill_docstring>
 
     Example:
 
@@ -116,7 +126,6 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         num_blocks: int = 24,
         dropout_rate: float = 0.0,
         causal: bool = True,
-        batch_norm: bool = False,
         ext_pw_out_channel: int = 1024,
         ext_pw_kernel_size: int = 1,
         depthwise_seperable_out_channel: int = 1024,
@@ -147,7 +156,6 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
         self.causal = causal
-        self.batch_norm = batch_norm
         self.ext_pw_out_channel = ext_pw_out_channel
         self.ext_pw_kernel_size = ext_pw_kernel_size
         self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
@@ -167,6 +175,11 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.feature_layer = feature_layer
 
+        length = input_size
+        for _ in range(int(math.log(time_reduction, 2))):
+            length = math.floor((length - 1 / 2) + 1)
+        self.nemo_final_size = length
+
 
 class Phi4MultimodalConfig(PretrainedConfig):
     r"""
@@ -179,7 +192,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 200064):
+        vocab_size (`int`, *optional*, defaults to 32064):
             Vocabulary size of the Phi-3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Phi4MultimodalModel`].
         hidden_size (`int`, *optional*, defaults to 3072):
@@ -190,7 +203,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
+        num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -206,8 +219,11 @@ class Phi4MultimodalConfig(PretrainedConfig):
             The dropout ratio after computing the attention scores.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
+        original_max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model was trained with. This is used to determine the size of the
+            original RoPE embeddings when using long scaling.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -224,21 +240,16 @@ class Phi4MultimodalConfig(PretrainedConfig):
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
             the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
-        partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
+        partial_rotary_factor (`float`, *optional*, defaults to 1.0):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
-        bos_token_id (`int`, *optional*, defaults to 199999):
+        bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 199999):
+        eos_token_id (`int`, *optional*, defaults to 32000):
             The id of the "end-of-sequence" token.
-        pad_token_id (`int`, *optional*, defaults to 199999):
+        pad_token_id (`int`, *optional*, defaults to 32000):
             The id of the padding token.
-        original_max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model was trained with. This is used to determine the size of the
-            original RoPE embeddings when using long scaling.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If `None`, no sliding window is applied.
-        vision_config (`<fill_type>`, *optional*): <fill_docstring>
-        audio_config (`<fill_type>`, *optional*): <fill_docstring>
 
     Example:
 
