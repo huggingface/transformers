@@ -195,7 +195,6 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
-    "liquidpy>=0.8.1,<1",
 ]
 
 
@@ -404,11 +403,6 @@ extras["dev"] = (
     extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
 )
 
-# Check if 'liquidpy' is in the deps dictionary
-if 'liquidpy' not in deps:
-    # Add it manually if it's missing
-    deps['liquidpy'] = "liquidpy>=0.8.1,<1"
-
 extras["torchhub"] = deps_list(
     "filelock",
     "huggingface-hub",
@@ -422,7 +416,6 @@ extras["torchhub"] = deps_list(
     "torch",
     "tokenizers",
     "tqdm",
-    "liquidpy"
 )
 
 extras["agents"] = deps_list(

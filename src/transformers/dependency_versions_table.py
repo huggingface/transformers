@@ -100,5 +100,4 @@ deps = {
     "pytest-rich": "pytest-rich",
     "libcst": "libcst",
     "rich": "rich",
-    "liquidpy": "liquidpy>=0.8.1,<1",
 }
