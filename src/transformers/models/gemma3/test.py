@@ -14,7 +14,7 @@ def main(*args):
 
     # tokenizer = GemmaTokenizer.from_pretrained(LOCAL_MODEL)
     processor = Gemma3Processor.from_pretrained(LOCAL_MODEL)
-    # model = Gemma3ForConditionalGeneration.from_pretrained(LOCAL_MODEL)
+    model = Gemma3ForConditionalGeneration.from_pretrained(LOCAL_MODEL, ignore_mismatched_sizes=True)
 
     prompt = "<image> Where is the cow standing?"
     url = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
@@ -22,19 +22,14 @@ def main(*args):
 
     inputs = processor(images=image, text=prompt,  return_tensors="pt")
     inputs = inputs.to(torch.get_default_device())
-    print(inputs.keys())
-    print(inputs["input_ids"].shape)
-    print(inputs["attention_mask"].shape)
-    print(inputs["image_soft_token_mask"].shape)
-    print(len(inputs["pixel_values"]), inputs["pixel_values"][0].shape)
 
-    # generate_ids = model.generate(**inputs, max_new_tokens=24)
-    # outputs = processor.batch_decode(
-    #     generate_ids,
-    #     skip_special_tokens=True,
-    #     clean_up_tokenization_spaces=False
-    # )
-    # print(outputs)
+    generate_ids = model.generate(**inputs, max_new_tokens=24)
+    outputs = processor.batch_decode(
+        generate_ids,
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False
+    )
+    print(outputs)
 
 
 if __name__ == "__main__":

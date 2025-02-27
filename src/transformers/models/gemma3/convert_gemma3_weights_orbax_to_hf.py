@@ -319,7 +319,7 @@ def _convert_transformer_weights(
     config: Gemma3TextConfig,
     paths: Sequence[str],
     weights: np.ndarray,
-) -> Iterator[Sequence[str, np.ndarray]]:
+) -> Iterator[tuple[str, np.ndarray]]:
     path, prop = paths
 
     if path.startswith(_TRANSFORMER_POST_TRAINING_PREFIX):
@@ -338,11 +338,11 @@ def _convert_transformer_weights(
                 "language_model.lm_head.weight",
             ]
             converted_weights = [weights, weights]
+        elif _TEXT_ONLY.value or prop == "mm_output_embedding":
+            return zip([], [])
         elif prop == "mm_input_embedding_extra":
             converted_paths = ["mm_input_embedding_extra.weight"]
             converted_weights = [weights]
-        elif prop == "mm_output_embedding":
-            return zip([], [])
         else:
             raise ValueError(f"Upexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
@@ -456,13 +456,13 @@ def convert(
     hf_tree: dict[str, torch.Tensor] = {}
 
     def update_tree(path: str, weights: np.ndarray) -> None:
-        # logging.info(
-        #     "%s converted from shape=%s to shape=%s with dtype=%s",
-        #     path,
-        #     value.shape,
-        #     weights.shape,
-        #     weights.dtype,
-        # )
+        logging.info(
+            "%s converted from shape=%s to shape=%s with dtype=%s",
+            path,
+            value.shape,
+            weights.shape,
+            weights.dtype,
+        )
         hf_tree[path] = torch.from_numpy(weights.astype("float32")).type(target_dtype)
 
     for paths, value in tree.flatten_with_path(ckpt):
@@ -483,6 +483,24 @@ def convert(
 
                 update_tree(path, weights)
 
+    if not _TEXT_ONLY.value:
+        extra_embs = hf_tree.pop("mm_input_embedding_extra.weight").float()
+        soft_emb_norm = hf_tree.get("mm_soft_emb_norm.weight").float()
+        soft_emb_proj = hf_tree.get("mm_input_projection.weight").float()
+        lm_embs = hf_tree.get("language_model.model.embed_tokens.weight").float()
+
+        extra_embs_expanded = extra_embs.unsqueeze(0)
+        extra_embs_norm = extra_embs_expanded * torch.rsqrt(
+            extra_embs_expanded.pow(2).mean(-1, keepdim=True) + config.text_config.rms_norm_eps
+        )
+        extra_embs_norm = extra_embs_norm * (1.0 + soft_emb_norm)
+        extra_embs_proj = torch.einsum('btm,md->btd', extra_embs_norm, soft_emb_proj)
+        extra_embs_proj = extra_embs_proj.squeeze()
+        embs = torch.cat([lm_embs, extra_embs_proj], dim=0)
+
+        hf_tree["language_model.model.embed_tokens.weight"] = embs
+        hf_tree["language_model.lm_head.weight"] = embs.clone()
+
     return ConversionResult(state_tree=hf_tree, config=config)
 
 
@@ -493,11 +511,15 @@ def main(*args):
     dtype = _PRECISION.value
     config = _VARIANTS[variant]
 
+    if variant == _VARIANT_GEMMA_3_1B:
+        flags.FLAGS.set_default(_TEXT_ONLY.name, True)
+
     tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
 
     if _TEXT_ONLY.value:
+        config.text_config.mm_vocab_size = 0
         config.vision_config = None
-        output_path = f"{output_path}_textonly"
+        output_path = f"{_OUTPUT_PATH.value}_textonly"
         tokenizer.save_pretrained(output_path)
         logging.info("Saved GemmaTokenizer for %s", variant)
         del tokenizer

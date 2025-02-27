@@ -171,7 +171,8 @@ class Gemma3TextConfig(PretrainedConfig):
     def __init__(
         self,
         # Config parameters found in all implementations, name differences noted
-        vocab_size: int = 256_000,  # num_embed in FLAX
+        vocab_size: int = 262_144,  # num_embed in FLAX
+        mm_vocab_size: int = 128,
         hidden_size: int = 2304,  # embed_dim in FLAX
         intermediate_size: int = 9216,  # hidden_dim in FLAX
         num_hidden_layers: int = 26,  # num_layers in FLAX
@@ -190,7 +191,6 @@ class Gemma3TextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        image_token_index: int = 256_000,
         tie_word_embeddings: bool = True,
         max_position_embeddings: int = 8192,
         initializer_range: float = 0.02,
@@ -198,9 +198,6 @@ class Gemma3TextConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         use_cache: bool = True,
         cache_implementation: str = "hybrid",
-        # Config parameters still to be adjudicated
-        use_pre_ffw_norm: bool = False,  # use_post_attn_norm in FLAX
-        use_post_ffw_norm: bool = False,
         compression_type: Optional[enum.Enum] = None,  # uant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
@@ -212,6 +209,7 @@ class Gemma3TextConfig(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
+        self.mm_vocab_size = mm_vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -306,7 +304,6 @@ class Gemma3Config(PretrainedConfig):
         self,
         text_config: Optional[Gemma3TextConfig] = None,
         vision_config: Optional[Gemma3VisionConfig] = None,
-        mm_extra_vocab_size: int = 128,
         **kwargs,
     ):
         if text_config is None:
@@ -329,8 +326,6 @@ class Gemma3Config(PretrainedConfig):
                 "vision_config is None or incompatible with Gemma3VisionConfig intialization. Gemma3 will be limited "
                 "to text tasks."
             )
-
-        self.mm_extra_vocab_size = mm_extra_vocab_size
 
         super().__init__(**kwargs)
 

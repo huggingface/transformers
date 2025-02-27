@@ -307,6 +307,7 @@ class Gemma3Processor(ProcessorMixin):
                         )
                         prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_TOKEN_LEN :]
 
+            # Expand placeholder image tokens to the full image token sequence
             text = [prompt.replace(IMAGE_TOKEN, self.full_image_sequence) for prompt in text]
 
         inputs = self.tokenizer(text=text, **kwargs)

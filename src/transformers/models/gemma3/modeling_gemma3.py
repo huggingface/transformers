@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache
+from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -444,7 +444,11 @@ class Gemma3Model(Gemma3PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size + config.mm_vocab_size,
+            config.hidden_size,
+            padding_idx=config.pad_token_id,
+        )
         self.layers = nn.ModuleList(
             [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -712,9 +716,9 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
         self.config = config
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.vocab_size + config.mm_vocab_size
         self.model = Gemma3Model(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, self.vocab_size, bias=False)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -985,25 +989,16 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         self.config = config
         self.language_model = Gemma3ForCausalLM(config=config.text_config)
         self.vision_model = SiglipVisionModel(config=config.vision_config)
-        self.mm_input_embedding_extra = nn.Embedding(
-            config.mm_extra_vocab_size, config.vision_config.hidden_size, config.pad_token_id
-        )
         self.mm_input_projection = Gemma3MultimodalInputProjection(config=config)
         self.mm_soft_emb_norm = Gemma3RMSNorm(
             config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
         )
         self.vocab_size = config.text_config.vocab_size
-
         self.pad_token_id = pad_token_id if (pad_token_id := config.text_config.pad_token_id) is not None else -1
         self.post_init()
 
     # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.get_input_embeddings with PaliGemma->Gema3
     def get_input_embeddings(self):
-        # lm_embeddings = self.language_model.get_input_embeddings()
-        # vision_embeddings = self.encode_vision(
-        #     self.mm_input_embedding_extra.weight[None, ...]
-        # ).squeeze()
-        # combined_embeddings = torch.cat([lm_embeddings, vision_embeddings], dim=0)
         return self.language_model.get_input_embeddings()
 
     # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.set_input_embeddings with PaliGemma->Gema3
@@ -1033,7 +1028,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         logger.info("x.shape after projection: %s", x.shape)
         return x
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
+    def get_image_features(self, pixel_values: Sequence[torch.Tensor]) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
 
@@ -1043,11 +1038,15 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_model(pixel_values)
-        image_features = image_outputs.last_hidden_state
-        logger.info("image_features.shape after vision encoding: %s", image_features.shape)
-        image_features = self.encode_vision(image_features)
-        return image_features
+        image_features = []
+        for prompt_images in pixel_values:
+            image_outputs = self.vision_model(prompt_images)
+            prompt_image_features = image_outputs.last_hidden_state
+            logger.info("prompt_image_features.shape after vision model: %s", prompt_image_features.shape)
+            prompt_image_features = self.encode_vision(prompt_image_features)
+            logger.info("prompt_image_features.shape after vision encoding: %s", prompt_image_features.shape)
+            image_features.append(prompt_image_features)
+        return torch.nested.nested_tensor(image_features)
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
@@ -1057,6 +1056,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         pixel_values: Optional[Sequence[torch.FloatTensor]] = None,
+        image_soft_token_mask: Optional[torch.BoolTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
@@ -1142,17 +1142,14 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
-                    "tokens from image embeddings."
-                )
+            image_mask = image_soft_token_mask.unsqueeze(-1)
+            image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+
+            if inputs_embeds[image_mask].numel() != image_features.numel():
+                raise ValueError("Number of images does not match number of special image tokens in the input text. ")
+
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         # mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
@@ -1269,6 +1266,65 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             model_inputs["attention_mask"] = causal_mask
 
         return model_inputs
+
+    def _update_causal_mask(
+        self,
+        attention_mask,
+        token_type_ids,
+        past_key_values,
+        cache_position,
+        input_tensor,
+        is_training: bool = False,
+    ):
+        if self.config.text_config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        using_static_cache = isinstance(past_key_values, StaticCache)
+        min_dtype = torch.finfo(self.dtype).min
+        inputs_lead_dim, sequence_length = input_tensor.shape[:2]
+        if using_static_cache:
+            target_length = past_key_values.get_max_cache_shape()
+        elif isinstance(past_key_values, HybridCache):
+            target_length = past_key_values.get_max_cache_shape()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else cache_position[0] + sequence_length + 1
+            )
+
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            return attention_mask
+
+        causal_mask = torch.full(
+            (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
+        )
+        # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
+        if sequence_length != 1:
+            if is_training:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            else:
+                causal_mask[:, :sequence_length] = 0.0
+
+        causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            mask_length = attention_mask.shape[-1]
+            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
+            padding_mask = padding_mask == 0
+            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                padding_mask, min_dtype
+            )
+            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
+            if is_training:
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
+                )
+        return causal_mask
 
 
 __all__ = ["Gemma3PreTrainedModel", "Gemma3Model", "Gemma3ForCausalLM", "Gemma3ForConditionalGeneration"]
