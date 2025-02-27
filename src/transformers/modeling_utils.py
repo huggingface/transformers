@@ -67,7 +67,6 @@ from .pytorch_utils import (  # noqa: F401
     translate_to_torch_parallel_style,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
-from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ACCELERATE_MIN_VERSION,
@@ -831,7 +830,7 @@ def _load_state_dict_into_meta_model(
                 param_casting_dtype = dtype
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            module_to_tp, param_type = find_submodule_and_param_name(model, serialized_param_name)
+            module_to_tp, param_type = find_submodule_and_param_name(model, fixed_param_name)
             current_module_plan = None
             full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
             if plan := re.search(full_tp_plan_, fixed_param_name):
@@ -909,14 +908,14 @@ def _load_state_dict_into_meta_model(
                 )
             else:
                 hf_quantizer.create_quantized_param(
-                    model, param[:], module_name, param_device, state_dict, unexpected_keys
+                    model, param[:], fixed_param_name, param_device, state_dict, unexpected_keys
                 )
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    module, tensor_name = get_module_from_name(model, module_name)
-                    value = getattr(module, tensor_name)
+                    module, param_type = find_submodule_and_param_name(model, fixed_param_name)
+                    value = getattr(module, param_type)
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         param_to = "meta"
@@ -924,7 +923,7 @@ def _load_state_dict_into_meta_model(
                     if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
                         val_kwargs["requires_grad"] = False
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                    setattr(module, tensor_name, value)
+                    setattr(module, param_type, value)
     if file_pointer is not None:
         file_pointer.close()
 
