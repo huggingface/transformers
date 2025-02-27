@@ -5850,12 +5850,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             param = model.get_parameter(param_name)
         except AttributeError:
             param = model.get_buffer(param_name)
-        # hardcoded x2 factor to improve loading in distributed scenario
         parameter_count[device] += int(math.prod(param.shape) * allocation_factor)
 
     dtype = dtype if dtype is not None else torch.float32
-    # This will kick off the caching allocator to avoid having to Malloc afterwards
     max_memory = get_max_memory()
+
+    # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
         # allocate only if we have enough memory
         if max_memory[device.index] > param_count * dtype_byte_size(dtype):
