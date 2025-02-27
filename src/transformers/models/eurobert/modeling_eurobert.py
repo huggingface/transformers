@@ -703,7 +703,7 @@ class EuroBertModel(EuroBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
+    "The EuroBert Model with a sequence classification head on top that performs pooling.",
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForMaskedLM(EuroBertPreTrainedModel):
@@ -732,7 +732,9 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
-        encoder_output = self.encoder.forward(
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_output = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -795,15 +797,6 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        encoder_output = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -865,6 +858,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
+
         if not return_dict:
             output = (logits,) + encoder_output[1:]
             return ((loss,) + output) if loss is not None else output

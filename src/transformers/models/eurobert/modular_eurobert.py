@@ -97,6 +97,11 @@ class EuroBertConfig(LlamaConfig):
             Padding token id.
         mask_token_id (`int`, *optional*, defaults to 128002):
             Mask token id.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
+            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
+            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 250000.0):
@@ -181,6 +186,7 @@ class EuroBertConfig(LlamaConfig):
         eos_token_id=128001,
         pad_token_id=128001,
         mask_token_id=128002,
+        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=250000.0,
         rope_scaling=None,
@@ -191,6 +197,10 @@ class EuroBertConfig(LlamaConfig):
         classifier_pooling="late",
         **kwargs,
     ):
+        # use_cache is specific to decoder models
+        if "use_cache" in kwargs:
+            _ = kwargs.pop("use_cache")
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -206,7 +216,7 @@ class EuroBertConfig(LlamaConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
-            pretraining_tp=1,
+            pretraining_tp=pretraining_tp,
             tie_word_embeddings=tie_word_embeddings,
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
@@ -333,31 +343,10 @@ EUROBERT_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -471,7 +460,7 @@ class EuroBertModel(LlamaModel):
 
 
 @add_start_docstrings(
-    "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
+    "The EuroBert Model with a sequence classification head on top that performs pooling.",
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForMaskedLM(EuroBertPreTrainedModel):
@@ -500,7 +489,9 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
-        encoder_output = self.encoder.forward(
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        encoder_output = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -563,15 +554,6 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        encoder_output = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -633,6 +615,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
+
         if not return_dict:
             output = (logits,) + encoder_output[1:]
             return ((loss,) + output) if loss is not None else output

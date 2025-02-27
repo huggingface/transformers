@@ -70,6 +70,11 @@ class EuroBertConfig(LlamaConfig):
             Padding token id.
         mask_token_id (`int`, *optional*, defaults to 128002):
             Mask token id.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
+            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
+            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 250000.0):
@@ -154,6 +159,7 @@ class EuroBertConfig(LlamaConfig):
         eos_token_id=128001,
         pad_token_id=128001,
         mask_token_id=128002,
+        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=250000.0,
         rope_scaling=None,
@@ -164,6 +170,10 @@ class EuroBertConfig(LlamaConfig):
         classifier_pooling="late",
         **kwargs,
     ):
+        # use_cache is specific to decoder models
+        if "use_cache" in kwargs:
+            _ = kwargs.pop("use_cache")
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -179,7 +189,7 @@ class EuroBertConfig(LlamaConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
-            pretraining_tp=1,
+            pretraining_tp=pretraining_tp,
             tie_word_embeddings=tie_word_embeddings,
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
