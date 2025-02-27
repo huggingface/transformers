@@ -25,6 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1139,7 +1140,7 @@ class VitsEncoder(nn.Module):
 
         hidden_states = hidden_states * padding_mask
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -1149,8 +1150,8 @@ class VitsEncoder(nn.Module):
             dropout_probability = np.random.uniform(0, 1)
 
             skip_the_layer = self.training and (dropout_probability < self.layerdrop)
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
@@ -1405,10 +1406,11 @@ class VitsModel(VitsPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
 
+        mask_dtype = self.text_encoder.embed_tokens.weight.dtype
         if attention_mask is not None:
-            input_padding_mask = attention_mask.unsqueeze(-1).float()
+            input_padding_mask = attention_mask.unsqueeze(-1).to(mask_dtype)
         else:
-            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
+            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).to(mask_dtype)
 
         if self.config.num_speakers > 1 and speaker_id is not None:
             if not 0 <= speaker_id < self.config.num_speakers:
@@ -1486,3 +1488,6 @@ class VitsModel(VitsPreTrainedModel):
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
+
+
+__all__ = ["VitsModel", "VitsPreTrainedModel"]

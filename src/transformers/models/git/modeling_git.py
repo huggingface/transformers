@@ -22,7 +22,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -650,15 +649,15 @@ class GitVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        self.position_embeddings = self.position_embedding.weight.unsqueeze(0)
-        num_positions = self.position_embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding(self.position_ids)
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -1426,6 +1425,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1591,8 +1591,12 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
             shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shifted_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = self.loss_function(
+                shifted_logits.view(-1, self.config.vocab_size),
+                labels.view(-1),
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1609,6 +1613,8 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
     ):
+        # Overwritten -- `git` has special cache handling and doesn't support generating from `inputs_embeds` atm
+
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
             past_length = past_key_values.get_seq_length()
@@ -1642,3 +1648,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]

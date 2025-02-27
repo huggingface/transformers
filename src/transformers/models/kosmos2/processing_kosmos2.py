@@ -428,6 +428,25 @@ class Kosmos2Processor(ProcessorMixin):
             return clean_text_and_extract_entities_with_bboxes(caption)
         return caption
 
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+        return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
+
     @property
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
     def model_input_names(self):
@@ -690,3 +709,6 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
         entities.append(adjusted_entity + (bboxes_in_coords,))
 
     return _cleanup_spaces(processed_text, entities)
+
+
+__all__ = ["Kosmos2Processor"]

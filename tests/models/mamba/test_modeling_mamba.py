@@ -38,9 +38,6 @@ if is_torch_available():
         MambaModel,
     )
     from transformers.models.mamba.modeling_mamba import MambaCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 
 class MambaModelTester:
@@ -239,13 +236,9 @@ class MambaModelTester:
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MambaForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
@@ -350,11 +343,12 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                         self.assertTrue(param.data.min().item() >= inv_dt[0])
                 elif "A_log" in name:
                     A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
-                    self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                    A = A.expand(config.intermediate_size, -1).contiguous()
+                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                 elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
     @slow
     def test_model_from_pretrained(self):
@@ -420,6 +414,30 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @unittest.skip("The `input_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
+
+    def test_dtype_mismatch_handled_in_cache(self):
+        config, input_ids, *args = self.model_tester.prepare_config_and_inputs()
+        model = MambaModel(config)
+        model.to(torch_device).to(torch.float16)
+        model.eval()
+
+        # Create cache with float32 dtype
+        cache_params = MambaCache(config, batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
+
+        # If code is correct, no error occurs and test passes
+        outputs = model(
+            input_ids,
+            cache_params=cache_params,
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+
+        self.assertIsNotNone(outputs)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
+        )
 
 
 @require_torch

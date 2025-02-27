@@ -221,7 +221,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=tokenized_books["train"],
 ...     eval_dataset=tokenized_books["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )
@@ -290,7 +290,7 @@ Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
 
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
+>>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_test_set)
 ```
 
 Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:

@@ -93,7 +93,6 @@ masks = processor.image_processor.post_process_masks(
 )
 scores = outputs.iou_scores
 ```
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.

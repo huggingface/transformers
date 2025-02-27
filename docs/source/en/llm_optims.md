@@ -57,13 +57,13 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
 
 model.generation_config.cache_implementation = "static"
 
 model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device.type)
 
 outputs = model.generate(**input_ids)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -89,11 +89,11 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
 
 model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device.type)
 prompt_length = input_ids.input_ids.shape[1]
 model.generation_config.max_new_tokens = 16
 
@@ -126,6 +126,7 @@ If you want to go further down a level, the [`StaticCache`] object can also be p
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
 from transformers.testing_utils import CaptureLogger
 import torch
+from accelerate.test_utils.testing import get_backend
 
 prompts = [
     "Simply put, the theory of relativity states that ",
@@ -133,7 +134,7 @@ prompts = [
 ]
 
 NUM_TOKENS_TO_GENERATE = 40
-torch_device = "cuda"
+torch_device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 
 tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
 model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
@@ -155,9 +156,11 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
 There are a few important things you must do to enable static kv-cache and `torch.compile` with the `StaticCache` method:
 1. Initialize the [`StaticCache`] instance before using the model for inference. There you can configure parameters like the maximum batch size and sequence length.
 2. Call `torch.compile` on the model to compile the forward pass with the static kv-cache.
-3. Set `enable_math=True` in the [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) context manager to enable the native PyTorch C++ implementation of scaled dot product attention to speed up inference even more.
+3. Use `SDPBackend.MATH` in the [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) context manager to enable the native PyTorch C++ implementation of scaled dot product attention to speed up inference even more.
 
 ```py
+from torch.nn.attention import SDPBackend, sdpa_kernel
+
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
     past_key_values = StaticCache(
@@ -178,7 +181,7 @@ with torch.no_grad():
     decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
     cache_position = torch.tensor([seq_length + 1], device=torch_device)
     for _ in range(1, NUM_TOKENS_TO_GENERATE):
-        with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+        with sdpa_kernel(SDPBackend.MATH):
             next_token = decode_one_tokens(model, next_token.clone(), None, cache_position, past_key_values)
             generated_ids[:, cache_position] = next_token.int()
         cache_position += 1
@@ -201,11 +204,11 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
 
 model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device.type)
 
 outputs = model.generate(**input_ids)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -241,13 +244,14 @@ Enable speculative decoding by loading an assistant model and passing it to the 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+from accelerate.test_utils.testing import get_backend
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, assistant_model=assistant_model)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -262,13 +266,14 @@ For speculative sampling decoding, add the `do_sample` and `temperature` paramet
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+from accelerate.test_utils.testing import get_backend
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.7)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -290,13 +295,14 @@ To enable prompt lookup decoding, specify the number of tokens that should be ov
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+from accelerate.test_utils.testing import get_backend
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, prompt_lookup_num_tokens=3)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -311,13 +317,14 @@ For prompt lookup decoding with sampling, add the `do_sample` and `temperature` 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+from accelerate.test_utils.testing import get_backend
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 outputs = model.generate(**inputs, prompt_lookup_num_tokens=3, do_sample=True, temperature=0.7)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ["The second law of thermodynamics states that energy cannot be created nor destroyed. It's not a"]
@@ -348,6 +355,99 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### Fine-Tuning with torch.compile and Padding-Free Data Collation
+
+In addition to optimizing inference, you can also enhance the training efficiency of large language models by leveraging torch.compile during fine-tuning and using a padding-free data collator. This approach can significantly speed up training and reduce computational overhead.
+
+Here's how you can fine-tune a Llama model using SFTTrainer from the TRL library, with torch_compile enabled and a padding-free data collator:
+
+```
+#################### IMPORTS ###################
+
+import math
+import datasets
+import dataclasses
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments
+)
+from trl import SFTConfig, SFTTrainer, DataCollatorForCompletionOnlyLM
+
+#################### MODEL LOADING WITH FLASH ATTENTION ###################
+
+model_name = "meta-llama/Llama-3.2-1B"
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    attn_implementation="flash_attention_2"  # Enables FlashAttention-2
+)
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+
+#################### DATA PREPROCESSING (PADDING-FREE) ###################
+
+response_template = "\n### Label:"
+response_template_ids = tokenizer.encode(
+    response_template, add_special_tokens=False
+)[2:]  # Exclude special tokens
+
+data_collator = DataCollatorForCompletionOnlyLM(
+    response_template_ids=response_template_ids,
+    tokenizer=tokenizer,
+    ignore_index=-100,
+    padding_free=True  # Enables padding-free collation
+)
+
+def format_dataset(example):
+    return {
+        "output": example["output"] + tokenizer.eos_token
+    }
+
+data_files = {"train": "path/to/dataset"}  # Replace with your dataset path
+json_dataset = datasets.load_dataset("json", data_files=data_files)
+formatted_train_dataset = json_dataset["train"].map(format_dataset)
+
+################# TRAINING CONFIGURATION ############################
+
+train_args = TrainingArguments(
+    num_train_epochs=5,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    gradient_accumulation_steps=4,
+    learning_rate=1e-5,
+    weight_decay=0.0,
+    warmup_ratio=0.03,
+    lr_scheduler_type="cosine",
+    logging_steps=1,
+    include_tokens_per_second=True,
+    save_strategy="epoch",
+    output_dir="output",
+    torch_compile=True,  # Enables torch.compile
+    torch_compile_backend="inductor",
+    torch_compile_mode="default"
+)
+
+# Convert TrainingArguments to SFTConfig
+transformer_train_arg_fields = [x.name for x in dataclasses.fields(SFTConfig)]
+transformer_kwargs = {
+    k: v
+    for k, v in train_args.to_dict().items()
+    if k in transformer_train_arg_fields
+}
+training_args = SFTConfig(**transformer_kwargs)
+
+####################### FINE-TUNING #####################
+
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=formatted_train_dataset,
+    data_collator=data_collator,
+    dataset_text_field="output",
+    args=training_args,
+)
+trainer.train()
+```
+
 ### PyTorch scaled dot product attention
 
 Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and PyTorch's C++ implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the PyTorch C++ implementation.
@@ -355,10 +455,11 @@ Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and 
 > [!TIP]
 > SDPA supports FlashAttention-2 as long as you have the latest PyTorch version installed.
 
-Use the [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) context manager to explicitly enable or disable any of the three attention algorithms. For example, set `enable_flash=True` to enable FlashAttention.
+Use the [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) context manager to explicitly enable or disable any of the four attention algorithms. For example, use `SDPBackend.FLASH_ATTENTION` to enable FlashAttention.
 
 ```py
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -366,7 +467,7 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.bfloat16,
 )
 
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 ```
 
@@ -375,7 +476,7 @@ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable
 Quantization reduces the size of the LLM weights by storing them in a lower precision. This translates to lower memory usage and makes loading LLMs for inference more accessible if you're constrained by your GPUs memory. If you aren't limited by your GPU, you don't necessarily need to quantize your model because it can incur a small latency cost (except for AWQ and fused AWQ modules) due to the extra step required to quantize and dequantize the weights.
 
 > [!TIP]
-> There are many quantization libraries (see the [Quantization](./quantization) guide for more details) available, such as Quanto, AQLM, AWQ, and AutoGPTQ. Feel free to try them out and see which one works best for your use case. We also recommend reading the [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) blog post which compares AutoGPTQ and bitsandbytes.
+> There are many quantization libraries (see the [Quantization](./quantization) guide for more details) available, such as Quanto, AQLM, VPTQ, AWQ, and AutoGPTQ. Feel free to try them out and see which one works best for your use case. We also recommend reading the [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) blog post which compares AutoGPTQ and bitsandbytes.
 
 Use the Model Memory Calculator below to estimate and compare how much memory is required to load a model. For example, try estimating how much memory it costs to load [Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1).
 

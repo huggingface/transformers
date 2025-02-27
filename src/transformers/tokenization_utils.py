@@ -316,6 +316,9 @@ class ExtensionsTrie(Trie):
         """
         node = self.data
         for char in token:
+            if char not in node:
+                break
+
             node = node[char]
         return node
 
@@ -574,7 +577,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 token_index = current_vocab[token.content]
 
             if token.special and str(token) not in self.all_special_tokens:
-                self._additional_special_tokens.append(token)
+                self._special_tokens_map["additional_special_tokens"].append(token)
             # the setter automatically updates the reverse map
             self._added_tokens_decoder[token_index] = token
             self._added_tokens_encoder[token.content] = token_index
@@ -749,7 +752,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -835,7 +838,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -917,7 +920,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,

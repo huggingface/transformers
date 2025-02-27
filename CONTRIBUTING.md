@@ -132,7 +132,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L449)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main/setup.py#L449)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -343,8 +343,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 Like the slow tests, there are other environment variables available which are not enabled by default during testing:
 - `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
-- `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
-- `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
 
 More environment variables and additional information can be found in the [testing_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py).
 

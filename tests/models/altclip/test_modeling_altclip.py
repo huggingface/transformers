@@ -436,19 +436,35 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
+        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
             return True
 
         return False
 
     def setUp(self):
         self.model_tester = AltCLIPModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=AltCLIPConfig,
+            has_text_modality=False,
+            common_properties=["projection_dim", "logit_scale_init_value"],
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -596,7 +612,7 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         probs = outputs.logits_per_image.softmax(dim=1)
         expected_probs = torch.tensor([[9.9942e-01, 5.7805e-04]], device=torch_device)
 
-        self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
+        torch.testing.assert_close(probs, expected_probs, rtol=5e-3, atol=5e-3)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -635,6 +651,6 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
             [[-0.3589, -0.5939, 0.3534], [0.4346, 0.1647, 0.7071], [1.1404, -0.4716, 0.1664]]
         ).to(torch_device)
 
-        self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
         )

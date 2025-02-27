@@ -224,16 +224,16 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         hidden_states = hidden_states[::-1]
 
         fused_hidden_states = []
-        # first layer only uses the last hidden_state
-        size = hidden_states[1].shape[2:]
-        fused_hidden_state = self.layers[0](hidden_states[0], size=size)
-        fused_hidden_states.append(fused_hidden_state)
+        fused_hidden_state = None
 
-        # looping from the last layer to the second
-        for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
-            size = hidden_states[1:][idx + 1].shape[2:] if idx != (len(hidden_states[1:]) - 1) else None
+        for idx, (hidden_state, layer) in enumerate(zip(hidden_states, self.layers)):
+            size = hidden_states[idx + 1].shape[2:] if idx != (len(hidden_states) - 1) else None
 
-            fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
+            if fused_hidden_state is None:
+                # first layer only uses the last hidden_state
+                fused_hidden_state = layer(hidden_state, size=size)
+            else:
+                fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
 
             fused_hidden_states.append(fused_hidden_state)
 
@@ -413,20 +413,18 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...     predicted_depth = outputs.predicted_depth
 
         >>> # interpolate to original size
-        >>> prediction = torch.nn.functional.interpolate(
-        ...     predicted_depth.unsqueeze(1),
-        ...     size=image.size[::-1],
-        ...     mode="bicubic",
-        ...     align_corners=False,
+        >>> post_processed_output = image_processor.post_process_depth_estimation(
+        ...     outputs,
+        ...     target_sizes=[(image.height, image.width)],
         ... )
 
         >>> # visualize the prediction
-        >>> output = prediction.squeeze().cpu().numpy()
-        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> depth = Image.fromarray(formatted)
+        >>> predicted_depth = post_processed_output[0]["predicted_depth"]
+        >>> depth = predicted_depth * 255 / predicted_depth.max()
+        >>> depth = depth.detach().cpu().numpy()
+        >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         loss = None
         if labels is not None:
@@ -465,3 +463,6 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["DepthAnythingForDepthEstimation", "DepthAnythingPreTrainedModel"]

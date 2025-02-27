@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -594,7 +595,6 @@ class UniSpeechFlashAttention2(UniSpeechAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -700,7 +700,7 @@ class UniSpeechFlashAttention2(UniSpeechAttention):
             value_states,
             attention_mask,
             q_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -1004,7 +1004,7 @@ class UniSpeechEncoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
             if output_hidden_states:
@@ -1014,8 +1014,8 @@ class UniSpeechEncoder(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         layer.__call__,
@@ -1075,7 +1075,7 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            hidden_states = hidden_states * expand_attention_mask.to(dtype=hidden_states.dtype)
             if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
@@ -1091,7 +1091,7 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
             if output_hidden_states:
@@ -1101,8 +1101,8 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
@@ -1576,7 +1576,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         quantized_features, codevector_perplexity = self.quantizer(extract_features)
 
         # project quantized features twice
-        quantized_features = self.project_q(quantized_features)
+        quantized_features = self.project_q(quantized_features.to(self.project_q.weight.dtype))
         quantized_features = self.project_hid(quantized_features)
 
         prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
@@ -1876,7 +1876,8 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1896,3 +1897,12 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "UniSpeechForCTC",
+    "UniSpeechForPreTraining",
+    "UniSpeechForSequenceClassification",
+    "UniSpeechModel",
+    "UniSpeechPreTrainedModel",
+]

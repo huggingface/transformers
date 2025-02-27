@@ -197,7 +197,6 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -263,7 +262,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             value,
             attention_mask,
             query_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
         )
@@ -578,6 +577,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         self.input_embeds_layer = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+        # Overwritten -- bark has a model-specific hack
         input_embeds = kwargs.get("input_embeds", None)
 
         attention_mask = kwargs.get("attention_mask", None)
@@ -1189,11 +1189,11 @@ class BarkFineModel(BarkPreTrainedModel):
         # one lm_head for each codebook
         self.lm_heads = new_output_embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, mean_resizing=True):
         old_embeddings_list = self.get_input_embeddings()
         new_embeddings_list = nn.ModuleList(
             [
-                self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+                self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of, mean_resizing)
                 for old_embeddings in old_embeddings_list
             ]
         )
@@ -1211,7 +1211,10 @@ class BarkFineModel(BarkPreTrainedModel):
         return self.get_input_embeddings()
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
@@ -1230,11 +1233,19 @@ class BarkFineModel(BarkPreTrainedModel):
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
                 details about this, or help on choosing the correct value for resizing, refer to this guide:
                 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+            mean_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
+
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities won't be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
 
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
@@ -1721,6 +1732,8 @@ class BarkModel(BarkPreTrainedModel):
                     kwargs_fine[key] = value
 
         # 1. Generate from the semantic model
+        if "generation_config" in kwargs_semantic:
+            kwargs_semantic.pop("generation_config")
         semantic_output = self.semantic.generate(
             input_ids,
             history_prompt=history_prompt,
@@ -1729,6 +1742,8 @@ class BarkModel(BarkPreTrainedModel):
         )
 
         # 2. Generate from the coarse model
+        if "generation_config" in kwargs_coarse:
+            kwargs_coarse.pop("generation_config")
         coarse_output = self.coarse_acoustics.generate(
             semantic_output,
             history_prompt=history_prompt,
@@ -1746,6 +1761,8 @@ class BarkModel(BarkPreTrainedModel):
             output_lengths = output_lengths // coarse_generation_config.n_coarse_codebooks
 
         # 3. "generate" from the fine model
+        if "generation_config" in kwargs_fine:
+            kwargs_fine.pop("generation_config")
         output = self.fine_acoustics.generate(
             coarse_output,
             history_prompt=history_prompt,
@@ -1812,3 +1829,13 @@ class BarkModel(BarkPreTrainedModel):
         config.coarse_acoustics_config._attn_implementation = config._attn_implementation
         config.fine_acoustics_config._attn_implementation = config._attn_implementation
         return config
+
+
+__all__ = [
+    "BarkFineModel",
+    "BarkSemanticModel",
+    "BarkCoarseModel",
+    "BarkModel",
+    "BarkPreTrainedModel",
+    "BarkCausalModel",
+]

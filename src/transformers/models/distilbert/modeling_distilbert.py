@@ -29,6 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import get_activation
 from ...configuration_utils import PretrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -38,7 +39,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_2_2,
+    prune_linear_layer,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -239,7 +245,6 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
     API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -329,6 +334,86 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             return (attn_output,)
 
 
+class DistilBertSdpaAttention(MultiHeadSelfAttention):
+    def __init__(self, config: PretrainedConfig):
+        super().__init__(config=config)
+        self.dropout_prob = config.attention_dropout
+        self.require_contiguous_qkv = not is_torch_greater_or_equal_than_2_2
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
+        """
+        Parameters:
+            query: torch.tensor(bs, seq_length, dim)
+            key: torch.tensor(bs, seq_length, dim)
+            value: torch.tensor(bs, seq_length, dim)
+            mask: torch.tensor(bs, seq_length)
+
+        Returns:
+            weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
+            seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
+        """
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "DistilBertSdpaAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support"
+                " `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but specifying"
+                " the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be"
+                ' removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                query,
+                key,
+                value,
+                mask,
+                head_mask,
+                output_attentions,
+            )
+
+        batch_size, _, _ = query.size()
+        dim_per_head = self.dim // self.n_heads
+
+        def shape(x: torch.Tensor) -> torch.Tensor:
+            """separate heads"""
+            return x.view(batch_size, -1, self.n_heads, dim_per_head).transpose(1, 2)
+
+        def unshape(x: torch.Tensor) -> torch.Tensor:
+            """group heads"""
+            return x.transpose(1, 2).contiguous().view(batch_size, -1, self.n_heads * dim_per_head)
+
+        q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
+        k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+        v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and q.device.type == "cuda" and mask is not None:
+            q = q.contiguous()
+            k = k.contiguous()
+            v = v.contiguous()
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=False,
+        )
+
+        attn_output = unshape(attn_output)
+        attn_output = self.out_lin(attn_output)
+
+        return (attn_output,)
+
+
 class FFN(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
@@ -353,6 +438,7 @@ class FFN(nn.Module):
 DISTILBERT_ATTENTION_CLASSES = {
     "eager": MultiHeadSelfAttention,
     "flash_attention_2": DistilBertFlashAttention2,
+    "sdpa": DistilBertSdpaAttention,
 }
 
 
@@ -503,6 +589,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
@@ -589,6 +676,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -689,6 +777,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        head_mask_is_none = head_mask is None
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
@@ -699,6 +788,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
         else:
             if attention_mask is None:
                 attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
+
+            if self._use_sdpa and head_mask_is_none and not output_attentions:
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, embeddings.dtype, tgt_len=input_shape[1]
+                )
 
         return self.transformer(
             x=embeddings,
@@ -1271,3 +1365,14 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DistilBertForMaskedLM",
+    "DistilBertForMultipleChoice",
+    "DistilBertForQuestionAnswering",
+    "DistilBertForSequenceClassification",
+    "DistilBertForTokenClassification",
+    "DistilBertModel",
+    "DistilBertPreTrainedModel",
+]

@@ -19,7 +19,6 @@ import unittest
 from transformers import LiltConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -218,7 +217,7 @@ class LiltModelTester:
 
 
 @require_torch
-class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class LiltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LiltModel,
@@ -245,7 +244,14 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -319,4 +325,4 @@ class LiltModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(outputs.last_hidden_state.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :, :3], expected_slice, rtol=1e-3, atol=1e-3)

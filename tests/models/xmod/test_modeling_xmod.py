@@ -369,7 +369,6 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (XmodForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": XmodModel,
@@ -386,9 +385,16 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
         return False
@@ -546,7 +552,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
         # language de_DE
         model.set_default_language("de_DE")
@@ -562,7 +568,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_xmod_large_prenorm(self):
@@ -582,7 +588,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
         # language de_DE
         model.set_default_language("de_DE")
@@ -598,7 +604,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_multilingual_batch(self):
@@ -624,7 +630,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids, lang_ids=lang_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_end_to_end_mask_fill(self):

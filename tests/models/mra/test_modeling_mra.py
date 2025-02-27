@@ -42,7 +42,8 @@ class MraModelTester:
         self,
         parent,
         batch_size=2,
-        seq_length=8,
+        # must be [== max_position_embeddings] AND [multiple of block_size (default = 32)] (?)
+        seq_length=64,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
@@ -55,7 +56,7 @@ class MraModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
-        max_position_embeddings=512,
+        max_position_embeddings=64,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -297,7 +298,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     has_attentions = False
 
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MraModel,
@@ -400,7 +400,7 @@ class MraModelIntegrationTest(unittest.TestCase):
             [[[-0.0140, 0.0830, -0.0381], [0.1546, 0.1402, 0.0220], [0.1162, 0.0851, 0.0165]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_masked_lm(self):
@@ -419,7 +419,7 @@ class MraModelIntegrationTest(unittest.TestCase):
             [[[9.2595, -3.6038, 11.8819], [9.3869, -3.2693, 11.0956], [11.8524, -3.4938, 13.1210]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_masked_lm_long_input(self):
@@ -438,4 +438,4 @@ class MraModelIntegrationTest(unittest.TestCase):
             [[[5.4789, -2.3564, 7.5064], [7.9067, -1.3369, 9.9668], [9.0712, -1.8106, 7.0380]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

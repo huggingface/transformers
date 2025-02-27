@@ -14,9 +14,6 @@
 # limitations under the License.
 """BridgeTower model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -68,6 +65,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -94,21 +92,6 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.stop_gradient = stop_gradient
         self.share_layernorm = share_layernorm
         self.remove_last_layer = remove_last_layer
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "bridgetower":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class BridgeTowerTextConfig(PretrainedConfig):
@@ -175,6 +158,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -216,21 +200,6 @@ class BridgeTowerTextConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "bridgetower":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class BridgeTowerConfig(PretrainedConfig):
@@ -288,6 +257,7 @@ class BridgeTowerConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower"
+    sub_configs = {"text_config": BridgeTowerTextConfig, "vision_config": BridgeTowerVisionConfig}
 
     def __init__(
         self,
@@ -344,3 +314,6 @@ class BridgeTowerConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

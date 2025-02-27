@@ -19,27 +19,13 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...image_utils import ImageInput, make_nested_list_of_images
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
-    BatchEncoding,
     PreTokenizedInput,
     TextInput,
 )
-
-# TODO: Can we do it that way or its better include as "Copied from ..."
-from .image_processing_mllama import make_list_of_images
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
@@ -216,28 +202,37 @@ class MllamaProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
             The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
 
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "MllamaImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer):
-        self.image_token = "<|image|>"
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+    def __init__(self, image_processor, tokenizer, chat_template=None):
+        if not hasattr(tokenizer, "image_token"):
+            self.image_token = "<|image|>"
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        else:
+            self.image_token = tokenizer.image_token
+            self.image_token_id = tokenizer.image_token_id
+
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
         self.bos_token = tokenizer.bos_token
-        self.chat_template = tokenizer.chat_template
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
         arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -260,7 +255,7 @@ class MllamaProcessor(ProcessorMixin):
                     - `'np'`: Return NumPy `np.ndarray` objects.
                     - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -296,7 +291,7 @@ class MllamaProcessor(ProcessorMixin):
 
         n_images_in_images = [0]
         if images is not None:
-            images = make_list_of_images(images)
+            images = make_nested_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
         if text is not None:
@@ -311,7 +306,7 @@ class MllamaProcessor(ProcessorMixin):
                     raise ValueError("No image were provided, but there are image tokens in the prompt")
                 else:
                     raise ValueError(
-                        f"The number of image token ({sum(n_images_in_images)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
+                        f"The number of image token ({sum(n_images_in_text)}) should be the same as in the number of provided images ({sum(n_images_in_images)})"
                     )
 
         if images is not None:
@@ -333,9 +328,9 @@ class MllamaProcessor(ProcessorMixin):
             data["cross_attention_mask"] = cross_attention_mask
 
         return_tensors = common_kwargs.pop("return_tensors", None)
-        batch_encoding = BatchFeature(data=data, tensor_type=return_tensors)
+        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
 
-        return batch_encoding
+        return batch_feature
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -351,8 +346,42 @@ class MllamaProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+
+        # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when remocing
+        # otherwise `self.image_processor.model_input_names` is also modified
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])
+
+
+__all__ = ["MllamaProcessor"]

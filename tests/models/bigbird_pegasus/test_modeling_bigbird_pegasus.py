@@ -250,7 +250,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BigBirdPegasusModel,
@@ -276,34 +275,19 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
         return False
-
-    # overwrite from GenerationTesterMixin to solve problem
-    # with conflicting random seeds
-    def _get_input_ids_and_config(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.attention_type = "original_full"
-
-        input_ids = inputs_dict.pop(self.input_name)
-        _ = inputs_dict.pop("attention_mask", None)
-        _ = inputs_dict.pop("decoder_input_ids", None)
-        _ = inputs_dict.pop("decoder_attention_mask", None)
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
-
-        # cut to half length & take max batch_size 3
-        sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:batch_size, :sequence_length]
-        attention_mask = attention_mask[:batch_size, :sequence_length]
-
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            config.pad_token_id = config.eos_token_id
-        return config, input_ids, attention_mask, inputs_dict
 
     def setUp(self):
         self.model_tester = BigBirdPegasusModelTester(self)
@@ -433,12 +417,12 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         with torch.no_grad():
             logits_single_first = model(input_ids=input_ids[:1, :-chunk_length], labels=labels[:1]).logits
 
-        self.assertTrue(torch.allclose(logits_batched[0, -3:], logits_single_first[0, -3:], atol=tolerance))
+        torch.testing.assert_close(logits_batched[0, -3:], logits_single_first[0, -3:], rtol=tolerance, atol=tolerance)
 
         with torch.no_grad():
             logits_single_second = model(input_ids=input_ids[1:], labels=labels[1:, :-4]).logits
 
-        self.assertTrue(torch.allclose(logits_batched[1, :3], logits_single_second[0, :3], atol=tolerance))
+        torch.testing.assert_close(logits_batched[1, :3], logits_single_second[0, :3], rtol=tolerance, atol=tolerance)
 
     def test_auto_padding(self):
         ids = [[7, 6, 9] * 65]
@@ -460,7 +444,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             "logits"
         ]
 
-        self.assertTrue(torch.allclose(output1, output2, atol=1e-5))
+        torch.testing.assert_close(output1, output2, rtol=1e-5, atol=1e-5)
 
     def test_for_change_to_full_attn(self):
         self.model_tester.seq_length = 9
@@ -477,13 +461,20 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         model.load_state_dict(state_dict)
         outputs2 = model(**input_dict)["logits"]
 
-        self.assertTrue(torch.allclose(outputs1, outputs2, atol=1e-5))
+        torch.testing.assert_close(outputs1, outputs2, rtol=1e-5, atol=1e-5)
 
     @unittest.skip(
         reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
+
+    def test_generate_with_head_masking(self):
+        # overwritten to temporarily switch the attention type to `original_full`
+        original_self_attention_type = self.model_tester.attention_type
+        self.model_tester.attention_type = "original_full"
+        super().test_generate_with_head_masking()
+        self.model_tester.attention_type = original_self_attention_type
 
 
 @require_torch
@@ -531,8 +522,8 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         )
 
         # fmt: on
-        self.assertTrue(
-            torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
         )
 
     def test_inference_full_attn(self):
@@ -552,8 +543,8 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         # fmt: on
-        self.assertTrue(
-            torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
         )
 
     def test_seq_to_seq_generation(self):
@@ -800,7 +791,6 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BigBirdPegasusForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

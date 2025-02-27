@@ -156,7 +156,8 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*):
+        inputs (`np.ndarray`, *optional*): Input data passed to the model.
+        losses (`np.ndarray`, *optional*): Loss values computed during evaluation.
     """
 
     def __init__(
@@ -164,28 +165,25 @@ class EvalPrediction:
         predictions: Union[np.ndarray, Tuple[np.ndarray]],
         label_ids: Union[np.ndarray, Tuple[np.ndarray]],
         inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        losses: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
         self.inputs = inputs
+        self.losses = losses
+        self.elements = (self.predictions, self.label_ids)
+        if self.inputs is not None:
+            self.elements += (self.inputs,)
+        if self.losses is not None:
+            self.elements += (self.losses,)
 
     def __iter__(self):
-        if self.inputs is not None:
-            return iter((self.predictions, self.label_ids, self.inputs))
-        else:
-            return iter((self.predictions, self.label_ids))
+        return iter(self.elements)
 
     def __getitem__(self, idx):
-        if idx < 0 or idx > 2:
+        if idx < 0 or idx >= len(self.elements):
             raise IndexError("tuple index out of range")
-        if idx == 2 and self.inputs is None:
-            raise IndexError("tuple index out of range")
-        if idx == 0:
-            return self.predictions
-        elif idx == 1:
-            return self.label_ids
-        elif idx == 2:
-            return self.inputs
+        return self.elements[idx]
 
 
 class EvalLoopOutput(NamedTuple):
@@ -227,6 +225,13 @@ class IntervalStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
     EPOCH = "epoch"
+
+
+class SaveStrategy(ExplicitEnum):
+    NO = "no"
+    STEPS = "steps"
+    EPOCH = "epoch"
+    BEST = "best"
 
 
 class EvaluationStrategy(ExplicitEnum):
@@ -317,7 +322,7 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
 
 def default_hp_space_sigopt(trial):
     return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
+        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
         {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
         {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
         {

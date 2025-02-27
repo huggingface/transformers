@@ -104,9 +104,10 @@ class VivitEmbeddings(nn.Module):
             torch.zeros(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.tubelet_size[1:]
         self.config = config
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
+    # Adapted from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -129,8 +130,8 @@ class VivitEmbeddings(nn.Module):
 
         dim = embeddings.shape[-1]
 
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
+        new_height = height // self.patch_size[0]
+        new_width = width // self.patch_size[1]
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -226,6 +227,51 @@ class VivitSelfAttention(nn.Module):
         return outputs
 
 
+# Adapted from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->Vivit
+class VivitSdpaSelfAttention(VivitSelfAttention):
+    def __init__(self, config: VivitConfig) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "VivitSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support"
+                " `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but specifying"
+                " the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be"
+                ' removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                head_mask,
+                output_attentions,
+            )
+
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Vivit
 class VivitSelfOutput(nn.Module):
     """
@@ -285,6 +331,13 @@ class VivitAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->Vivit
+class VivitSdpaAttention(VivitAttention):
+    def __init__(self, config: VivitConfig) -> None:
+        super().__init__(config)
+        self.attention = VivitSdpaSelfAttention(config)
+
+
 class VivitIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -319,6 +372,12 @@ class VivitOutput(nn.Module):
         return hidden_states
 
 
+VIVIT_ATTENTION_CLASSES = {
+    "eager": VivitAttention,
+    "sdpa": VivitSdpaAttention,
+}
+
+
 class VivitLayer(nn.Module):
     """This corresponds to the EncoderBlock class in the scenic/vivit implementation."""
 
@@ -326,7 +385,7 @@ class VivitLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = VivitAttention(config)
+        self.attention = VIVIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = VivitIntermediate(config)
         self.output = VivitOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -435,6 +494,7 @@ class VivitPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = []
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -804,3 +864,6 @@ class VivitForVideoClassification(VivitPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["VivitModel", "VivitPreTrainedModel", "VivitForVideoClassification"]

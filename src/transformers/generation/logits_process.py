@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team
+# Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,22 +44,6 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
 class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
-
-    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        raise NotImplementedError(
-            f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
-        )
-
-
-class LogitsWarper:
-    """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
-
-    def __init__(self):
-        logger.warning_once(
-            "`LogitsWarper` is deprecated and will be removed in v4.48. Your class should inherit `LogitsProcessor` "
-            "instead, which has the same properties and interface."
-        )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -1056,10 +1040,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
     <Tip>
 
-    In order to get the token ids of the sequences that you want to bias, make sure to set `add_prefix_space=True` when
-    initializing the tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The
-    `add_prefix_space` argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours
-    come from `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
+    At a token-level, biasing a word is different from biasing a word with a space before it. If you want to bias
+    "foo" mid-sentence, you'll likely want to add a prefix space and bias " foo" instead. Check the tokenizer section
+    of our NLP course to find out why: https://huggingface.co/learn/nlp-course/chapter2/4?fw=pt
 
     </Tip>
 
@@ -1076,37 +1059,40 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
     >>> inputs = tokenizer(["The full name of Donald is Donald"], return_tensors="pt")
 
-    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=4)
+    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=4, do_sample=False)
     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
-    The full name of Donald is Donald J. Trump Jr
-
-    >>> # Now let's control generation through a bias. Please note that the tokenizer is initialized differently!
-    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("openai-community/gpt2", add_prefix_space=True)
-
+    The full name of Donald is Donald John Trump Sr.
 
     >>> def get_tokens(word):
-    ...     return tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
+    ...     return tokenizer([word], add_special_tokens=False).input_ids[0]
 
-
-    >>> # If we add a negative bias without beam search, it may become "stuck" in a prefix without good continuations
-    >>> sequence_bias = [get_tokens("Trump"), -10.0]
-    >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, sequence_bias=sequence_bias)
+    >>> # IMPORTANT: Remember our tip about adding spaces before words to bias them correctly.
+    >>> sequence_bias = [[get_tokens("Trump"), -10.0],]  # will fail to apply bias
+    >>> biased_ids = model.generate(
+    ...     inputs["input_ids"], max_new_tokens=4, do_sample=False, sequence_bias=sequence_bias
+    ... )
     >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
-    The full name of Donald is Donald J. Donald,
+    The full name of Donald is Donald John Trump Sr.
 
-    >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=4, sequence_bias=sequence_bias)
+    >>> sequence_bias = [[get_tokens(" Trump"), -10.0],]  # will work
+    >>> biased_ids = model.generate(
+    ...     inputs["input_ids"], max_new_tokens=4, do_sample=False, sequence_bias=sequence_bias
+    ... )
     >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
-    The full name of Donald is Donald Rumsfeld,
+    The full name of Donald is Donald John Harper. He
 
-    >>> # We can also add a positive bias to nudge the model towards specific tokens or continuations
-    >>> sequence_bias = [get_tokens("Donald Duck"), 10.0]
-    >>> biased_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=4, sequence_bias=sequence_bias)
+    >>> # We can also add a positive bias to nudge the model towards specific tokens or continuations. This technique
+    >>> # is also more effective when paired up with beam search.
+    >>> sequence_bias = [[get_tokens(" Donald Duck"), 10.0],]
+    >>> biased_ids = model.generate(
+    ...     inputs["input_ids"], max_new_tokens=4, num_beams=4, do_sample=False, sequence_bias=sequence_bias
+    ... )
     >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
-    The full name of Donald is Donald Duck.
+    The full name of Donald is Donald Duck. He is
     ```
     """
 
@@ -1782,7 +1768,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     r"""
     [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
     generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are
-    not generated at the begining. Originally created for
+    not generated at the beginning. Originally created for
     [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper).
 
     Examples:
@@ -2460,6 +2446,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
                 final_greenlist.append(greedy_predictions[i])
         return torch.tensor(final_greenlist, device=input_seq.device)
 
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[-1] < self.context_width:
             logger.warning(
@@ -2477,3 +2464,478 @@ class WatermarkLogitsProcessor(LogitsProcessor):
             scores_processed[b_idx, greenlist_ids] = scores_processed[b_idx, greenlist_ids] + self.bias
 
         return scores_processed
+
+
+class SynthIDTextWatermarkState:
+    """SynthID watermarking state."""
+
+    def __init__(
+        self,
+        batch_size: int,
+        ngram_len: int,
+        context_history_size: int,
+        device: torch.device,
+    ):
+        """Initializes the state.
+
+        Args:
+            batch_size (`int`): Batch size.
+            ngram_len (`int`): Ngram length.
+            context_history_size (`int`): Size of the tensor to keep track of seen contexts.
+            device (`int`): Device to use.
+        """
+        self.context = torch.zeros(
+            (batch_size, ngram_len - 1),
+            dtype=torch.int64,
+            device=device,
+        )
+        self.context_history = torch.zeros(
+            (batch_size, context_history_size),
+            dtype=torch.int64,
+            device=device,
+        )
+        self.num_calls = 0
+
+
+class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
+    r"""
+    Logits processor that implements watermarking techniques for text generation models.
+    This class facilitates the application of SynthID text watermarking, a method for embedding imperceptible signals
+    into generated text to aid in detecting synthetic content. It operates by subtly manipulating the probabilities of
+    token selection during text generation in a manner that can be reliably recovered later for verification.
+
+    Key Features:
+    * **State Management:** Maintains internal state to track token sequences and generate watermarking keys
+    dynamically.
+
+    * **Key Generation:** Computes hashes based on token sequences and watermarking parameters to create unique keys
+    for each position.
+
+    * **G-Value Sampling:** Employs a pre-computed sampling table to sample watermarking values (g-values) based on
+    the generated keys.
+
+    * **Score Adjustment:** Applies calculated g-values to modify token probabilities during generation, embedding the
+    watermark.
+
+    * **Context Repetition Handling:** Incorporates logic to avoid watermarking tokens in repeated contexts,
+    preserving naturalness.
+
+    * **EOS Token Masking:** Supports masking end-of-sentence tokens to prevent their inclusion in watermarking
+    calculations.
+
+    * **Utility Functions:** Provides functions to compute g-values directly, check for context repetition, create
+    EOS token masks, and estimate expected mean g-values.
+
+    Refer to paper url: https://www.nature.com/articles/s41586-024-08025-4 for more details around this.
+
+    Args:
+        ngram_len (`int`):
+            Ngram length.
+        keys (`List[int]`):
+            A sequence of watermarking keys, one for each depth.
+        sampling_table_size (`int`):
+            Size of the sampling table.
+        sampling_table_seed (`int`):
+            Random seed to generate the sampling table.
+        context_history_size (`int`):
+            Size of the tensor to keep track of seen contexts.
+        device (`torch.device`):
+            Device to use.
+        skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
+            Whether to skip first ngram calls.
+        debug_mode (`bool`, optional, *optional*, defaults to `False`):
+            Logits are modified to uniform one got before watermarking modification is applied. This is to test the
+            implementation.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, SynthIDTextWatermarkingConfig
+
+    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b', padding_side="left")
+    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b')
+
+    >>> # SynthID Text configuration
+    >>> watermarking_config = SynthIDTextWatermarkingConfig(
+    ...     keys=[654, 400, 836, 123, 340, 443, 597, 160, 57],
+    ...     ngram_len=5,
+    ... )
+
+    >>> # Generation with watermarking
+    >>> tokenized_prompts = tokenizer(["Once upon a time, "], return_tensors="pt", padding=True)
+    >>> output_sequences = model.generate(
+    ...     **tokenized_prompts, watermarking_config=watermarking_config, do_sample=True, max_new_tokens=10
+    ... )
+    >>> watermarked_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+    ```
+    """
+
+    def __init__(
+        self,
+        ngram_len: int,
+        keys: List[int],
+        sampling_table_size: int,
+        sampling_table_seed: int,
+        context_history_size: int,
+        device: torch.device,
+        skip_first_ngram_calls: bool = False,
+        debug_mode: bool = False,
+    ):
+        self.ngram_len = ngram_len
+        self.keys = torch.tensor(keys, device=device)
+
+        generator = torch.Generator(device=device).manual_seed(sampling_table_seed)
+        # A random sampling table is pre-computed and modulo table size is applied to map from a hash of ngram keys to
+        # g values, this is similar to the hashtable implementation used in
+        # https://github.com/facebookresearch/three_bricks. We note that the hashing employed in this repository is
+        # different from that used to watermark the Gemini App, and hence the detectors trained based on the
+        # hashing in this repository will not transfer to text generated by the Gemini App.
+        self.sampling_table = torch.randint(
+            low=0,
+            high=2,
+            size=(sampling_table_size,),
+            generator=generator,
+            device=device,
+        )
+        self.context_history_size = context_history_size
+        self.device = device
+        self.state = None
+        self.skip_first_ngram_calls = skip_first_ngram_calls
+        self.debug_mode = debug_mode
+
+    def _init_state(self, batch_size: int):
+        """Initializes the state."""
+        self.state = SynthIDTextWatermarkState(
+            batch_size=batch_size,
+            ngram_len=self.ngram_len,
+            context_history_size=self.context_history_size,
+            device=self.device,
+        )
+
+    def update_scores(self, scores: torch.FloatTensor, g_values: torch.FloatTensor) -> torch.FloatTensor:
+        """Updates scores using the g values.
+
+        We assume that the scores are in the log space.
+        Args:
+            scores (`torch.FloatTensor`): Scores (batch_size, vocab_size).
+            g_values (`torch.FloatTensor`): G valus (batch_size, vocab_size, depth).
+
+        Returns:
+            Updated scores (batch_size, vocab_size).
+        """
+        _, _, depth = g_values.shape
+
+        probs = torch.softmax(scores, dim=1)
+
+        for i in range(depth):
+            g_values_at_depth = g_values[:, :, i]
+            g_mass_at_depth = (g_values_at_depth * probs).sum(axis=1, keepdims=True)
+            probs = probs * (1 + g_values_at_depth - g_mass_at_depth)
+
+        log_probs = torch.log(probs)
+        log_probs = torch.where(torch.isfinite(log_probs), log_probs, torch.finfo(log_probs.dtype).min)
+        return log_probs
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self._check_input_ids_shape(input_ids)
+        batch_size, vocab_size = scores.shape
+
+        if self.debug_mode:
+            scores = torch.ones_like(scores)
+
+        # Currently indices is just a arange to compute watermarking on the desnse logits.
+        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
+
+        if self.state is None:
+            # Initialize watermarking state if it does not exist.
+            self._init_state(batch_size)
+        else:
+            # Append last input id (which is the input id added in last call) to the
+            # previous context so we have the context to be used for current
+            # watermarking.
+            self.state.context = torch.concat(
+                (self.state.context, input_ids[:, -1:]),
+                dim=1,
+            )
+            self.state.context = self.state.context[:, 1:]
+
+        if self.state is None:
+            raise ValueError("self.state can't be None! Call `self._init_state` to initialize the state.")
+
+        self.state.num_calls += 1
+
+        # Don't watermark the first ngram_len - 1 tokens if set.
+        if self.skip_first_ngram_calls and self.state.num_calls < self.ngram_len:
+            return scores
+
+        # 2. Generate random keys for each ngram key combination.
+        ngram_keys, hash_result_with_just_context = self._compute_keys(self.state.context, all_indices)
+        # ngram_keys shape [batch_size, top_k, depth]
+
+        # 3. Sample g values.
+        g_values = self.sample_g_values(ngram_keys)
+        # g_values shape [batch_size, top_k, depth]
+
+        # 4. Modify scores.
+        updated_scores = self.update_scores(scores, g_values)
+        # updated scores shape [batch_size, top_k]
+
+        # 5. Check if the current watermarking context was previously used, if yes skip watermarking.
+        hash_result_with_just_context = hash_result_with_just_context[:, None]
+        is_repeated_context = (self.state.context_history == hash_result_with_just_context).any(
+            dim=1,
+            keepdim=True,
+        )
+        self.state.context_history = torch.concat(
+            (hash_result_with_just_context, self.state.context_history),
+            dim=1,
+        )[:, :-1]
+
+        updated_watermarked_scores = torch.where(
+            is_repeated_context,
+            input=scores,
+            other=updated_scores,
+        )
+        return updated_watermarked_scores
+
+    def accumulate_hash(
+        self,
+        current_hash: torch.LongTensor,
+        data: torch.LongTensor,
+        multiplier: int = 6364136223846793005,
+        increment: int = 1,
+    ) -> torch.LongTensor:
+        """
+        Accumulate hash of data on current hash.
+
+        Method uses adapted linear congruential generator with newlib/musl parameters.
+
+        This function has following property -
+        f(x, data[T]) = f(f(x, data[:T - 1]), data[T])
+
+        This function expects current_hash.shape and data.shape[:-1] to
+        match/broadcastable.
+
+        Args:
+            current_hash (`torch.LongTensor`):
+                (shape,)
+            data (`torch.LongTensor`):
+                (shape, tensor_len)
+            multiplier (`int`, optional, *optional*, defaults to 6364136223846793005):
+                multiplier of linear congruential generator
+            increment (`int`, optional, *optional*, defaults to 1):
+                increment of linear congruential generator
+
+        Returns:
+            updated hash (shape,)
+        """
+        for i in range(data.shape[-1]):
+            current_hash = torch.add(current_hash, data[..., i])
+            current_hash = torch.mul(current_hash, multiplier)
+            current_hash = torch.add(current_hash, increment)
+        return current_hash
+
+    def compute_ngram_keys(self, ngrams: torch.LongTensor) -> torch.LongTensor:
+        """Computes random keys for each ngram and depth.
+
+        Args:
+            ngrams (`torch.LongTensor`):
+                Ngrams (batch_size, num_ngrams, ngram_len).
+
+        Returns:
+            ngram keys (batch_size, num_ngrams, depth).
+        """
+        if len(ngrams.shape) != 3:
+            raise ValueError(
+                "Ngrams should be of shape (batch_size, num_ngrams, ngram_len), but" f" is {ngrams.shape}"
+            )
+        if ngrams.shape[2] != self.ngram_len:
+            raise ValueError(
+                "Ngrams should be of shape (batch_size, num_ngrams, ngram_len),"
+                f" where ngram_len is {self.ngram_len}, but is {ngrams.shape}"
+            )
+        batch_size, _, _ = ngrams.shape
+
+        hash_result = torch.ones(batch_size, device=self.device, dtype=torch.long)
+        # hash_result shape [batch_size,]
+        # ngrams shape [batch_size, num_ngrams, ngram_len]
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 1), out_dims=1)(hash_result, ngrams)
+        # hash_result shape [batch_size, num_ngrams]
+
+        keys = self.keys[None, None, :, None]
+        # hash_result shape [batch_size, num_ngrams]
+        # keys shape [1, 1, depth, 1]
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 2), out_dims=2)(hash_result, keys)
+        # hash_result shape [batch_size, num_ngrams, depth]
+
+        return hash_result
+
+    def _compute_keys(
+        self, n_minus_1_grams: torch.LongTensor, indices: torch.LongTensor
+    ) -> Tuple[torch.LongTensor, torch.LongTensor]:
+        """Computes random keys for each ngram and depth.
+
+        Args:
+            n_minus_1_grams (`torch.LongTensor`):
+                Ngrams (batch_size, ngram_len - 1).
+            indices (`torch.LongTensor`):
+                indices of the continuations (batch_size, num_indices)
+
+        Returns:
+            Ngram keys (batch_size, num_indices, depth).
+        """
+        batch_size, _ = n_minus_1_grams.shape
+
+        hash_result = torch.ones(batch_size, device=self.device, dtype=torch.long)
+        # First hash n_minus_1 gram, for each batch entry we have a single
+        # n_minus_1 gram context.
+        # hash_result shape [batch_size]
+        # n_minus_1_gram shape [batch_size, ngram_len - 1]
+        hash_result_with_just_context = self.accumulate_hash(hash_result, n_minus_1_grams)
+        # hash_result shape [batch_size,]
+        # Indices is of shape [batch_size, num_indices], so we make it
+        # [batch_size, num_indices, 1] so we can vmap over num_indices dim.
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 1), out_dims=1)(
+            hash_result_with_just_context, indices[:, :, None]
+        )
+        # hash_result shape [batch_size, num_indices]
+        # Basically we have a hash for each batch entry and each indices
+        # Now we add watermarking keys to this hash.
+        # keys are of shape [depth,]
+        # We add batch, num_indices and data dimension to this making it
+        # [1, 1, depth, 1].
+        # So we can vmap over the depth dimension for compute_hash
+        keys = self.keys[None, None, :, None]
+        hash_result = torch.vmap(self.accumulate_hash, in_dims=(None, 2), out_dims=2)(hash_result, keys)
+        # hash_result shape should be [batch_size, num_indices, depth]
+        return hash_result, hash_result_with_just_context
+
+    def sample_g_values(self, ngram_keys: torch.LongTensor) -> torch.LongTensor:
+        """
+        Samples g values from Bernoulli distribution.
+
+        It is not possible to pass random keys in a vectorized way in torch. Instead
+        we pre-compute a random sampling table, and use apply modulo table size to
+        map from ngram keys (int64) to g values.
+
+        Args:
+            ngram_keys (`torch.LongTensor`):
+                Random keys (batch_size, num_ngrams, depth).
+
+        Returns:
+            G values (batch_size, num_ngrams, depth).
+        """
+        (sampling_table_size,) = self.sampling_table.shape
+        sampling_table = self.sampling_table.reshape((1, 1, sampling_table_size))
+        ngram_keys = ngram_keys % sampling_table_size
+        return torch.take_along_dim(sampling_table, indices=ngram_keys, dim=2)
+
+    def _check_input_ids_shape(self, input_ids: torch.LongTensor):
+        """Checks the shape of input ids."""
+        if len(input_ids.shape) != 2:
+            raise ValueError("Input ids should be of shape (batch_size, input_len), but is" f" {input_ids.shape}")
+
+    def compute_g_values(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        """
+        Computes g values for each ngram from the given sequence of tokens.
+
+        Args:
+            input_ids (`torch.LongTensor`):
+                Input token ids (batch_size, input_len).
+
+        Returns:
+            G values (batch_size, input_len - (ngram_len - 1), depth).
+        """
+        self._check_input_ids_shape(input_ids)
+        ngrams = input_ids.unfold(dimension=1, size=self.ngram_len, step=1)
+        ngram_keys = self.compute_ngram_keys(ngrams)
+        return self.sample_g_values(ngram_keys)
+
+    def compute_context_repetition_mask(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        """
+        Computes repetition mask.
+
+        0 and 1 stand for repeated and not repeated context n-1 grams respectively.
+
+        Args:
+            input_ids (`torch.LongTensor`):
+                Input token ids (batch_size, input_len).
+
+        Returns:
+            Repetitions mask (batch_size, input_len - (ngram_len - 1)).
+        """
+        self._check_input_ids_shape(input_ids)
+        batch_size, _ = input_ids.shape
+        state = SynthIDTextWatermarkState(
+            batch_size=batch_size,
+            ngram_len=self.ngram_len,
+            context_history_size=self.context_history_size,
+            device=self.device,
+        )
+        contexts = input_ids[:, :-1].unfold(
+            dimension=1,
+            size=self.ngram_len - 1,
+            step=1,
+        )
+        _, num_contexts, _ = contexts.shape
+
+        are_repeated_contexts = []
+        for i in range(num_contexts):
+            context = contexts[:, i, :]
+            hash_result = torch.ones(batch_size, device=self.device, dtype=torch.long)
+            context_hash = self.accumulate_hash(hash_result, context)[:, None]
+            is_repeated_context = (state.context_history == context_hash).any(
+                dim=1,
+                keepdim=True,
+            )
+            are_repeated_contexts.append(is_repeated_context)
+            state.context_history = torch.concat(
+                (context_hash, state.context_history),
+                dim=1,
+            )[:, :-1]
+        are_repeated_contexts = torch.concat(are_repeated_contexts, dim=1)
+
+        return torch.logical_not(are_repeated_contexts)
+
+    def compute_eos_token_mask(self, input_ids: torch.LongTensor, eos_token_id: int) -> torch.LongTensor:
+        """
+        Computes repetitions mask.
+
+        1 stands for ngrams that don't contain EOS tokens and vice versa.
+
+        Args:
+            input_ids (`torch.LongTensor`):
+                Input token ids (batch_size, input_len).
+            eos_token_id (`int`):
+                EOS token ID.
+
+        Returns:
+            EOS token mask (batch_size, input_len).
+        """
+        self._check_input_ids_shape(input_ids)
+        noneos_masks = []
+        all_eos_equated = input_ids == eos_token_id
+        for eos_equated in all_eos_equated:
+            nonzero_idx = torch.nonzero(eos_equated)
+            noneos_mask = torch.ones_like(eos_equated)
+            if nonzero_idx.shape[0] != 0:
+                noneos_mask[nonzero_idx[0][0] :] = 0
+            noneos_masks.append(noneos_mask)
+        return torch.stack(noneos_masks, dim=0)
+
+    def expected_mean_g_value(self, vocab_size: int, coinflip_prob: float = 0.5) -> float:
+        """
+        Compute expected mean g-value after watermarking, assuming uniform LM dist.
+
+        This is the theoretical expected value for single-layer watermarking.
+
+        Args:
+            vocab_size (`int`):
+                The size of the vocabulary.
+            coinflip_prob arg_name (`float`, *optional*, defaults to 0.5):
+                Probability of 1 in boolean prf.
+
+        Returns:
+            The expected mean g-value for watermarked text.
+        """
+        return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))

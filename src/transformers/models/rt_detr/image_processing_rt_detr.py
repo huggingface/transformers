@@ -935,7 +935,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -1062,10 +1062,8 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-
             if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
             else:
                 img_h, img_w = target_sizes.unbind(1)
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
@@ -1089,10 +1087,16 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
 
         results = []
-        for s, l, b in zip(scores, labels, boxes):
-            score = s[s > threshold]
-            label = l[s > threshold]
-            box = b[s > threshold]
-            results.append({"scores": score, "labels": label, "boxes": box})
+        for score, label, box in zip(scores, labels, boxes):
+            results.append(
+                {
+                    "scores": score[score > threshold],
+                    "labels": label[score > threshold],
+                    "boxes": box[score > threshold],
+                }
+            )
 
         return results
+
+
+__all__ = ["RTDetrImageProcessor"]

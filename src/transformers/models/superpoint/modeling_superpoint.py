@@ -25,7 +25,6 @@ from transformers.modeling_outputs import (
 )
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -239,7 +238,10 @@ class SuperPointInterestPointDecoder(nn.Module):
         return scores
 
     def _extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation"""
+        """
+        Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation.
+        The keypoints are in the form of relative (x, y) coordinates.
+        """
         _, height, width = scores.shape
 
         # Threshold keypoints by score value
@@ -311,7 +313,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         divisor = divisor.to(keypoints)
         keypoints /= divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
-        kwargs = {"align_corners": True} if is_torch_greater_or_equal_than_1_13 else {}
+        kwargs = {"align_corners": True}
         # [batch_size, num_channels, num_keypoints, 2] -> [batch_size, num_channels, num_keypoints, 2]
         keypoints = keypoints.view(batch_size, 1, -1, 2)
         descriptors = nn.functional.grid_sample(descriptors, keypoints, mode="bilinear", **kwargs)
@@ -447,7 +449,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
-        batch_size = pixel_values.shape[0]
+        batch_size, _, height, width = pixel_values.shape
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -485,6 +487,9 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             descriptors[i, : _descriptors.shape[0]] = _descriptors
             mask[i, : _scores.shape[0]] = 1
 
+        # Convert to relative coordinates
+        keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
+
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
             return tuple(v for v in [loss, keypoints, scores, descriptors, mask, hidden_states] if v is not None)
@@ -497,3 +502,6 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             mask=mask,
             hidden_states=hidden_states,
         )
+
+
+__all__ = ["SuperPointForKeypointDetection", "SuperPointPreTrainedModel"]

@@ -110,6 +110,73 @@ Below is an expected speedup diagram that compares pure inference time between t
 </div>
 
 
+### Using Scaled Dot Product Attention (SDPA)
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```python
+from transformers import OPTForCausalLM
+model = OPTForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16, attn_implementation="sdpa")
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (L40S-45GB, PyTorch 2.4.0, OS Debian GNU/Linux 11) using `float16` with
+[facebook/opt-350m](https://huggingface.co/facebook/opt-350m), we saw the
+following speedups during training and inference.
+
+### Training
+
+|    batch_size |    seq_len |  Time per batch (eager - s)   |    Time per batch (sdpa - s) |  Speedup (%)   |  Eager peak mem (MB)   |    sdpa peak mem (MB) |  Mem saving (%)   |
+|--------------:|-----------:|:------------------------------|-----------------------------:|:---------------|:-----------------------|----------------------:|:------------------|
+|             1 |        128 | 0.047                         |                        0.037 | 26.360         | 1474.611               |               1474.32 | 0.019             |
+|             1 |        256 | 0.046                         |                        0.037 | 24.335         | 1498.541               |               1499.49 | -0.063            |
+|             1 |        512 | 0.046                         |                        0.037 | 24.959         | 1973.544               |               1551.35 | 27.215            |
+|             1 |       1024 | 0.062                         |                        0.038 | 65.135         | 4867.113               |               1698.35 | 186.578           |
+|             1 |       2048 | 0.230                         |                        0.039 | 483.933        | 15662.224              |               2715.75 | 476.718           |
+|             2 |        128 | 0.045                         |                        0.037 | 20.455         | 1498.164               |               1499.49 | -0.089            |
+|             2 |        256 | 0.046                         |                        0.037 | 24.027         | 1569.367               |               1551.35 | 1.161             |
+|             2 |        512 | 0.045                         |                        0.037 | 20.965         | 3257.074               |               1698.35 | 91.778            |
+|             2 |       1024 | 0.122                         |                        0.038 | 225.958        | 9054.405               |               2715.75 | 233.403           |
+|             2 |       2048 | 0.464                         |                        0.067 | 593.646        | 30572.058              |               4750.55 | 543.548           |
+|             4 |        128 | 0.045                         |                        0.037 | 21.918         | 1549.448               |               1551.35 | -0.123            |
+|             4 |        256 | 0.044                         |                        0.038 | 18.084         | 2451.768               |               1698.35 | 44.361            |
+|             4 |        512 | 0.069                         |                        0.037 | 84.421         | 5833.180               |               2715.75 | 114.791           |
+|             4 |       1024 | 0.262                         |                        0.062 | 319.475        | 17427.842              |               4750.55 | 266.860           |
+|             4 |       2048 | OOM                           |                        0.062 | Eager OOM      | OOM                    |               4750.55 | Eager OOM         |
+|             8 |        128 | 0.044                         |                        0.037 | 18.436         | 2049.115               |               1697.78 | 20.694            |
+|             8 |        256 | 0.048                         |                        0.036 | 32.887         | 4222.567               |               2715.75 | 55.484            |
+|             8 |        512 | 0.153                         |                        0.06  | 154.862        | 10985.391              |               4750.55 | 131.245           |
+|             8 |       1024 | 0.526                         |                        0.122 | 330.697        | 34175.763              |               8821.18 | 287.428           |
+|             8 |       2048 | OOM                           |                        0.122 | Eager OOM      | OOM                    |               8821.18 | Eager OOM         |
+
+### Inference
+
+|    batch_size |    seq_len |    Per token latency eager (ms) |    Per token latency SDPA (ms) |    Speedup (%) |    Mem eager (MB) |    Mem BT (MB) |    Mem saved (%) |
+|--------------:|-----------:|--------------------------------:|-------------------------------:|---------------:|------------------:|---------------:|-----------------:|
+|             1 |        128 |                          11.634 |                          8.647 |         34.546 |           717.676 |        717.674 |            0     |
+|             1 |        256 |                          11.593 |                          8.86  |         30.851 |           742.852 |        742.845 |            0.001 |
+|             1 |        512 |                          11.515 |                          8.816 |         30.614 |           798.232 |        799.593 |           -0.17  |
+|             1 |       1024 |                          11.556 |                          8.915 |         29.628 |           917.265 |        895.538 |            2.426 |
+|             2 |        128 |                          12.724 |                         11.002 |         15.659 |           762.434 |        762.431 |            0     |
+|             2 |        256 |                          12.704 |                         11.063 |         14.83  |           816.809 |        816.733 |            0.009 |
+|             2 |        512 |                          12.757 |                         10.947 |         16.535 |           917.383 |        918.339 |           -0.104 |
+|             2 |       1024 |                          13.018 |                         11.018 |         18.147 |          1162.65  |       1114.81  |            4.291 |
+|             4 |        128 |                          12.739 |                         10.959 |         16.243 |           856.335 |        856.483 |           -0.017 |
+|             4 |        256 |                          12.718 |                         10.837 |         17.355 |           957.298 |        957.674 |           -0.039 |
+|             4 |        512 |                          12.813 |                         10.822 |         18.393 |          1158.44  |       1158.45  |           -0.001 |
+|             4 |       1024 |                          13.416 |                         11.06  |         21.301 |          1653.42  |       1557.19  |            6.18  |
+|             8 |        128 |                          12.763 |                         10.891 |         17.193 |          1036.13  |       1036.51  |           -0.036 |
+|             8 |        256 |                          12.89  |                         11.104 |         16.085 |          1236.98  |       1236.87  |            0.01  |
+|             8 |        512 |                          13.327 |                         10.939 |         21.836 |          1642.29  |       1641.78  |            0.031 |
+|             8 |       1024 |                          15.181 |                         11.175 |         35.848 |          2634.98  |       2443.35  |            7.843 |
 
 ## OPTConfig
 

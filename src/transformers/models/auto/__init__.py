@@ -74,6 +74,8 @@ else:
         "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
         "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
         "MODEL_FOR_VISION_2_SEQ_MAPPING",
+        "MODEL_FOR_RETRIEVAL_MAPPING",
+        "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING",
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
@@ -119,6 +121,7 @@ else:
         "AutoModelWithLMHead",
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
+        "AutoModelForImageTextToText",
     ]
 
 try:
@@ -238,6 +241,7 @@ if TYPE_CHECKING:
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
             MODEL_FOR_KEYPOINT_DETECTION_MAPPING,
@@ -249,6 +253,7 @@ if TYPE_CHECKING:
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_RETRIEVAL_MAPPING,
             MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -279,6 +284,7 @@ if TYPE_CHECKING:
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForImageTextToText,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
             AutoModelForKeypointDetection,

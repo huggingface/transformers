@@ -2018,35 +2018,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
 
         return loss
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
-
-        if past_key_values:
-            decoder_input_ids = decoder_input_ids[:, -1:]
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-        }
-
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
@@ -2290,6 +2261,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         use_cache=None,
         **kwargs,
     ):
+        # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
+
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
@@ -2336,3 +2309,13 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+
+__all__ = [
+    "ProphetNetDecoder",
+    "ProphetNetEncoder",
+    "ProphetNetForCausalLM",
+    "ProphetNetForConditionalGeneration",
+    "ProphetNetModel",
+    "ProphetNetPreTrainedModel",
+]
