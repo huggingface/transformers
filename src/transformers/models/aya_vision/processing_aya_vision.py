@@ -107,7 +107,7 @@ class AyaVisionProcessor(ProcessorMixin):
         **kwargs: Unpack[AyaVisionProcessorKwargs],
     ):
         self.patch_size = patch_size * downsample_factor
-        self.img_size = kwargs.get("size")
+        self.img_size = kwargs.get("size", 364)
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.chat_preamble = kwargs.get("chat_preamble", STD_PREAMBLE)
         self.max_splits_per_img = kwargs.get("max_splits_per_img", 1)
@@ -115,6 +115,8 @@ class AyaVisionProcessor(ProcessorMixin):
         self.image_mean = kwargs.get("image_mean", [0.5, 0.5, 0.5])
         self.image_std = kwargs.get("image_std", [0.5, 0.5, 0.5])
         self.image_token = kwargs.get("image_token", "<|IMG_PATCH|>")
+        
+        # Initialize the parent class
         super().__init__(
             image_processor,
             tokenizer,
@@ -122,6 +124,13 @@ class AyaVisionProcessor(ProcessorMixin):
             if chat_template is None
             else chat_template,
         )
+        
+        # Configure the image processor with our parameters
+        if self.image_processor is not None:
+            self.image_processor.img_size = self.img_size
+            self.image_processor.max_splits_per_image = self.max_splits_per_img
+            self.image_processor.image_mean = self.image_mean
+            self.image_processor.image_std = self.image_std
 
     def __call__(self, batch_of_conversations, **kwargs) -> BatchFeature:
         """
@@ -169,12 +178,12 @@ class AyaVisionProcessor(ProcessorMixin):
         )
 
         # Zero-pad the image patches across the batch
-        max_num_patches = max(image_num_patches)
+        max_num_patches = max(image_num_patches) if image_num_patches else 0
         padded_image_patches = []
         padding_image = np.zeros((self.img_size, self.img_size, 3))
         for i, patch_seq in enumerate(all_image_patches):
             # Normalize the patch images
-            patch_seq = self._normalize_image_patches(patch_seq)
+            patch_seq = self.image_processor.normalize_image_patches(patch_seq)
             padded = patch_seq + [
                 padding_image for _ in range(max_num_patches - len(patch_seq))
             ]
@@ -245,11 +254,14 @@ class AyaVisionProcessor(ProcessorMixin):
     def content_as_text(self, content: List[dict]) -> Tuple[str, List[np.ndarray]]:
         message = ""
         img_patches = []
+        img_size = None
         for content_row in content:
-            text, img_patch_list, img_size = self.content_row_as_text(content_row)
+            text, img_patch_list, row_img_size = self.content_row_as_text(content_row)
             message += text
             if img_patch_list is not None:
                 img_patches.extend(img_patch_list)
+            if row_img_size is not None:
+                img_size = row_img_size
 
         return message, img_patches, img_size
 
@@ -277,7 +289,7 @@ class AyaVisionProcessor(ProcessorMixin):
         if normalized_role not in ["User", "Chatbot", "System"]:
             if self.role_map != DEFAULT_ROLE_MAP:
                 raise ValueError(
-                    f"Using External Evaluator. Chat turn {turn!r} has invalid or missing role. Normalized role was {normalized_role!r} (External Evaluator role was {original_role!r}) but must be one of {list(role_map.values())}"
+                    f"Using External Evaluator. Chat turn {turn!r} has invalid or missing role. Normalized role was {normalized_role!r} (External Evaluator role was {original_role!r}) but must be one of {list(self.role_map.values())}"
                 )
             else:
                 raise ValueError(
@@ -287,8 +299,8 @@ class AyaVisionProcessor(ProcessorMixin):
         turn["role"] = normalized_role if original_role is None else original_role
         return turn
 
-    def content_row_as_text(self, content: dict) -> Tuple[str, List[np.ndarray]]:
-        img_pil =  None
+    def content_row_as_text(self, content: dict) -> Tuple[str, List[np.ndarray], Optional[Tuple[int, int]]]:
+        img_pil = None
         if content.get("url"):
             img_pil = load_img_from_url(content["url"])
         elif content.get("img"):
@@ -297,9 +309,13 @@ class AyaVisionProcessor(ProcessorMixin):
         if img_pil:
             assert not content.get("text"), "Cannot have both text and url in the same content dict."
             img_pil = img_pil.convert("RGB")
-            img_pil = self.scale_to_optimal_aspect_ratio(img_pil)
+            # Make sure image processor has the correct parameters
+            self.image_processor.img_size = self.img_size
+            self.image_processor.max_splits_per_image = self.max_splits_per_img
+            
+            img_pil = self.image_processor.scale_to_optimal_aspect_ratio(img_pil)
             text = self.img_tokens_from_size(*img_pil.size)
-            img_splits = self.make_img_splits(img_pil)
+            img_splits = self.image_processor.make_img_splits(img_pil)
             # If there are more than 1 splits, also include a thumbnail image
             if len(img_splits) > 1: 
                 img_splits += [img_pil.resize((self.img_size, self.img_size))]
@@ -307,28 +323,6 @@ class AyaVisionProcessor(ProcessorMixin):
             return text, img_splits, img_pil.size
 
         return content["text"], [], None
-
-    def find_closest_aspect_ratio(self, aspect_ratio: float, width: int, height: int) -> Tuple[int, int]:
-        best_ratio_diff = float('inf')
-        best_ratio = (1, 1)
-        area = width * height
-        for (rw, rh) in self._possible_aspect_ratios():
-            target_aspect_ratio = rw / rh
-            ratio_diff = abs(aspect_ratio - target_aspect_ratio)
-            if ratio_diff < best_ratio_diff:
-                best_ratio_diff = ratio_diff
-                best_ratio = rw, rh
-            elif ratio_diff == best_ratio_diff:
-                if area > 0.5 * self.img_size * self.img_size * rw * rh:
-                    best_ratio = rw, rh
-        return best_ratio
-
-    def scale_to_optimal_aspect_ratio(self, img: Image.Image) -> Image.Image:
-        w, h = img.size
-        target_aspect_ratio = self.find_closest_aspect_ratio(w / h, w, h)
-        target_width = self.img_size * target_aspect_ratio[0]
-        target_height = self.img_size * target_aspect_ratio[1]
-        return img.resize((target_width, target_height), resample=3)
 
     def img_tokens_from_size(self, width: int, height: int) -> str:
         w_patch = width / self.patch_size
@@ -362,27 +356,6 @@ class AyaVisionProcessor(ProcessorMixin):
             return self.chat_preamble.format(date=date.strftime("%A, %B %d, %Y"))
         return self.chat_preamble
 
-    @functools.lru_cache(maxsize=1)
-    def _possible_aspect_ratios(self):
-        min_num, max_num = 1, self.max_splits_per_img
-        target_ratios = set(
-            (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
-            i * j <= max_num and i * j >= min_num)
-        return sorted(target_ratios, key=lambda x: x[0] * x[1])
-
-    def make_img_splits(self, img: Image.Image) -> List[Image.Image]:
-        width, height = img.size
-        return [img.crop((x, y, x + self.img_size, y + self.img_size))
-                for y in range(0, height, self.img_size)
-                for x in range(0, width, self.img_size)]
-    
-    def _normalize_image_patches(self, image_patches):
-        normalize = lambda x: (x - self.image_mean) / self.image_std
-        normalized_patches = []
-        for img_patch in image_patches:
-            img_patch = normalize(img_patch/255)
-            normalized_patches.append(img_patch)
-        return normalized_patches
 
 def load_img_from_url(url: str) -> Image:
     if url.startswith("data:"):

@@ -148,7 +148,7 @@ AYA_VISION_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare Aya Vision Model outputting raw hidden-states without any specific head on top.",
     AYA_VISION_START_DOCSTRING,
 )
 # Copied from transformers.models.cohere.modeling_cohere.CoherePreTrainedModel with Cohere->AyaVision

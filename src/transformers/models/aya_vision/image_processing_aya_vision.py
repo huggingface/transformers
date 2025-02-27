@@ -14,34 +14,19 @@
 # limitations under the License.
 """Image processor class for Aya Vision."""
 
-import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
-
+import functools
 import numpy as np
+from typing import Dict, List, Optional, Tuple, Union
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, select_best_resolution
-from ...image_transforms import (
-    PaddingMode,
-    convert_to_rgb,
-    get_resize_output_image_size,
-    pad,
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_processing_utils import BaseImageProcessor
+from ...image_transforms import to_channel_dimension_format
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    is_valid_image,
     make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -51,29 +36,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
-
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched video from {images}")
 
 
 class AyaVisionImageProcessor(BaseImageProcessor):
@@ -87,10 +49,6 @@ class AyaVisionImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-            method.
-        image_grid_pinpoints (`List` *optional*, defaults to `[[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]`):
-            A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-            based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
             method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
@@ -120,6 +78,10 @@ class AyaVisionImageProcessor(BaseImageProcessor):
                 number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        patch_size (`int`, *optional*):
+            Size of the patches to extract from the image.
+        max_splits_per_image (`int`, *optional*, defaults to 1):
+            Maximum number of splits to make for a single image.
     """
 
     model_input_names = ["pixel_values"]
@@ -128,7 +90,6 @@ class AyaVisionImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
@@ -139,13 +100,17 @@ class AyaVisionImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = True,
         do_convert_rgb: bool = True,
+        patch_size: Optional[int] = None,
+        max_splits_per_image: Optional[int] = 1,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
+        size = size if size is not None else {"shortest_edge": 364}
         self.do_resize = do_resize
         self.size = size
-        self.max_splits_per_image = kwargs.get("max_splits_per_image")
+        self.img_size = size.get("shortest_edge", 364)
+        self.patch_size = patch_size
+        self.max_splits_per_image = max_splits_per_image
         self.resample = resample
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
@@ -157,96 +122,11 @@ class AyaVisionImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.do_convert_rgb = do_convert_rgb
 
-    def _preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Image.Image:
-        """
-        Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        images = make_list_of_images(images)
-
-        all_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
-            if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
-
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-            if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-
-            all_images.append(image)
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in all_images
-        ]
-
-        return images
-
     def preprocess(
         self,
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: int = None,
@@ -261,5 +141,141 @@ class AyaVisionImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
+        """
+        Preprocess an image or batch of images.
+
+        Args:
+            images (`ImageInput`):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing.
+            resample (`int`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the center crop.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for normalization.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for normalization.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image.
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+                Whether to convert the image to RGB.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - `'pt'`: Return PyTorch tensors.
+                - `'tf'`: Return TensorFlow tensors.
+                - `'np'`: Return NumPy arrays.
+                - `None`: Return the processed image as a PIL image.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image.
+        """
+        # Implement preprocessing logic here
         pass
+
+    def find_closest_aspect_ratio(self, aspect_ratio: float, width: int, height: int) -> Tuple[int, int]:
+        """
+        Find the closest aspect ratio from the predefined set of aspect ratios.
+        
+        Args:
+            aspect_ratio (`float`):
+                The aspect ratio of the input image.
+            width (`int`):
+                The width of the input image.
+            height (`int`):
+                The height of the input image.
+                
+        Returns:
+            `Tuple[int, int]`: The closest aspect ratio as (width, height).
+        """
+        best_ratio_diff = float('inf')
+        best_ratio = (1, 1)
+        area = width * height
+        for (rw, rh) in self._possible_aspect_ratios():
+            target_aspect_ratio = rw / rh
+            ratio_diff = abs(aspect_ratio - target_aspect_ratio)
+            if ratio_diff < best_ratio_diff:
+                best_ratio_diff = ratio_diff
+                best_ratio = rw, rh
+            elif ratio_diff == best_ratio_diff:
+                if area > 0.5 * self.img_size * self.img_size * rw * rh:
+                    best_ratio = rw, rh
+        return best_ratio
+
+    def scale_to_optimal_aspect_ratio(self, img: Image.Image) -> Image.Image:
+        """
+        Scale the image to the optimal aspect ratio.
+        
+        Args:
+            img (`Image.Image`):
+                The input image.
+                
+        Returns:
+            `Image.Image`: The scaled image.
+        """
+        w, h = img.size
+        target_aspect_ratio = self.find_closest_aspect_ratio(w / h, w, h)
+        target_width = self.img_size * target_aspect_ratio[0]
+        target_height = self.img_size * target_aspect_ratio[1]
+        return img.resize((target_width, target_height), resample=3)
+
+    def make_img_splits(self, img: Image.Image) -> List[Image.Image]:
+        """
+        Split the image into patches.
+        
+        Args:
+            img (`Image.Image`):
+                The input image.
+                
+        Returns:
+            `List[Image.Image]`: List of image patches.
+        """
+        width, height = img.size
+        return [img.crop((x, y, x + self.img_size, y + self.img_size))
+                for y in range(0, height, self.img_size)
+                for x in range(0, width, self.img_size)]
+    
+    def normalize_image_patches(self, image_patches):
+        """
+        Normalize image patches.
+        
+        Args:
+            image_patches (`List[np.ndarray]`):
+                List of image patches.
+                
+        Returns:
+            `List[np.ndarray]`: List of normalized image patches.
+        """
+        normalize = lambda x: (x - self.image_mean) / self.image_std
+        normalized_patches = []
+        for img_patch in image_patches:
+            img_patch = normalize(img_patch/255)
+            normalized_patches.append(img_patch)
+        return normalized_patches
+
+    @functools.lru_cache(maxsize=1)
+    def _possible_aspect_ratios(self):
+        """
+        Get all possible aspect ratios based on max_splits_per_image.
+        
+        Returns:
+            `List[Tuple[int, int]]`: List of possible aspect ratios as (width, height).
+        """
+        min_num, max_num = 1, self.max_splits_per_image
+        target_ratios = set(
+            (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
+            i * j <= max_num and i * j >= min_num)
+        return sorted(target_ratios, key=lambda x: x[0] * x[1])
 
