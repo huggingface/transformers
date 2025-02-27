@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import gc
+import tempfile
 import unittest
 
 import requests
@@ -30,10 +31,12 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    require_soundfile,
     require_torch,
     slow,
     torch_device,
 )
+from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -48,9 +51,8 @@ if is_vision_available():
     from PIL import Image
 
 
-import tempfile
-
-import soundfile
+if is_soundfile_available():
+    import soundfile
 
 
 class Phi4MultimodalModelTester:
@@ -118,6 +120,7 @@ class Phi4MultimodalModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[input_ids == self.pad_token_id] = self.pad_token_id + 1  # random value but not pad token
         attention_mask = torch.tril(torch.ones_like(input_ids))
         config = self.get_config()
 
@@ -175,11 +178,6 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
-            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
-            tmp.flush()
-            tmp.seek(0)
-            self.audio = soundfile.read(tmp.name)
 
     def tearDown(self):
         gc.collect()
@@ -249,13 +247,20 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
+    @require_soundfile
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
+        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
+            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
+            tmp.flush()
+            tmp.seek(0)
+            audio = soundfile.read(tmp.name)
+
         prompt = f"{self.user_token}<|audio_1|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, audios=[self.audio], return_tensors="pt").to(torch_device)
+        inputs = self.processor(prompt, audios=[audio], return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
