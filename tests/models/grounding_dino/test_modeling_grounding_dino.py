@@ -357,7 +357,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
             out_len = len(outputs)
 
-            correct_outlen = 13
+            correct_outlen = 12
 
             # loss is at first position
             if "labels" in inputs_dict:

@@ -2452,7 +2452,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             enc_outputs = tuple(
                 value
                 for value in [
-                    topk_proposals,
                     enc_outputs_class,
                     enc_outputs_coord_logits,
                     encoder_logits,
