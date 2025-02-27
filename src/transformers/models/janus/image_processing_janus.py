@@ -22,7 +22,6 @@
 from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
-from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
@@ -55,6 +54,7 @@ if is_torch_available():
 
 if is_vision_available():
     import PIL
+    from PIL import Image
 
 
 logger = logging.get_logger(__name__)
@@ -409,9 +409,9 @@ class JanusImageProcessor(BaseImageProcessor):
 
             if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
                 image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                pixel_values.append(Image.fromarray(image))
-            else:
-                pixel_values.extend(image)
+                image = Image.fromarray(image)
+
+            pixel_values.append(image)
 
         data = {"pixel_values": pixel_values}
         return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
