@@ -988,7 +988,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
 
         hidden_states = self.act(hidden_states)
         hidden_states = self.ext_pw_conv_1d(hidden_states)
-        out = self.dropout(hidden_states)
+        out = self.dropout(hidden_states.permute([0, 2, 1]))
         return out
 
 
