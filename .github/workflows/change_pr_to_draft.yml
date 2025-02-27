@@ -8,6 +8,8 @@ jobs:
   convert_pr_to_draft:
     runs-on: ubuntu-22.04
     name: Convert PR to draft
+    permissions:
+      pull-requests: write
     if: github.event.pull_request.draft == false
     steps:
       - name: Convert PR to draft
