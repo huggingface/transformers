@@ -17,12 +17,14 @@ from typing import Dict
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_accelerate,
     require_fp8,
     require_fsdp,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
+    torch_device,
 )
 
 
@@ -65,7 +67,7 @@ if is_torch_available():
 
 class TestFSDPTrainer(TestCasePlus):
     @require_accelerate
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @require_fsdp
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
@@ -76,7 +78,7 @@ class TestFSDPTrainer(TestCasePlus):
             "--main_process_port",
             f"{get_torch_dist_unique_port()}",
             "--num_processes",
-            f"{torch.cuda.device_count()}",
+            f"{backend_device_count(torch_device)}",
             "--fsdp_transformer_layer_cls_to_wrap",
             "GPT2Block",
             f"{self.test_file_dir}/test_trainer_fsdp.py",
@@ -91,7 +93,7 @@ class TestFSDPTrainer(TestCasePlus):
 
 class TestFSDPTrainerFP8(TestCasePlus):
     @require_accelerate
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @require_fsdp
     @require_fp8
     def test_trainer(self):
@@ -103,7 +105,7 @@ class TestFSDPTrainerFP8(TestCasePlus):
             "--main_process_port",
             f"{get_torch_dist_unique_port()}",
             "--num_processes",
-            f"{torch.cuda.device_count()}",
+            f"{backend_device_count(torch_device)}",
             "--mixed_precision",
             "fp8",
             "--fsdp_transformer_layer_cls_to_wrap",
@@ -119,7 +121,7 @@ class TestFSDPTrainerFP8(TestCasePlus):
 
     class TestFSDPTrainerWrap(TestCasePlus):
         @require_accelerate
-        @require_torch_multi_gpu
+        @require_torch_multi_accelerator
         @require_fsdp
         def test_trainer(self):
             output_dir = self.get_auto_remove_tmp_dir()
@@ -130,7 +132,7 @@ class TestFSDPTrainerFP8(TestCasePlus):
                 "--main_process_port",
                 f"{get_torch_dist_unique_port()}",
                 "--num_processes",
-                f"{torch.cuda.device_count()}",
+                f"{backend_device_count(torch_device)}",
                 "--fsdp_transformer_layer_cls_to_wrap",
                 "GPT2Block",
                 f"{self.test_file_dir}/test_trainer_fsdp.py",
