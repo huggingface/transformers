@@ -1808,6 +1808,11 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
         self.assertNotIn("attention_mask", batch)
+        self.assertNotIn("cu_seq_lens_k", batch)
+        self.assertNotIn("cu_seq_lens_q", batch)
+        self.assertNotIn("max_seq_lens_k", batch)
+        self.assertNotIn("max_seq_lens_q", batch)
+        self.assertNotIn("seq_idx", batch)
         self.assertIn("position_ids", batch)
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
@@ -1841,6 +1846,28 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["max_seq_lens_k"][0].tolist(), [9])
         self.assertEqual(batch["max_seq_lens_q"].shape, (1, 1))
         self.assertEqual(batch["max_seq_lens_q"][0].tolist(), [9])
+
+    def test_data_collator_with_flattening_seq_idx(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+
+        data_collator = DataCollatorWithFlattening(return_tensors="np", return_seq_idx=True)
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, (1, 16))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertNotIn("attention_mask", batch)
+        self.assertIn("position_ids", batch)
+        self.assertNotIn("cu_seq_lens_k", batch)
+        self.assertNotIn("cu_seq_lens_q", batch)
+        self.assertNotIn("max_seq_lens_k", batch)
+        self.assertNotIn("max_seq_lens_q", batch)
+        self.assertEqual(batch["seq_idx"].shape, batch["input_ids"].shape)
+        self.assertEqual(batch["seq_idx"][0].tolist(), [0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2])
 
     def test_data_collator_for_token_classification(self):
         tokenizer = BertTokenizer(self.vocab_file)
