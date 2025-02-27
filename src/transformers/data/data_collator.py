@@ -1795,10 +1795,19 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
     """
 
-    def __init__(self, *args, return_position_ids=True, return_flash_attn_kwargs=False, separator_id=-100, **kwargs):
+    def __init__(
+        self,
+        *args,
+        return_position_ids=True,
+        return_flash_attn_kwargs=False,
+        return_seq_idx=False,
+        separator_id=-100,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
+        self.return_seq_idx = return_seq_idx
         self.separator_id = separator_id
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
@@ -1814,12 +1823,14 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         ret = {"input_ids": [], "labels": []}
         if self.return_position_ids:
             ret.update({"position_ids": []})
+        if self.return_seq_idx:
+            ret.update({"seq_idx": []})
         if self.return_flash_attn_kwargs:
             ret.update({"cu_seq_lens_k": [0]})
             ret.update({"cu_seq_lens_q": [0]})
             max_len_k = 0
             max_len_q = 0
-        for sample in features:
+        for seq_idx, sample in enumerate(features):
             input_ids = sample["input_ids"]
             ret["input_ids"] += input_ids
             if is_labels_provided:
@@ -1828,6 +1839,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 ret["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
                 ret["position_ids"] += list(range(len(input_ids)))
+            if self.return_seq_idx:
+                ret["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
             if self.return_flash_attn_kwargs:
                 len_input_ids = len(input_ids)
                 ret["cu_seq_lens_q"].append(ret["cu_seq_lens_q"][-1] + len_input_ids)
