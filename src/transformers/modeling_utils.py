@@ -4908,7 +4908,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                try:
+                    model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                except RuntimeError as e:
+                    try:
+                        msg = next(arg for arg in e.args if "Error(s) in loading state_dict" in arg)
+                        pattern = r"size mismatch for ([^:]*)[^(]*\((.*?)\)[^(]*\((.*?)\)"
+                        matches = re.findall(pattern, msg)
+                        if len(matches) == 0:
+                            raise e
+                    except StopIteration:
+                        raise e
+                    # Now we parse and edit it ourselves
+                    mismatched_warning = "\n".join(
+                        [
+                            f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                            for key, shape1, shape2 in matches
+                        ]
+                    )
+                    logger.warning(
+                        f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                        f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not "
+                        f"match: \n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                        " to use it for predictions and inference."
+                    )
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
@@ -4999,7 +5022,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                    model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                    try:
+                        model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
+                    except RuntimeError as e:
+                        try:
+                            msg = next(arg for arg in e.args if "Error(s) in loading state_dict" in arg)
+                            pattern = r"size mismatch for ([^:]*)[^(]*\((.*?)\)[^(]*\((.*?)\)"
+                            matches = re.findall(pattern, msg)
+                            if len(matches) == 0:
+                                raise e
+                        except StopIteration:
+                            raise e
+                        # Now we parse and edit it ourselves
+                        mismatched_warning = "\n".join(
+                            [
+                                f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                                for key, shape1, shape2 in matches
+                            ]
+                        )
+                        logger.warning(
+                            f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                            f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not "
+                            f"match: \n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                            " to use it for predictions and inference."
+                        )
+
                 # force memory release
                 del state_dict
                 gc.collect()
