@@ -14,7 +14,7 @@ jobs:
         shell: bash
         env:
           PR_NUMBER: ${{ github.event.number }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           echo $PR_NUMBER
