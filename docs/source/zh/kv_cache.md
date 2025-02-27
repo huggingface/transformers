@@ -112,7 +112,7 @@ KV 缓存的存在是为了优化自回归模型中的文本生成的过程，�
 
 这些缓存类可以在生成时通过 `cache_implementation` 参数设置。要了解 `cache_implementation` 标记的可用选项，请参阅 [API 文档](./main_classes/text_generation#transformers.GenerationConfig)。现在，让我们详细探讨每种缓存类型，并看看如何使用它们。请注意，以下示例适用于基于decoder-only的 Transformer 模型。我们还支持为 Mamba 或 Jamba 等模型的特定缓存类，继续阅读以获取更多详细信息。
 
-### 可量化的缓存
+### Quantized Cache
 
 Key 和 value 的缓存可能会占据大量内存，成为[长上下文生成的瓶颈](https://huggingface.co/blog/llama31#inference-memory-requirements)，尤其是对于大规模语言模型。
 在使用 `generate()` 时量化缓存可以显著减少内存需求，但代价是速度变慢。
@@ -144,7 +144,7 @@ Key 和 value 的缓存可能会占据大量内存，成为[长上下文生成�
 I like rock music because it's a great way to express myself. I like the way it makes me feel, the
 ```
 
-### 可卸载的缓存
+### Offloaded Cache
 
 类似地，[`~OffloadedCache`] 策略旨在减少 GPU VRAM 的使用量。
 它通过将大部分层的 KV 缓存移到 CPU 来实现这一目标。
@@ -216,7 +216,7 @@ CUDA out of memory. Tried to allocate 4.83 GiB. GPU
 retrying with cache_implementation='offloaded'
 ```
 
-### 静态缓存
+### Static Cache
 
 由于“动态缓存”在每一步生成过程中动态增长，这会妨碍你充分利用即时编译（JIT）优化的优势。
 而[`~StaticCache`]则预先分配了keys和values的最大空间，使得在生成至最大长度前无需调整缓存大小。请参阅以下使用示例。
@@ -238,7 +238,7 @@ retrying with cache_implementation='offloaded'
 ```
 
 
-## 可卸载的静态缓存
+## Offloaded Static Cache
 
 类似于[`~OffloadedCache`]用于卸载“动态缓存”，也存在可卸载的静态缓存。
 它完全支持JIT优化。只需在`generation_config`或直接传递给`generate()`调用时添加`cache_implementation="offloaded_static"`参数即可。
@@ -260,7 +260,7 @@ retrying with cache_implementation='offloaded'
 
 缓存卸载功能需要配备一块CUDA GPU才能使用。
 
-### 滑动窗口缓存
+### Sliding Window Cache
 
 正如其名所示，这种缓存类型实现了对已有的keys和values的滑动窗口机制，仅保留最近的`sliding_window`个标记。它适用于支持滑动窗口注意力机制的模型，如Mistral。此外，与静态缓存相似，这种缓存同样对JIT友好，并能应用与静态缓存相同的编译技术。
 
@@ -281,9 +281,9 @@ retrying with cache_implementation='offloaded'
 "Yesterday I was on a rock concert and. I was so excited to see my favorite band perform live. I was so happy that I could hardly contain myself. I was jumping up and down and"
 ```
 
-### 下沉缓存
+### Sink Cache
 
-下沉缓存是在 ["Efficient Streaming Language Models with Attention Sinks"](https://arxiv.org/abs/2309.17453)一文中提出的。它能够无需微调即可生成长文本序列（根据论文描述，达到“无限长度”）。对已有的keys和values的智能处理策略使得下沉缓存得以实现，特别地，该机制保留了序列开头的几个标记，称为“下沉标记”。这一设计基于一个观察：在文本生成过程中，这些初始标记会吸引大量的注意力得分。紧接“下沉标记”之后的标记则基于滑动窗口原则进行舍弃，仅保留最新的`window_size`个标记。通过保留这些初始标记作为“注意力下沉点”，模型即使处理超长文本也能保持稳定的性能，尽管这意味着大部分过往的知识被舍弃。
+Sink Cache 是在 ["Efficient Streaming Language Models with Attention Sinks"](https://arxiv.org/abs/2309.17453)一文中提出的。它能够无需微调即可生成长文本序列（根据论文描述，达到“无限长度”）。对已有的keys和values的智能处理策略使得下沉缓存得以实现，特别地，该机制保留了序列开头的几个标记，称为“下沉标记”。这一设计基于一个观察：在文本生成过程中，这些初始标记会吸引大量的注意力得分。紧接“下沉标记”之后的标记则基于滑动窗口原则进行舍弃，仅保留最新的`window_size`个标记。通过保留这些初始标记作为“注意力下沉点”，模型即使处理超长文本也能保持稳定的性能，尽管这意味着大部分过往的知识被舍弃。
 
 与其他缓存类不同，这种缓存不能直接通过指定`cache_implementation`来使用。你需要在调用`generate()`之前，按照以下方式初始化缓存。
 
@@ -303,7 +303,7 @@ retrying with cache_implementation='offloaded'
 "This is a long story about unicorns, fairies and magic. It is a story about a young girl named Lily who discovers that she has the power to control the elements. She learns that she can"
 ```
 
-### Encoder-Decoder 缓存
+### Encoder-Decoder Cache
 
 [`~EncoderDecoderCache`]是一种专门设计用于满足Encoder-Decoder 模型缓存需求的封装工具。此缓存类型特别构建用于管理自注意力和交叉注意力缓存，确保复杂模型所需的历史 key/values 的存储与检索。Encoder-Decoder 缓存的一个亮点在于，你可以根据具体应用场景，分别为Encoder和Decoder设置不同的缓存类型。目前，这一缓存仅支持[Whisper](./model_doc/whisper)模型，但我们计划很快增加更多模型的支持。
 
