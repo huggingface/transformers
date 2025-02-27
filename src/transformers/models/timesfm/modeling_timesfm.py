@@ -25,7 +25,13 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_timesfm import TimesFmConfig
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "TimesFmConfig"
 
 
 @dataclass
@@ -594,6 +600,27 @@ def timesfm_merge_masks(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     return torch.minimum(a, b)  # Element-wise minimum, similar to jnp.minimum
 
 
+TIMESFM_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`TimesFmConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare TimesFM Model outputting raw hidden-states without any specific head on top.",
+    TIMESFM_START_DOCSTRING,
+)
 class TimesFmPreTrainedModel(PreTrainedModel):
     """handles the loading for all models."""
 
@@ -693,6 +720,27 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         )
 
 
+TIMESFM_INPUTS_DOCSTRING = r"""
+    Args:
+        inputs: list of time series forecast contexts. Each context time series
+            should be a torch Tensor of potentially different context lengths.
+        freq: frequency of each context time series in the inputs. 0 for high frequency
+            (default), 1 for medium, and 2 for low.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail. tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "The bare TimesFM Model outputting raw hidden-states without any specific head on top.",
+    TIMESFM_START_DOCSTRING,
+)
 class TimesFmModel(TimesFmPreTrainedModel):
     """Patched time-series decoder without any specific output layer."""
 
@@ -769,17 +817,23 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         return model_input, patched_padding, stats, patched_inputs
 
+    @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ts: torch.Tensor,
+        inputs: torch.Tensor,
         input_padding: torch.LongTensor,
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
+        """
+        input_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The padding indicator of the time series.
+        """
+
         model_input, patched_padding, stats, _ = self._preprocess_input(
-            input_ts=input_ts,
+            input_ts=inputs,
             input_padding=input_padding,
         )
         f_emb = self.freq_emb(freq)  # B x 1 x D
@@ -906,6 +960,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             losses.append(loss.mean())
         return torch.stack(losses).mean()
 
+    @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TimesFmOutputForPrediction, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs: Sequence[torch.Tensor],
@@ -919,31 +975,25 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[TimesFmOutputForPrediction, tuple[torch.Tensor, ...]]:
-        """Forecasts on a list of time series.
-
-        Args:
-          inputs: list of time series forecast contexts. Each context time series
-            should be a torch Tensor of potentially different context lengths.
-          freq: frequency of each context time series in the inputs. 0 for high frequency
-            (default), 1 for medium, and 2 for low.
-          window_size: window size of trend + residual decomposition. If None then
-            we do not do decomposition.
-          future_target: optional future target time series to be used for loss computation.
-          forecast_context_len: optional max context length.
-          return_forecast_on_context: True to return the forecast on the context
-            when available, i.e. after the first input patch.
-          truncate_negative: truncate to only non-negative values if all the contexts
-            have non-negative values.
-          output_attentions: Whether to return the attentions.
-          output_hidden_states: Whether to return the hidden states.
-          return_dict: Whether to return a TimesFmOutputForPrediction object.
+        r"""
+        window_size (`int`, *optional*):
+            Window size of trend + residual decomposition. If None thenwe do not do decomposition.
+        future_target (`torch.Tensor`, *optional*):
+            Optional future target time series to be used for loss computation.
+        forecast_context_len (`int`, *optional*):
+            Optional max context length.
+        return_forecast_on_context (`bool`, *optional*):
+            True to return the forecast on the context when available, i.e. after the first input patch.
+        truncate_negative (`bool`, *optional*):
+            Truncate to only non-negative values if all the contexts have non-negative values.
+            have non-ne ative values.
 
         Returns:
-          A TimesFmOutputForPrediction object containing:
-          - the mean forecast of size (# inputs, # forecast horizon),
-          - the full forecast (mean + quantiles) of size
-            (# inputs,  # forecast horizon, 1 + # quantiles).
-          - loss: the mean squared error loss + quantile loss if future_target is provided.
+            A TimesFmOutputForPrediction object or a tuple containing:
+                - the mean forecast of size (# inputs, # forecast horizon),
+                - the full forecast (mean + quantiles) of size
+                    (# inputs,  # forecast horizon, 1 + # quantiles).
+                - loss: the mean squared error loss + quantile loss if future_target is provided.
         """
         if return_dict is None:
             return_dict = self.config.use_return_dict
