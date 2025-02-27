@@ -126,6 +126,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         nemo_conv_channels: int = 1024,
         downsample_rate: int = 1,
         audio_token_id: int = 200011,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -155,6 +156,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.nemo_conv_channels = nemo_conv_channels
         self.downsample_rate = downsample_rate
         self.audio_token_id = audio_token_id
+        self.initializer_range = initializer_range
 
 
 class Phi4MultimodalConfig(PretrainedConfig):
