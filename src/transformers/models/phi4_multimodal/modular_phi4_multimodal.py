@@ -1745,6 +1745,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1797,6 +1798,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
