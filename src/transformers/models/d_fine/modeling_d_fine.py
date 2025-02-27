@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import functools
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
@@ -1709,8 +1708,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         self.model = DFineModel(config)
         scaled_dim = round(config.layer_scale * config.hidden_size)
         num_pred = config.decoder_layers
-        self.class_embed = functools.partial(nn.Linear, config.d_model, config.num_labels)
-        self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
+        self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
                 DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.max_num_bins + 1), 3)
@@ -1763,7 +1761,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DFineImageProcessor, DFineForObjectDetection
+        >>> from transformers import AutoImageProcessor, DFineForObjectDetection
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1771,8 +1769,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DFineImageProcessor.from_pretrained("PekingU/DFine_r50vd")
-        >>> model = DFineForObjectDetection.from_pretrained("PekingU/DFine_r50vd")
+        >>> image_processor = AutoImageProcessor.from_pretrained("vladislavbro/dfine_x_coco")
+        >>> model = DFineForObjectDetection.from_pretrained("vladislavbro/dfine_x_coco")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1800,11 +1798,11 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
-        Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
-        Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
-        Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
-        Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
+        Detected cat with confidence 0.96 [344.4865,  23.4047, 639.8372, 374.2650]
+        Detected cat with confidence 0.96 [11.7123,  53.5185, 316.6395, 472.3320]
+        Detected remote with confidence 0.95 [40.4605,  73.6995, 175.6157, 117.5686]
+        Detected sofa with confidence 0.92 [0.58968, 1.88410, 640.25000, 474.74000]
+        Detected remote with confidence 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

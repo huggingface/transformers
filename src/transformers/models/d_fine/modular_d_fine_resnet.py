@@ -85,8 +85,6 @@ class DFineResNetConfig(RTDetrResNetConfig):
         use_learnable_affine_block (`bool`, *optional*, defaults to False):
             Whether to use Learnable Affine Blocks (LAB) in the network.
             LAB adds learnable scale and bias parameters after certain operations.
-        aggregation (`str`, *optional*, defaults to se):
-            Method of feature aggregation to be used after processing the input through the convolutional layers.
     """
 
     model_type = "d_fine_resnet"
@@ -104,7 +102,6 @@ class DFineResNetConfig(RTDetrResNetConfig):
         stage_kernel_size=[3, 3, 5, 5],
         stage_numb_of_layers=[6, 6, 6, 6],
         use_learnable_affine_block=False,
-        aggregation="se",
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
@@ -118,7 +115,6 @@ class DFineResNetConfig(RTDetrResNetConfig):
         self.stage_kernel_size = stage_kernel_size
         self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
-        self.aggregation = aggregation
 
         del self.downsample_in_first_stage
         del self.downsample_in_bottleneck
@@ -211,27 +207,6 @@ class DFineResNetConvLayerLight(nn.Module):
         return hidden_state
 
 
-class DFineResNetEseModule(nn.Module):
-    def __init__(self, channels: int):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            channels,
-            channels,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-        )
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, hidden_state: Tensor) -> Tensor:
-        identity = hidden_state
-        hidden_state = hidden_state.mean((2, 3), keepdim=True)
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.sigmoid(hidden_state)
-        hidden_state = torch.mul(identity, hidden_state)
-        return hidden_state
-
-
 class DFineResNetEmbeddings(nn.Module):
     def __init__(self, config: DFineResNetConfig):
         super().__init__()
@@ -308,7 +283,6 @@ class DFineResNetBasicLayer(nn.Module):
         kernel_size: int = 3,
         residual: bool = False,
         light_block: bool = False,
-        aggregation: str = "ese",
         drop_path: float = 0.0,
         use_learnable_affine_block: bool = False,
     ):
@@ -337,38 +311,24 @@ class DFineResNetBasicLayer(nn.Module):
 
         # feature aggregation
         total_channels = in_channels + layer_num * middle_channels
-        if aggregation == "se":
-            aggregation_squeeze_conv = DFineResNetConvLayer(
-                total_channels,
-                out_channels // 2,
-                kernel_size=1,
-                stride=1,
-                use_learnable_affine_block=use_learnable_affine_block,
-            )
-            aggregation_excitation_conv = DFineResNetConvLayer(
-                out_channels // 2,
-                out_channels,
-                kernel_size=1,
-                stride=1,
-                use_learnable_affine_block=use_learnable_affine_block,
-            )
-            self.aggregation = nn.Sequential(
-                aggregation_squeeze_conv,
-                aggregation_excitation_conv,
-            )
-        else:
-            aggregation_conv = DFineResNetConvLayer(
-                total_channels,
-                out_channels,
-                kernel_size=1,
-                stride=1,
-                use_learnable_affine_block=use_learnable_affine_block,
-            )
-            ese_aggregation_module = DFineResNetEseModule(out_channels)
-            self.aggregation = nn.Sequential(
-                aggregation_conv,
-                ese_aggregation_module,
-            )
+        aggregation_squeeze_conv = DFineResNetConvLayer(
+            total_channels,
+            out_channels // 2,
+            kernel_size=1,
+            stride=1,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+        aggregation_excitation_conv = DFineResNetConvLayer(
+            out_channels // 2,
+            out_channels,
+            kernel_size=1,
+            stride=1,
+            use_learnable_affine_block=use_learnable_affine_block,
+        )
+        self.aggregation = nn.Sequential(
+            aggregation_squeeze_conv,
+            aggregation_excitation_conv,
+        )
         self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
 
     def forward(self, hidden_state: Tensor) -> Tensor:
@@ -385,12 +345,7 @@ class DFineResNetBasicLayer(nn.Module):
 
 
 class DFineResNetStage(nn.Module):
-    def __init__(
-        self,
-        config: DFineResNetConfig,
-        stage_index: int,
-        drop_path: float = 0.0,
-    ):
+    def __init__(self, config: DFineResNetConfig, stage_index: int, drop_path: float = 0.0):
         super().__init__()
         in_channels = config.stage_in_channels[stage_index]
         mid_channels = config.stage_mid_channels[stage_index]
@@ -400,7 +355,6 @@ class DFineResNetStage(nn.Module):
         downsample = config.stage_downsample[stage_index]
         light_block = config.stage_light_block[stage_index]
         kernel_size = config.stage_kernel_size[stage_index]
-        aggregation = config.aggregation
         use_learnable_affine_block = config.use_learnable_affine_block
 
         if downsample:
@@ -421,8 +375,7 @@ class DFineResNetStage(nn.Module):
                     residual=False if i == 0 else True,
                     kernel_size=kernel_size,
                     light_block=light_block,
-                    aggregation=aggregation,
-                    drop_path=drop_path[i] if isinstance(drop_path, (list, tuple)) else drop_path,
+                    drop_path=drop_path,
                     use_learnable_affine_block=use_learnable_affine_block,
                 )
             )
@@ -469,8 +422,8 @@ class DFineResNetEncoder(nn.Module):
 class DFineResNetBackbone(RTDetrResNetBackbone):
     def __init__(self, config: DFineResNetConfig):
         super().__init__(config=config)
-        self.embedder = DFineResNetEmbeddings(config=config)
-        self.encoder = DFineResNetEncoder(config=config)
+        self.embedder = DFineResNetEmbeddings(config)
+        self.encoder = DFineResNetEncoder(config)
 
 
 __all__ = ["DFineResNetConfig", "DFineResNetBackbone", "DFineResNetPreTrainedModel"]
