@@ -395,6 +395,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        last_cache_position: int = 0,
         num_logits_to_keep: int = 0,
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
