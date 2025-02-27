@@ -45,7 +45,7 @@ class EuroBertConfig(LlamaConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 12):
+        num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -150,7 +150,7 @@ class EuroBertConfig(LlamaConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_key_value_heads=12,
+        num_key_value_heads=None,
         hidden_act="silu",
         max_position_embeddings=8192,
         initializer_range=0.02,
@@ -173,6 +173,10 @@ class EuroBertConfig(LlamaConfig):
         # use_cache is specific to decoder models
         if "use_cache" in kwargs:
             _ = kwargs.pop("use_cache")
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
 
         super().__init__(
             vocab_size=vocab_size,

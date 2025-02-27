@@ -72,7 +72,7 @@ class EuroBertConfig(LlamaConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 12):
+        num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -177,7 +177,7 @@ class EuroBertConfig(LlamaConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_key_value_heads=12,
+        num_key_value_heads=None,
         hidden_act="silu",
         max_position_embeddings=8192,
         initializer_range=0.02,
@@ -200,6 +200,10 @@ class EuroBertConfig(LlamaConfig):
         # use_cache is specific to decoder models
         if "use_cache" in kwargs:
             _ = kwargs.pop("use_cache")
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
 
         super().__init__(
             vocab_size=vocab_size,
@@ -256,6 +260,10 @@ EUROBERT_START_DOCSTRING = r"""
 
 
 class EuroBertAttention(LlamaAttention):
+    def __init__(self, config: EuroBertConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -403,7 +411,10 @@ class EuroBertModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[0], inputs_embeds.dtype)
+        if attention_mask is None:
+            attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.bool)
+
+        mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[1], inputs_embeds.dtype)
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the encoder layers
@@ -464,8 +475,6 @@ class EuroBertModel(LlamaModel):
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForMaskedLM(EuroBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.model = EuroBertModel(config)
@@ -524,8 +533,6 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -578,8 +585,11 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
                 pooled_output = last_hidden_state[:, 0]
 
             elif self.clf_pooling == "mean":
-                pooled_output = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1)
-                pooled_output /= attention_mask.sum(dim=1, keepdim=True)
+                if attention_mask is None:
+                    pooled_output = last_hidden_state.mean(dim=1)
+                else:
+                    pooled_output = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1)
+                    pooled_output /= attention_mask.sum(dim=1, keepdim=True)
 
             pooled_output = self.dense(pooled_output)
             pooled_output = self.activation(pooled_output)
@@ -589,8 +599,11 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
             x = self.dense(last_hidden_state)
             x = self.activation(x)
             logits = self.out_proj(x)
-            logits = (logits * attention_mask.unsqueeze(-1)).sum(dim=1)
-            logits /= attention_mask.sum(dim=1, keepdim=True)
+            if attention_mask is None:
+                logits = logits.mean(dim=1)
+            else:
+                logits = (logits * attention_mask.unsqueeze(-1)).sum(dim=1)
+                logits /= attention_mask.sum(dim=1, keepdim=True)
 
         loss = None
         if labels is not None:

@@ -147,7 +147,7 @@ class EuroBertAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -523,7 +523,10 @@ class EuroBertModel(EuroBertPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[0], inputs_embeds.dtype)
+        if attention_mask is None:
+            attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.bool)
+
+        mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[1], inputs_embeds.dtype)
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the encoder layers
@@ -707,8 +710,6 @@ class EuroBertModel(EuroBertPreTrainedModel):
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForMaskedLM(EuroBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.model = EuroBertModel(config)
@@ -767,8 +768,6 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -821,8 +820,11 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
                 pooled_output = last_hidden_state[:, 0]
 
             elif self.clf_pooling == "mean":
-                pooled_output = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1)
-                pooled_output /= attention_mask.sum(dim=1, keepdim=True)
+                if attention_mask is None:
+                    pooled_output = last_hidden_state.mean(dim=1)
+                else:
+                    pooled_output = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1)
+                    pooled_output /= attention_mask.sum(dim=1, keepdim=True)
 
             pooled_output = self.dense(pooled_output)
             pooled_output = self.activation(pooled_output)
@@ -832,8 +834,11 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
             x = self.dense(last_hidden_state)
             x = self.activation(x)
             logits = self.out_proj(x)
-            logits = (logits * attention_mask.unsqueeze(-1)).sum(dim=1)
-            logits /= attention_mask.sum(dim=1, keepdim=True)
+            if attention_mask is None:
+                logits = logits.mean(dim=1)
+            else:
+                logits = (logits * attention_mask.unsqueeze(-1)).sum(dim=1)
+                logits /= attention_mask.sum(dim=1, keepdim=True)
 
         loss = None
         if labels is not None:
