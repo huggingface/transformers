@@ -707,7 +707,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             for output_img in output_imgs:
                 output_img = output_img.to(device=target_device, dtype=target_dtype)
                 img_feature_proj = self.img_projection_up(output_img)
-                img_feature_proj = nn.GELU(img_feature_proj)
+                img_feature_proj = nn.functional.gelu(img_feature_proj)
                 img_feature_proj = self.img_projection_down(img_feature_proj)
                 img_set_tensor.append(img_feature_proj)
 
@@ -1312,10 +1312,9 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 
         if len(positions.tolist()) > 0:
             audio_features, _ = self.encoder(input_embeds, audio_attention_mask)
-            if audio_projection_mode == "speech":
-                audio_set_tensor = up_proj(audio_features)
-                audio_set_tensor = nn.GELU(audio_set_tensor)
-                audio_set_tensor = down_proj(audio_set_tensor)
+            audio_set_tensor = up_proj(audio_features)
+            audio_set_tensor = nn.functional.gelu(audio_set_tensor)
+            audio_set_tensor = down_proj(audio_set_tensor)
 
         hidden_states = kwargs["wte"](input_ids)
 
