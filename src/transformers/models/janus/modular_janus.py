@@ -66,10 +66,9 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersDropPath,
     Dinov2WithRegistersLayerScale,
 )
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer, SiglipVisionModel
 from ..vit.modeling_vit import ViTPatchEmbeddings
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
-
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -85,6 +84,33 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "JanusConfig"
 _CHECKPOINT_FOR_DOC = ""
+
+
+class JanusPreTrainedModel(PreTrainedModel):
+    config_class = JanusConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_param_buffer_assignment = False
+
+    def _init_weights(self, module):
+        std = self.config.vision_config.initializer_range
+        if isinstance(module, JanusVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
@@ -150,7 +176,7 @@ class JanusVisionEmbeddings(nn.Module):
         new_height = height // self.patch_size
         new_width = width // self.patch_size
 
-        sqrt_num_positions = torch_int(num_positions**0.5)
+        sqrt_num_positions = torch_int(num_positions ** 0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
@@ -208,7 +234,7 @@ class JanusVisionAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        self.scale = self.head_dim**-0.5
+        self.scale = self.head_dim ** -0.5
         self.attention_dropout = config.attention_dropout
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
@@ -222,10 +248,10 @@ class JanusVisionAttention(nn.Module):
         self.key_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[torch.Tensor] = None,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            output_attentions: Optional[torch.Tensor] = None,
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
@@ -293,10 +319,10 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
 
     # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        output_attentions: bool = False,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.LongTensor] = None,
+            output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
 
@@ -370,10 +396,10 @@ class JanusVisionSdpaAttention(JanusVisionAttention):
 
     # Adapted from transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -472,10 +498,10 @@ class JanusVisionEncoderLayer(nn.Module):
         self.mlp = JanusVisionMLP(config)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: torch.Tensor,
+            output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -517,7 +543,7 @@ class JanusVisionAttentionPoolLatent(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.mlp_ratio = getattr(config, "mlp_ratio", 4.0)
-        self.scale = self.head_dim**-0.5
+        self.scale = self.head_dim ** -0.5
 
         # Learnable latent query (probe)
         self.latent = nn.Parameter(torch.zeros(1, self.latent_len, self.hidden_size))
@@ -580,8 +606,6 @@ class JanusVisionEncoder(SiglipEncoder):
 
 
 class JanusVisionTransformer(SiglipVisionTransformer, nn.Module):
-    config_class = JanusVisionConfig
-
     def __init__(self, config: JanusVisionConfig):
         nn.Module.__init__()
         self.config = config
@@ -592,6 +616,33 @@ class JanusVisionTransformer(SiglipVisionTransformer, nn.Module):
         if self.use_head:
             self.head = JanusVisionAttentionPoolLatent(config)
 
+
+# This class is necessary for backward compatibility, see SiglipModel initialization. SDPA attention produces
+# inconsistent behavior if we pass JanusVisionTransformer directly as the vision model
+class JanusVisionModel(SiglipVisionModel):
+    config_class = JanusVisionConfig
+
+    def __init__(self, config: JanusVisionConfig):
+        super().__init__(config)
+
+        self.vision_model = JanusVisionTransformer(config)
+
+        self.post_init()
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        # overrides this line
+        std = self.config.initializer_range
+        if isinstance(module, JanusVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 class JanusVisionAlignerMLP(nn.Module):
     def __init__(self, config: JanusVisionConfig):
@@ -800,42 +851,6 @@ class JanusVQVAEDecoder(nn.Module):
         return hidden_state
 
 
-class JanusPreTrainedModel(PreTrainedModel):
-    config_class = JanusConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_param_buffer_assignment = False
-
-    # TODO: remove this, it is a temporary measure while a more robust fix is not implemented
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if hasattr(self, "config"):
-            if hasattr(self.config, "vision_config"):
-                self.config.vision_config._attn_implementation = self.config._attn_implementation
-            if hasattr(self.config, "language_config"):
-                self.config.language_config._attn_implementation = self.config._attn_implementation
-
-    def _init_weights(self, module):
-        std = self.config.vision_config.initializer_range
-        if isinstance(module, JanusVQVAE):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-
 class JanusVQVAE(ChameleonVQVAE):
     main_input_name = "pixel_values"
 
@@ -868,7 +883,7 @@ class JanusVQVAE(ChameleonVQVAE):
         return pixel_values
 
     def forward(
-        self, pixel_values: torch.FloatTensor, return_dict: bool = None
+            self, pixel_values: torch.FloatTensor, return_dict: bool = None
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         Encodes pixel values into quantized tokens and decodes them back.
@@ -900,6 +915,7 @@ class JanusVQVAEAligner(nn.Module):
         "JanusVQVAEResnetBlock",
         "JanusVQVAEVectorQuantizer",
     ]
+
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
 
@@ -932,17 +948,18 @@ class JanusVQVAEHead(nn.Module):
 
 
 class JanusModel(JanusPreTrainedModel):
-
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
-        self.vision_model = JanusVisionTransformer(config.vision_config)
-        self.aligner = JanusVisionAlignerMLP(config.vision_config)
+        # This is necessary for backward compatibility, see SiglipModel initialization
+        tmp_vision_model = JanusVisionModel._from_config(config.vision_config)
+        self.vision_model = tmp_vision_model.vision_model
+        self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
 
-        self.vqmodel = JanusVQVAE(config.vq_config)
-        self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
-        self.gen_aligner = JanusVQVAEAligner(config.vq_config)
-        self.gen_head = JanusVQVAEHead(config.vq_config)
+        self.vqmodel = JanusVQVAE._from_config(config.vq_config)
+        self.gen_embed = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
+        self.gen_aligner = JanusVQVAEAligner(self.vqmodel.config)
+        self.gen_head = JanusVQVAEHead(self.vqmodel.config)
 
         self.language_model = AutoModel.from_config(config=config.text_config)
 
@@ -962,21 +979,21 @@ class JanusModel(JanusPreTrainedModel):
         return image_embeds
 
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+            self,
+            input_ids: torch.LongTensor = None,
+            pixel_values: torch.FloatTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            logits_to_keep: Union[int, torch.Tensor] = 0,
+            **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1070,21 +1087,21 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         return self.model
 
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,
+            self,
+            input_ids: torch.LongTensor = None,
+            pixel_values: torch.FloatTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            logits_to_keep: Union[int, torch.Tensor] = 0,
+            **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1129,16 +1146,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
     # ToDo: Make it compatible with super class (add contine gen using embeds)
     def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        pixel_values=None,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
+            self,
+            input_ids,
+            pixel_values=None,
+            past_key_values=None,
+            attention_mask=None,
+            inputs_embeds=None,
+            cache_position=None,
+            position_ids=None,
+            use_cache=True,
+            **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
@@ -1151,12 +1168,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
-                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0]:]
             elif (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                    inputs_embeds is not None  # Exception 1
+                    or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
             ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
+                input_ids = input_ids[:, -cache_position.shape[0]:]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
@@ -1345,18 +1362,18 @@ def expand2square(pil_img, background_color):
 
 class JanusImageProcessor(BlipImageProcessor):
     def __init__(
-        self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        min_size: int = 14,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        **kwargs,
+            self,
+            do_resize: bool = True,
+            size: Dict[str, int] = None,
+            min_size: int = 14,
+            resample: PILImageResampling = PILImageResampling.BICUBIC,
+            do_rescale: bool = True,
+            rescale_factor: Union[int, float] = 1 / 255,
+            do_normalize: bool = True,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_convert_rgb: bool = None,
+            **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -1367,13 +1384,13 @@ class JanusImageProcessor(BlipImageProcessor):
             self.background_color = tuple([int(x * 255) for x in image_mean])
 
     def resize(
-        self,
-        image: np.ndarray,
-        size: Union[Dict[str, int], int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
+            self,
+            image: np.ndarray,
+            size: Union[Dict[str, int], int],
+            resample: PILImageResampling = PILImageResampling.BICUBIC,
+            data_format: Optional[Union[str, ChannelDimension]] = None,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to dynamically calculated size.
@@ -1454,15 +1471,15 @@ class JanusImageProcessor(BlipImageProcessor):
         return image
 
     def postprocess(
-        self,
-        images: ImageInput,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: List[float] = None,
-        image_std: List[float] = None,
-        input_data_format: str = None,
-        return_tensors: str = None,
+            self,
+            images: ImageInput,
+            do_rescale: bool = None,
+            rescale_factor: float = None,
+            do_normalize: bool = None,
+            image_mean: List[float] = None,
+            image_std: List[float] = None,
+            input_data_format: str = None,
+            return_tensors: str = None,
     ):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
@@ -1504,11 +1521,11 @@ class JanusImageProcessor(BlipImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def unnormalize(
-        self,
-        image: np.array,
-        image_mean: Union[float, Iterable[float]],
-        image_std: Union[float, Iterable[float]],
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            self,
+            image: np.array,
+            image_mean: Union[float, Iterable[float]],
+            image_std: Union[float, Iterable[float]],
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
         """
         Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
