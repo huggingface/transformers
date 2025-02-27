@@ -926,7 +926,8 @@ def _load_state_dict_into_meta_model(
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
     if file_pointer is not None:
-        file_pointer.close()
+        # not sure we need that, in tgi, they don't close the handler
+        file_pointer.__exit__(None,None,None)
 
     return error_msgs, offload_index, state_dict_index
 
