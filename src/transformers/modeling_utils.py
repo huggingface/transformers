@@ -905,7 +905,7 @@ def _load_state_dict_into_meta_model(
                     module.load_state_dict(
                         {param_type: param[:].to(param_device)},
                         False,
-                        True,
+                        False,
                     )
                 else:
                     hf_quantizer.create_quantized_param(
@@ -3744,6 +3744,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
+            print('load config', config_path, trust_remote_code)
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
                 cache_dir=cache_dir,
@@ -3757,6 +3758,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 subfolder=subfolder,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
+                trust_remote_code=trust_remote_code,
                 **kwargs,
             )
         else:
