@@ -177,7 +177,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
 
         length = input_size
         for _ in range(int(math.log(time_reduction, 2))):
-            length = math.floor((length - 1 / 2) + 1)
+            length = math.floor((length - 1) / 2 + 1)
         self.nemo_final_size = length
 
 

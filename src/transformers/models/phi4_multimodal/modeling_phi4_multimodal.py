@@ -1041,48 +1041,20 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.subsampling_factor = config.time_reduction
-
         if self.subsampling_factor % 2 != 0:
             raise ValueError("Sampling factor should be a multiply of 2!")
         self.sampling_num = int(math.log(self.subsampling_factor, 2))
-
         self.act_fn = ACT2FN[config.nemo_activation]
-
         conv_channels = config.nemo_conv_channels
+
         layers = []
-
-        layers.append(
-            torch.nn.Conv2d(
-                in_channels=1,
-                out_channels=conv_channels,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-            )
-        )
+        layers.append(torch.nn.Conv2d(1, conv_channels, kernel_size=3, stride=2, padding=1))
         layers.append(self.act_fn)
-
         for _ in range(self.sampling_num - 1):
             layers.append(
-                torch.nn.Conv2d(
-                    in_channels=conv_channels,
-                    out_channels=conv_channels,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    groups=conv_channels,
-                )
+                torch.nn.Conv2d(conv_channels, conv_channels, kernel_size=3, stride=2, padding=1, groups=conv_channels)
             )
-            layers.append(
-                torch.nn.Conv2d(
-                    in_channels=conv_channels,
-                    out_channels=conv_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    groups=1,
-                )
-            )
+            layers.append(torch.nn.Conv2d(conv_channels, conv_channels, kernel_size=1, stride=1, padding=0, groups=1))
             layers.append(self.act_fn)
 
         # Aggregate the layers
@@ -1092,7 +1064,6 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor]):
         # Unsqueeze Channel Axis
         hidden_states = hidden_states.unsqueeze(1)
-
         hidden_states = self.conv(hidden_states)
 
         # Flatten Channel and Frequency Axes
