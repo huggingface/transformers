@@ -1309,12 +1309,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     config_class = RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
-    _no_split_modules = [
-        r"RTDetrV2ConvEncoder",
-        r"RTDetrV2EncoderLayer",
-        r"RTDetrV2DecoderLayer",
-        r"RTDetrV2CSPRepLayer",
-    ]
+    _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
 
     def _init_weights(self, module):
         """Initalize the weights"""
