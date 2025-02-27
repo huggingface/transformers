@@ -961,7 +961,6 @@ class Phi4MultimodalAudioConvModule(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.config = config
-        self.batch_norm = config.batch_norm
         self.kernel_size = config.kernel_size
         self.ext_pw_kernel_size = config.ext_pw_kernel_size
 
