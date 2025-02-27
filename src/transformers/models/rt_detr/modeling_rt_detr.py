@@ -1279,31 +1279,44 @@ class RTDetrHybridEncoder(nn.Module):
         self.eval_size = config.eval_size
         self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
-        activation_function = config.activation_function
+        self.num_fpn_stages = len(self.in_channels) - 1
+        self.num_pan_stages = len(self.in_channels) - 1
+        activation = config.activation_function
 
         # encoder transformer
         self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
-        # top-down fpn
+
+        # top-down FPN
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1, 0, -1):
-            self.lateral_convs.append(
-                RTDetrConvNormLayer(
-                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1, activation=activation_function
-                )
+        for _ in range(self.num_fpn_stages):
+            lateral_conv = RTDetrConvNormLayer(
+                config,
+                in_channels=self.encoder_hidden_dim,
+                out_channels=self.encoder_hidden_dim,
+                kernel_size=1,
+                stride=1,
+                activation=activation,
             )
-            self.fpn_blocks.append(RTDetrCSPRepLayer(config))
+            fpn_block = RTDetrCSPRepLayer(config)
+            self.lateral_convs.append(lateral_conv)
+            self.fpn_blocks.append(fpn_block)
 
-        # bottom-up pan
+        # bottom-up PAN
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(
-                RTDetrConvNormLayer(
-                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2, activation=activation_function
-                )
+        for _ in range(self.num_pan_stages):
+            downsample_conv = RTDetrConvNormLayer(
+                config,
+                in_channels=self.encoder_hidden_dim,
+                out_channels=self.encoder_hidden_dim,
+                kernel_size=3,
+                stride=2,
+                activation=activation,
             )
-            self.pan_blocks.append(RTDetrCSPRepLayer(config))
+            pan_block = RTDetrCSPRepLayer(config)
+            self.downsample_convs.append(downsample_conv)
+            self.pan_blocks.append(pan_block)
 
     @staticmethod
     def build_2d_sincos_position_embedding(
@@ -1371,6 +1384,7 @@ class RTDetrHybridEncoder(nn.Module):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+
         # encoder
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
@@ -1406,37 +1420,37 @@ class RTDetrHybridEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states[enc_ind],)
 
-        # broadcasting and fusion
+        # top-down FPN
         fpn_feature_maps = [hidden_states[-1]]
-        for idx in range(len(self.in_channels) - 1, 0, -1):
-            # blocks
-            lateral_block = self.lateral_convs[len(self.in_channels) - 1 - idx]
-            fpn_block = self.fpn_blocks[len(self.in_channels) - 1 - idx]
-            # feature maps
-            backbone_feature_map = hidden_states[idx - 1]
-            top_fpn_feature_map = fpn_feature_maps[0]
+        for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
+            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            top_fpn_feature_map = fpn_feature_maps[-1]
             # apply lateral block
-            top_fpn_feature_map = lateral_block(top_fpn_feature_map)
-            fpn_feature_maps[0] = top_fpn_feature_map
+            top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
+            fpn_feature_maps[-1] = top_fpn_feature_map
             # apply fpn block
             top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
             fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
             new_fpn_feature_map = fpn_block(fused_feature_map)
-            fpn_feature_maps.insert(0, new_fpn_feature_map)
+            fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_states = [fpn_feature_maps[0]]
-        for idx in range(len(self.in_channels) - 1):
-            feat_low = fpn_states[-1]
-            feat_high = fpn_feature_maps[idx + 1]
-            downsample_feat = self.downsample_convs[idx](feat_low)
-            hidden_states = self.pan_blocks[idx](
-                torch.concat([downsample_feat, feat_high.to(downsample_feat.device)], dim=1)
-            )
-            fpn_states.append(hidden_states)
+        fpn_feature_maps = fpn_feature_maps[::-1]
+
+        # bottom-up PAN
+        pan_feature_maps = [fpn_feature_maps[0]]
+        for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
+            top_pan_feature_map = pan_feature_maps[-1]
+            fpn_feature_map = fpn_feature_maps[idx + 1]
+            downsampled_feature_map = downsample_conv(top_pan_feature_map)
+            fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
+            new_pan_feature_map = pan_block(fused_feature_map)
+            pan_feature_maps.append(new_pan_feature_map)
 
         if not return_dict:
-            return tuple(v for v in [fpn_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
+            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 class RTDetrDecoder(RTDetrPreTrainedModel):
