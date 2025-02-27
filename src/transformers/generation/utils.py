@@ -2256,7 +2256,7 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
-        if recipe is not None:
+        if recipe is not None:  # TODO: should also go in the generation config, so that users can save it
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
             # methods from `GenerationMixin` through `model`.
