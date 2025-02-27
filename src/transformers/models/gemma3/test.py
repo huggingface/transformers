@@ -16,13 +16,17 @@ def main(*args):
     processor = Gemma3Processor.from_pretrained(LOCAL_MODEL)
     # model = Gemma3ForConditionalGeneration.from_pretrained(LOCAL_MODEL)
 
-    prompt = "<start_of_image><end_of_image><image>"
+    prompt = "<image> Where is the cow standing?"
     url = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
     image = Image.open(requests.get(url, stream=True).raw)
 
     inputs = processor(images=image, text=prompt,  return_tensors="pt")
     inputs = inputs.to(torch.get_default_device())
-    print(inputs)
+    print(inputs.keys())
+    print(inputs["input_ids"].shape)
+    print(inputs["attention_mask"].shape)
+    print(inputs["image_soft_token_mask"].shape)
+    print(len(inputs["pixel_values"]), inputs["pixel_values"][0].shape)
 
     # generate_ids = model.generate(**inputs, max_new_tokens=24)
     # outputs = processor.batch_decode(

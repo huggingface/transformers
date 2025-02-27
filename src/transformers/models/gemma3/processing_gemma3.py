@@ -26,7 +26,6 @@ from collections.abc import Sequence
 from typing import Optional, Union, cast
 
 import PIL.Image
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
@@ -38,6 +37,8 @@ from ...processing_utils import (
     _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
+from ..gemma import GemmaTokenizer
+from ..siglip import SiglipImageProcessor
 
 
 class Gemma3TextKwargs(TextKwargs):
@@ -52,13 +53,13 @@ class Gemma3ImagesKwargs(ImagesKwargs):
     do_convert_rgb: Optional[bool]
     do_resize: bool
     size: dict[str, int]
-    resample: PIL.Image.Resampling = (PIL.Image.Resampling.BICUBIC,)
-    do_rescale: bool = (True,)
-    rescale_factor: Union[int, float] = (1 / 255,)
-    do_normalize: bool = (True,)
-    image_mean: Optional[Union[float, list[float]]] = (None,)
-    image_std: Optional[Union[float, list[float]]] = (None,)
-    do_convert_rgb: bool = (None,)
+    resample: PIL.Image.Resampling
+    do_rescale: bool
+    rescale_factor: Union[int, float]
+    do_normalize: bool
+    image_mean: Optional[Union[float, list[float]]]
+    image_std: Optional[Union[float, list[float]]]
+    do_convert_rgb: bool
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -74,6 +75,15 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
             "pan_and_scan_min_crop_size": 256,
             "pan_and_scan_max_num_crops": 4,
             "pan_and_scan_min_ratio_to_activate": 1.2,
+            "do_resize": True,
+            "size": {"height": 896, "width": 896},
+            "resample": PIL.Image.Resampling.BICUBIC,
+            "do_rescale": True,
+            "rescale_factor": 1 / 255,
+            "do_normalize": True,
+            "image_mean": None,
+            "image_std": None,
+            "do_convert_rgb": None,
         },
     }
 
@@ -82,6 +92,7 @@ IMAGE_TOKEN = "<image>"
 IMAGE_TOKEN_LEN = len(IMAGE_TOKEN)
 START_IMAGE_TOKEN = "<start_of_image>"
 END_IMAGE_TOKEN = "<end_of_image>"
+IMAGE_SOFT_TOKEN = "<image_soft_token>"
 NEWLINE_TOKEN = "\n"
 PAN_AND_SCAN_PREFIX = "Here is the original image"
 PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
@@ -166,7 +177,14 @@ class Gemma3Processor(ProcessorMixin):
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor: SiglipImageProcessor = None,
+        tokenizer: GemmaTokenizer = None,
+        chat_template: str = None,
+        num_mm_soft_tokens_per_image: int = 256,
+        **kwargs,
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -180,14 +198,19 @@ class Gemma3Processor(ProcessorMixin):
         start_image_token = AddedToken(START_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=255_999
         end_image_token = AddedToken(END_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=262_144
         image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+        image_soft_token = AddedToken(IMAGE_SOFT_TOKEN, normalized=False, special=True)
 
-        tokens_to_add = {"additional_special_tokens": [start_image_token, end_image_token, image_token]}
+        tokens_to_add = {
+            "additional_special_tokens": [start_image_token, end_image_token, image_token, image_soft_token]
+        }
         tokenizer.add_special_tokens(tokens_to_add)
 
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-        self.image_token = tokenizer.decode([self.image_token_id])
-        self.start_image_sequence = tokenizer.convert_tokens_to_ids([NEWLINE_TOKEN, START_IMAGE_TOKEN])
-        self.end_image_sequence = tokenizer.convert_tokens_to_ids([END_IMAGE_TOKEN, NEWLINE_TOKEN])
+        self.image_soft_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
+        self.full_image_sequence = "".join(
+            [NEWLINE_TOKEN, START_IMAGE_TOKEN]
+            + [IMAGE_SOFT_TOKEN] * num_mm_soft_tokens_per_image
+            + [END_IMAGE_TOKEN, NEWLINE_TOKEN]
+        )
 
         super().__init__(
             image_processor=image_processor,
@@ -229,10 +252,8 @@ class Gemma3Processor(ProcessorMixin):
 
         if pixel_values is not None:
             batched_input.update(
-                pixel_values=torch.tensor(pixel_values),
-                image_token_mask=batched_input["input_ids"] == self.image_token_id,
-                start_image_sequence=torch.tensor(self.start_image_sequence),
-                end_image_sequence=torch.tensor(self.end_image_sequence),
+                pixel_values=pixel_values,
+                image_soft_token_mask=batched_input["input_ids"] == self.image_soft_token_id,
             )
 
         return batched_input
@@ -279,12 +300,14 @@ class Gemma3Processor(ProcessorMixin):
                     raise ValueError(f"Prompt contained {idx_l} image tokens but received {i_l} images.")
 
                 # Insert additional image tokens for Pan-and-Scan crops
-                for (_, pas_images), idx in reversed(zip(images, image_indexes)):
+                for (_, pas_images), idx in reversed(list(zip(images, image_indexes))):
                     if pas_images:
                         formatted_image_text = " ".join(
                             [PAN_AND_SCAN_PREFIX, IMAGE_TOKEN, PAN_AND_SCAN_POSTFIX] + [IMAGE_TOKEN] * len(pas_images)
                         )
                         prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_TOKEN_LEN :]
+
+            text = [prompt.replace(IMAGE_TOKEN, self.full_image_sequence) for prompt in text]
 
         inputs = self.tokenizer(text=text, **kwargs)
         return BatchFeature({**inputs})
