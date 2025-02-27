@@ -598,6 +598,7 @@ def read_video_opencv(
             - `VideoMetadata` object.
     """
     # Lazy import cv2
+    requires_backends(read_video_opencv, ["cv2"])
     import cv2
 
     video = cv2.VideoCapture(video_path)
@@ -654,6 +655,7 @@ def read_video_decord(
             - `VideoMetadata` object.
     """
     # Lazy import from decord
+    requires_backends(read_video_decord, ["decord"])
     from decord import VideoReader, cpu
 
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
@@ -696,6 +698,7 @@ def read_video_pyav(
             - `VideoMetadata` object.
     """
     # Lazy import av
+    requires_backends(read_video_pyav, ["av"])
     import av
 
     container = av.open(video_path)
@@ -833,6 +836,7 @@ def load_video(
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         # Lazy import from yt_dlp
+        requires_backends(load_video, ["yt_dlp"])
         from yt_dlp import YoutubeDL
 
         buffer = BytesIO()
