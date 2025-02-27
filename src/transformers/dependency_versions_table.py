@@ -2,6 +2,7 @@
 # 1. modify the `_deps` dict in setup.py
 # 2. run `make deps_table_update``
 deps = {
+    "Pillow": "Pillow>=10.0.1,<=15.0",
     "accelerate": "accelerate>=0.26.0",
     "av": "av",
     "beautifulsoup4": "beautifulsoup4",
@@ -45,7 +46,6 @@ deps = {
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
     "phonemizer": "phonemizer",
-    "Pillow": "Pillow>=10.0.1,<=15.0",
     "protobuf": "protobuf",
     "psutil": "psutil",
     "pyyaml": "pyyaml>=5.1",

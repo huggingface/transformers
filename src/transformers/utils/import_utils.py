@@ -1205,6 +1205,10 @@ def is_jumanpp_available():
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
 
 
+def is_cython_available():
+    return importlib.util.find_spec("pyximport") is not None
+
+
 def is_jieba_available():
     return _jieba_available
 
@@ -1580,6 +1584,12 @@ PRETTY_MIDI_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
+CYTHON_IMPORT_ERROR = """
+{0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
+Cython`. Please note that you may need to restart your runtime after installation.
+"""
+
+
 JIEBA_IMPORT_ERROR = """
 {0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
 jieba`. Please note that you may need to restart your runtime after installation.
@@ -1641,6 +1651,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),

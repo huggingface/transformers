@@ -77,6 +77,7 @@ from setuptools import Command, find_packages, setup
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
+    "Pillow>=10.0.1,<=15.0",
     "accelerate>=0.26.0",
     "av",
     "beautifulsoup4",
@@ -121,7 +122,6 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "Pillow>=10.0.1,<=15.0",
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
