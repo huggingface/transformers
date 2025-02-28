@@ -1679,7 +1679,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = RTDetrMLPPredictionHead(
+            config, config.d_model, config.d_model, output_dim=4, num_layers=3
+        )
 
         # Init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -1688,26 +1690,21 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Create decoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
-        decoder_input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = config.decoder_in_channels[_]
-            decoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-        for _ in range(config.num_feature_levels - num_backbone_outs):
-            decoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-            in_channels = config.d_model
-        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+        self.decoder_input_proj = nn.ModuleList()
 
-        # decoder
+        for idx in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[idx]
+            conv = nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.d_model, eps=config.batch_norm_eps)
+            self.decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            conv = nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.d_model, eps=config.batch_norm_eps)
+            self.decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+            in_channels = config.d_model
+
+        # Decoder
         self.decoder = RTDetrDecoder(config)
 
         self.post_init()
