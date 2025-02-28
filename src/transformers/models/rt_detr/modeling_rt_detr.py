@@ -1833,18 +1833,18 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for i in range(len(feature_maps), self.config.num_feature_levels):
             feature_maps.append(self.decoder_input_proj[i](last_encoder_feature_map))
 
-        # Prepare encoder inputs (by flattening)
-        source_flatten = []
-        spatial_shapes_list = []
+        # Flatten decoder inputs
+        hidden_states = [feature_map.flatten(2).transpose(1, 2) for feature_map in feature_maps]
+        hidden_states = torch.cat(hidden_states, dim=1)
+
+        spatial_shapes_list = [(feat.shape[-2], feat.shape[-1]) for feat in feature_maps]
+
         spatial_shapes = torch.empty((len(feature_maps), 2), device=device, dtype=torch.long)
         for level, source in enumerate(feature_maps):
             height, width = source.shape[-2:]
             spatial_shapes[level, 0] = height
             spatial_shapes[level, 1] = width
-            spatial_shapes_list.append((height, width))
-            source = source.flatten(2).transpose(1, 2)
-            source_flatten.append(source)
-        source_flatten = torch.cat(source_flatten, 1)
+
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
@@ -1866,9 +1866,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
         else:
             denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
 
-        batch_size = len(source_flatten)
-        device = source_flatten.device
-        dtype = source_flatten.dtype
+        batch_size = len(hidden_states)
+        device = hidden_states.device
+        dtype = hidden_states.dtype
 
         # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
@@ -1881,43 +1881,38 @@ class RTDetrModel(RTDetrPreTrainedModel):
             anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
-        memory = valid_mask.to(source_flatten.dtype) * source_flatten
+        masked_hidden_states = hidden_states * valid_mask.to(hidden_states.dtype)
+        proj_hidden_states = self.enc_output(masked_hidden_states)
 
-        output_memory = self.enc_output(memory)
+        class_logits = self.enc_score_head(proj_hidden_states)
+        bboxes_logits = self.enc_bbox_head(proj_hidden_states) + anchors
 
-        enc_outputs_class = self.enc_score_head(output_memory)
-        enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
+        # gather encoder logits and boxes based on top K confident logits
+        _, topk_ind = torch.topk(class_logits.max(-1).values, self.config.num_queries, dim=1)
+        topk_ind = topk_ind.unsqueeze(-1)
 
-        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
-
-        reference_points_unact = enc_outputs_coord_logits.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
-        )
-
-        enc_topk_bboxes = F.sigmoid(reference_points_unact)
+        topk_logits = class_logits.gather(dim=1, index=topk_ind.repeat(1, 1, class_logits.shape[-1]))
+        topk_bboxes_logits = bboxes_logits.gather(dim=1, index=topk_ind.repeat(1, 1, bboxes_logits.shape[-1]))
         if denoising_bbox_unact is not None:
-            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
-
-        enc_topk_logits = enc_outputs_class.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
-        )
+            topk_bboxes_logits = torch.concat([denoising_bbox_unact, topk_bboxes_logits], 1)
 
         # extract region features
         if self.learn_initial_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
-            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = proj_hidden_states.gather(dim=1, index=topk_ind.repeat(1, 1, proj_hidden_states.shape[-1]))
             target = target.detach()
 
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
 
-        init_reference_points = reference_points_unact.detach()
+        topk_bbox = F.sigmoid(topk_bboxes_logits)
+        init_reference_points = topk_bboxes_logits.detach()
 
         # decoder
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            encoder_hidden_states=source_flatten,
+            encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,
@@ -1930,9 +1925,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(
-                value
-                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
-                if value is not None
+                value for value in [topk_logits, topk_bbox, class_logits, bboxes_logits] if value is not None
             )
             dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
             tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
@@ -1951,10 +1944,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             init_reference_points=init_reference_points,
-            enc_topk_logits=enc_topk_logits,
-            enc_topk_bboxes=enc_topk_bboxes,
-            enc_outputs_class=enc_outputs_class,
-            enc_outputs_coord_logits=enc_outputs_coord_logits,
+            enc_topk_logits=topk_logits,
+            enc_topk_bboxes=topk_bbox,
+            enc_outputs_class=class_logits,
+            enc_outputs_coord_logits=bboxes_logits,
             denoising_meta_values=denoising_meta_values,
         )
 
