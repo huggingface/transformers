@@ -1599,6 +1599,8 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
             image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
             non_image_position_mask = ~image_position_mask
 
+        image_embeds = None
+        audio_embeds = None
         if input_image_embeds is not None and input_image_embeds.numel() > 0:
             image_embeds = self.image_embed(
                 input_ids,
@@ -1619,11 +1621,11 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
             )
 
         # merge image and audio hidden states
-        if input_image_embeds is not None and input_audio_embeds is not None:
+        if image_embeds is not None and audio_embeds is not None:
             input_embeds = image_embeds * image_position_mask + audio_embeds * non_image_position_mask
-        elif input_image_embeds is not None:
+        elif image_embeds is not None:
             input_embeds = image_embeds
-        elif input_audio_embeds is not None:
+        elif audio_embeds is not None:
             input_embeds = audio_embeds
 
         return input_embeds
