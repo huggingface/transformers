@@ -2156,7 +2156,7 @@ class SwanLabCallback(TrainerCallback):
         if not is_swanlab_available():
             raise RuntimeError("SwanLabCallback requires swanlab to be installed. Run `pip install swanlab`.")
         import swanlab
-        
+
         self._swanlab = swanlab
         self._initialized = False
         self._log_model = os.getenv("SWANLAB_LOG_MODEL", None)
@@ -2181,8 +2181,8 @@ class SwanLabCallback(TrainerCallback):
                 login information.
 
         - **SWANLAB_PROJECT** (`str`, *optional*, defaults to `None`):
-            Set this to a custom string to store results in a different project. If not specified, the name of the running
-            directory is used.
+            Set this to a custom string to store results in a different project. If not specified, the name of the current
+            working directory is used.
 
         - **SWANLAB_LOG_DIR** (`str`, *optional*, defaults to `swanlog`):
             Path where SwanLab parsed log files (for local mode) are saved swanlog folder in the current working directory.
