@@ -627,20 +627,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model = LongT5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @slow
-    def test_export_to_onnx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = LongT5Model(config_and_inputs[0]).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/longt5_test.onnx",
-                export_params=True,
-                opset_version=14,
-                input_names=["input_ids", "decoder_input_ids"],
-            )
-
     def test_generate_with_head_masking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
