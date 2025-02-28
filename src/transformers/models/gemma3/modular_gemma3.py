@@ -60,7 +60,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..gemma import GemmaPreTrainedModel, GemmaTokenizer
+from ..gemma import GemmaPreTrainedModel, GemmaTokenizer, GemmaTokenizerFast
 from ..gemma.modeling_gemma import (
     GemmaMLP,
     GemmaRMSNorm,
@@ -496,7 +496,7 @@ class Gemma3Processor(ProcessorMixin):
     def __init__(
         self,
         image_processor: SiglipImageProcessor,
-        tokenizer: GemmaTokenizer,
+        tokenizer: Union[GemmaTokenizer, GemmaTokenizerFast],
         chat_template: Optional[str] = None,
         num_mm_soft_tokens_per_image: int = 256,
         **kwargs,

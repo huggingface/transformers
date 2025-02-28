@@ -36,7 +36,7 @@ from orbax import checkpoint as obc
 import torch
 import tree
 
-from ..gemma import GemmaTokenizer
+from ..gemma import GemmaTokenizerFast
 from ..siglip import SiglipImageProcessor
 from .configuration_gemma3 import (
     DEFAULT_ATTENION_PATTERN,
@@ -514,14 +514,14 @@ def main(*args):
     if variant == _VARIANT_GEMMA_3_1B:
         flags.FLAGS.set_default(_TEXT_ONLY.name, True)
 
-    tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
+    tokenizer = GemmaTokenizerFast(_TOKENIZER_PATH.value)
 
     if _TEXT_ONLY.value:
         config.text_config.mm_vocab_size = 0
         config.vision_config = None
         output_path = f"{_OUTPUT_PATH.value}_textonly"
         tokenizer.save_pretrained(output_path)
-        logging.info("Saved GemmaTokenizer for %s", variant)
+        logging.info("Saved GemmaTokenizer for %s (fast? %s)", variant, tokenizer.is_fast)
         del tokenizer
     else:
         output_path = _OUTPUT_PATH.value
@@ -530,7 +530,7 @@ def main(*args):
             tokenizer=tokenizer
         )
         processor.save_pretrained(output_path)
-        logging.info("Saved Gemma3Processor for %s", variant)
+        logging.info("Saved Gemma3Processor for %s (fast? %s)", variant, processor.tokenizer.is_fast)
         del processor
         del tokenizer
 
