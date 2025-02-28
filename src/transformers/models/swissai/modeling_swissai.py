@@ -160,8 +160,12 @@ class SwissAIAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = SwissAIRMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = SwissAIRMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        if self.config.qk_norm:
+            self.q_norm = SwissAIRMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
+            self.k_norm = SwissAIRMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        else:
+            self.q_norm = nn.Identity()
+            self.k_norm = nn.Identity()
 
     def forward(
         self,
@@ -225,10 +229,18 @@ class SwissAIMLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = XIELU()
+        if config.hidden_act == "xielu":
+            self.act_fn = XIELU()
+        else:
+            self.act_fn = ACT2FN[config.hidden_act]
+            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
 
     def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+        if self.config.hidden_act == "xielu":
+            # in case of xielu, no gated MLP
+            down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+        else:
+           down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
 
@@ -239,8 +251,8 @@ class SwissAIDecoderLayer(nn.Module):
         self.self_attn = SwissAIAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = SwissAIMLP(config)
-        self.pre_attention_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.feedforward_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -256,7 +268,8 @@ class SwissAIDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
-        hidden_states = self.pre_attention_layernorm(hidden_states)
+        if not self.config.post_norm:
+            hidden_states = self.attention_layernorm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -270,12 +283,17 @@ class SwissAIDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        if self.config.post_norm:
+            hidden_states = self.attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.pre_feedforward_layernorm(hidden_states)
+        if not self.config.post_norm:
+            hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if self.config.post_norm:
+            hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
