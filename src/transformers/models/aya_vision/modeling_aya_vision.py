@@ -546,3 +546,4 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         output = inputs_embeds * (~is_img_patch).unsqueeze(-1) + image_features * is_img_patch.unsqueeze(-1)
         return output
 
+__all__ = ["AyaVisionModel", "AyaVisionPreTrainedModel"]
