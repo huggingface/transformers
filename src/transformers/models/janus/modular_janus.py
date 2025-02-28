@@ -20,7 +20,6 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from PIL import Image
 from torch import nn
 from tqdm import tqdm
 
@@ -28,7 +27,12 @@ from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
-from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
+from ...generation import (
+    ClassifierFreeGuidanceLogitsProcessor,
+    GenerationMixin,
+    GenerationMode,
+    LogitsProcessorList,
+)
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
@@ -37,11 +41,11 @@ from ...image_transforms import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
-    ImageInput,
 )
 from ...modeling_outputs import CausalLMOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -50,6 +54,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     is_torch_available,
     is_torchdynamo_compiling,
+    is_vision_available,
     logging,
     torch_int,
 )
@@ -79,6 +84,9 @@ if is_torch_available():
     import torch.nn as nn
     import torch.nn.functional as F
     import torch.utils.checkpoint
+
+if is_vision_available():
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
@@ -1130,7 +1138,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    # ToDo: Make it compatible with super class (add contine gen using embeds)
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1180,7 +1187,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 batch_size, sequence_length = input_ids.shape
                 device = input_ids.device
 
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask = self.model.language_model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
                 target_length=past_key_values.get_max_cache_shape(),
@@ -1217,35 +1224,109 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         return decoded_image
 
     @torch.no_grad
-    def generate(self, input_ids: torch.Tensor = None, **kwargs):
-        generation_mode = kwargs.pop("generation_mode", None)
-
-        if generation_mode is None:
-            logger.info("Generation mode argument is not passed. Setting to default `Text` generation.")
-            generation_mode = "text"
-
-        # Perform usual auto-regressive text generation.
-        if generation_mode == "text":
-            return super().generate(input_ids=input_ids, **kwargs)
-
-        generation_config = kwargs.pop("generation_config", None)
-        if generation_config is None:
-            generation_config = self.generation_config
-
+    def generate(
+        self,
+        inputs: torch.Tensor = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        **kwargs,
+    ):
+        # 1. Handle generation config and model kwargs
+        generation_config = kwargs.pop("generation_config", self.generation_config)
         generation_config = copy.deepcopy(generation_config)
+
+        # Default to "text" generation if mode isn't provided
+        generation_mode = kwargs.pop("generation_mode", "text")
+        if generation_mode == "text":
+            # Set to prevent running UnbatchedCFG processor.
+            generation_config.guidance_scale = None
+            logger.info("Generation mode argument is not passed. Setting to default `Text` generation.")
+            return super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
+
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
-        generation_method = generation_config.get_generation_mode()
-        if generation_method not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+        # Validate generation mode
+        if generation_config.get_generation_mode() not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             raise ValueError(
                 "Got incompatible mode for Image Generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
+        # Validate the configuration and model kwargs
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
-        # init attention / hidden states / scores tuples
+        # 2. Initialize logit processors
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        # Don't require stopping criteria for image generation.
+
+        # Set `use_cache=True` as we will be using input embeds for generation.
+        model_kwargs["use_cache"] = True
+        model_kwargs["guidance_scale"] = generation_config.guidance_scale
+
+        # 3. Prepare model inputs
+        input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
+            inputs, generation_config.bos_token_id, model_kwargs
+        )
+
+        if len(input_ids.shape) != 2:
+            raise ValueError(
+                f"Expected input ids as input of shape (batch_size, seq_len), but got {input_ids.shape}"
+                "Passing `inputs embeds` is not supported currently."
+            )
+
+        # Prepare special tokens which will be used generate internally.
+        kwargs_has_attention_mask = attention_mask is not None
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=input_ids.device)
+
+        # 4. Add CFG processor along with user passed logit processor.
+        if generation_config.guidance_scale and generation_config.guidance_scale > 1:
+            logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
+            generation_config.guidance_scale = None  # Reset to prevent processor duplication.
+
+        # 5. Prepare logits processor
+        logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids.shape[1],
+            encoder_input_ids=input_ids,
+            prefix_allowed_tokens_fn=None,
+            logits_processor=logits_processor,
+            device=input_ids.device,
+        )
+
+        # 6. Expand inputs for multiple image generations per prompt.
+        input_ids, model_kwargs = self._expand_inputs_for_generation(
+            input_ids=input_ids,
+            expand_size=generation_config.num_return_sequences,
+            **model_kwargs,
+        )
+
+        # 7. Prepare input and model caches
+        batch_size, seq_len = input_ids.shape
+        num_image_tokens = self.config.vision_config.num_image_tokens
+        input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
+
+        input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id  # Set Unconditional logits
+        inputs_embeds = self.get_input_embeddings()(input_tokens)
+
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+
+        if model_kwargs.get("past_key_values", None) is None:
+            # Prepare cache if not provided
+            model_kwargs["past_key_values"] = self._get_cache(
+                cache_implementation=generation_config.cache_implementation or "static",
+                # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
+                batch_size=batch_size * 2,
+                # we should have atleast a cache len of seq_len + num_image_tokens
+                max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
+                device=input_ids,
+                model_kwargs=model_kwargs,
+            )
+
+        # Placeholder for generated tokens
+        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=input_ids.dtype)
+
+        # 8. init attention / hidden states / scores tuples
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -1257,67 +1338,43 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        # If image is passed then perform custom pre and post processing on generated tokens.
-        batch_size, seq_len = input_ids.shape
-
-        input_tokens = input_ids.repeat(2, 1)  # Now (batch_size * 2, seq_len)
-
-        # Set the second half of tokens to pad_token_id. These would be used
-        # for generating unconditional logits
-        input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id
-
-        # Generate input_embeddings from the given prompt.
-        inputs_embeds = self.get_input_embeddings()(input_tokens)  # (B,seq_len,embed_dim)
-
-        # Placeholder to store generated tokens
-        generated_tokens = torch.zeros(
-            (batch_size, self.config.vision_config.num_image_tokens), dtype=input_tokens.dtype
-        )
-        outputs = None
-
-        logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
-        # Loop through the number of image tokens that need to be generated
-        for i in tqdm(range(self.config.vision_config.num_image_tokens)):
-            # Pass the input embeddings through the language model
+        for i in tqdm(range(num_image_tokens)):
+            # Fix me: What to do with attention mask when expanding and repeating input ids.
+            # Should be also modify the attention mask if passed?
             outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
-                use_cache=True,
-                past_key_values=outputs.past_key_values if i != 0 else None,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                **model_kwargs,
             )
 
-            # Extract the last hidden state (corresponding to the most recent token)
+            # Update model_kwargs like cache_position for next generation.
+            model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone().float()
 
-            # Generate scores using the generation head.
+            # Generate scores using the generation head. (not using above defined lm head)
             scores = self.model.gen_head(hidden_state)
-
-            # Apply logit processor for controlled generation.
-            logits = logit_processor(input_ids, scores)
+            logits = logits_processor(input_ids, scores)
             probs = torch.softmax(logits / generation_config.temperature, dim=-1)
 
-            # Sample the next token from the probability distribution.
-            next_token = torch.multinomial(probs, num_samples=1)
+            # Sample the next token
+            next_token = torch.multinomial(probs, num_samples=1).squeeze(-1)
             generated_tokens[:, i] = next_token
 
-            # Prepare embeddings for image generation.
-            next_token = torch.cat([next_token, next_token], dim=1).view(-1)
-
+            # Prepare embeddings for the next step.
+            next_token = torch.cat([next_token, next_token])
             img_embeds = self.prepare_emeddings_for_image_generation(next_token)
-
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += (scores,)
-                if output_logits:
-                    raw_logits += (hidden_state,)
-                if output_attentions:
-                    decoder_attentions += outputs.attentions
-                if output_hidden_states:
-                    decoder_hidden_states += outputs.hidden_states
-            # break
+        if return_dict_in_generate:
+            if output_scores:
+                scores += (scores,)
+            if output_logits:
+                raw_logits += (hidden_state,)
+            if output_attentions:
+                decoder_attentions += outputs.attentions
+            if output_hidden_states:
+                decoder_hidden_states += outputs.hidden_states
 
         if return_dict_in_generate:
             return GenerateDecoderOnlyOutput(
@@ -1326,7 +1383,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=model_kwargs.get("past_key_values"),
+                past_key_values=outputs.past_key_values,
             )
         else:
             return generated_tokens
@@ -1497,9 +1554,9 @@ class JanusImageProcessor(BlipImageProcessor):
 
             if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
                 image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                pixel_values.append(Image.fromarray(image))
-            else:
-                pixel_values.extend(image)
+                image = Image.fromarray(image)
+
+            pixel_values.append(image)
 
         data = {"pixel_values": pixel_values}
         return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None

@@ -429,7 +429,10 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id)
-        processor = AutoProcessor.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(
+            self.model_id,
+            generation_mode="image",
+        )
 
         inputs = processor(
             text=["a portrait of young girl. masterpiece, film grained, best quality."],
@@ -437,7 +440,7 @@ class JanusIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         ).to(model.device)
 
-        self.assertTrue(inputs.input_ids.shape[1] == 53)
+        self.assertTrue(inputs.input_ids.shape[1] == 17)
 
         out = model.generate(
             **inputs,
@@ -453,7 +456,7 @@ class JanusIntegrationTest(unittest.TestCase):
         # Postprocess decoded pixel values.
         images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="np")
 
-        self.assertTrue(images["pixel_values"].shape == (384, 384, 3))
+        self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
         self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
 
         # Add a check to compare og pixel values with generated ones

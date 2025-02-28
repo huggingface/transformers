@@ -51,10 +51,12 @@ from ...utils import (
 if is_torch_available():
     pass
 
+if is_vision_available():
+    from PIL import Image
+
 
 if is_vision_available():
     import PIL
-    from PIL import Image
 
 
 logger = logging.get_logger(__name__)
