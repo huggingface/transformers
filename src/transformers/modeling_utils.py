@@ -786,6 +786,8 @@ def _load_state_dict_into_meta_model(
     if device_map is not None and device_map.get("", None) is not None:
         tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
 
+    device_map_regex = "|".join(sorted(device_map.keys(), reverse=True))
+
     # we need this later to initialize tensor parallelism
     if device_mesh is not None:
         full_tp_plan = model.config.base_model_tp_plan
@@ -876,12 +878,11 @@ def _load_state_dict_into_meta_model(
             if device_map is None:
                 param_device = "cpu"
             else:
-                module_name = fixed_param_name
-                while len(module_name) > 0 and module_name not in device_map:
-                    module_name = module_name.rsplit(".", 1)[0] if "." in module_name else ""
-                if module_name == "" and "" not in device_map:
+                module_layer = re.search(device_map_regex, fixed_param_name)
+                if not module_layer:
                     raise ValueError(f"{fixed_param_name} doesn't have any device set.")
-                param_device = device_map[module_name]
+                else:
+                    param_device = device_map[module_layer.group()]
 
             if param_device == "disk":
                 if not is_safetensors:
