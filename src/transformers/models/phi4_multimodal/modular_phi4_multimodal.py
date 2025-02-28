@@ -787,7 +787,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         img_embeds: torch.FloatTensor,
         image_sizes: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
@@ -869,15 +869,15 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             img_set_tensor.append(img_feature_proj)
 
         merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
-        merged_img_set_tensor = merged_img_set_tensor.to(dtype=input_embeds.dtype, device=input_embeds.device)
+        merged_img_set_tensor = merged_img_set_tensor.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
 
         with torch.no_grad():
             positions_tuple = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=True)
 
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
-        with torch.autocast(device_type=input_embeds.device.type, enabled=False):
-            image_embeds = input_embeds.index_put(
+        with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
+            image_embeds = inputs_embeds.index_put(
                 indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
             )
 
@@ -1374,7 +1374,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         audio_embeds: torch.FloatTensor,
         audio_embed_sizes=None,
         audio_attention_mask=None,
@@ -1404,11 +1404,11 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         merged_audio_set_tensor = torch.cat(
             [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
         )
-        merged_audio_set_tensor = merged_audio_set_tensor.to(dtype=input_embeds.dtype, device=input_embeds.device)
+        merged_audio_set_tensor = merged_audio_set_tensor.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
-        with torch.autocast(device_type=input_embeds.device.type, enabled=False):
-            audio_embeds = input_embeds.index_put(
+        with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
+            audio_embeds = inputs_embeds.index_put(
                 indices=positions_tuple, values=merged_audio_set_tensor, accumulate=False
             )
 
@@ -1440,7 +1440,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         input_image_embeds: Optional[torch.FloatTensor] = None,
         input_audio_embeds: Optional[torch.FloatTensor] = None,
         image_sizes=None,
@@ -1459,7 +1459,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         if input_image_embeds is not None and input_image_embeds.numel() > 0:
             image_embeds = self.image_embed(
                 input_ids,
-                input_embeds,
+                inputs_embeds,
                 img_embeds=input_image_embeds,
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
@@ -1468,22 +1468,22 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
             audio_projection_mode = "vision" if input_image_embeds is not None else "speech"
             audio_embeds = self.audio_embed(
                 input_ids,
-                input_embeds,
+                inputs_embeds,
                 audio_embeds=input_audio_embeds,
                 audio_embed_sizes=audio_embed_sizes,
                 audio_attention_mask=audio_attention_mask,
                 audio_projection_mode=audio_projection_mode,
             )
 
-        # merge image and audio hidden states
+        # merge image and audio
         if image_embeds is not None and audio_embeds is not None:
-            input_embeds = image_embeds * image_position_mask + audio_embeds * non_image_position_mask
+            inputs_embeds = image_embeds * image_position_mask + audio_embeds * non_image_position_mask
         elif image_embeds is not None:
-            input_embeds = image_embeds
+            inputs_embeds = image_embeds
         elif audio_embeds is not None:
-            input_embeds = audio_embeds
+            inputs_embeds = audio_embeds
 
-        return input_embeds
+        return inputs_embeds
 
 
 PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
@@ -1620,10 +1620,10 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
-            input_embeds = self.embed_tokens(input_ids)
-            hidden_states = self.embed_tokens_extend(
+            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_tokens_extend(
                 input_ids,
-                input_embeds,
+                inputs_embeds,
                 input_image_embeds=input_image_embeds,
                 input_audio_embeds=input_audio_embeds,
                 image_sizes=image_sizes,
