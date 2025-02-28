@@ -526,9 +526,14 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from transformers import pipeline
 
-        for model_id in self.peft_test_model_ids:
-            pipe = pipeline("text-generation", model_id)
-            _ = pipe("Hello")
+        for adapter_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            peft_pipe = pipeline("text-generation", adapter_id)
+            base_pipe = pipeline("text-generation", base_model_id)
+            peft_params = list(peft_pipe.model.parameters())
+            base_params = list(base_pipe.model.parameters())
+            self.assertNotEqual(peft_params, base_params)  # Assert we actually loaded the adapter too
+            _ = peft_pipe("Hello")
+
 
     def test_peft_add_adapter_with_state_dict(self):
         """
