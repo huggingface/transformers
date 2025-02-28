@@ -197,11 +197,11 @@ class EuroBertConfig(LlamaConfig):
         classifier_pooling="late",
         **kwargs,
     ):
-        # use_cache is specific to decoder models
-        if "use_cache" in kwargs:
-            _ = kwargs.pop("use_cache")
+        # use_cache is specific to decoder models and should be set to False for encoder models
+        use_cache = kwargs.pop("use_cache", None)
+        if use_cache:
+            logger.warning_once("The `use_cache` argument to EuroBertConfig is set to `False`, as caching is never used for encoder models.")
 
-        # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
 
@@ -411,14 +411,16 @@ class EuroBertModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.bool)
+        if attention_mask is not None:
+            mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[1], inputs_embeds.dtype)
+        else:
+            mask = None
 
-        mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[1], inputs_embeds.dtype)
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the encoder layers
-        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+        if position_ids is None:
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # encoder layers

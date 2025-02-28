@@ -20,7 +20,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...utils import logging
 from ..llama import LlamaConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class EuroBertConfig(LlamaConfig):
@@ -170,11 +174,13 @@ class EuroBertConfig(LlamaConfig):
         classifier_pooling="late",
         **kwargs,
     ):
-        # use_cache is specific to decoder models
-        if "use_cache" in kwargs:
-            _ = kwargs.pop("use_cache")
+        # use_cache is specific to decoder models and should be set to False for encoder models
+        use_cache = kwargs.pop("use_cache", None)
+        if use_cache:
+            logger.warning_once(
+                "The `use_cache` argument to EuroBertConfig is set to `False`, as caching is never used for encoder models."
+            )
 
-        # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
 
