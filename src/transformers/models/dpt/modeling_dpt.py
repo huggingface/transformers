@@ -296,7 +296,7 @@ class DPTViTPatchEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPT
-class DPTSelfAttention(nn.Module):
+class DPTViTSelfAttention(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -378,7 +378,7 @@ class DPTViTSelfOutput(nn.Module):
 class DPTViTAttention(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
-        self.attention = DPTSelfAttention(config)
+        self.attention = DPTViTSelfAttention(config)
         self.output = DPTViTSelfOutput(config)
         self.pruned_heads = set()
 
