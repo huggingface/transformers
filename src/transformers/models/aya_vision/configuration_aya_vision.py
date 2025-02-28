@@ -112,12 +112,24 @@ class AyaVisionConfig(PretrainedConfig):
                 vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
             )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif vision_config is None:
+            vision_config = CONFIG_MAPPING["siglip_vision_model"](
+                hidden_size=1152,
+                intermediate_size=4304,
+                patch_size=14,
+                image_size=384,
+                num_hidden_layers=26,
+                num_attention_heads=14,
+                vision_use_head=False,
+            )
 
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["cohere2"]()
 
         self.text_config = text_config
 

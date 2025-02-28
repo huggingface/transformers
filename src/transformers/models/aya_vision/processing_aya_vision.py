@@ -1,65 +1,41 @@
-import functools
-import os
-import copy
-import json
-import base64
-from datetime import datetime
-from typing import Union, Dict, Iterable, List, Optional, Tuple
-import requests
-from io import BytesIO
+# coding=utf-8
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+from functools import partial
+from typing import Dict, List, Optional, Union
+
 import numpy as np
-from jinja2 import Template, Environment
-from PIL import Image
-from typing import List, Union
-import torch
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
+from transformers.processing_utils import (
+    AllKwargsForChatTemplate,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+)
+from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
-CHAT_FORMATS = {
-    "chat-command-turn_tokens-v3": '{% if preamble != "" %}<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{ preamble }}<|END_OF_TURN_TOKEN|>{% endif %}{% for turn in turns %}{% if turn.message and turn.message != "" %}<|START_OF_TURN_TOKEN|>{{ turn.role | replace("User", "<|USER_TOKEN|>") | replace("Chatbot", "<|CHATBOT_TOKEN|><|START_RESPONSE|>") | replace("System", "<|SYSTEM_TOKEN|>") }}{{ turn.message }}{% if turn.role == "Chatbot" %}<|END_RESPONSE|>{% endif %}<|END_OF_TURN_TOKEN|>{% endif %}{% endfor %}<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>',
-}
+from ...image_processing_utils import BatchFeature
+from ...image_utils import (
+    ImageInput,
+    make_flat_list_of_images,
+    get_image_size,
+)
 
-STD_PREAMBLE = """
-# System Preamble
-You are in contextual safety mode. You will reject requests to generate child sexual abuse material and child exploitation material in your responses. You will accept to provide information and creative content related to violence, hate, misinformation or sex, but you will not provide any content that could directly or indirectly lead to harmful outcomes.
-
-Your information cutoff date is June 2024.
-
-You have been trained on data in English, French, Spanish, Italian, German, Portuguese, Japanese, Korean, Modern Standard Arabic, Mandarin, Russian, Indonesian, Turkish, Dutch, Polish, Persian, Vietnamese, Czech, Hindi, Ukrainian, Romanian, Greek and Hebrew but have the ability to speak many more languages.
-
-# Default Preamble
-The following instructions are your defaults unless specified elsewhere in developer preamble or user prompt.
-- Your name is Aya.
-- You are a large language model built by Cohere.
-- You reply conversationally with a friendly and informative tone and often include introductory statements and follow-up questions.
-- If the input is ambiguous, ask clarifying follow-up questions.
-- Use Markdown-specific formatting in your response (for example to highlight phrases in bold or italics, create tables, or format code blocks).
-- Use LaTeX to generate mathematical notation for complex equations.
-- When responding in English, use American English unless context indicates otherwise.
-- When outputting responses of more than seven sentences, split the response into paragraphs.
-- Prefer the active voice.
-- Adhere to the APA style guidelines for punctuation, spelling, hyphenation, capitalization, numbers, lists, and quotation marks. Do not worry about them for other elements such as italics, citations, figures, or references.
-- Use gender-neutral pronouns for unspecified persons.
-- Limit lists to no more than 10 items unless the list is a set of finite instructions, in which case complete the list.
-- Use the third person when asked to write a summary.
-- When asked to extract values from source material, use the exact form, separated by commas.
-- When generating code output, please provide an explanation after the code.
-- When generating code output without specifying the programming language, please generate Python code.
-- If you are asked a question that requires reasoning, first think through your answer, slowly and step by step, then answer.
-"""
-
-DEFAULT_ROLE_MAP = {
-    "system": "System",
-    "user": "User",
-    "chatbot": "Chatbot",
-}
-
+# Add constants for image token handling
 START_OF_IMG = "<|START_OF_IMG|>"
 END_OF_IMG = "<|END_OF_IMG|>"
 IMG_PATCH = "<|IMG_PATCH|>"
@@ -68,258 +44,94 @@ IMG_LINE_BREAK = "<|IMG_LINE_BREAK|>"
 TILE = "TILE"
 TILE_GLOBAL = "TILE_GLOBAL"
 
+
+class AyaVisionImagesKwargs(ImagesKwargs, total=False):
+    crop_to_patches: Optional[bool]
+    min_patches: Optional[int]
+    max_patches: Optional[int]
+
+
 class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: AyaVisionImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "padding": "longest",
             "padding_side": "left",
-            "truncation": True,
+            "padding": True,
         },
         "images_kwargs": {
-            "do_pad": True,
+            "crop_to_patches": True,
         },
     }
 
 
 class AyaVisionProcessor(ProcessorMixin):
+    r"""
+    Constructs a AyaVision processor which wraps a [`AutoImageProcessor`] and
+    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    tokenizer functionalities. See the [`~AyaVisionProcessor.__call__`] and [`~AyaVisionProcessor.decode`] for more information.
+    Args:
+        image_processor ([`AutoImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size of image patches for tokenization.
+        downsample_factor (`int`, *optional*, defaults to 1):
+            The factor by which to scale the patch size.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "chat_preamble", # saurabhdash: should this be moved to tokenizer config?
-        "max_splits_per_img",
-        "size",
+        "chat_template", 
+        "image_token", 
+        "patch_size", 
         "downsample_factor",
+        "vision_feature_select_strategy",
+        "max_splits_per_img", 
+        "size"
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        patch_size=None,
-        downsample_factor=1,
-        vision_feature_select_strategy=None,
-        chat_template=None,
-        **kwargs: Unpack[AyaVisionProcessorKwargs],
+        self, 
+        image_processor=None, 
+        tokenizer=None, 
+        patch_size: int = 14,
+        downsample_factor: int = 1,
+        chat_template=None, 
+        **kwargs
     ):
         self.patch_size = patch_size * downsample_factor
         self.img_size = kwargs.get("size", 364)
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.chat_preamble = kwargs.get("chat_preamble", STD_PREAMBLE)
-        self.max_splits_per_img = kwargs.get("max_splits_per_img", 1)
-        self.role_map = DEFAULT_ROLE_MAP
-        self.image_mean = kwargs.get("image_mean", [0.5, 0.5, 0.5])
-        self.image_std = kwargs.get("image_std", [0.5, 0.5, 0.5])
-        self.image_token = kwargs.get("image_token", "<|IMG_PATCH|>")
-        
-        # Initialize the parent class
-        super().__init__(
-            image_processor,
-            tokenizer,
-            chat_template=CHAT_FORMATS["chat-command-turn_tokens-v3"]
-            if chat_template is None
-            else chat_template,
-        )
+        self.max_splits_per_img = kwargs.get("max_splits_per_img", 12)
+        self.vision_feature_select_strategy = kwargs.get("vision_feature_select_strategy", "full")
+        self.image_token = kwargs.get("image_token", "<image>")
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
         
         # Configure the image processor with our parameters
         if self.image_processor is not None:
             self.image_processor.img_size = self.img_size
             self.image_processor.max_splits_per_image = self.max_splits_per_img
-            self.image_processor.image_mean = self.image_mean
-            self.image_processor.image_std = self.image_std
-
-    def __call__(self, batch_of_conversations, **kwargs) -> BatchFeature:
-        """
-        Process a *batch* of conversations, each conversation can be multimodal or text-only.
-        
-        batch_of_conversations: List[List[Dict]]
-            A list of conversations, where each conversation is itself a list of turns (dicts).
-        """
-
-        if isinstance(self.chat_template, str):
-            # Create a Jinja2 environment with proper configuration
-            env = Environment(autoescape=False)
-            self.chat_template = env.from_string(self.chat_template)
-        
-        # Merge user-supplied kwargs with default kwargs
-        output_kwargs = self._merge_kwargs(
-            AyaVisionProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        
-        text_kwargs = output_kwargs["text_kwargs"]
-        # Get return_tensors from kwargs or default to None
-        return_tensors = kwargs.get("return_tensors", None)
-
-        if not isinstance(batch_of_conversations, list):
-            raise ValueError("batch_of_conversations must be a list of conversations.")
-        if len(batch_of_conversations) == 0:
-            raise ValueError("No conversations provided (empty list).")
-
-        if isinstance(batch_of_conversations[0], dict):
-            # Single conversation -> wrap in list
-            batch_of_conversations = [batch_of_conversations]
-
-        all_prompts = []
-        all_image_patches = []
-        image_num_patches = []
-        for conversation in batch_of_conversations:
-            prompt, image_patches, _ = self.encode_turns(conversation)
-            all_prompts.append(prompt)
-            all_image_patches.append(image_patches)
-            image_num_patches.append(len(image_patches))
-
-        text_inputs = self.tokenizer(
-            all_prompts,
-            **text_kwargs
-        )
-
-        # Zero-pad the image patches across the batch
-        max_num_patches = max(image_num_patches) if image_num_patches else 0
-        padded_image_patches = []
-        padding_image = np.zeros((self.img_size, self.img_size, 3))
-        for i, patch_seq in enumerate(all_image_patches):
-            # Normalize the patch images
-            patch_seq = self.image_processor.normalize_image_patches(patch_seq)
-            padded = patch_seq + [
-                padding_image for _ in range(max_num_patches - len(patch_seq))
-            ]
-            padded_image_patches.append(padded)
-
-        # If there are *any* images in the batch, convert to np.array
-        if any(len(p) > 0 for p in padded_image_patches):
-            # shape = (batch_size, num_patches, H, W, C)
-            padded_image_patches = np.array(padded_image_patches)
-            # We want (batch_size, num_patches, channels, height, width)
-            padded_image_patches = padded_image_patches.transpose(0, 1, 4, 2, 3)
-            padded_image_patches = padded_image_patches.astype(np.float16)
-
-            # Return the final BatchFeature with text + image data
-            return BatchFeature(
-                data={
-                    **text_inputs,
-                    "pixel_values": padded_image_patches,
-                    "image_num_patches": np.array(image_num_patches),
-                },
-                tensor_type=return_tensors,
-            )
-        else:
-            # No images in the entire batch (text-only). Return text
-            return BatchFeature(
-                data={**text_inputs},
-                tensor_type=return_tensors,
-            )
-
-    def encode_turns(self, turns: List[dict]) -> Union[List[int], Tuple[str, List[np.ndarray], List]]:
-        prompt = self.prompt_from_turns(turns)
-        return prompt
-    
-    def prompt_from_turns(
-        self, turns: List[dict], overwrite_date: Optional[datetime] = None
-    ) -> Union[str, Tuple[str, List[np.ndarray], List]]:
-        """
-        Example code that returns the 3-tuple: (prompt_str, [img_patches], [img_sizes]).
-        """
-        turns, img_patches, img_sizes = self._turns_as_text_messages(turns)
-        turns = [self.validate_turn(turn) for turn in turns]
-        preamble = self.render_preamble(overwrite_date)
-        if turns and turns[0]["role"] == "System" and isinstance(turns[0]["message"], str):
-            # NOTE: system preamble override
-            preamble = turns[0]["message"]
-            turns = turns[1:]
-        prompt = self.chat_template.render(preamble=preamble, turns=turns)
-        return prompt, img_patches, img_sizes
-
-    def _turns_as_text_messages(self, turns: List[List[dict]]) -> Tuple[List[dict], List[np.ndarray]]:
-        message_turns = []
-        img_patches = []
-        img_size_array = []
-        for turn in turns:
-            is_message_content_array = isinstance(turn["message"], list) and \
-                len(turn["message"]) > 0 and \
-                isinstance(turn["message"][0], dict)
-            if is_message_content_array:
-                message, turn_img_patches, img_size = self.content_as_text(turn["message"])
-            else:
-                message, turn_img_patches, img_size = turn["message"], [], None
-            message_turns.append({"role": turn["role"], "message": message})
-            img_patches.extend(turn_img_patches)
-            if img_size is not None:
-                img_size_array.append(img_size)
-        return message_turns, img_patches, img_size_array
-
-    def content_as_text(self, content: List[dict]) -> Tuple[str, List[np.ndarray]]:
-        message = ""
-        img_patches = []
-        img_size = None
-        for content_row in content:
-            text, img_patch_list, row_img_size = self.content_row_as_text(content_row)
-            message += text
-            if img_patch_list is not None:
-                img_patches.extend(img_patch_list)
-            if row_img_size is not None:
-                img_size = row_img_size
-
-        return message, img_patches, img_size
-
-    def validate_turn(self, turn):
-        """Validate if a turn has correct role and message.
-
-        Args:
-            turn (dict): A chat turn with role.
-
-        Returns:
-            dict: A chat turn with role capitalized and message.
-        """
-        turn = copy.copy(turn)
-        original_role = None
-        if "message" not in turn:
-            raise ValueError(
-                f"Chat turn {turn!r} is missing a 'message' field. Note that the convention for platform and datatools is different from command, which uses 'content'."
-            )
-        normalized_role = turn.get("role", "").capitalize()
-        if normalized_role not in ["User", "Chatbot", "System"]:
-            raise ValueError(
-                f"Chat turn {turn!r} has invalid or missing role. Normalized role was {normalized_role!r}, but must be one of 'User', 'Chatbot', 'System'"
-            )
-        turn["role"] = normalized_role if original_role is None else original_role
-        return turn
-
-    def content_row_as_text(self, content: dict) -> Tuple[str, List[np.ndarray], Optional[Tuple[int, int]]]:
-        img_pil = None
-        if content.get("url"):
-            img_pil = load_img_from_url(content["url"])
-        elif content.get("img"):
-            img_pil = content["img"]
-
-        if img_pil:
-            assert not content.get("text"), "Cannot have both text and url in the same content dict."
-            img_pil = img_pil.convert("RGB")
-            # Make sure image processor has the correct parameters
-            self.image_processor.img_size = self.img_size
-            self.image_processor.max_splits_per_image = self.max_splits_per_img
-            
-            img_pil = self.image_processor.scale_to_optimal_aspect_ratio(img_pil)
-            text = self.img_tokens_from_size(*img_pil.size)
-            img_splits = self.image_processor.make_img_splits(img_pil)
-            # If there are more than 1 splits, also include a thumbnail image
-            if len(img_splits) > 1: 
-                img_splits += [img_pil.resize((self.img_size, self.img_size))]
-            img_splits = [np.array(img) for img in img_splits]
-            return text, img_splits, img_pil.size
-
-        return content["text"], [], None
 
     def img_tokens_from_size(self, width: int, height: int) -> str:
+        """
+        Convert image dimensions to appropriate token representation
+        
+        Args:
+            width: Image width
+            height: Image height
+            
+        Returns:
+            String representation of image tokens
+        """
         w_patch = width / self.patch_size
         h_patch = height / self.patch_size
 
-        # Number of crops/ tiles after resizing to optimal aspect ratio
+        # Number of crops/tiles after resizing to optimal aspect ratio
         w_tiles = width // self.img_size
         h_tiles = height // self.img_size
 
@@ -327,6 +139,16 @@ class AyaVisionProcessor(ProcessorMixin):
         return self.create_image_str(w_tiles, h_tiles)
 
     def create_image_str(self, w_tiles, h_tiles):
+        """
+        Create a structured string representation of image tokens
+        
+        Args:
+            w_tiles: Number of tiles horizontally
+            h_tiles: Number of tiles vertically
+            
+        Returns:
+            String with appropriate image tokens
+        """
         idx = 1
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
 
@@ -341,23 +163,162 @@ class AyaVisionProcessor(ProcessorMixin):
         img_string += f"{END_OF_IMG}"
         return img_string
 
-    def render_preamble(self, overwrite_date: Optional[datetime] = None) -> str:
-        if "{date}" in self.chat_preamble:
-            date = overwrite_date if overwrite_date is not None else datetime.now()
-            return self.chat_preamble.format(date=date.strftime("%A, %B %d, %Y"))
-        return self.chat_preamble
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio=None,
+        **kwargs: Unpack[AyaVisionProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
+        is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
+        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
+        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+        if text is None:
+            raise ValueError("You have to specify text.")
+
+        output_kwargs = self._merge_kwargs(
+            AyaVisionProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if not isinstance(text, (list, tuple)):
+            text = [text]
+
+        # Process images
+        image_inputs = {}
+        if images is not None:
+            images = make_flat_list_of_images(images)
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_num_patches = image_inputs.pop("num_patches")
+            image_pixel_values = image_inputs.pop("pixel_values")
+            resized_image_sizes = image_inputs.pop("resized_sizes")
+            # Get image dimensions
+            image_sizes = [self.get_image_size(img) for img in images]
+            
+            image_index = 0
+            processed_text = []
+            for prompt in text:
+                new_prompt = prompt
+                while "<image>" in new_prompt:
+                    # Replace the image placeholder with structured image tokens
+                    height = resized_image_sizes[image_index][0]
+                    width = resized_image_sizes[image_index][1]
+                    image_tokens = self.img_tokens_from_size(width, height)
+                    new_prompt = new_prompt.replace("<image>", image_tokens, 1)
+                    image_index += 1
+                processed_text.append(new_prompt)
+
+            if image_index != len(images):
+                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
+
+            image_inputs = {"pixel_values": image_pixel_values}
+            text = processed_text
+
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs})
+
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(tokenizer_input_names) + list(image_processor_input_names)
+
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
+        chat_template: Optional[str] = None,
+        **kwargs: Unpack[AllKwargsForChatTemplate],
+    ):
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
+
+        The input is expected to be in the following format, where each message content is a list consisting of text and
+        optionally image inputs. One can also provide an image, URL or local path which will be used to form
+        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Please describe this image in detail."},
+                ],
+            },
+        ]
+
+        Args:
+            conversation (`Union[List[Dict, [str, str]], List[List[Dict[str, str]]]]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
+        """
+        return super().apply_chat_template(
+            conversation, chat_template, **kwargs
+        )
+
+    def get_image_size(self, image):
+        """
+        Gets the size (width, height) of an image.
+        
+        Args:
+            image: A PIL Image, numpy array, or tensor representing an image
+            
+        Returns:
+            Tuple[int, int]: A tuple of (width, height)
+        """
+        # If image is already a PIL image, we can directly get its size
+        if hasattr(image, 'size'):
+            return image.size
+        
+        # Otherwise, use the utility function
+        return get_image_size(image)
 
 
-def load_img_from_url(url: str) -> Image:
-    if url.startswith("data:"):
-        data_prefix = "data:image/jpeg;base64,"
-        if not url.startswith(data_prefix):
-            raise NotImplementedError(f"Currently only support format: {data_prefix}")
-        data = url[len(data_prefix):]
-        image_data = base64.b64decode(data)
-    elif url.startswith("http"):
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'})
-        image_data = response.content
-    else:
-        raise NotImplementedError(f"Unsupported url value {url=}")
-    return Image.open(BytesIO(image_data))
+
+__all__ = ["AyaVisionProcessor"]

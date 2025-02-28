@@ -1231,6 +1231,7 @@ else:
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.aria"].extend(["AriaImageProcessor"])
+    _import_structure["models.aya_vision"].extend(["AyaVisionImageProcessor"])
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
