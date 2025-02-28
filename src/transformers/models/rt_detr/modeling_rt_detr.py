@@ -42,6 +42,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
@@ -500,7 +501,7 @@ def get_contrastive_denoising_training_group(
         denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
     )
     # total denoising queries
-    num_denoising_queries = int(max_gt_num * 2 * num_groups_denoising_queries)
+    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
 
     if label_noise_ratio > 0:
         mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
@@ -1322,8 +1323,8 @@ class RTDetrHybridEncoder(nn.Module):
     def build_2d_sincos_position_embedding(
         width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
     ):
-        grid_w = torch.arange(int(width), device=device).to(dtype)
-        grid_h = torch.arange(int(height), device=device).to(dtype)
+        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
+        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
         grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
