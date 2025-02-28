@@ -34,6 +34,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_ninja_available,
@@ -135,8 +136,14 @@ class MultiScaleDeformableAttentionFunction(Function):
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
-# TODO: Replace all occurrences of the checkpoint with the final one
 _CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
+_DETECTION_OUTPUT_FOR_DOC = """
+    Detected 'sofa' (0.97) at [0.14, 0.38, 640.13, 476.21]
+    Detected 'cat' (0.96) at [343.38, 24.28, 640.14, 371.5]
+    Detected 'cat' (0.96) at [13.23, 54.18, 318.98, 472.22]
+    Detected 'remote' (0.95) at [40.11, 73.44, 175.96, 118.48]
+    Detected 'remote' (0.92) at [333.73, 76.58, 369.97, 186.99]
+"""
 
 
 @dataclass
@@ -1974,7 +1981,12 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=RTDetrObjectDetectionOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_DETECTION_OUTPUT_FOR_DOC,
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1995,59 +2007,11 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
-        >>> from PIL import Image
-        >>> import requests
-        >>> import torch
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
-        >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
-
-        >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
-        >>> # forward pass
-        >>> outputs = model(**inputs)
-
-        >>> logits = outputs.logits
-        >>> list(logits.shape)
-        [1, 300, 80]
-
-        >>> boxes = outputs.pred_boxes
-        >>> list(boxes.shape)
-        [1, 300, 4]
-
-        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-        ...     0
-        ... ]
-
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(
-        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...         f"{round(score.item(), 3)} at location {box}"
-        ...     )
-        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
-        Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
-        Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
-        Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
-        Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
-        ```"""
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
