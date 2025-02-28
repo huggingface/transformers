@@ -19,7 +19,7 @@ Processor class for Janus.
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -37,20 +37,6 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are able to understand the visual content that the user provides, "
     "and assist the user with a variety of tasks using natural language.\n\n"
 )
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_url
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
-
-
-def _is_str_or_image(elem):
-    return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
@@ -78,7 +64,7 @@ class JanusProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
+    valid_kwargs = ["chat_template", "use_default_system_prompt"]
     image_processor_class = "JanusImageProcessor"
     """
     The default from the original Janus codebase uses LlamaTokenizerFast, but not LlamaTokenizer.
@@ -120,7 +106,7 @@ class JanusProcessor(ProcessorMixin):
             raise ValueError("You must specify either text or images.")
 
         if not self.generation_mode:
-            logger.info("Generation mode argument not provided. Defaulting to 'text' mode.")
+            logger.info("Generation mode argument not provided.Setting default to `text generation` mode.")
             self.generation_mode = "text"
 
         if text is not None:

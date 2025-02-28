@@ -298,15 +298,12 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        output_attentions = False
-
         batch_size, seq_len, _ = hidden_states.size()
 
         # Batched computation of query, key, value states.
@@ -315,7 +312,7 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states, key_states, value_states = qkv.permute.unbind(2)
+        query_states, key_states, value_states = qkv.unbind(2)
         query_states = self.query_norm(query_states)
         key_states = self.key_norm(key_states)
 
@@ -335,7 +332,7 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.qkv.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -362,7 +359,6 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
 
-        # In `Flash Attenition` we don't return Attention weights, hence return None.
         return output, None
 
 

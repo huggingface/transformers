@@ -16,33 +16,26 @@ rendered properly in your Markdown viewer.
 
 # Janus
 
-# Janus
+## Overview 
 
-# Janus
-
-# Janus
-
-# Janus
-
-# Janus
-
-# Janus
-
-## Overview
-
-The Janus model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DEEPSEEK AI team. Janus is a Vision language Model can generate both Images and Text output. The model can take both images and text as input. Note: The models doesn't generate both images and text in an interleaved format rather it could generate either text or image at a time.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*In this paper, we introduce Janus, an autoregressive framework that unifies multimodal understanding and generation. Prior research often relies on a single visual encoder for both tasks, such as Chameleon. However, due to the differing levels of information granularity required by multimodal understanding and generation, this approach can lead to suboptimal performance, particularly in multimodal understanding. To address this issue, we decouple visual encoding into separate pathways, while still leveraging a single, unified transformer architecture for processing. The decoupling not only alleviates the conflict between the visual encoder's roles in understanding and generation, but also enhances the framework's flexibility. For instance, both the multimodal understanding and generation components can independently select their most suitable encoding methods. Experiments show that Janus surpasses previous unified model and matches or exceeds the performance of task-specific models. The simplicity, high flexibility, and effectiveness of Janus make it a strong candidate for next-generation unified multimodal models.*
 
-Tips:
+Subsequently they have released [Janus-Pro: Unified Multimodal Understanding and
+Generation with Data and Model Scaling](https://arxiv.org/abs/2501.17811) which is an advanced version of previous version of Janus. 
 
-<INSERT TIPS ABOUT MODEL HERE>
+The abstract from following `Janus-Pro` paper:
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+*In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strategy, (2) expanded training data,
+and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant
+advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will
+inspire further exploration in the field. Code and models are publicly available.*
+
+This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali) and []().
+The original code can be found [here](https://github.com/deepseek-ai/Janus).
 
 
 ## JanusConfig

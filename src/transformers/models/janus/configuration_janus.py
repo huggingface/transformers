@@ -289,6 +289,7 @@ class JanusConfig(PretrainedConfig):
 
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
+        self.image_token_index = 100581
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]

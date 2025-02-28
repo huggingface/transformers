@@ -253,8 +253,6 @@ def convert_model(
         config_data = json.load(f)
     with open(os.path.join(input_path, "preprocessor_config.json"), "r") as f:
         preprocessor_config = json.load(f)
-    with open(os.path.join(input_path, "processor_config.json"), "r") as f:
-        processor_config = json.load(f)
     with open(os.path.join(input_path, "special_tokens_map.json"), "r") as f:
         special_tokens_map = json.load(f)
     with open(os.path.join(input_path, "tokenizer_config.json"), "r") as f:

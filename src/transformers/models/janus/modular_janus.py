@@ -86,7 +86,7 @@ if is_torch_available():
     import torch.utils.checkpoint
 
 if is_vision_available():
-    from PIL import Image
+    import PIL
 
 logger = logging.get_logger(__name__)
 
@@ -299,15 +299,12 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        output_attentions = False
-
         batch_size, seq_len, _ = hidden_states.size()
 
         # Batched computation of query, key, value states.
@@ -316,7 +313,7 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states, key_states, value_states = qkv.permute.unbind(2)
+        query_states, key_states, value_states = qkv.unbind(2)
         query_states = self.query_norm(query_states)
         key_states = self.key_norm(key_states)
 
@@ -336,7 +333,7 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.qkv.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -363,7 +360,6 @@ class JanusVisionFlashAttention2(JanusVisionAttention):
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
 
-        # In `Flash Attenition` we don't return Attention weights, hence return None.
         return output, None
 
 
@@ -1394,11 +1390,11 @@ def expand2square(pil_img, background_color):
     if width == height:
         return pil_img
     elif width > height:
-        result = Image.new(pil_img.mode, (width, width), background_color)
+        result = PIL.Image.new(pil_img.mode, (width, width), background_color)
         result.paste(pil_img, (0, (width - height) // 2))
         return result
     else:
-        result = Image.new(pil_img.mode, (height, height), background_color)
+        result = PIL.Image.new(pil_img.mode, (height, height), background_color)
         result.paste(pil_img, ((height - width) // 2, 0))
         return result
 
@@ -1532,7 +1528,7 @@ class JanusImageProcessor(BlipImageProcessor):
 
         images = make_list_of_images(images)  # Ensures input is a list
 
-        if isinstance(images[0], Image.Image):
+        if isinstance(images[0], PIL.Image.Image):
             return images if len(images) > 1 else images[0]
 
         if input_data_format is None:
@@ -1554,7 +1550,7 @@ class JanusImageProcessor(BlipImageProcessor):
 
             if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
                 image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                image = Image.fromarray(image)
+                image = PIL.Image.fromarray(image)
 
             pixel_values.append(image)
 
