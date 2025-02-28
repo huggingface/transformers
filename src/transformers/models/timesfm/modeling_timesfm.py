@@ -24,12 +24,19 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_timesfm import TimesFmConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/timesfm-2.0-500m-pytorch"
 _CONFIG_FOR_DOC = "TimesFmConfig"
 
 
@@ -979,6 +986,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TimesFmOutputForPrediction, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TimesFmOutputForPrediction,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         inputs: Sequence[torch.Tensor],
