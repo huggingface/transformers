@@ -814,9 +814,6 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -832,7 +829,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states +position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -1745,8 +1742,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 indexing="ij",
             )
             grid_xy = torch.stack([grid_x, grid_y], -1)
-            valid_wh = torch.tensor([width, height], device=device).to(dtype)
-            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
+            grid_xy = grid_xy.unsqueeze(0) + 0.5
+            grid_xy[..., 0] /= width
+            grid_xy[..., 1] /= height
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
         # define the valid range for anchor coordinates
@@ -1847,14 +1845,15 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Prepare encoder inputs (by flattening)
         source_flatten = []
         spatial_shapes_list = []
+        spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
         for level, source in enumerate(sources):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes_list.append(spatial_shape)
+            height, width = source.shape[-2:]
+            spatial_shapes[level, 0] = height
+            spatial_shapes[level, 1] = width
+            spatial_shapes_list.append((height, width))
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
         source_flatten = torch.cat(source_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
