@@ -1902,7 +1902,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(
-                value for value in [topk_logits, topk_bbox, class_logits, bboxes_logits] if value is not None
+                value for value in [topk_logits, topk_bboxes, class_logits, bboxes_logits] if value is not None
             )
             dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
             tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
@@ -1922,7 +1922,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
             init_reference_points=init_reference_points,
             enc_topk_logits=topk_logits,
-            enc_topk_bboxes=topk_bbox,
+            enc_topk_bboxes=topk_bboxes,
             enc_outputs_class=class_logits,
             enc_outputs_coord_logits=bboxes_logits,
             denoising_meta_values=denoising_meta_values,
