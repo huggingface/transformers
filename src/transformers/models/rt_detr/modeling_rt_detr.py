@@ -1336,11 +1336,6 @@ class RTDetrHybridEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
-        valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1349,19 +1344,6 @@ class RTDetrHybridEncoder(nn.Module):
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
