@@ -14,8 +14,8 @@ rendered properly in your Markdown viewer.
 
 -->
 
-> [!TIP]
-> Agents and tools are being spun out into the standalone [smolagents](https://huggingface.co/docs/smolagents/index) library. These docs will be deprecated in the future! 
+> [!WARNING]
+> Agents and tools are being spun out into the standalone [smolagents](https://huggingface.co/docs/smolagents/index) library. These docs will be deprecated in the future!
 
 # Tools
 
