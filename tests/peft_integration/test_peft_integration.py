@@ -531,7 +531,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             base_pipe = pipeline("text-generation", base_model_id)
             peft_params = list(peft_pipe.model.parameters())
             base_params = list(base_pipe.model.parameters())
-            self.assertNotEqual(peft_params, base_params)  # Assert we actually loaded the adapter too
+            self.assertNotEqual(len(peft_params), len(base_params))  # Assert we actually loaded the adapter too
             _ = peft_pipe("Hello")
 
     def test_peft_add_adapter_with_state_dict(self):
