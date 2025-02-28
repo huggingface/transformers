@@ -902,11 +902,10 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         super().__init__()
         self.config = config
         self.kernel_size = config.kernel_size
-        padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
-        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
+        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=config.kernel_size - 1)
         self.act = ACT2FN[config.conv_activation]
         self.ext_pw_conv_1d = nn.Conv1d(config.hidden_size, config.ext_pw_out_channel, kernel_size=1, stride=1)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -915,7 +914,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         hidden_states = self.glu(self.layer_norm(hidden_states))
         hidden_states = self.dw_sep_conv_1d(hidden_states.permute([0, 2, 1]))
 
-        if self.config.causal and self.kernel_size > 1:
+        if self.kernel_size > 1:
             hidden_states = hidden_states[:, :, : -(self.kernel_size - 1)]
 
         hidden_states = self.act(hidden_states)
@@ -1259,9 +1258,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         self.config = config
         self.layer_idx = config.audio_config.feature_layer
         self.audio_dim_out = config.audio_config.hidden_size
-        self.audio_dim_in = config.audio_config.input_size
-        self.downsample_rate = config.audio_config.downsample_rate
-        self.linear_downsample_rate = self.downsample_rate
+        self.linear_downsample_rate = config.audio_config.downsample_rate
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.encoder = Phi4MultimodalAudioModel._from_config(config.audio_config)

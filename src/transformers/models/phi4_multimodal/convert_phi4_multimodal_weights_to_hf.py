@@ -108,6 +108,7 @@ def convert_config(original_config: dict):
     audio_config.pop("encoder_embedding_config", None)
     audio_config.pop("ext_pw_kernel_size", None)
     audio_config.pop("bias_in_glu", None)
+    audio_config.pop("causal", None)
     # rename
     audio_config["hidden_size"] = audio_config.pop("attention_dim")
     audio_config["num_attention_heads"] = audio_config.pop("attention_heads")

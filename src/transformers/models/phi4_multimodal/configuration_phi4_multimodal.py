@@ -27,8 +27,8 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalVisionModel`]. It is used to instantiate a
     Phi4Multimodal vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Phi4Multimodal
-    [google/phi4_multimodal-base-patch16-224](https://huggingface.co/google/phi4_multimodal-base-patch16-224) architecture.
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of
+    [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -55,20 +55,22 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        crop_size (`int`, *optional*, defaults to 448):
+            Crop size for the input images.
+        hd_transform_order (`str`, *optional*, defaults to `"sub_glb"`):
+            Concatenation order for the image feature extractor. One of `"sub_glb"` or `"sub_glb"`.
+        image_token_id (`int`, *optional*, defaults to 200010):
+            The image token id.
+        feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer of the encoder from which to extract image features.
 
     Example:
 
     ```python
-    >>> from transformers import Phi4MultimodalVisionConfig, Phi4MultimodalVisionModel
+    >>> from transformers import Phi4MultimodalVisionConfig
 
-    >>> # Initializing a Phi4MultimodalVisionConfig with google/phi4_multimodal-base-patch16-224 style configuration
+    >>> # Initializing a Phi4MultimodalVisionConfig with microsoft/Phi-4-multimodal-instruct style configuration
     >>> configuration = Phi4MultimodalVisionConfig()
-
-    >>> # Initializing a Phi4MultimodalVisionModel (with random weights) from the google/phi4_multimodal-base-patch16-224 style configuration
-    >>> model = Phi4MultimodalVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "phi4_multimodal_vision"
@@ -111,19 +113,86 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Phi4MultimodalAudioModel`]. It is used to instantiate a
+    Phi4Multimodal audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of
+    [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the encoder layers.
+        intermediate_size (`int`, *optional*, defaults to 1536):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_blocks (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        activation (`str`, *optional*, defaults to `"swish"`):
+            The non-linear activation function in the MLPs.
+        chunk_size (`int`, *optional*, defaults to -1):
+            The chunk size to create the masks.
+        left_chunk (`int`, *optional*, defaults to 18):
+            The left chunk to create the masks.
+        dropout_rate (`float`, *optional*, defaults to 0.0):
+            The dropout ratio.
+        ext_pw_out_channel (`int`, *optional*, defaults to 1024):
+            Number of out channels in the point-wise conv modules.
+        depthwise_seperable_out_channel (`int`, *optional*, defaults to 1024):
+            Number of out channels in the depth-wise separable conv modules.
+        depthwise_multiplier (`int`, *optional*, defaults to 1):
+            Input size multiplier for the depth-wise separable conv modules.
+        kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size for the depth-wise separable conv modules.
+        conv_activation (`str`, *optional*, defaults to `"swish"`):
+            The non-linear activation function in the conv modules.
+        input_size (`int`, *optional*, defaults to 80):
+            Input size for the audio model.
+        conv_glu_type (`str`, *optional*, defaults to `"swish"`):
+            The non-linear activation function in the point-wise conv modules.
+        time_reduction (`int`, *optional*, defaults to 8):
+            Time reduction (subsampling factor).
+        bias_max_distance (`int`, *optional*, defaults to 1000):
+            Max distance for the relative attention bias module.
+        bias_symmetric (`bool`, *optional*, defaults to False):
+            Whether the relative attention bias should be symmetric or not.
+        nemo_activation (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the nemo conv modules.
+        nemo_conv_channels (`int`, *optional*, defaults to 1024):
+            Number of channels in the nemo conv modules.
+        downsample_rate (`int`, *optional*, defaults to 1):
+            Downsample rate for the audio feature extractor.
+        initializer_range (`float`, *optional*, defaults to `0.02`):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        audio_token_id (`int`, *optional*, defaults to 200011):
+            The audio token id.
+        feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer of the encoder from which to extract audio features.
+
+    Example:
+
+    ```python
+    >>> from transformers import Phi4MultimodalAudioConfig
+
+    >>> # Initializing a Phi4MultimodalAudioConfig with microsoft/Phi-4-multimodal-instruct style configuration
+    >>> configuration = Phi4MultimodalAudioConfig()
+    ```"""
+
     model_type = "phi4_multimodal_audio"
 
     def __init__(
         self,
         hidden_size: int = 1024,
-        num_attention_heads: int = 16,
         intermediate_size: int = 1536,
+        num_blocks: int = 24,
+        num_attention_heads: int = 16,
         activation: str = "swish",
         chunk_size: int = -1,
         left_chunk: int = 18,
-        num_blocks: int = 24,
         dropout_rate: float = 0.0,
-        causal: bool = True,
         ext_pw_out_channel: int = 1024,
         depthwise_seperable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
@@ -137,8 +206,8 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         nemo_activation: str = "relu",
         nemo_conv_channels: int = 1024,
         downsample_rate: int = 1,
-        audio_token_id: int = 200011,
         initializer_range: float = 0.02,
+        audio_token_id: int = 200011,
         feature_layer: int = -2,
         **kwargs,
     ):
@@ -151,7 +220,6 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.left_chunk = left_chunk
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
-        self.causal = causal
         self.ext_pw_out_channel = ext_pw_out_channel
         self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
@@ -177,10 +245,10 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
 
 class Phi4MultimodalConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a Phi-3
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the
-    [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct).
+    This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
+    Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the
+    [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -188,7 +256,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32064):
             Vocabulary size of the Phi-3 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Phi4MultimodalModel`].
+            `inputs_ids` passed when calling [`Phi3Model`].
         hidden_size (`int`, *optional*, defaults to 3072):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 8192):
@@ -244,14 +312,22 @@ class Phi4MultimodalConfig(PretrainedConfig):
             The id of the padding token.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If `None`, no sliding window is applied.
+        vision_config (`Phi4MultimodalVisionConfig` or `dict`, *optional*):
+            The vision config for the underlying image embedding model. If not provided, will default to the configuration
+            used to instantiate a model similar in architecture as
+            [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct).
+        audio_config (`Phi4MultimodalAudioConfig` or `dict`, *optional*):
+            The audio config for the underlying audio embedding model. If not provided, will default to the configuration
+            used to instantiate a model similar in architecture as
+            [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct).
 
     Example:
 
     ```python
     >>> from transformers import Phi4MultimodalModel, Phi4MultimodalConfig
 
-    >>> # Initializing a Phi-3 style configuration
-    >>> configuration = Phi4MultimodalConfig.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+    >>> # Initializing a Phi4Multimodal style configuration
+    >>> configuration = Phi4MultimodalConfig.from_pretrained("microsoft/Phi-4-multimodal-instruct")
 
     >>> # Initializing a model from the configuration
     >>> model = Phi4MultimodalModel(configuration)
@@ -273,6 +349,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
 
     def __init__(
