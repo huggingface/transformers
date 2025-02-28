@@ -41,7 +41,6 @@ import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
-from torch.distributed.tensor import DTensor, Shard
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
@@ -179,6 +178,9 @@ else:
 
 if is_peft_available():
     from .utils import find_adapter_config_file
+
+if is_torch_greater_or_equal("2.5"):
+    from torch.distributed.tensor import DTensor, Shard
 
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 
