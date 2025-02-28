@@ -542,6 +542,9 @@ def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
 
+    if is_habana_gaudi1():
+        return False
+
     import torch
 
     try:
@@ -790,6 +793,17 @@ def is_torch_hpu_available():
     import torch
 
     return hasattr(torch, "hpu") and torch.hpu.is_available()
+
+
+@lru_cache
+def is_habana_gaudi1():
+    if is_torch_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            return True
+
+    return False
 
 
 def is_torchdynamo_available():

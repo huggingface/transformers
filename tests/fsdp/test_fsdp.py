@@ -33,12 +33,17 @@ from transformers.testing_utils import (
     require_fsdp,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    run_first,
     slow,
     torch_device,
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
-from transformers.utils import is_accelerate_available, is_torch_bf16_available_on_device
+from transformers.utils import (
+    is_accelerate_available,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+)
 
 
 if is_torch_available():
@@ -49,9 +54,13 @@ else:
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
-dtypes = ["fp16"]
+
+dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
     dtypes += ["bf16"]
+if is_torch_fp16_available_on_device(torch_device):
+    dtypes += ["fp16"]
+
 sharding_strategies = ["full_shard", "shard_grad_op"]
 state_dict_types = ["FULL_STATE_DICT", "SHARDED_STATE_DICT"]
 set_seed(42)
@@ -124,6 +133,7 @@ def _parameterized_custom_name_func(func, param_num, param):
     return f"{func.__name__}_{param_based_name}"
 
 
+@run_first
 @require_accelerate
 @require_torch_accelerator
 @require_fsdp_version
