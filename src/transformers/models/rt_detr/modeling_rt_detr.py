@@ -1537,8 +1537,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         intermediate_reference_points = ()
         intermediate_logits = ()
 
-        reference_points = F.sigmoid(reference_points)
-
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L252
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
@@ -1910,7 +1908,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             inputs_embeds=target,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            reference_points=init_reference_points,
+            reference_points=topk_bbox,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
