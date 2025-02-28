@@ -845,8 +845,8 @@ def pipeline(
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
+                    adapter_path = model
                     model = adapter_config["base_model_name_or_path"]
-                    adapter_path = maybe_adapter_path
                     if framework not in (None, "pt"):
                         raise ValueError(
                             f"Adapter files are only supported for PyTorch models. You passed framework={framework}."
