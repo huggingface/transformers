@@ -200,7 +200,9 @@ class EuroBertConfig(LlamaConfig):
         # use_cache is specific to decoder models and should be set to False for encoder models
         use_cache = kwargs.pop("use_cache", None)
         if use_cache:
-            logger.warning_once("The `use_cache` argument to EuroBertConfig is set to `False`, as caching is never used for encoder models.")
+            logger.warning_once(
+                "The `use_cache` argument to EuroBertConfig is set to `False`, as caching is never used for encoder models."
+            )
 
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
