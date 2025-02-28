@@ -1813,8 +1813,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
         hidden_states = [feature_map.flatten(2).transpose(1, 2) for feature_map in feature_maps]
         hidden_states = torch.cat(hidden_states, dim=1)
 
+        # Prepare spatial shapes, we have to keep both: the list and the tensor
+        # for torch.compile fullgraph=True and ONNX dynamic export
         spatial_shapes_list = [(feat.shape[-2], feat.shape[-1]) for feat in feature_maps]
-
         spatial_shapes = torch.empty((len(feature_maps), 2), device=device, dtype=torch.long)
         for level, source in enumerate(feature_maps):
             height, width = source.shape[-2:]
@@ -1882,7 +1883,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
 
-        topk_bbox = F.sigmoid(topk_bboxes_logits)
+        topk_bboxes = F.sigmoid(topk_bboxes_logits)
         init_reference_points = topk_bboxes_logits.detach()
 
         # decoder
@@ -1890,7 +1891,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             inputs_embeds=target,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            reference_points=topk_bbox,
+            reference_points=topk_bboxes,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
