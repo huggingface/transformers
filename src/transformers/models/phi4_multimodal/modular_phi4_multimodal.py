@@ -269,6 +269,8 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.feature_layer = feature_layer
 
+        if time_reduction % 2 != 0:
+            raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
         for _ in range(int(math.log(time_reduction, 2))):
             length = math.floor((length - 1) / 2 + 1)
@@ -1064,8 +1066,6 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.subsampling_factor = config.time_reduction
-        if self.subsampling_factor % 2 != 0:
-            raise ValueError("Sampling factor should be a multiply of 2!")
         self.sampling_num = int(math.log(self.subsampling_factor, 2))
         self.act_fn = ACT2FN[config.nemo_activation]
         conv_channels = config.nemo_conv_channels
@@ -1365,15 +1365,17 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = config.audio_config.feature_layer
-        self.audio_dim_out = config.audio_config.hidden_size
-        self.linear_downsample_rate = config.audio_config.downsample_rate
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.encoder = Phi4MultimodalAudioModel._from_config(config.audio_config)
-        self.audio_up_proj_for_speech = nn.Linear(self.audio_dim_out * self.linear_downsample_rate, config.hidden_size)
-        self.audio_down_proj_for_speech = nn.Linear(config.hidden_size, config.hidden_size)
-        self.audio_up_proj_for_vision = nn.Linear(self.audio_dim_out * self.linear_downsample_rate, config.hidden_size)
-        self.audio_down_proj_for_vision = nn.Linear(config.hidden_size, config.hidden_size)
+        self.up_proj_for_speech = nn.Linear(
+            config.audio_config.hidden_size * config.audio_config.downsample_rate, config.hidden_size
+        )
+        self.down_proj_for_speech = nn.Linear(config.hidden_size, config.hidden_size)
+        self.up_proj_for_vision_speech = nn.Linear(
+            config.audio_config.hidden_size * config.audio_config.downsample_rate, config.hidden_size
+        )
+        self.down_proj_for_vision_speech = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(
         self,
@@ -1393,9 +1395,9 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
             positions = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=False)
             positions_tuple = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=True)
 
-        up_proj = self.audio_up_proj_for_speech if audio_projection_mode == "speech" else self.audio_up_proj_for_vision
+        up_proj = self.up_proj_for_speech if audio_projection_mode == "speech" else self.up_proj_for_vision_speech
         down_proj = (
-            self.audio_down_proj_for_speech if audio_projection_mode == "speech" else self.audio_down_proj_for_vision
+            self.down_proj_for_speech if audio_projection_mode == "speech" else self.down_proj_for_vision_speech
         )
 
         target_device = up_proj.bias.device

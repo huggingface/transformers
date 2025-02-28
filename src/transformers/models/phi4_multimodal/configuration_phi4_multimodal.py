@@ -237,6 +237,8 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.feature_layer = feature_layer
 
+        if time_reduction % 2 != 0:
+            raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
         for _ in range(int(math.log(time_reduction, 2))):
             length = math.floor((length - 1) / 2 + 1)
