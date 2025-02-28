@@ -1284,7 +1284,7 @@ class RTDetrHybridEncoder(nn.Module):
         activation = config.activation_function
 
         # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
+        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in self.encode_proj_layers])
 
         # top-down FPN
         self.lateral_convs = nn.ModuleList()
@@ -1327,6 +1327,7 @@ class RTDetrHybridEncoder(nn.Module):
         grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+
         pos_dim = embed_dim // 4
         omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
         omega = 1.0 / (temperature**omega)
@@ -1385,34 +1386,42 @@ class RTDetrHybridEncoder(nn.Module):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        # encoder
+        # Step 1: Apply transformer encoder
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
                 if output_hidden_states:
                     encoder_states = encoder_states + (hidden_states[enc_ind],)
-                height, width = hidden_states[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, height*width, channel]
-                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
+
+                # 1. flatten [batch, channel, height, width] to [batch, height * width, channel]
+                hidden_state = hidden_states[enc_ind]
+                height, width = hidden_state.shape[2:]
+                hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
+
+                # build position embeddings
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
                         width,
                         height,
                         self.encoder_hidden_dim,
                         self.positional_encoding_temperature,
-                        device=src_flatten.device,
-                        dtype=src_flatten.dtype,
+                        device=hidden_state.device,
+                        dtype=hidden_state.dtype,
                     )
                 else:
                     pos_embed = None
 
+                # 2. Apply transformer encoder layer
                 layer_outputs = self.encoder[i](
-                    src_flatten,
+                    hidden_state,
                     pos_embed=pos_embed,
                     output_attentions=output_attentions,
                 )
-                hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
-                )
+                hidden_state = layer_outputs[0]
+
+                # 3. Reshape back to [batch, height, width, channel]
+                hidden_state = hidden_state.permute(0, 2, 1)
+                hidden_state = hidden_state.reshape(-1, self.encoder_hidden_dim, height, width)
+                hidden_states[enc_ind] = hidden_state.contiguous()
 
                 if output_attentions:
                     all_attentions = all_attentions + (layer_outputs[1],)
@@ -1420,7 +1429,7 @@ class RTDetrHybridEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states[enc_ind],)
 
-        # top-down FPN
+        # Step 2: Apply FPN (conv part)
         fpn_feature_maps = [hidden_states[-1]]
         for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
             backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
@@ -1436,7 +1445,7 @@ class RTDetrHybridEncoder(nn.Module):
 
         fpn_feature_maps = fpn_feature_maps[::-1]
 
-        # bottom-up PAN
+        # Step 3: Apply PAN (conv part)
         pan_feature_maps = [fpn_feature_maps[0]]
         for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
             top_pan_feature_map = pan_feature_maps[-1]
