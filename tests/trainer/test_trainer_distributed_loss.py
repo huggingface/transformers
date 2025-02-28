@@ -2,13 +2,13 @@ import json
 
 import datasets
 
-from tests.trainer.test_trainer import StoreLossCallback
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
     set_seed,
 )
@@ -20,6 +20,19 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     torch_device,
 )
+
+
+class StoreLossCallback(TrainerCallback):
+    """
+    Simple callback to store the loss.
+    """
+
+    def __init__(self):
+        self.losses = []
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if "loss" in logs:
+            self.losses.append(logs["loss"])
 
 
 class TestTrainerDistributedLoss(TestCasePlus):
