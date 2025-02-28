@@ -1709,12 +1709,18 @@ class RTDetrModel(RTDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+    def generate_anchors(
+        self,
+        spatial_shapes: Optional[Tuple[Tuple[int, int], ...]] = None,
+        grid_size: float = 0.05,
+        device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ):
         if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+            height, width = self.config.anchor_image_size
+            spatial_shapes = tuple(
+                [(int(height / stride), int(width / stride)) for stride in self.config.feat_strides]
+            )
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
