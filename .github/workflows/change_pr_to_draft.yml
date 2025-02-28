@@ -8,13 +8,16 @@ jobs:
   convert_pr_to_draft:
     runs-on: ubuntu-22.04
     name: Convert PR to draft
+    permissions:
+      pull-requests: write
+      contents: write
     if: github.event.pull_request.draft == false
     steps:
       - name: Convert PR to draft
         shell: bash
         env:
           PR_NUMBER: ${{ github.event.number }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           echo $PR_NUMBER
