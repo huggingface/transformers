@@ -900,6 +900,8 @@ def _load_state_dict_into_meta_model(
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
                     module = model.get_submodule(layer)
+                    if param_casting_dtype is not None and param_casting_dtype != empty_param.dtype:
+                        param = param[:].to(param_casting_dtype)
                     module.load_state_dict(
                         {param_type: param[:].to(param_device)},
                         strict=False,
