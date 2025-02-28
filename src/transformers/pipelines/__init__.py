@@ -950,7 +950,6 @@ def pipeline(
             config=config,
             framework=framework,
             task=task,
-            adapter_path=adapter_path,
             **hub_kwargs,
             **model_kwargs,
         )
