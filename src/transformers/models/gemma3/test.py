@@ -21,6 +21,9 @@ def main(*args):
 
     # tokenizer = GemmaTokenizer.from_pretrained(LOCAL_MODEL)
     processor = Gemma3Processor.from_pretrained(LOCAL_MODEL)
+    processor_ready = time.time()
+    print("timecheck - processor ready", processor_ready - start, processor.tokenizer.is_fast)
+
     inputs = processor(images=image, text=prompt,  return_tensors="pt")
     inputs = inputs.to(torch.get_default_device())
     processed = time.time()
@@ -30,6 +33,12 @@ def main(*args):
     model.to(torch.get_default_device())
     loaded = time.time()
     print("timecheck - loaded", loaded - start)
+
+    pixel_values = inputs["pixel_values"][0]
+    print("pre-vision encode", type(inputs["pixel_values"]), type(pixel_values), pixel_values.shape)
+    vision_outputs = model.vision_model(pixel_values=pixel_values)
+    vision_encoded = time.time()
+    print("timecheck - vision encoded", vision_encoded - start, type(vision_outputs))
 
     # generate_ids = model.generate(**inputs, max_new_tokens=24)
     # generated = time.time()
@@ -41,7 +50,7 @@ def main(*args):
     #     clean_up_tokenization_spaces=False
     # )
     # print(outputs)
-    # done = time.time()
+    done = time.time()
     print("timecheck - done", done - start)
 
 
