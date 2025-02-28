@@ -896,6 +896,19 @@ def require_torch_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
+def require_torch_multi_hpu(test_case):
+    """
+    Decorator marking a test that requires a multi-HPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple HPUs.
+
+    To run *only* the multi_hpu tests, assuming all test names contain multi_hpu: $ pytest -sv ./tests -k "multi_hpu"
+    """
+    if not is_torch_hpu_available():
+        return unittest.skip(reason="test requires PyTorch HPU")(test_case)
+
+    return unittest.skipUnless(torch.hpu.device_count() > 1, "test requires multiple HPUs")(test_case)
+
+
 if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
@@ -2873,6 +2886,14 @@ else:
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_npu_available():
+    BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
+    BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
+
+if is_torch_xpu_available():
+    BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
+    BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
 
 
 def backend_manual_seed(device: str, seed: int):
