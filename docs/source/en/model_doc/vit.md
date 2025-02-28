@@ -146,7 +146,7 @@ print(f"The predicted class label is: {predicted_class_label}")
     - call
 
 </hfoption>
-<hfoption id="Flax>
+<hfoption id="Flax">
 
 ## FlaxVitModel
 
