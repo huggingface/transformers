@@ -18,7 +18,6 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -1645,39 +1644,36 @@ class RTDetrMLPPredictionHead(nn.Module):
 class RTDetrModel(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
+        self.learn_initial_query = config.learn_initial_query
 
         # Create backbone
         self.backbone = RTDetrConvEncoder(config)
-        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
         num_backbone_outs = len(intermediate_channel_sizes)
-        encoder_input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = intermediate_channel_sizes[_]
-            encoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.encoder_hidden_dim),
-                )
-            )
-        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
+        self.encoder_input_proj = nn.ModuleList()
+        for idx in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[idx]
+            conv = nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.encoder_hidden_dim)
+            self.encoder_input_proj.append(nn.Sequential(conv, batchnorm))
 
         # Create encoder
         self.encoder = RTDetrHybridEncoder(config)
 
-        # denoising part
+        # De-noising part
         if config.num_denoising > 0:
             self.denoising_class_embed = nn.Embedding(
                 config.num_labels + 1, config.d_model, padding_idx=config.num_labels
             )
 
-        # decoder embedding
-        if config.learn_initial_query:
+        # Decoder embedding
+        if self.learn_initial_query:
             self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
 
-        # encoder head
+        # Encoder head
         self.enc_output = nn.Sequential(
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
@@ -1685,7 +1681,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
         self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
-        # init encoder output anchors and valid_mask
+        # Init encoder output anchors and valid_mask
         if config.anchor_image_size:
             self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
 
@@ -1915,7 +1911,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         )
 
         # extract region features
-        if self.config.learn_initial_query:
+        if self.learn_initial_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
@@ -1991,17 +1987,15 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.model = RTDetrModel(config)
 
         # Detection heads on top
-        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
-
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
-        if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-        else:
-            self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
+        self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
+        self.bbox_embed = nn.ModuleList(
+            [
+                RTDetrMLPPredictionHead(config, config.d_model, config.d_model, output_dim=4, num_layers=3)
+                for _ in range(num_pred)
+            ]
+        )
 
         # hack implementation for iterative bounding box refinement
         self.model.decoder.class_embed = self.class_embed
@@ -2009,13 +2003,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
