@@ -732,12 +732,6 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
         target_length: int,
