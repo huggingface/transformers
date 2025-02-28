@@ -110,14 +110,12 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         dropout_rate: float = 0.0,
         causal: bool = True,
         ext_pw_out_channel: int = 1024,
-        ext_pw_kernel_size: int = 1,
         depthwise_seperable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
         kernel_size: int = 3,
         conv_activation: str = "swish",
         input_size: int = 80,
         conv_glu_type: str = "swish",
-        bias_in_glu: bool = True,
         time_reduction: int = 8,
         bias_max_distance: int = 1000,
         bias_symmetric: bool = False,
@@ -140,14 +138,12 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.causal = causal
         self.ext_pw_out_channel = ext_pw_out_channel
-        self.ext_pw_kernel_size = ext_pw_kernel_size
         self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
         self.kernel_size = kernel_size
         self.conv_activation = conv_activation
         self.input_size = input_size
         self.conv_glu_type = conv_glu_type
-        self.bias_in_glu = bias_in_glu
         self.time_reduction = time_reduction
         self.bias_max_distance = bias_max_distance
         self.bias_symmetric = bias_symmetric
@@ -694,7 +690,7 @@ class Phi4MultimodalAudioMLP(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.act_fn = ACT2FN[config.activation]
-        self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2, config.bias_in_glu)
+        self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -786,38 +782,20 @@ class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
         super().__init__()
         self.config = config
         self.output_dim = config.ext_pw_out_channel
-        kernel_size = config.ext_pw_kernel_size
 
-        self.ext_pw_conv_1d = nn.Conv1d(
-            config.hidden_size,
-            config.ext_pw_out_channel * 2,
-            kernel_size,
-            1,
-            padding=(kernel_size - 1) if config.causal else (kernel_size - 1) // 2,
-        )
-
+        self.ext_pw_conv_1d = nn.Conv1d(config.hidden_size, config.ext_pw_out_channel * 2, kernel_size=1, stride=1)
         self.glu_act = ACT2FN[config.conv_glu_type]
-
-        if config.bias_in_glu:
-            self.b1 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
-            self.b2 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
+        self.b1 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
+        self.b2 = nn.Parameter(torch.zeros(1, config.ext_pw_out_channel, 1))
 
     def forward(self, hidden_states):
-        # to be consistent with GLULinear, we assume the input always has the #channel (#dim) in the last dimension of the
+        # we assume the input always has the #channel (#dim) in the last dimension of the
         # tensor, so need to switch the dimension first for 1D-Conv case
         hidden_states = hidden_states.permute([0, 2, 1])
         hidden_states = self.ext_pw_conv_1d(hidden_states)
-        if self.config.bias_in_glu:
-            hidden_states = (hidden_states[:, 0 : self.output_dim, :] + self.b1) * self.glu_act(
-                hidden_states[:, self.output_dim : self.output_dim * 2, :] + self.b2
-            )
-        else:
-            hidden_states = (hidden_states[:, 0 : self.output_dim, :]) * self.glu_act(
-                hidden_states[:, self.output_dim : self.output_dim * 2, :]
-            )
-
-        out = hidden_states.permute([0, 2, 1])
-        return out
+        out = hidden_states[:, 0 : self.output_dim, :] + self.b1
+        out = out * self.glu_act(hidden_states[:, self.output_dim : self.output_dim * 2, :] + self.b2)
+        return out.permute([0, 2, 1])
 
 
 class Phi4MultimodalAudioConvModule(nn.Module):
@@ -825,21 +803,13 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         super().__init__()
         self.config = config
         self.kernel_size = config.kernel_size
-        self.ext_pw_kernel_size = config.ext_pw_kernel_size
+        padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
-        padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
         self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
         self.act = ACT2FN[config.conv_activation]
-
-        self.ext_pw_conv_1d = nn.Conv1d(
-            config.hidden_size,
-            config.ext_pw_out_channel,
-            kernel_size=config.ext_pw_kernel_size,
-            stride=1,
-            padding=config.ext_pw_kernel_size - 1 if config.causal else (config.ext_pw_kernel_size - 1) // 2,
-        )
+        self.ext_pw_conv_1d = nn.Conv1d(config.hidden_size, config.ext_pw_out_channel, kernel_size=1, stride=1)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states: torch.Tensor):
@@ -894,15 +864,18 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
         self.act_fn = ACT2FN[config.nemo_activation]
         conv_channels = config.nemo_conv_channels
 
-        layers = []
-        layers.append(torch.nn.Conv2d(1, conv_channels, kernel_size=3, stride=2, padding=1))
-        layers.append(self.act_fn)
+        layers = [
+            nn.Conv2d(1, conv_channels, kernel_size=3, stride=2, padding=1),
+            self.act_fn,
+        ]
         for _ in range(self.sampling_num - 1):
-            layers.append(
-                torch.nn.Conv2d(conv_channels, conv_channels, kernel_size=3, stride=2, padding=1, groups=conv_channels)
+            layers.extend(
+                [
+                    nn.Conv2d(conv_channels, conv_channels, kernel_size=3, stride=2, padding=1, groups=conv_channels),
+                    nn.Conv2d(conv_channels, conv_channels, kernel_size=1, stride=1, padding=0, groups=1),
+                    self.act_fn,
+                ]
             )
-            layers.append(torch.nn.Conv2d(conv_channels, conv_channels, kernel_size=1, stride=1, padding=0, groups=1))
-            layers.append(self.act_fn)
 
         # Aggregate the layers
         self.conv = torch.nn.Sequential(*layers)
@@ -955,8 +928,8 @@ class Phi4MultimodalAudioRelativeAttentionBias(nn.Module):
         bias_idx = relative_position
         bias_idx = bias_idx.abs() if self.symmetric else bias_idx + self.num_buckets // 2
 
-        att_bias = self.bias_values(bias_idx)  # [L, L, H]
-        att_bias = att_bias.permute(2, 0, 1).unsqueeze(0)  # [1, H, L, L]
+        att_bias = self.bias_values(bias_idx)
+        att_bias = att_bias.permute(2, 0, 1).unsqueeze(0)
 
         return att_bias
 
@@ -1010,34 +983,10 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _chunk_size_selection(self, chunk_size=None, left_chunk=None):
-        """If chunk size is a list, we will randomly select a chunk size."""
-
-        if chunk_size is None:
-            chunk_size = self.chunk_size
-        if left_chunk is None:
-            left_chunk = self.left_chunk
-        if isinstance(chunk_size, list):
-            # Variable chunk size during training
-            chunk_size_index = int(torch.randint(low=0, high=len(chunk_size), size=(1,)))
-            chunk_size_train_eff = chunk_size[chunk_size_index]
-            if not isinstance(left_chunk, list):
-                raise ValueError("Since chunk_size is a list, left_chunk must be a list")
-            if len(left_chunk) != len(chunk_size):
-                raise ValueError("The length of left_chunk must be the same as length of chunk_size.")
-            left_chunk_train_eff = left_chunk[chunk_size_index]
-        else:
-            chunk_size_train_eff = chunk_size
-            left_chunk_train_eff = left_chunk
-
-        return chunk_size_train_eff, left_chunk_train_eff
-
     def _streaming_mask(self, seq_len, batch_size, chunk_size, left_chunk):
-        chunk_size_train_eff, left_chunk_train_eff = self._chunk_size_selection(chunk_size, left_chunk)
-
         # Create mask matrix for streaming
         # S stores start index. if chunksize is 18, s is [0,18,36,....]
-        chunk_start_idx = np.arange(0, seq_len, chunk_size_train_eff)
+        chunk_start_idx = np.arange(0, seq_len, chunk_size)
         # avoid randomness when run evaluation or decoding
         if self.training and np.random.rand() > 0.5:
             # Either first or last chunk is not complete.
@@ -1048,7 +997,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
             chunk_start_idx = np.insert(chunk_start_idx, 0, 0)
 
         enc_streaming_mask = (
-            adaptive_enc_mask(seq_len, chunk_start_idx, left_window=left_chunk_train_eff)
+            adaptive_enc_mask(seq_len, chunk_start_idx, left_window=left_chunk)
             .unsqueeze(0)
             .expand([batch_size, -1, -1])
         )
@@ -1059,9 +1008,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         seq_len = math.ceil(hidden_states.shape[1] / self.config.time_reduction)
         if seq_len <= 0:
             raise ValueError(
-                f"""The squence length after time reduction is invalid: {seq_len}.
-                Your input feature is too short. Consider filtering out the very
-                short sentence from data loader""",
+                f"The squence length after time reduction is invalid: {seq_len}. Your input feature is too short."
             )
 
         batch_size = hidden_states.shape[0]
@@ -1084,7 +1031,9 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
     def calculate_hs_mask(self, hidden_states, device, mask):
         max_audio_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
-        enc_streaming_mask = self._streaming_mask(max_audio_length, batch_size, self.chunk_size, self.left_chunk)
+        enc_streaming_mask = self._streaming_mask(
+            max_audio_length, batch_size, self.config.chunk_size, self.config.left_chunk
+        )
         enc_streaming_mask = enc_streaming_mask.to(device)
         if mask is None:
             return enc_streaming_mask
@@ -1154,30 +1103,23 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         return hidden_states, mask
 
 
-def unfold_tensor(xs_pad, max_seq_len):
+def unfold_tensor(tensor, max_seq_len):
     """
     For a given tensor with shape of (N, T, D), if sequence length T is longer than max_seq_len,
     this function unfold it to a (NT', max_seq_len, D) where T' is T // max_seq_len.
     Args:
-        xs_pad: N, T, D
+        tensor: N, T, D
     """
-    _, _, D = xs_pad.shape
-    xs_pad = xs_pad.transpose(-1, -2)  # convert to N, D, T
+    _, _, D = tensor.shape
+    tensor = tensor.transpose(-1, -2)
     # N x D x 1 x T => N x (D x max_seq_len) x T'
-    xs_pad = F.unfold(
-        xs_pad[..., None, :],
-        kernel_size=(1, max_seq_len),
-        stride=(1, max_seq_len),
-    )
+    tensor = F.unfold(tensor[..., None, :], kernel_size=(1, max_seq_len), stride=(1, max_seq_len))
 
-    new_bsz, _, slen = xs_pad.shape
-    # N x D x max_seq_len x T'
-    xs_pad = xs_pad.view(new_bsz, -1, max_seq_len, slen)
-    # N x T' x max_seq_len x D
-    xs_pad = xs_pad.permute(0, 3, 2, 1).contiguous()
-    # NT' x max_seq_len x D
-    xs_pad = xs_pad.view(-1, max_seq_len, D)
-    return xs_pad
+    new_bsz, _, slen = tensor.shape
+    tensor = tensor.view(new_bsz, -1, max_seq_len, slen)
+    tensor = tensor.permute(0, 3, 2, 1)
+    tensor = tensor.view(-1, max_seq_len, D).contiguous()
+    return tensor
 
 
 def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
@@ -1190,25 +1132,17 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
         right_window (int): how many right chunks can be seen. It is used for chunk overlap model.
         Returns:
             mask (torch.Tensor): a mask tensor for streaming model
-            Torch 1.0.1
-            tensor([[1., 1., 0., 0.],
-                    [0., 1., 1., 0.],
-                    [0., 0., 1., 1.]])
-            Torch 1.4.1
-            tensor([[True., True., False., False.],
-                    [False., True., True., False.],
-                    [False., False., True., True.]])
     """
-    chunk_start_idx = torch.Tensor(chunk_start_idx).long()  # first idx of each chunk, such as [0,18,36,48].
+    chunk_start_idx = torch.Tensor(chunk_start_idx).long()
     start_pad = torch.nn.functional.pad(
         chunk_start_idx, (1, 0)
     )  # append 0 to the beginning, so it becomes [0, 0, 18, 36, 48]
     end_pad = torch.nn.functional.pad(
         chunk_start_idx, (0, 1), value=x_len
     )  # append x_len to the end, so it becomes [0,18,36,48, x_len]
-    seq_range = torch.arange(0, x_len).unsqueeze(-1)  # seq_range size: [x_len, 1]
-    idx = ((seq_range < end_pad) & (seq_range >= start_pad)).nonzero()[:, 1]  # idx size: [x_len]
-    seq_range_expand = torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)  # seq_range_expand size [x_len, x_len]
+    seq_range = torch.arange(0, x_len).unsqueeze(-1)
+    idx = ((seq_range < end_pad) & (seq_range >= start_pad)).nonzero()[:, 1]
+    seq_range_expand = torch.arange(0, x_len).unsqueeze(0).expand(x_len, -1)
     idx_left = idx - left_window
     idx_left[idx_left < 0] = 0
     boundary_left = start_pad[idx_left]

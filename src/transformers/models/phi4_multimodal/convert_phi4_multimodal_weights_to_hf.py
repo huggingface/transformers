@@ -106,6 +106,8 @@ def convert_config(original_config: dict):
     audio_config.pop("input_layer", None)
     audio_config.pop("batch_norm", None)
     audio_config.pop("encoder_embedding_config", None)
+    audio_config.pop("ext_pw_kernel_size", None)
+    audio_config.pop("bias_in_glu", None)
     # rename
     audio_config["hidden_size"] = audio_config.pop("attention_dim")
     audio_config["num_attention_heads"] = audio_config.pop("attention_heads")
@@ -159,11 +161,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "input_dir",
-        help="Location of Mistral weights, which contains tokenizer.model and model folders",
+        help="Location of the model folder containing the weights and configs.",
     )
     parser.add_argument(
         "output_dir",
-        help="Location to write HF model and tokenizer",
+        help="Location to write HF model.",
     )
     args = parser.parse_args()
 
