@@ -403,6 +403,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
+    "models.plaindetr": ["PlaindetrConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
@@ -2210,6 +2211,14 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.plaindetr"].extend(
+        [
+            "PlaindetrForObjectDetection",
+            "PlaindetrForSegmentation",
+            "PlaindetrModel",
+            "PlaindetrPreTrainedModel",
         ]
     )
     _import_structure["models.diffllama"].extend(
@@ -5551,6 +5560,7 @@ if TYPE_CHECKING:
     from .models.depth_anything import DepthAnythingConfig
     from .models.depth_pro import DepthProConfig
     from .models.detr import DetrConfig
+    from .models.plaindetr import PlaindetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
@@ -7254,6 +7264,12 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.plaindetr import (
+            PlaindetrForObjectDetection,
+            PlaindetrForSegmentation,
+            PlaindetrModel,
+            PlaindetrPreTrainedModel,
         )
         from .models.diffllama import (
             DiffLlamaForCausalLM,
