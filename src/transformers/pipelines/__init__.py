@@ -847,11 +847,6 @@ def pipeline(
                     adapter_config = json.load(f)
                     adapter_path = model
                     model = adapter_config["base_model_name_or_path"]
-                    if framework not in (None, "pt"):
-                        raise ValueError(
-                            f"Adapter files are only supported for PyTorch models. You passed framework={framework}."
-                        )
-                    framework = "pt"
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
