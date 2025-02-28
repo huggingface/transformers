@@ -86,7 +86,6 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        use_hd_transform: bool = True,
         crop_size: int = 448,
         hd_transform_order: str = "sub_glb",
         image_token_id: int = 200010,
@@ -105,7 +104,6 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.use_hd_transform = use_hd_transform
         self.crop_size = crop_size
         self.hd_transform_order = hd_transform_order
         self.image_token_id = image_token_id

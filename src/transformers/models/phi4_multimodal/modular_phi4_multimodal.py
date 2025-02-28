@@ -70,7 +70,6 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        use_hd_transform: bool = True,
         crop_size: int = 448,
         hd_transform_order: str = "sub_glb",
         image_token_id: int = 200010,
@@ -90,7 +89,6 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
             attention_dropout=attention_dropout,
             **kwargs,
         )
-        self.use_hd_transform = use_hd_transform
         self.crop_size = crop_size
         self.hd_transform_order = hd_transform_order
         self.image_token_id = image_token_id
@@ -543,31 +541,23 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = config.vision_config.feature_layer
-
-        self.drop = nn.Dropout(config.embd_pdrop)
-        self.img_processor = Phi4MultimodalVisionModel._from_config(config.vision_config)
+        self.hd_transform_order = config.vision_config.hd_transform_order
+        self.crop_size = config.vision_config.crop_size
+        self.image_dim_out = config.vision_config.hidden_size
 
         N_patches = config.vision_config.image_size // config.vision_config.patch_size
         if N_patches % 2 != 0:
             self.img_processor_padding = nn.ReflectionPad2d((0, 1, 0, 1))
             N_patches += 1
         self.num_img_tokens = (N_patches // 2) ** 2
-        self.image_dim_out = config.vision_config.hidden_size
 
-        self.use_hd_transform = config.vision_config.use_hd_transform
-        self.hd_transform_order = config.vision_config.hd_transform_order
-        self.crop_size = config.vision_config.crop_size
-
-        # image token compression
+        self.drop = nn.Dropout(config.embd_pdrop)
+        self.img_processor = Phi4MultimodalVisionModel._from_config(config.vision_config)
         self.image_token_compression = nn.AvgPool2d(kernel_size=2, stride=2)
-
-        if self.use_hd_transform:
-            # 1024 * 4, merge spatial to channel dimension
-            self.glb_GN = nn.Parameter(torch.zeros([1, 1, self.image_dim_out]))
-            self.sub_GN = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out]))
-
         self.img_projection_up = nn.Linear(self.image_dim_out, config.hidden_size)
         self.img_projection_down = nn.Linear(config.hidden_size, config.hidden_size)
+        self.global_img_feature_extensor = nn.Parameter(torch.zeros([1, 1, self.image_dim_out]))
+        self.sub_img_feature_extensor = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out]))
 
     def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
         img_processor_output = self.img_processor(
@@ -601,6 +591,8 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         if img_embeds is not None:
             img_embeds = img_embeds.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
 
+        hidden_states = wte(input_ids)
+
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
@@ -608,100 +600,70 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             positions = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=False)
             positions_tuple = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=True)
 
-        select = False
-
         target_device = self.img_projection_up.bias.device
         target_dtype = self.img_projection_up.bias.dtype
 
         if len(positions.tolist()) > 0:
-            select = True
-            bs = img_embeds.shape[0]
+            batch_size = img_embeds.shape[0]
 
             img_features = self.get_img_features(
                 img_embeds.flatten(0, 1),
-                attention_mask=image_attention_mask.type(torch.BoolTensor).flatten(0, 1).to(target_device),
+                attention_mask=image_attention_mask.flatten(0, 1).to(dtype=bool, device=target_device),
             )
-
-            base_resolution = self.crop_size
-            base_feat_height = base_feat_width = int(np.sqrt(img_features.shape[1]))
-
-            # bs x max_num_crops x (24x24) x C
-            img_features = img_features.view(bs, -1, base_feat_height * base_feat_width, self.image_dim_out)
-            C = self.image_dim_out
-            H = base_feat_height
+            base_feat_size = int(np.sqrt(img_features.shape[1]))
+            img_features = img_features.view(batch_size, -1, base_feat_size**2, self.image_dim_out)
+            image_sizes = image_sizes.view(-1, 2)
 
             output_imgs = []
-            output_len = []
-            # training is tensor, inference is list
-            if isinstance(image_sizes, torch.Tensor):
-                image_sizes = image_sizes.view(-1, 2)
-            for _bs in range(bs):
-                h, w = image_sizes[_bs]
-                h = h // base_resolution
-                w = w // base_resolution
-                B_ = h * w
+            for idx in range(batch_size):
+                height, width = image_sizes[idx]
+                height_ratio = height // self.crop_size
+                width_ratio = width // self.crop_size
+                area_ratio = height_ratio * width_ratio
 
-                # 1 x (24x24) x 1024
-                global_img_feature = img_features[_bs, :1]
-
-                # 1 x 12 x 12 x 4096
-                glb_img = (
-                    global_img_feature.reshape(1, H, 1, H, 1, C)
-                    .contiguous()
+                global_img = img_features[idx, :1]
+                global_img = (
+                    global_img.reshape(1, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
                     .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(1, H, H, C)
+                    .reshape(1, base_feat_size, base_feat_size, self.image_dim_out)
                     .contiguous()
                 )
-                temp_glb_GN = self.sub_GN.repeat(1, H, 1, 1)
+                temporary_extensor = self.sub_img_feature_extensor.repeat(1, base_feat_size, 1, 1)
+                global_img = torch.cat([global_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
 
-                # 1 x 156 x 4096
-                glb_img = torch.cat([glb_img, temp_glb_GN], dim=2).reshape(1, -1, C)
-
-                sub_img = img_features[_bs, 1:]
-                sub_img = sub_img[:B_]
-
+                sub_img = img_features[idx, 1:]
+                sub_img = sub_img[:area_ratio]
                 sub_img = (
-                    sub_img.reshape(B_, H, 1, H, 1, C)
-                    .contiguous()
+                    sub_img.reshape(area_ratio, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
                     .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(B_, -1, C)
-                    .contiguous()
-                )
-                sub_img = (
-                    sub_img.reshape(1, h, w, base_feat_height, base_feat_width, -1)
+                    .reshape(area_ratio, -1, self.image_dim_out)
+                    .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size, -1)
                     .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(1, h * base_feat_height, w * base_feat_width, C)
+                    .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size, self.image_dim_out)
+                    .contiguous()
                 )
 
-                if image_attention_mask is not None and len(image_attention_mask) > 0:
+                if image_attention_mask is not None:
                     reshaped_image_attention_mask = (
-                        image_attention_mask[_bs, 1 : B_ + 1, 0::2, 0::2]
-                        .reshape(1, h, w, base_feat_height, base_feat_width)
+                        image_attention_mask[idx, 1 : area_ratio + 1, 0::2, 0::2]
+                        .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size)
                         .permute(0, 1, 3, 2, 4)
-                        .reshape(1, h * base_feat_height, w * base_feat_width)
+                        .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size)
                     )
                     useful_height = int(reshaped_image_attention_mask[0, :, 0].sum().item())
                     useful_width = int(reshaped_image_attention_mask[0, 0, :].sum().item())
                     sub_img = sub_img[:, :useful_height, :useful_width]
-                    temp_sub_GN = self.sub_GN.repeat(1, useful_height, 1, 1)
-                    temp_len = (
-                        int(image_attention_mask[_bs, : B_ + 1, 0::2, 0::2].sum().item())
-                        + (useful_height + 1)
-                        + base_feat_height
-                    )
+                    temporary_extensor = self.sub_img_feature_extensor.repeat(1, useful_height, 1, 1)
                 else:
-                    temp_sub_GN = self.sub_GN.repeat(1, h * base_feat_height, 1, 1)
-                    temp_len = int((h * w + 1) * self.num_img_tokens + 1 + (h + 1) * base_feat_height)
+                    temporary_extensor = self.sub_img_feature_extensor.repeat(1, height_ratio * base_feat_size, 1, 1)
 
-                sub_img = torch.cat([sub_img, temp_sub_GN], dim=2).reshape(1, -1, C)
+                sub_img = torch.cat([sub_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
 
-                # glb + sub
+                # Merge global and sub
                 if self.hd_transform_order == "glb_sub":
-                    output_imgs.append(torch.cat([glb_img, self.glb_GN, sub_img], dim=1))
+                    output_imgs.append(torch.cat([global_img, self.global_img_feature_extensor, sub_img], dim=1))
                 elif self.hd_transform_order == "sub_glb":
-                    output_imgs.append(torch.cat([sub_img, self.glb_GN, glb_img], dim=1))
-
-                output_len.append(temp_len)
+                    output_imgs.append(torch.cat([sub_img, self.global_img_feature_extensor, global_img], dim=1))
 
             img_set_tensor = []
             for output_img in output_imgs:
@@ -711,12 +673,8 @@ class Phi4MultimodalImageEmbedding(nn.Module):
                 img_feature_proj = self.img_projection_down(img_feature_proj)
                 img_set_tensor.append(img_feature_proj)
 
-        # we use the token embedding layer from the base model
-        hidden_states = wte(input_ids)
-
-        if select:
             merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
-            merged_img_set_tensor = merged_img_set_tensor.to(hidden_states.dtype).to(hidden_states.device)
+            merged_img_set_tensor = merged_img_set_tensor.to(dtype=hidden_states.dtype, device=hidden_states.device)
             # Temporarily disable autocast to avoid issue on bf16 tensors
             # Ref: https://github.com/pytorch/pytorch/issues/132715
             with torch.autocast(device_type=hidden_states.device.type, enabled=False):
@@ -725,8 +683,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
                 )
             hidden_states = new_hidden_states
 
-        if self.drop is not None:
-            hidden_states = self.drop(hidden_states)
+        hidden_states = self.drop(hidden_states)
 
         return hidden_states
 
@@ -1268,16 +1225,14 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__()
         self.config = config
-
-        self.drop = nn.Dropout(config.embd_pdrop)
-        self.encoder = Phi4MultimodalAudioModel._from_config(config.audio_config)
-
         self.layer_idx = config.audio_config.feature_layer
         self.audio_dim_out = config.audio_config.hidden_size
         self.audio_dim_in = config.audio_config.input_size
         self.downsample_rate = config.audio_config.downsample_rate
         self.linear_downsample_rate = self.downsample_rate
 
+        self.drop = nn.Dropout(config.embd_pdrop)
+        self.encoder = Phi4MultimodalAudioModel._from_config(config.audio_config)
         self.audio_up_proj_for_speech = nn.Linear(self.audio_dim_out * self.linear_downsample_rate, config.hidden_size)
         self.audio_down_proj_for_speech = nn.Linear(config.hidden_size, config.hidden_size)
         self.audio_up_proj_for_vision = nn.Linear(self.audio_dim_out * self.linear_downsample_rate, config.hidden_size)
@@ -1290,10 +1245,12 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         audio_embed_sizes=None,
         audio_attention_mask=None,
         audio_projection_mode="speech",
-        **kwargs,
+        wte: nn.Module = None,
     ) -> torch.FloatTensor:
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
+
+        hidden_states = wte(input_ids)
 
         with torch.no_grad():
             positions = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=False)
@@ -1316,13 +1273,12 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
             audio_set_tensor = nn.functional.gelu(audio_set_tensor)
             audio_set_tensor = down_proj(audio_set_tensor)
 
-        hidden_states = kwargs["wte"](input_ids)
-
-        if len(positions.tolist()) > 0:
             merged_audio_set_tensor = torch.cat(
                 [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
             )
-            merged_audio_set_tensor = merged_audio_set_tensor.to(hidden_states.dtype).to(hidden_states.device)
+            merged_audio_set_tensor = merged_audio_set_tensor.to(
+                dtype=hidden_states.dtype, device=hidden_states.device
+            )
             # Temporarily disable autocast to avoid issue on bf16 tensors
             # Ref: https://github.com/pytorch/pytorch/issues/132715
             with torch.autocast(device_type=hidden_states.device.type, enabled=False):
@@ -1331,8 +1287,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
                 )
             hidden_states = new_hidden_states
 
-        if self.drop is not None:
-            hidden_states = self.drop(hidden_states)
+        hidden_states = self.drop(hidden_states)
 
         return hidden_states
 

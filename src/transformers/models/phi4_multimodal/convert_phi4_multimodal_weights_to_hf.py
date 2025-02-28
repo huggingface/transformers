@@ -1,4 +1,4 @@
-# Copyright 2023 Mistral AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,19 +30,22 @@ from transformers import (
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.0.linear"  : r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.gate_up_proj",
+    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.0.linear": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.gate_up_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.2": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.down_proj",
 
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_(q|k|v)": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.\2_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_out": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.o_proj",
 
-    r"^model.embed_tokens_extend.image_embed.img_projection.0"  : r"model.embed_tokens_extend.image_embed.img_projection_up",
-    r"^model.embed_tokens_extend.image_embed.img_projection.2"  : r"model.embed_tokens_extend.image_embed.img_projection_down",
+    r"^model.embed_tokens_extend.image_embed.img_projection.0": r"model.embed_tokens_extend.image_embed.img_projection_up",
+    r"^model.embed_tokens_extend.image_embed.img_projection.2": r"model.embed_tokens_extend.image_embed.img_projection_down",
 
-    r"^model.embed_tokens_extend.audio_embed.audio_projection.speech.0"  : r"model.embed_tokens_extend.audio_embed.audio_up_proj_for_speech",
-    r"^model.embed_tokens_extend.audio_embed.audio_projection.speech.2"  : r"model.embed_tokens_extend.audio_embed.audio_down_proj_for_speech",
-    r"^model.embed_tokens_extend.audio_embed.audio_projection.vision.0"  : r"model.embed_tokens_extend.audio_embed.audio_up_proj_for_vision",
-    r"^model.embed_tokens_extend.audio_embed.audio_projection.vision.2"  : r"model.embed_tokens_extend.audio_embed.audio_down_proj_for_vision",
+    r"^model.embed_tokens_extend.image_embed.glb_GN": r"model.embed_tokens_extend.image_embed.global_img_feature_extensor",
+    r"^model.embed_tokens_extend.image_embed.sub_GN": r"model.embed_tokens_extend.image_embed.sub_img_feature_extensor",
+
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.speech.0": r"model.embed_tokens_extend.audio_embed.audio_up_proj_for_speech",
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.speech.2": r"model.embed_tokens_extend.audio_embed.audio_down_proj_for_speech",
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.vision.0": r"model.embed_tokens_extend.audio_embed.audio_up_proj_for_vision",
+    r"^model.embed_tokens_extend.audio_embed.audio_projection.vision.2": r"model.embed_tokens_extend.audio_embed.audio_down_proj_for_vision",
 }
 # fmt: on
 
@@ -62,7 +65,7 @@ def map_old_key_to_new(old_key):
     if "base_layer." in old_key:
         return old_key.replace("base_layer.", "")
 
-    # not part of the key mapping
+    # not part of the key mapping, we keep the original name
     return old_key
 
 
@@ -92,7 +95,7 @@ def convert_config(original_config: dict):
 
     # Keep only some of the subdict
     keep_audio_embd_layer = ["downsample_rate"]
-    keep_vision_embd_layer = ["use_hd_transform", "crop_size", "hd_transform_order"]
+    keep_vision_embd_layer = ["crop_size", "hd_transform_order"]
     audio_embd_layer = {k: v for k, v in audio_embd_layer.items() if k in keep_audio_embd_layer}
     vision_embd_layer = {k: v for k, v in vision_embd_layer.items() if k in keep_vision_embd_layer}
 
