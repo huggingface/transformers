@@ -1811,34 +1811,25 @@ class RTDetrModel(RTDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-        features = self.backbone(pixel_values, pixel_mask)
+        # Stage 1: Convolutional backbone
+        backbone_outputs = self.backbone(pixel_values, pixel_mask)
 
-        proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
-
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                proj_feats,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if output_hidden_states else None,
-                attentions=encoder_outputs[2]
-                if len(encoder_outputs) > 2
-                else encoder_outputs[1]
-                if output_attentions
-                else None,
-            )
+        # Stage 2: Hybrid encoder (transformer -> FPN -> PAN)
+        projected_feature_maps = [
+            self.encoder_input_proj[i](feature_map) for i, (feature_map, mask) in enumerate(backbone_outputs)
+        ]
+        encoder_outputs = self.encoder(
+            projected_feature_maps,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         # Equivalent to def _get_encoder_input
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
-        for level, source in enumerate(encoder_outputs[0]):
-            sources.append(self.decoder_input_proj[level](source))
+        for i, source in enumerate(encoder_outputs[0]):
+            sources.append(self.decoder_input_proj[i](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
