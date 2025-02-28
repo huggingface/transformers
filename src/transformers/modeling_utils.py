@@ -878,7 +878,7 @@ def _load_state_dict_into_meta_model(
             else:
                 module_name = fixed_param_name
                 while len(module_name) > 0 and module_name not in device_map:
-                    module_name = ".".join(module_name.split(".")[:-1])
+                    module_name = module_name.rsplit(".", 1)[0] if "." in module_name else ""
                 if module_name == "" and "" not in device_map:
                     raise ValueError(f"{fixed_param_name} doesn't have any device set.")
                 param_device = device_map[module_name]
@@ -5863,14 +5863,15 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         parameter_count[device] += int(math.prod(param.shape) * allocation_factor)
 
     dtype = dtype if dtype is not None else torch.float32
-    # calling max_memory will create a tensor thus creating a bit of overhead (aten::empty_strided)
-    # max_memory = get_max_memory()
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
+        max_memory_device = None
+        if device.type == "cuda":
+            max_memory_device = torch.cuda.mem_get_info(device.index)[0]
         # allocate only if we have enough memory
-        # if max_memory[device.index] > param_count * dtype_byte_size(dtype):
-        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
+        if max_memory_device is None or max_memory_device > param_count * dtype_byte_size(dtype):
+            _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
