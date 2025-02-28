@@ -257,6 +257,8 @@ class CosmosTextConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout: float = 0.1,
         initializer_range: float = 0.02,
+        cross_attn_hidden_size: int = 1024,
+        insert_cross_attn_layers: List[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -275,6 +277,8 @@ class CosmosTextConfig(PretrainedConfig):
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
+        self.cross_attn_hidden_size = cross_attn_hidden_size
+        self.insert_cross_attn_layers = insert_cross_attn_layers or []
         rope_config_validation(self)
 
         self.attention_dropout = attention_dropout
@@ -301,19 +305,23 @@ class CosmosConfig(PretrainedConfig):
             CosmosVQVAEConfig instance containing the configuration for the VQ-VAE model.
         text_config (`Union[Dict, CosmosTextConfig]``, *optional*):
             CosmosTextConfig instance containing the configuration for the language model.
+        prompt_encodr (`Union[Dict, PreTrainedConfig]``, *optional*):
+            PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
+            video-text generation models.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
     """
 
     model_type = "cosmos"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig, "text_encoder": AutoConfig}
+    sub_configs = {"text_config": CosmosTextConfig, "vq_config": CosmosVQVAEConfig, "prompt_encoder": AutoConfig}
 
     def __init__(
         self,
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
-        text_encoder: Union[Dict, AutoConfig] = None,
+        prompt_encoder: Union[Dict, AutoConfig] = None,
+        is_video_to_world: bool = False,
         image_token_id: int = 64000,
         **kwargs,
     ):
@@ -327,13 +335,29 @@ class CosmosConfig(PretrainedConfig):
         elif isinstance(text_config, dict):
             text_config = CosmosTextConfig(**text_config)
 
-        if text_encoder is None:
-            text_encoder = AutoConfig.for_model("t5")
-        elif isinstance(text_encoder, dict):
-            text_encoder = AutoConfig.for_model(**text_encoder)
+        if prompt_encoder is None:
+            prompt_encoder_config = {
+                "d_ff": 65536,
+                "d_kv": 128,
+                "d_model": 1024,
+                "dropout_rate": 0.1,
+                "eos_token_id": 1,
+                "layer_norm_epsilon": 1e-06,
+                "n_positions": 512,
+                "num_heads": 128,
+                "num_layers": 24,
+                "pad_token_id": 0,
+                "relative_attention_num_buckets": 32,
+                "vocab_size": 32128,
+            }
+            prompt_encoder = AutoConfig.for_model("t5", **prompt_encoder_config)
+        elif isinstance(prompt_encoder, dict):
+            prompt_encoder = AutoConfig.for_model(**prompt_encoder)
 
         self.vq_config = vq_config
         self.text_config = text_config
+        self.prompt_encoder = prompt_encoder
+        self.is_video_to_world = is_video_to_world
         self.image_token_id = image_token_id
 
         super().__init__(**kwargs)

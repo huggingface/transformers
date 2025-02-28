@@ -50,7 +50,7 @@ class CosmosProcessor(ProcessorMixin):
     """
 
     attributes = ["video_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(

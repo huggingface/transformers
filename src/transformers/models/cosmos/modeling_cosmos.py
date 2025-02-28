@@ -1093,17 +1093,17 @@ class CosmosTextAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-        kv_hidden_dim = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
+        self.is_causal = is_self_attention
+        kv_hidden_size = config.hidden_size if is_self_attention else config.cross_attn_hidden_size
 
         self.q_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = CosmosTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         self.q_proj = nn.Linear(
-            kv_hidden_dim.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.k_proj = nn.Linear(kv_hidden_dim, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(kv_hidden_dim, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(kv_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(kv_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
@@ -1193,9 +1193,9 @@ class CosmosTextDecoderLayer(nn.Module):
 
         self.self_attn = CosmosTextAttention(config=config, layer_idx=layer_idx)
 
-        if config.insert_cross_attn:
+        if layer_idx in config.insert_cross_attn_layers:
             self.cross_attn = CosmosTextAttention(config=config, layer_idx=layer_idx, is_self_attention=False)
-            self.cross_attn_prelayernorm = CosmosTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.cross_input_layernorm = CosmosTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.mlp = CosmosTextMLP(config)
         self.input_layernorm = CosmosTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1233,10 +1233,11 @@ class CosmosTextDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        if self.config.insert_cross_attn:
-            hidden_states = self.cross_attn_prelayernorm(hidden_states)
+        if self.self_attn.layer_idx in self.config.insert_cross_attn_layers:
+            residual = hidden_states
+            hidden_states = self.cross_input_layernorm(hidden_states)
 
-            hidden_states, self_attn_weights = self.self_attn(
+            hidden_states, self_attn_weights = self.cross_attn(
                 hidden_states=hidden_states,
                 key_value_states=key_value_states,
                 attention_mask=cross_attention_mask,
@@ -1418,7 +1419,9 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1481,7 +1484,9 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    key_value_states,
                     causal_mask,
+                    cross_attention_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -1492,7 +1497,9 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
+                    key_value_states=key_value_states,
                     attention_mask=causal_mask,
+                    cross_attention_mask=cross_attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -1655,6 +1662,7 @@ COSMOS_START_DOCSTRING = None
 class CosmosPreTrainedModel(PreTrainedModel):
     config_class = CosmosConfig
     base_model_prefix = "model"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CosmosTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -1756,9 +1764,10 @@ class CosmosModel(CosmosPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.text_encoder = AutoModel.from_config(config.text_encoder)
         self.language_model = CosmosTextModel._from_config(config.text_config)
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
+        if config.is_video_to_world:
+            self.prompt_encoder = AutoModel.from_config(config.prompt_encoder).encoder
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1828,28 +1837,26 @@ class CosmosModel(CosmosPreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
+        if input_ids is not None:
+            output = self.prompt_encoder(input_ids, attention_mask=attention_mask)
+            key_value_states = output.last_hidden_state
+            lengths = attention_mask.sum(dim=1)
+            for batch_id in range(key_value_states.shape[0]):
+                key_value_states[batch_id][lengths[batch_id] :] = 0
+        elif inputs_embeds is not None:
+            key_value_states = inputs_embeds
+        else:
+            key_value_states = None
 
-        if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values)
-
-            if input_ids is not None:
-                special_image_mask = input_ids == self.config.image_token_id
-                image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
-                input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
-            else:
-                input_ids = image_tokens
+        input_ids = self.get_image_tokens(pixel_values)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            cross_attention_mask=attention_mask,
+            key_value_states=key_value_states,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
