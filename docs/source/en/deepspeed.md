@@ -1091,7 +1091,7 @@ ds_config = {
         "overlap_comm": True,
         "contiguous_gradients": True,
         "reduce_bucket_size": model_hidden_size * model_hidden_size,
-        "stage3_prefetch_bucket_size": 0.9 * model_hidden_size * model_hidden_size,
+        "stage3_prefetch_bucket_size": 3774873,
         "stage3_param_persistence_threshold": 10 * model_hidden_size
     },
     "steps_per_print": 2000,
