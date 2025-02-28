@@ -64,7 +64,11 @@ class SwissAIConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
-
+        qk_norm (`bool`, *optional*, defaults to `True`):
+            Whether to use a normalization in the query and key projection layers during self-attention.
+        post_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use a normalization after the self-attention and MLP layers, i.e. x = norm(f(x)) + x.
+            If `False`, the model will use a pre-normalization, i.e. x = f(norm(x)) + x.
     ```python
     >>> from transformers import SwissAIModel, SwissAIConfig
 
@@ -88,6 +92,7 @@ class SwissAIConfig(PretrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -116,6 +121,8 @@ class SwissAIConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         rms_norm_eps=1e-5,
+        qk_norm=True,
+        post_norm=False,        
         **kwargs,
     ):
         super().__init__(
@@ -147,6 +154,9 @@ class SwissAIConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         self.rms_norm_eps = rms_norm_eps
+
+        self.qk_norm = qk_norm
+        self.post_norm = post_norm
 
     def _rope_scaling_validation(self):
         """
