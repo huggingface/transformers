@@ -38,12 +38,14 @@ class Gemma3RotaryEmbeddingConfig(PretrainedConfig):
         num_attention_heads: int,
         rope_theta: float,
         head_dim: Optional[int] = None,
+        max_position_embeddings: int = 131_072,
         partial_rotary_factor: Optional[float] = None,
-        rope_scaling: Mapping[str, Union[int, float]] = None,
+        rope_scaling: Optional[Mapping[str, Union[int, float]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
+        self.max_position_embeddings = max_position_embeddings
         self.num_attention_heads = num_attention_heads
         self.rope_theta = rope_theta
 
@@ -183,7 +185,6 @@ class Gemma3TextConfig(PretrainedConfig):
         final_logit_softcapping: float = 30.0,
         query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
-        rope_theta: float = 10_000.0,  # Consolidated in rope_wave_length Mapping in PyTorch
         rope_global_base_freq: float = 1_000_000.0,
         rope_local_base_freq: float = 10_000.0,
         rms_norm_eps: float = 1e-6,
@@ -192,13 +193,13 @@ class Gemma3TextConfig(PretrainedConfig):
         eos_token_id: int = 1,
         bos_token_id: int = 2,
         tie_word_embeddings: bool = True,
-        max_position_embeddings: int = 8192,
+        max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         use_cache: bool = True,
         cache_implementation: str = "hybrid",
-        compression_type: Optional[enum.Enum] = None,  # uant in Torch, v3_compression_type in FLAX
+        compression_type: Optional[enum.Enum] = None,  # quant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
         super().__init__(
@@ -220,7 +221,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.rope_global_base_freq = rope_global_base_freq
         self.rope_local_base_freq = rope_local_base_freq
         self.attention_pattern = attention_pattern
@@ -231,6 +231,7 @@ class Gemma3TextConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.cache_implementation = cache_implementation
+        self.compression_type = compression_type
 
 
 class Gemma3VisionConfig(SiglipVisionConfig):
@@ -238,31 +239,17 @@ class Gemma3VisionConfig(SiglipVisionConfig):
 
     def __init__(
         self,
-        # SigLIP Vision Config Params
-        hidden_size: int = 1152,  # width in FLAX
-        intermediate_size: int = 4304,  # mlp_dim in FLAX
-        num_hidden_layers: int = 27,  # depth in FLAX
-        num_attention_heads: int = 16,  # num_heads in FLAX
-        num_channels: int = 3,  # image_channels in FLAX
-        image_size: int = 896,  # Split into image_height and image_width in FLAX
-        attention_dropout: float = 0.0,  # dropout in FLAX
+        hidden_size: int = 1152,
+        intermediate_size: int = 4304,
+        num_hidden_layers: int = 27,
+        num_attention_heads: int = 16,
+        num_channels: int = 3,
+        image_size: int = 896,
+        attention_dropout: float = 0.0,
         patch_size: int = 14,
-        projection_dim: int = 2048,
-        # Config parameters in Transformers but not FLAX
         hidden_act: str = "gelu_pytorch_tanh",
         layer_norm_eps: float = 0.000001,
-        # Config parameters in FLAX but not Transformers
-        position_embedding: str = "learn",
-        representation_size: Union[int, bool] = False,
-        pool_type: Optional[str] = "none",
-        head_zeroinit: bool = True,
-        scan: bool = False,
-        remat_policy: str = "nothing_savable",
-        output_length: int = 256,
-        num_mm_tokens_per_image_prepool: int = 4096,
-        num_mm_tokens_per_image: int = 256,
-        apply_stop_gradient: bool = True,
-        vision_use_head=False,
+        vision_use_head: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -279,17 +266,6 @@ class Gemma3VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
-        self.projection_dim = projection_dim
-        self.position_embedding = position_embedding
-        self.representation_size = representation_size
-        self.pool_type = pool_type
-        self.head_zeroinit = head_zeroinit
-        self.scan = scan
-        self.remat_policy = remat_policy
-        self.output_length = output_length
-        self.num_mm_tokens_per_image_prepool = num_mm_tokens_per_image_prepool
-        self.num_mm_tokens_per_image = num_mm_tokens_per_image
-        self.apply_stop_gradient = apply_stop_gradient
         self.vision_use_head = vision_use_head
 
 
@@ -319,7 +295,7 @@ class Gemma3Config(PretrainedConfig):
         if isinstance(vision_config, dict):
             self.vision_config = Gemma3VisionConfig(**vision_config)
         elif isinstance(vision_config, Gemma3VisionConfig):
-            self.vision_config = vision_config
+            self.vision_config = cast(Gemma3VisionConfig, vision_config)
         else:
             self.vision_config = None
             logger.info(

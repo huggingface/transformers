@@ -485,9 +485,9 @@ def convert(
 
     if not _TEXT_ONLY.value:
         extra_embs = hf_tree.pop("mm_input_embedding_extra.weight").float()
-        soft_emb_norm = hf_tree.get("mm_soft_emb_norm.weight").float()
-        soft_emb_proj = hf_tree.get("mm_input_projection.weight").float()
-        lm_embs = hf_tree.get("language_model.model.embed_tokens.weight").float()
+        soft_emb_norm = hf_tree["mm_soft_emb_norm.weight"].float()
+        soft_emb_proj = hf_tree["mm_input_projection.weight"].float()
+        lm_embs = hf_tree["language_model.model.embed_tokens.weight"].float()
 
         extra_embs_expanded = extra_embs.unsqueeze(0)
         extra_embs_norm = extra_embs_expanded * torch.rsqrt(

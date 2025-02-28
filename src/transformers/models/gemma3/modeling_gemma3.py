@@ -1046,7 +1046,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         image_features = []
         for i, prompt_images in enumerate(pixel_values):
             logger.info("Encoding images for prompt @ idx %d", i)
-            image_outputs = self.vision_model(prompt_images)
+            image_outputs = self.vision_model(pixel_values=prompt_images)
             prompt_image_features = image_outputs.last_hidden_state
             logger.info("prompt_image_features.shape after vision model: %s", prompt_image_features.shape)
             prompt_image_features = self.encode_vision(prompt_image_features)

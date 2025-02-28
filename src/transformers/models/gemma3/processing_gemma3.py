@@ -46,20 +46,11 @@ class Gemma3TextKwargs(TextKwargs):
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
-    do_pan_and_scan: bool
-    pan_and_scan_min_crop_size: int
-    pan_and_scan_max_num_crops: int
-    pan_and_scan_min_ratio_to_activate: float
+    do_pan_and_scan: Optional[bool]
+    pan_and_scan_min_crop_size: Optional[int]
+    pan_and_scan_max_num_crops: Optional[int]
+    pan_and_scan_min_ratio_to_activate: Optional[float]
     do_convert_rgb: Optional[bool]
-    do_resize: bool
-    size: dict[str, int]
-    resample: PIL.Image.Resampling
-    do_rescale: bool
-    rescale_factor: Union[int, float]
-    do_normalize: bool
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
-    do_convert_rgb: bool
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -179,9 +170,9 @@ class Gemma3Processor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: SiglipImageProcessor = None,
-        tokenizer: GemmaTokenizer = None,
-        chat_template: str = None,
+        image_processor: SiglipImageProcessor,
+        tokenizer: GemmaTokenizer,
+        chat_template: Optional[str] = None,
         num_mm_soft_tokens_per_image: int = 256,
         **kwargs,
     ):
@@ -207,9 +198,9 @@ class Gemma3Processor(ProcessorMixin):
 
         self.image_soft_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
         self.full_image_sequence = "".join(
-            [NEWLINE_TOKEN, START_IMAGE_TOKEN]
+            [NEWLINE_TOKEN, NEWLINE_TOKEN, START_IMAGE_TOKEN]
             + [IMAGE_SOFT_TOKEN] * num_mm_soft_tokens_per_image
-            + [END_IMAGE_TOKEN, NEWLINE_TOKEN]
+            + [END_IMAGE_TOKEN, NEWLINE_TOKEN, NEWLINE_TOKEN]
         )
 
         super().__init__(
