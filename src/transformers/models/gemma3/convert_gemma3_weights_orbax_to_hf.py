@@ -456,14 +456,14 @@ def convert(
     hf_tree: dict[str, torch.Tensor] = {}
 
     def update_tree(path: str, weights: np.ndarray) -> None:
+        torch_tensor = torch.from_numpy(weights.astype("float32")).type(target_dtype)
         logging.info(
-            "%s converted from shape=%s to shape=%s with dtype=%s",
+            "%s converted shape=%s with dtype=%s",
             path,
-            value.shape,
             weights.shape,
-            weights.dtype,
+            torch_tensor.dtype,
         )
-        hf_tree[path] = torch.from_numpy(weights.astype("float32")).type(target_dtype)
+        hf_tree[path] = torch_tensor
 
     for paths, value in tree.flatten_with_path(ckpt):
         if paths[0].startswith("SigLiPFromPatches_"):

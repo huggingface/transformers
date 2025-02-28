@@ -6,7 +6,7 @@ from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
 torch.set_default_device('cpu')
 
-MODEL_ID = "google/paligemma2-3b-mix-448"
+MODEL_ID = "google/paligemma2-3b-pt-896"
 
 
 def main(*args):
