@@ -824,6 +824,7 @@ def pipeline(
 
     # Config is the primordial information item.
     # Instantiate config if needed
+    adapter_path = None
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(
             config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
@@ -845,6 +846,12 @@ def pipeline(
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
                     model = adapter_config["base_model_name_or_path"]
+                    adapter_path = maybe_adapter_path
+                    if framework not in (None, "pt"):
+                        raise ValueError(
+                            f"Adapter files are only supported for PyTorch models. You passed framework={framework}."
+                        )
+                    framework = "pt"
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
@@ -938,11 +945,12 @@ def pipeline(
     if isinstance(model, str) or framework is None:
         model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
         framework, model = infer_framework_load_model(
-            model,
+            adapter_path if adapter_path is not None else model,
             model_classes=model_classes,
             config=config,
             framework=framework,
             task=task,
+            adapter_path=adapter_path,
             **hub_kwargs,
             **model_kwargs,
         )
