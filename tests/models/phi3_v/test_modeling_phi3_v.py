@@ -298,7 +298,6 @@ class Phi3VModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Phi3V
 class Phi3VModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
