@@ -4911,7 +4911,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 mismatched_names = [name for name, _, _ in mismatched_keys]
                 fixed_state_dict = {k: v for k, v in state_dict.items() if k not in mismatched_names}
                 fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(fixed_state_dict)
-        
+
                 if is_deepspeed_zero3_enabled():
                     error_msgs += _load_state_dict_into_zero3_model(
                         model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
