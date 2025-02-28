@@ -1816,7 +1816,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # Stage 2: Hybrid encoder (transformer -> FPN -> PAN)
         projected_feature_maps = [
-            self.encoder_input_proj[i](feature_map) for i, (feature_map, mask) in enumerate(backbone_outputs)
+            proj(feature_map) for proj, (feature_map, mask) in zip(self.encoder_input_proj, backbone_outputs)
         ]
         encoder_outputs = self.encoder(
             projected_feature_maps,
@@ -1825,24 +1825,19 @@ class RTDetrModel(RTDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # Equivalent to def _get_encoder_input
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
-        sources = []
-        for i, source in enumerate(encoder_outputs[0]):
-            sources.append(self.decoder_input_proj[i](source))
+        feature_maps = encoder_outputs[0]
+        last_encoder_feature_map = feature_maps[-1]
 
-        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
-        if self.config.num_feature_levels > len(sources):
-            _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
-            for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
+        # Apply projection to each feature map
+        feature_maps = [proj(feature_map) for proj, feature_map in zip(self.decoder_input_proj, feature_maps)]
+        for i in range(len(feature_maps), self.config.num_feature_levels):
+            feature_maps.append(self.decoder_input_proj[i](last_encoder_feature_map))
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
         spatial_shapes_list = []
-        spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
-        for level, source in enumerate(sources):
+        spatial_shapes = torch.empty((len(feature_maps), 2), device=device, dtype=torch.long)
+        for level, source in enumerate(feature_maps):
             height, width = source.shape[-2:]
             spatial_shapes[level, 0] = height
             spatial_shapes[level, 1] = width
