@@ -116,6 +116,8 @@ class AyaVisionProcessor(ProcessorMixin):
         if self.image_processor is not None:
             self.image_processor.img_size = self.img_size
             self.image_processor.max_splits_per_image = self.max_splits_per_img
+            self.image_processor.image_mean = [0.5, 0.5, 0.5]
+            self.image_processor.image_std = [0.5, 0.5, 0.5]
 
     def img_tokens_from_size(self, width: int, height: int) -> str:
         """
@@ -175,7 +177,7 @@ class AyaVisionProcessor(ProcessorMixin):
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
         `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
-        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
+        AyaVisionImageProcessor's [`~AyaVisionImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -230,8 +232,10 @@ class AyaVisionProcessor(ProcessorMixin):
             
             image_index = 0
             processed_text = []
+            # sample_patch_idx = [0]
             for prompt in text:
                 new_prompt = prompt
+                # sample_patch_idx.append(sample_patch_idx[-1] + image_num_patches[image_index])
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
                     height, width = resized_dimensions[image_index]
@@ -239,6 +243,8 @@ class AyaVisionProcessor(ProcessorMixin):
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
                     image_index += 1
                 processed_text.append(new_prompt)
+
+            # sample_patch_idx = sample_patch_idx[:-1] # Remove the last one
 
             if image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
