@@ -220,9 +220,13 @@ class AyaVisionProcessor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
-            resized_image_sizes = image_inputs.pop("resized_sizes")
-            # Get image dimensions
-            image_sizes = [self.get_image_size(img) for img in images]
+            
+            # Get resized dimensions for each image
+            size = output_kwargs["images_kwargs"].get("size", None)
+            resized_dimensions = [
+                self.image_processor.get_resized_dimensions(img, size) 
+                for img in images
+            ]
             
             image_index = 0
             processed_text = []
@@ -230,8 +234,7 @@ class AyaVisionProcessor(ProcessorMixin):
                 new_prompt = prompt
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
-                    height = resized_image_sizes[image_index][0]
-                    width = resized_image_sizes[image_index][1]
+                    height, width = resized_dimensions[image_index]
                     image_tokens = self.img_tokens_from_size(width, height)
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
                     image_index += 1
@@ -301,23 +304,6 @@ class AyaVisionProcessor(ProcessorMixin):
         return super().apply_chat_template(
             conversation, chat_template, **kwargs
         )
-
-    def get_image_size(self, image):
-        """
-        Gets the size (width, height) of an image.
-        
-        Args:
-            image: A PIL Image, numpy array, or tensor representing an image
-            
-        Returns:
-            Tuple[int, int]: A tuple of (width, height)
-        """
-        # If image is already a PIL image, we can directly get its size
-        if hasattr(image, 'size'):
-            return image.size
-        
-        # Otherwise, use the utility function
-        return get_image_size(image)
 
 
 

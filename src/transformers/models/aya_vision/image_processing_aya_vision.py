@@ -390,7 +390,7 @@ class AyaVisionImageProcessor(BaseImageProcessor):
         else:
             num_patches = np.array([1] * len(images))
 
-        # Track image sizes before and after resizing
+        # Track image sizes before resizing
         image_sizes_before_resize = []
         for image in images:
             if input_data_format == ChannelDimension.FIRST:
@@ -399,23 +399,14 @@ class AyaVisionImageProcessor(BaseImageProcessor):
                 height, width = image.shape[0], image.shape[1]
             image_sizes_before_resize.append({"height": height, "width": width})
 
-        resized_sizes = []
         if do_resize:
             images = [
                 self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
-            # Store the resized dimensions
-            for image in images:
-                if input_data_format == ChannelDimension.FIRST:
-                    height, width = image.shape[-2], image.shape[-1]
-                else:
-                    height, width = image.shape[0], image.shape[1]
-                resized_sizes.append([height, width])
         else:
             # If no resizing, use original sizes
-            for size_dict in image_sizes_before_resize:
-                resized_sizes.append([size_dict["height"], size_dict["width"]])
+            pass
 
         if do_rescale:
             images = [
@@ -437,7 +428,6 @@ class AyaVisionImageProcessor(BaseImageProcessor):
             data={
                 "pixel_values": images, 
                 "num_patches": num_patches,
-                "resized_sizes": resized_sizes
             }, 
             tensor_type=return_tensors
         )
@@ -522,5 +512,52 @@ class AyaVisionImageProcessor(BaseImageProcessor):
 
         return processed_images
 
+    def get_resized_dimensions(self, image: ImageInput, size: Dict[str, int] = None) -> Tuple[int, int]:
+        """
+        Returns the dimensions an image would have after resizing using the optimal tiled canvas.
+        
+        Args:
+            image: The image to resize
+            size: Target size dictionary with 'height' and 'width' keys
+            
+        Returns:
+            Tuple (height, width) of dimensions after resizing
+        """
+        size = size if size is not None else self.size
+        size = get_size_dict(size, default_to_square=True)
+        
+        # Get original dimensions - handle PIL images directly
+        if hasattr(image, "size"):  # PIL Image
+            orig_width, orig_height = image.size
+        else:
+            # Convert to numpy array if not already
+            image = to_numpy_array(image)
+            input_data_format = infer_channel_dimension_format(image)
+            if input_data_format == ChannelDimension.FIRST:
+                orig_height, orig_width = image.shape[-2], image.shape[-1]
+            else:
+                orig_height, orig_width = image.shape[0], image.shape[1]
+        
+        # Use the same logic as in crop_image_to_patches
+        patch_size_height, patch_size_width = size["height"], size["width"]
+        
+        # If crop_to_patches is likely to be used, calculate optimal canvas
+        min_patches = self.min_patches
+        max_patches = self.max_patches
+        
+        # Find the optimal tile grid
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (orig_height, orig_width), 
+            (patch_size_height, patch_size_width), 
+            min_patches, 
+            max_patches
+        )
+        
+        # Calculate final dimensions
+        target_width = patch_size_width * num_columns
+        target_height = patch_size_height * num_rows
+        
+        return target_height, target_width
 
-__all__ = ["GotOcr2ImageProcessor"]
+
+__all__ = ["AyaVisionImageProcessor"]
