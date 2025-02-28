@@ -1,44 +1,30 @@
 import json
 
 import datasets
+import torch
 
+from tests.trainer.test_trainer import StoreLossCallback
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
     Trainer,
-    TrainerCallback,
     TrainingArguments,
     set_seed,
 )
 from transformers.testing_utils import (
     TestCasePlus,
-    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_accelerator,
-    torch_device,
+    require_torch_multi_gpu,
 )
 
 
-class StoreLossCallback(TrainerCallback):
-    """
-    Simple callback to store the loss.
-    """
-
-    def __init__(self):
-        self.losses = []
-
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        if "loss" in logs:
-            self.losses.append(logs["loss"])
-
-
 class TestTrainerDistributedLoss(TestCasePlus):
-    @require_torch_multi_accelerator
+    @require_torch_multi_gpu
     def test_trainer(self):
-        device_count = backend_device_count(torch_device)
+        device_count = torch.cuda.device_count()
         min_bs = 1
         output_dir = self.get_auto_remove_tmp_dir()
         for gpu_num, enable, bs, name in (
