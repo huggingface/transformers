@@ -246,8 +246,6 @@ class GroundingDinoModelOutput(ModelOutput):
             weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
             multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
             bi-attention heads.
-        encoder_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
-            Top `config.num_queries` scoring bounding boxes indices picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
             region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
@@ -271,7 +269,6 @@ class GroundingDinoModelOutput(ModelOutput):
     encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_topk_proposals: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
@@ -334,8 +331,6 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
-        encoder_topk_proposals (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*, returned when `config.two_stage=True`):
-            Top `config.num_queries` scoring bounding boxes indices picked as region proposals in the first stage.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
             region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
@@ -366,7 +361,6 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    encoder_topk_proposals: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
@@ -2483,7 +2477,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             encoder_vision_hidden_states=encoder_outputs.vision_hidden_states,
             encoder_text_hidden_states=encoder_outputs.text_hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            encoder_topk_proposals=topk_proposals,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             encoder_logits=encoder_logits,
@@ -2783,7 +2776,6 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
-            encoder_topk_proposals=outputs.encoder_topk_proposals,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             encoder_logits=outputs.encoder_logits,
