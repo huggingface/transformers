@@ -815,7 +815,9 @@ def _load_state_dict_into_meta_model(
 
         # we need to use serialized_param_name as file pointer is untouched
         param = (
-            file_pointer.get_slice(serialized_param_name) if shard_file.endswith(".safetensors") else bin_state_dict[serialized_param_name]
+            file_pointer.get_slice(serialized_param_name)
+            if shard_file.endswith(".safetensors")
+            else bin_state_dict[serialized_param_name]
         )
         # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
@@ -929,7 +931,6 @@ def _load_state_dict_into_meta_model(
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
     if file_pointer is not None:
-        # not sure we need that, in tgi, they don't close the handler
         file_pointer.__exit__(None, None, None)
 
     return error_msgs, offload_index, state_dict_index
@@ -5862,13 +5863,14 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         parameter_count[device] += int(math.prod(param.shape) * allocation_factor)
 
     dtype = dtype if dtype is not None else torch.float32
-    max_memory = get_max_memory()
+    # calling max_memory will create a tensor thus creating a bit of overhead (aten::empty_strided)
+    # max_memory = get_max_memory()
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
         # allocate only if we have enough memory
-        if max_memory[device.index] > param_count * dtype_byte_size(dtype):
-            _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
+        # if max_memory[device.index] > param_count * dtype_byte_size(dtype):
+        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
