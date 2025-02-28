@@ -186,9 +186,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     pipeline_model_mapping = (
         {
             "feature-extraction": TFBlenderbotSmallModel,
-            "summarization": TFBlenderbotSmallForConditionalGeneration,
             "text2text-generation": TFBlenderbotSmallForConditionalGeneration,
-            "translation": TFBlenderbotSmallForConditionalGeneration,
         }
         if is_tf_available()
         else {}

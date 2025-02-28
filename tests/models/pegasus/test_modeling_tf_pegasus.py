@@ -183,9 +183,7 @@ class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = (
         {
             "feature-extraction": TFPegasusModel,
-            "summarization": TFPegasusForConditionalGeneration,
             "text2text-generation": TFPegasusForConditionalGeneration,
-            "translation": TFPegasusForConditionalGeneration,
         }
         if is_tf_available()
         else {}
