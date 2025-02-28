@@ -684,9 +684,6 @@ class Phi4MultimodalImageEmbedding(nn.Module):
     ) -> torch.FloatTensor:
         img_embeds = img_embeds.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
 
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
         target_device = self.img_projection_up.bias.device
         target_dtype = self.img_projection_up.bias.dtype
 
@@ -1270,9 +1267,6 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         audio_attention_mask=None,
         audio_projection_mode="speech",
     ) -> torch.FloatTensor:
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
         with torch.no_grad():
             positions_tuple = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=True)
 
@@ -1579,6 +1573,8 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
     def __init__(self, config: Phi4MultimodalConfig) -> None:
         super().__init__()
         self.config = config
+        self.image_token_id = config.vision_config.image_token_id
+        self.audio_token_id = config.audio_config.audio_token_id
         self.image_embed = Phi4MultimodalImageEmbedding(config)
         self.audio_embed = Phi4MultimodalAudioEmbedding(config)
 
@@ -1593,15 +1589,13 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         audio_embed_sizes=None,
         audio_attention_mask=None,
     ) -> torch.FloatTensor:
-        input_ids = input_ids.view(-1, input_ids.shape[-1])
-
         with torch.no_grad():
             image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
             non_image_position_mask = ~image_position_mask
 
         image_embeds = None
         audio_embeds = None
-        if input_image_embeds is not None and input_image_embeds.numel() > 0:
+        if input_image_embeds is not None and (input_ids == self.image_token_id).any():
             image_embeds = self.image_embed(
                 input_ids,
                 inputs_embeds,
@@ -1609,7 +1603,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
             )
-        if input_audio_embeds is not None and input_audio_embeds.numel() > 0:
+        if input_audio_embeds is not None and (input_ids == self.audio_token_id).any():
             audio_projection_mode = "vision" if input_image_embeds is not None else "speech"
             audio_embeds = self.audio_embed(
                 input_ids,
