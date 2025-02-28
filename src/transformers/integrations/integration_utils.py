@@ -2181,8 +2181,8 @@ class SwanLabCallback(TrainerCallback):
                 login information.
 
         - **SWANLAB_PROJECT** (`str`, *optional*, defaults to `None`):
-            Set this to a custom string to store results in a different project. If not specified, the name of the running
-            directory is used.
+            Set this to a custom string to store results in a different project. If not specified, the name of the current
+            working directory is used.
 
         - **SWANLAB_LOG_DIR** (`str`, *optional*, defaults to `swanlog`):
             Path where SwanLab parsed log files (for local mode) are saved swanlog folder in the current working directory.
