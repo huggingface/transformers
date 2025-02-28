@@ -1721,22 +1721,23 @@ class RTDetrModel(RTDetrPreTrainedModel):
             spatial_shapes = tuple(
                 [(int(height / stride), int(width / stride)) for stride in self.config.feat_strides]
             )
+
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
-            grid_y, grid_x = torch.meshgrid(
-                torch.arange(end=height, device=device).to(dtype),
-                torch.arange(end=width, device=device).to(dtype),
-                indexing="ij",
-            )
-            grid_xy = torch.stack([grid_x, grid_y], -1)
-            grid_xy = grid_xy.unsqueeze(0) + 0.5
-            grid_xy[..., 0] /= width
-            grid_xy[..., 1] /= height
-            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
-            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+            # Generate normalized grid coordinates from the center of the first pixel
+            # to the center of the last pixel (e.g. 0.5 / width, 1 - 0.5 / width)
+            grid_x = torch.linspace(0.5 / width, 1 - 0.5 / width, width, device=device, dtype=dtype)
+            grid_y = torch.linspace(0.5 / height, 1 - 0.5 / height, height, device=device, dtype=dtype)
+            grid_y, grid_x = torch.meshgrid(grid_y, grid_x, indexing="ij")
+            grid_xy = torch.stack([grid_x, grid_y], dim=-1)
+
+            grid_wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            level_anchors = torch.concat([grid_xy, grid_wh], dim=-1).reshape(height * width, 4)
+            anchors.append(level_anchors)
+        anchors = torch.concat(anchors).unsqueeze(0)
+
         # define the valid range for anchor coordinates
         eps = 1e-2
-        anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
