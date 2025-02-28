@@ -25,7 +25,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -69,7 +69,7 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -107,10 +107,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = 56 * 56
     max_pixels = 28 * 28 * 1280
-    valid_init_kwargs = Qwen2VLFastImageProcessorInitKwargs
+    valid_kwargs = DefaultFastImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(

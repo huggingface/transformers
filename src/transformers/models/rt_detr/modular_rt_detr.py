@@ -2,8 +2,7 @@ import pathlib
 from typing import Dict, List, Optional, Tuple, Union
 
 from transformers.models.detr.image_processing_detr_fast import (
-    DetrFastImageProcessorInitKwargs,
-    DetrFastImageProcessorPreprocessKwargs,
+    DetrFastImageProcessorKwargs,
     DetrImageProcessorFast,
 )
 
@@ -112,11 +111,7 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorInitKwargs(DetrFastImageProcessorInitKwargs):
-    pass
-
-
-class RTDetrFastImageProcessorPreprocessKwargs(DetrFastImageProcessorPreprocessKwargs):
+class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
     pass
 
 
@@ -133,10 +128,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = RTDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = RTDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = RTDetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
@@ -181,9 +175,13 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         """,
     )
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, **kwargs)
+        return BaseImageProcessorFast().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def prepare_annotation(
         self,
