@@ -677,109 +677,103 @@ class Phi4MultimodalImageEmbedding(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_embeds: torch.FloatTensor,
+        input_embeds: torch.Tensor,
+        img_embeds: torch.FloatTensor,
         image_sizes: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
-        wte: nn.Module = None,
     ) -> torch.FloatTensor:
-        img_embeds = input_embeds
-        if img_embeds is not None:
-            img_embeds = img_embeds.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
-
-        hidden_states = wte(input_ids)
+        img_embeds = img_embeds.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
-        with torch.no_grad():
-            positions = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=False)
-            positions_tuple = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=True)
-
         target_device = self.img_projection_up.bias.device
         target_dtype = self.img_projection_up.bias.dtype
 
-        if len(positions.tolist()) > 0:
-            batch_size = img_embeds.shape[0]
+        batch_size = img_embeds.shape[0]
 
-            img_features = self.get_img_features(
-                img_embeds.flatten(0, 1),
-                attention_mask=image_attention_mask.flatten(0, 1).to(dtype=bool, device=target_device),
+        img_features = self.get_img_features(
+            img_embeds.flatten(0, 1),
+            attention_mask=image_attention_mask.flatten(0, 1).to(dtype=bool, device=target_device),
+        )
+        base_feat_size = int(np.sqrt(img_features.shape[1]))
+        img_features = img_features.view(batch_size, -1, base_feat_size**2, self.image_dim_out)
+        image_sizes = image_sizes.view(-1, 2)
+
+        output_imgs = []
+        for idx in range(batch_size):
+            height, width = image_sizes[idx]
+            height_ratio = height // self.crop_size
+            width_ratio = width // self.crop_size
+            area_ratio = height_ratio * width_ratio
+
+            global_img = img_features[idx, :1]
+            global_img = (
+                global_img.reshape(1, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
+                .permute(0, 1, 3, 2, 4, 5)
+                .reshape(1, base_feat_size, base_feat_size, self.image_dim_out)
+                .contiguous()
             )
-            base_feat_size = int(np.sqrt(img_features.shape[1]))
-            img_features = img_features.view(batch_size, -1, base_feat_size**2, self.image_dim_out)
-            image_sizes = image_sizes.view(-1, 2)
+            temporary_extensor = self.sub_img_feature_extensor.repeat(1, base_feat_size, 1, 1)
+            global_img = torch.cat([global_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
 
-            output_imgs = []
-            for idx in range(batch_size):
-                height, width = image_sizes[idx]
-                height_ratio = height // self.crop_size
-                width_ratio = width // self.crop_size
-                area_ratio = height_ratio * width_ratio
+            sub_img = img_features[idx, 1:]
+            sub_img = sub_img[:area_ratio]
+            sub_img = (
+                sub_img.reshape(area_ratio, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
+                .permute(0, 1, 3, 2, 4, 5)
+                .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size, -1)
+                .permute(0, 1, 3, 2, 4, 5)
+                .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size, self.image_dim_out)
+                .contiguous()
+            )
 
-                global_img = img_features[idx, :1]
-                global_img = (
-                    global_img.reshape(1, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
-                    .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(1, base_feat_size, base_feat_size, self.image_dim_out)
-                    .contiguous()
+            if image_attention_mask is not None:
+                reshaped_image_attention_mask = (
+                    image_attention_mask[idx, 1 : area_ratio + 1, 0::2, 0::2]
+                    .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size)
+                    .permute(0, 1, 3, 2, 4)
+                    .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size)
                 )
-                temporary_extensor = self.sub_img_feature_extensor.repeat(1, base_feat_size, 1, 1)
-                global_img = torch.cat([global_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
+                useful_height = int(reshaped_image_attention_mask[0, :, 0].sum().item())
+                useful_width = int(reshaped_image_attention_mask[0, 0, :].sum().item())
+                sub_img = sub_img[:, :useful_height, :useful_width]
+                temporary_extensor = self.sub_img_feature_extensor.repeat(1, useful_height, 1, 1)
+            else:
+                temporary_extensor = self.sub_img_feature_extensor.repeat(1, height_ratio * base_feat_size, 1, 1)
 
-                sub_img = img_features[idx, 1:]
-                sub_img = sub_img[:area_ratio]
-                sub_img = (
-                    sub_img.reshape(area_ratio, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
-                    .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size, -1)
-                    .permute(0, 1, 3, 2, 4, 5)
-                    .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size, self.image_dim_out)
-                    .contiguous()
-                )
+            sub_img = torch.cat([sub_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
 
-                if image_attention_mask is not None:
-                    reshaped_image_attention_mask = (
-                        image_attention_mask[idx, 1 : area_ratio + 1, 0::2, 0::2]
-                        .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size)
-                        .permute(0, 1, 3, 2, 4)
-                        .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size)
-                    )
-                    useful_height = int(reshaped_image_attention_mask[0, :, 0].sum().item())
-                    useful_width = int(reshaped_image_attention_mask[0, 0, :].sum().item())
-                    sub_img = sub_img[:, :useful_height, :useful_width]
-                    temporary_extensor = self.sub_img_feature_extensor.repeat(1, useful_height, 1, 1)
-                else:
-                    temporary_extensor = self.sub_img_feature_extensor.repeat(1, height_ratio * base_feat_size, 1, 1)
+            # Merge global and sub
+            if self.hd_transform_order == "glb_sub":
+                output_imgs.append(torch.cat([global_img, self.global_img_feature_extensor, sub_img], dim=1))
+            elif self.hd_transform_order == "sub_glb":
+                output_imgs.append(torch.cat([sub_img, self.global_img_feature_extensor, global_img], dim=1))
 
-                sub_img = torch.cat([sub_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
+        img_set_tensor = []
+        for output_img in output_imgs:
+            output_img = output_img.to(device=target_device, dtype=target_dtype)
+            img_feature_proj = self.img_projection_up(output_img)
+            img_feature_proj = nn.functional.gelu(img_feature_proj)
+            img_feature_proj = self.img_projection_down(img_feature_proj)
+            img_set_tensor.append(img_feature_proj)
 
-                # Merge global and sub
-                if self.hd_transform_order == "glb_sub":
-                    output_imgs.append(torch.cat([global_img, self.global_img_feature_extensor, sub_img], dim=1))
-                elif self.hd_transform_order == "sub_glb":
-                    output_imgs.append(torch.cat([sub_img, self.global_img_feature_extensor, global_img], dim=1))
+        merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
+        merged_img_set_tensor = merged_img_set_tensor.to(dtype=input_embeds.dtype, device=input_embeds.device)
 
-            img_set_tensor = []
-            for output_img in output_imgs:
-                output_img = output_img.to(device=target_device, dtype=target_dtype)
-                img_feature_proj = self.img_projection_up(output_img)
-                img_feature_proj = nn.functional.gelu(img_feature_proj)
-                img_feature_proj = self.img_projection_down(img_feature_proj)
-                img_set_tensor.append(img_feature_proj)
+        with torch.no_grad():
+            positions_tuple = torch.nonzero(input_ids == self.config.vision_config.image_token_id, as_tuple=True)
 
-            merged_img_set_tensor = torch.cat(img_set_tensor, dim=1).squeeze(0)
-            merged_img_set_tensor = merged_img_set_tensor.to(dtype=hidden_states.dtype, device=hidden_states.device)
-            # Temporarily disable autocast to avoid issue on bf16 tensors
-            # Ref: https://github.com/pytorch/pytorch/issues/132715
-            with torch.autocast(device_type=hidden_states.device.type, enabled=False):
-                new_hidden_states = hidden_states.index_put(
-                    indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
-                )
-            hidden_states = new_hidden_states
+        # Temporarily disable autocast to avoid issue on bf16 tensors
+        # Ref: https://github.com/pytorch/pytorch/issues/132715
+        with torch.autocast(device_type=input_embeds.device.type, enabled=False):
+            image_embeds = input_embeds.index_put(
+                indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
+            )
 
-        hidden_states = self.drop(hidden_states)
+        image_embeds = self.drop(image_embeds)
 
-        return hidden_states
+        return image_embeds
 
 
 ########################################################## AUDIO #############################################
@@ -1270,19 +1264,16 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        input_embeds: torch.FloatTensor,
+        input_embeds: torch.Tensor,
+        audio_embeds: torch.FloatTensor,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         audio_projection_mode="speech",
-        wte: nn.Module = None,
     ) -> torch.FloatTensor:
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
-        hidden_states = wte(input_ids)
-
         with torch.no_grad():
-            positions = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=False)
             positions_tuple = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=True)
 
         up_proj = self.up_proj_for_speech if audio_projection_mode == "speech" else self.up_proj_for_vision_speech
@@ -1293,32 +1284,27 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         target_device = up_proj.bias.device
         target_dtype = up_proj.bias.dtype
 
-        if input_embeds is not None:
-            input_embeds = input_embeds.to(device=target_device, dtype=target_dtype)
+        audio_embeds = audio_embeds.to(device=target_device, dtype=target_dtype)
 
-        if len(positions.tolist()) > 0:
-            audio_features, _ = self.encoder(input_embeds, audio_attention_mask)
-            audio_set_tensor = up_proj(audio_features)
-            audio_set_tensor = nn.functional.gelu(audio_set_tensor)
-            audio_set_tensor = down_proj(audio_set_tensor)
+        audio_features, _ = self.encoder(audio_embeds, audio_attention_mask)
+        audio_set_tensor = up_proj(audio_features)
+        audio_set_tensor = nn.functional.gelu(audio_set_tensor)
+        audio_set_tensor = down_proj(audio_set_tensor)
 
-            merged_audio_set_tensor = torch.cat(
-                [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
+        merged_audio_set_tensor = torch.cat(
+            [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
+        )
+        merged_audio_set_tensor = merged_audio_set_tensor.to(dtype=input_embeds.dtype, device=input_embeds.device)
+        # Temporarily disable autocast to avoid issue on bf16 tensors
+        # Ref: https://github.com/pytorch/pytorch/issues/132715
+        with torch.autocast(device_type=input_embeds.device.type, enabled=False):
+            audio_embeds = input_embeds.index_put(
+                indices=positions_tuple, values=merged_audio_set_tensor, accumulate=False
             )
-            merged_audio_set_tensor = merged_audio_set_tensor.to(
-                dtype=hidden_states.dtype, device=hidden_states.device
-            )
-            # Temporarily disable autocast to avoid issue on bf16 tensors
-            # Ref: https://github.com/pytorch/pytorch/issues/132715
-            with torch.autocast(device_type=hidden_states.device.type, enabled=False):
-                new_hidden_states = hidden_states.index_put(
-                    indices=positions_tuple, values=merged_audio_set_tensor, accumulate=False
-                )
-            hidden_states = new_hidden_states
 
-        hidden_states = self.drop(hidden_states)
+        audio_embeds = self.drop(audio_embeds)
 
-        return hidden_states
+        return audio_embeds
 
 
 class Phi4MultimodalRMSNorm(nn.Module):
@@ -1587,11 +1573,6 @@ class Phi4MultimodalDecoderLayer(nn.Module):
         return outputs
 
 
-# Special token ids
-_COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE = [-9999, -1]  # For backward compatibility
-_COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE = [float("-inf"), -10000]  # For backward compatibility
-
-
 class Phi4MultimodalFeatureEmbedding(nn.Module):
     """Image-audio embedding."""
 
@@ -1604,59 +1585,48 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
+        input_embeds: torch.Tensor,
         input_image_embeds: Optional[torch.FloatTensor] = None,
         input_audio_embeds: Optional[torch.FloatTensor] = None,
         image_sizes=None,
         image_attention_mask=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-        wte=None,
     ) -> torch.FloatTensor:
         input_ids = input_ids.view(-1, input_ids.shape[-1])
 
         with torch.no_grad():
-            input_ids[
-                (input_ids >= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[0])
-                & (input_ids <= _COMPATIBLE_IMAGE_SPECIAL_TOKEN_ID_RANGE[1])
-            ] = self.config.vision_config.image_token_id
-            input_ids[
-                (input_ids >= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[0])
-                & (input_ids <= _COMPATIBLE_AUDIO_SPECIAL_TOKEN_ID_RANGE[1])
-            ] = self.config.audio_config.audio_token_id
-
             image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
             non_image_position_mask = ~image_position_mask
 
-        if input_image_embeds is not None:
-            image_hidden_states = self.image_embed(
-                input_ids=input_ids,
-                input_embeds=input_image_embeds,
+        if input_image_embeds is not None and input_image_embeds.numel() > 0:
+            image_embeds = self.image_embed(
+                input_ids,
+                input_embeds,
+                img_embeds=input_image_embeds,
                 image_sizes=image_sizes,
-                wte=wte,
                 image_attention_mask=image_attention_mask,
             )
-        if input_audio_embeds is not None:
+        if input_audio_embeds is not None and input_audio_embeds.numel() > 0:
             audio_projection_mode = "vision" if input_image_embeds is not None else "speech"
-            audio_hidden_states = self.audio_embed(
-                input_ids=input_ids,
-                input_embeds=input_audio_embeds,
+            audio_embeds = self.audio_embed(
+                input_ids,
+                input_embeds,
+                audio_embeds=input_audio_embeds,
                 audio_embed_sizes=audio_embed_sizes,
                 audio_attention_mask=audio_attention_mask,
-                wte=wte,
                 audio_projection_mode=audio_projection_mode,
             )
 
         # merge image and audio hidden states
         if input_image_embeds is not None and input_audio_embeds is not None:
-            hidden_states = image_hidden_states * image_position_mask + audio_hidden_states * non_image_position_mask
+            input_embeds = image_embeds * image_position_mask + audio_embeds * non_image_position_mask
         elif input_image_embeds is not None:
-            hidden_states = image_hidden_states
+            input_embeds = image_embeds
         elif input_audio_embeds is not None:
-            hidden_states = audio_hidden_states
-        else:
-            hidden_states = wte(input_ids)
+            input_embeds = audio_embeds
 
-        return hidden_states
+        return input_embeds
 
 
 class Phi4MultimodalRotaryEmbedding(nn.Module):
@@ -1935,15 +1905,16 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens_extend(
-                input_ids=input_ids,
+            input_embeds = self.embed_tokens(input_ids)
+            hidden_states = self.embed_tokens_extend(
+                input_ids,
+                input_embeds,
                 input_image_embeds=input_image_embeds,
                 input_audio_embeds=input_audio_embeds,
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
                 audio_embed_sizes=audio_embed_sizes,
                 audio_attention_mask=audio_attention_mask,
-                wte=self.embed_tokens,
             )
 
         if cache_position is None:
