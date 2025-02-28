@@ -534,7 +534,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             self.assertNotEqual(peft_params, base_params)  # Assert we actually loaded the adapter too
             _ = peft_pipe("Hello")
 
-
     def test_peft_add_adapter_with_state_dict(self):
         """
         Simple test that tests the basic usage of PEFT model through `from_pretrained`. This test tests if
