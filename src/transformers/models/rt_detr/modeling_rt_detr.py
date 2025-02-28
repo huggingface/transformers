@@ -343,10 +343,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     denoising_meta_values: Optional[Dict] = None
 
 
-def _get_clones(partial_module, N):
-    return nn.ModuleList([partial_module() for i in range(N)])
-
-
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.inverse_sigmoid
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
