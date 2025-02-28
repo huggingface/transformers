@@ -44,16 +44,15 @@ from urllib.request import urlopen
 
 # Define model path
 model_path = "microsoft/Phi-4-multimodal-instruct"
+device = "cuda
 
 # Load model and processor
 processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_path, 
-    device_map="cuda", 
-    torch_dtype="auto", 
-    trust_remote_code=True, 
-    attn_implementation='flash_attention_2',
-).cuda()
+    device_map=device, 
+    torch_dtype=torch.float16, 
+)
 
 # Load generation config
 generation_config = GenerationConfig.from_pretrained(model_path)
@@ -71,7 +70,7 @@ print(f'>>> Prompt\n{prompt}')
 
 # Download and open image
 image = Image.open(requests.get(image_url, stream=True).raw)
-inputs = processor(text=prompt, images=image, return_tensors='pt').to('cuda:0')
+inputs = processor(text=prompt, images=image, return_tensors='pt').to(device)
 
 # Generate response
 generate_ids = model.generate(
@@ -96,7 +95,7 @@ print(f'>>> Prompt\n{prompt}')
 audio, samplerate = sf.read(io.BytesIO(urlopen(audio_url).read()))
 
 # Process with the model
-inputs = processor(text=prompt, audios=[(audio, samplerate)], return_tensors='pt').to('cuda:0')
+inputs = processor(text=prompt, audios=[(audio, samplerate)], return_tensors='pt').to(device)
 
 generate_ids = model.generate(
     **inputs,
