@@ -793,7 +793,8 @@ def _load_state_dict_into_meta_model(
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     file_pointer = None
-    if is_safetensors:
+    bin_state_dict = None
+    if shard_file.endswith(".safetensors"):
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
     else:
         bin_state_dict = load_state_dict(shard_file, map_location="cpu")
@@ -814,7 +815,7 @@ def _load_state_dict_into_meta_model(
 
         # we need to use serialized_param_name as file pointer is untouched
         param = (
-            file_pointer.get_slice(serialized_param_name) if is_safetensors else bin_state_dict[serialized_param_name]
+            file_pointer.get_slice(serialized_param_name) if shard_file.endswith(".safetensors") else bin_state_dict[serialized_param_name]
         )
         # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
