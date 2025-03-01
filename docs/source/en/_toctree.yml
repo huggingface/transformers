@@ -881,6 +881,8 @@
         title: CLVP
       - local: model_doc/colpali
         title: ColPali
+      - local: model_doc/cosmos
+        title: Cosmos
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
