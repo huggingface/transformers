@@ -308,7 +308,7 @@ _import_structure = {
     ],
     "models.cohere": ["CohereConfig"],
     "models.cohere2": ["Cohere2Config"],
-    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor", "AyaVisionImageProcessor"],
+    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor"],
     "models.colpali": [
         "ColPaliConfig",
         "ColPaliProcessor",
