@@ -260,7 +260,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.49.0", raise_if_both_names=True)
+    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.51.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
@@ -387,7 +387,7 @@ class DecisionTransformerGPT2Block(nn.Module):
 
         self.mlp = DecisionTransformerGPT2MLP(inner_dim, config)
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.49.0", raise_if_both_names=True)
+    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.51.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
