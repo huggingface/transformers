@@ -390,27 +390,22 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         else:
             num_patches = np.array([1] * len(images))
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        for i, image in enumerate(images):
+            if do_resize:
+                images[i] = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_rescale:
+                images[i] = self.rescale(image=images[i], scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_normalize:
+                images[i] = self.normalize(
+                    image=images[i],
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
+            images[i] = to_channel_dimension_format(images[i], data_format, input_channel_dim=input_data_format)
 
         encoded_outputs = BatchFeature(
             data={"pixel_values": images, "num_patches": num_patches}, tensor_type=return_tensors
