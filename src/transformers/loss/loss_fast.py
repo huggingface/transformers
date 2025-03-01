@@ -31,7 +31,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
     """
     
     def __init__(self, feature_dim=4, delta_v=0.5, delta_d=1.5, weights=(1.0, 1.0), bg_sample=False):
-        super(FastLoss, self).__init__()
+        super().__init__()
         self.feature_dim = feature_dim
         self.delta_v = delta_v
         self.delta_d = delta_d

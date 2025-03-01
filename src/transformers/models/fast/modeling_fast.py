@@ -126,7 +126,8 @@ class FastRepConvLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: Tuple[int, int],
-        stride: int = 1
+        stride: int = 1,
+        bias: bool = False
     ) -> None:
         super().__init__()
 
@@ -182,6 +183,11 @@ class FastRepConvLayer(nn.Module):
             self.identity_batch_norm = nn.BatchNorm2d(num_features=in_channels)
         else:
             self.identity_batch_norm = None
+        
+        #TODO: check if needed
+        self.rbr_identity = (
+            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+        )
 
     def forward(self, hidden_states):
         # if self.training:
@@ -250,7 +256,7 @@ class FASTNeck(nn.Module):
 
     def forward(self, hidden_states):
         first_layer_hidden = hidden_states[0]
-        first_layer_hidden = self.reduce_layer1(first_layer_hidden)
+        first_layer_hidden = self.reduce_layers[0](first_layer_hidden)
         output_stages = [first_layer_hidden]
 
         for layer_ix in range(1, self.num_layers):
