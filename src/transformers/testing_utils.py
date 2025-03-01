@@ -43,6 +43,7 @@ from unittest import mock
 from unittest.mock import patch
 
 import huggingface_hub.utils
+import requests
 import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
@@ -199,6 +200,8 @@ if is_torch_available():
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
+
+logger = transformers_logging.get_logger(__name__)
 
 
 def parse_flag_from_env(key, default=False):
@@ -2497,7 +2500,49 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
                     return test_func_ref(*args, **kwargs)
 
                 except Exception as err:
-                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
+                    if wait_before_retry is not None:
+                        time.sleep(wait_before_retry)
+                    retry_count += 1
+
+            return test_func_ref(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
+    """
+    To decorate tests that download from the Hub. They can fail due to a
+    variety of network issues such as timeouts, connection resets, etc.
+
+    Args:
+        max_attempts (`int`, *optional*, defaults to 5):
+            The maximum number of attempts to retry the flaky test.
+        wait_before_retry (`float`, *optional*, defaults to 2):
+            If provided, will wait that number of seconds before retrying the test.
+    """
+
+    def decorator(test_func_ref):
+        @functools.wraps(test_func_ref)
+        def wrapper(*args, **kwargs):
+            retry_count = 1
+
+            while retry_count < max_attempts:
+                try:
+                    return test_func_ref(*args, **kwargs)
+                # We catch all exceptions related to network issues from requests
+                except (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ReadTimeout,
+                    requests.exceptions.HTTPError,
+                    requests.exceptions.RequestException,
+                ) as err:
+                    logger.error(
+                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specied Hub repository."
+                    )
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
                     retry_count += 1
