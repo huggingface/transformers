@@ -178,11 +178,6 @@ class FastRepConvLayer(nn.Module):
             self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels)
         else:
             self.horizontal_conv, self.horizontal_batch_norm = None, None
-
-        if out_channels == in_channels and stride == 1:
-            self.identity_batch_norm = nn.BatchNorm2d(num_features=in_channels)
-        else:
-            self.identity_batch_norm = None
         
         #TODO: check if needed
         self.rbr_identity = (

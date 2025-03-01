@@ -40,6 +40,10 @@ rename_key_mappings = {
     "hor": "horizontal",
     "module.neck": "neck",
     "module.det_head": "text_detection_head",
+    "neck.reduce_layer1": "neck.reduce_layers.0",
+    "neck.reduce_layer2": "neck.reduce_layers.1",
+    "neck.reduce_layer3": "neck.reduce_layers.2",
+    "neck.reduce_layer4": "neck.reduce_layers.3",
 }
 
 def get_model_config(model_config, model_type, size, min_area, bbox_type, loss_bg):
@@ -221,7 +225,6 @@ def convert_fast_checkpoint(
         model_config, model_type, size, min_area, bbox_type, loss_bg
     )
     size = data_config.get("train", {}).get("short_size", size)
-    breakpoint()
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"shortest_edge": size},
