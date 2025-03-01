@@ -38,7 +38,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         self.weights = weights
         self.bg_sample = bg_sample
     
-    def preprocess_inputs(emb: torch.Tensor, instance: torch.Tensor, kernel: torch.Tensor, training_mask: torch.Tensor):
+    def preprocess_inputs(self, emb: torch.Tensor, instance: torch.Tensor, kernel: torch.Tensor, training_mask: torch.Tensor):
         """
         Preprocess input tensors by applying masks and reshaping them.
         """
@@ -50,7 +50,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         emb = emb.view(emb.shape[0], -1)
         return emb, instance, instance_kernel
 
-    def compute_embedding_means(emb: torch.Tensor, instance_kernel: torch.Tensor, unique_labels: torch.Tensor):
+    def compute_embedding_means(self, emb: torch.Tensor, instance_kernel: torch.Tensor, unique_labels: torch.Tensor):
         """
         Compute the mean embedding for each instance.
         """
@@ -63,7 +63,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
             emb_mean[:, i] = torch.mean(emb[:, indices], dim=1)
         return emb_mean
 
-    def compute_aggregation_loss(emb: torch.Tensor, instance: torch.Tensor, emb_mean: torch.Tensor, unique_labels: torch.Tensor, delta_v: float):
+    def compute_aggregation_loss(self, emb: torch.Tensor, instance: torch.Tensor, emb_mean: torch.Tensor, unique_labels: torch.Tensor, delta_v: float):
         """
         Compute the aggregation loss, which ensures that embeddings are close to their instance mean.
         """
@@ -79,7 +79,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
             aggregation_loss[i] = torch.mean(torch.log(distance + 1.0))
         return torch.mean(aggregation_loss[1:])
 
-    def compute_discriminative_loss(emb_mean: torch.Tensor, unique_labels: torch.Tensor, delta_d: float, bg_sample: bool):
+    def compute_discriminative_loss(self, emb_mean: torch.Tensor, unique_labels: torch.Tensor, delta_d: float, bg_sample: bool):
         """
         Compute the discriminative loss, which ensures that different instances are separated.
         """
@@ -107,6 +107,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         return discriminative_loss
     
     def emb_loss(
+        self,
         emb: torch.Tensor,
         instance: torch.Tensor,
         kernel: torch.Tensor,
@@ -120,16 +121,16 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         """
         Computes the embedding loss based on variance and distance constraints.
         """
-        emb, instance, instance_kernel = preprocess_inputs(emb, instance, kernel, training_mask)
+        emb, instance, instance_kernel = self.preprocess_inputs(emb, instance, kernel, training_mask)
         unique_labels, _ = torch.unique(instance_kernel, sorted=True, return_inverse=True)
         num_instance = unique_labels.size(0)
         
         if num_instance <= 1:
             return 0
         
-        emb_mean = compute_embedding_means(emb, instance_kernel, unique_labels)
-        aggregation_loss = compute_aggregation_loss(emb, instance, emb_mean, unique_labels, delta_v)
-        discriminative_loss = compute_discriminative_loss(emb_mean, unique_labels, delta_d, bg_sample)
+        emb_mean = self.compute_embedding_means(emb, instance_kernel, unique_labels)
+        aggregation_loss = self.compute_aggregation_loss(emb, instance, emb_mean, unique_labels, delta_v)
+        discriminative_loss = self.compute_discriminative_loss(emb_mean, unique_labels, delta_d, bg_sample)
         
         regularization_loss = torch.mean(torch.log(torch.norm(emb_mean, 2, 0) + 1.0)) * 0.001
         
@@ -137,14 +138,14 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         return total_loss
 
     
-    def emb_loss_batch(emb, instance, kernel, training_mask, reduce=True, loss_weight=0.25):
+    def emb_loss_batch(self, emb, instance, kernel, training_mask, reduce=True, loss_weight=0.25):
         """
         Computes batch-wise embedding loss.
         """
         loss_batch = emb.new_zeros((emb.size(0)), dtype=torch.float32)
 
         for i in range(loss_batch.size(0)):
-            loss_batch[i] = emb_loss(emb[i], instance[i], kernel[i], training_mask[i])
+            loss_batch[i] = self.emb_loss(emb[i], instance[i], kernel[i], training_mask[i])
 
         loss_batch = loss_weight * loss_batch
 
@@ -153,7 +154,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
 
         return loss_batch
     
-    def dice_loss_with_masks(input, target, mask, reduce=True):
+    def dice_loss_with_masks(self, input, target, mask, reduce=True):
         """
         Computes dice loss with masks applied.
         """
@@ -190,7 +191,7 @@ class FastForSceneTextRecognitionLoss(nn.Module):
 
         return loss
     
-    def ohem_single(score, gt_text, training_mask):
+    def ohem_single(self, score, gt_text, training_mask):
         """
         Computes Online Hard Example Mining (OHEM) for a single sample.
         """
@@ -218,18 +219,18 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         selected_mask = selected_mask.reshape(1, selected_mask.shape[0], selected_mask.shape[1]).float()
         return selected_mask
     
-    def ohem_batch(scores, gt_texts, training_masks):
+    def ohem_batch(self, scores, gt_texts, training_masks):
         """
         Computes OHEM for a batch of samples.
         """
         selected_masks = []
         for i in range(scores.shape[0]):
-            selected_masks.append(ohem_single(scores[i, :, :], gt_texts[i, :, :], training_masks[i, :, :]))
+            selected_masks.append(self.ohem_single(scores[i, :, :], gt_texts[i, :, :], training_masks[i, :, :]))
 
         selected_masks = torch.cat(selected_masks, 0).float()
         return selected_masks
     
-    def forward(self, hidden: torch.Tensor, labels: torch.Tensor):
+    def forward(self, hidden: torch.Tensor, labels: torch.Tensor, texts):
         """
         Computes the overall loss.
         """
@@ -239,14 +240,13 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         gt_instances = labels["gt_instances"]
 
         kernels = hidden[:, 0, :, :]  # 4*640*640
-        texts = self._max_pooling(kernels, scale=1)  # 4*640*640
         embs = hidden[:, 1:, :, :]  # 4*4*640*640
 
-        selected_masks = ohem_batch(texts, gt_texts, training_masks)
-        loss_text = dice_loss_with_masks(texts, gt_texts, selected_masks, reduce=False)
+        selected_masks = self.ohem_batch(texts, gt_texts, training_masks)
+        loss_text = self.dice_loss_with_masks(texts, gt_texts, selected_masks, reduce=False)
         selected_masks = gt_texts * training_masks
-        loss_kernel = dice_loss_with_masks(kernels, gt_kernels, selected_masks, reduce=False)
+        loss_kernel = self.dice_loss_with_masks(kernels, gt_kernels, selected_masks, reduce=False)
         loss_kernel = torch.mean(loss_kernel, dim=0)
 
-        loss_emb = emb_loss_batch(embs, gt_instances, gt_kernels, training_masks, reduce=False)
+        loss_emb = self.emb_loss_batch(embs, gt_instances, gt_kernels, training_masks, reduce=False)
         return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
