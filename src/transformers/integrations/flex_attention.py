@@ -7,6 +7,8 @@ from ..utils import is_torch_flex_attn_available
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import flex_attention
+    flex_attention = torch.compile(flex_attention, dynamic=False)
+
 
 
 def flex_attention_forward(
