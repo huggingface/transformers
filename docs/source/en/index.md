@@ -125,6 +125,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                [Depth Anything](model_doc/depth_anything)                |       ✅        |         ❌         |      ❌      |
 |                     [DepthPro](model_doc/depth_pro)                      |       ✅        |         ❌         |      ❌      |
 |                          [DETA](model_doc/deta)                          |       ✅        |         ❌         |      ❌      |
+|                          [DeepSeek-V2](model_doc/deepseek_v2.md)         |       ✅        |         ❌         |      ❌      |
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
 |                     [DiffLlama](model_doc/diffllama)                     |       ✅        |         ❌         |      ❌      |
