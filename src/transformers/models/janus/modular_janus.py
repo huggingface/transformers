@@ -1569,7 +1569,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Update model_kwargs like cache_position for next generation.
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
-            hidden_state = outputs.last_hidden_state[:, -1, :].clone().float()
+            hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
             scores = self.model.gen_head(hidden_state)
@@ -1589,7 +1589,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             if output_scores:
                 scores += (scores,)
             if output_logits:
-                raw_logits += (hidden_state,)
+                raw_logits += (hidden_state.float(),)
             if output_attentions:
                 decoder_attentions += outputs.attentions
             if output_hidden_states:

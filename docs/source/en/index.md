@@ -192,6 +192,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [InstructBLIP](model_doc/instructblip)                  |       ✅        |         ❌         |      ❌      |
 |             [InstructBlipVideo](model_doc/instructblipvideo)             |       ✅        |         ❌         |      ❌      |
 |                         [Jamba](model_doc/jamba)                         |       ✅        |         ❌         |      ❌      |
+|                         [Janus](model_doc/janus)                         |       ✅        |         ❌         |      ❌      |
 |                        [JetMoe](model_doc/jetmoe)                        |       ✅        |         ❌         |      ❌      |
 |                       [Jukebox](model_doc/jukebox)                       |       ✅        |         ❌         |      ❌      |
 |                      [KOSMOS-2](model_doc/kosmos-2)                      |       ✅        |         ❌         |      ❌      |
