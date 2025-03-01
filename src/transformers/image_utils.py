@@ -74,17 +74,6 @@ if is_vision_available():
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
 
-if is_decord_available():
-    from decord import VideoReader, cpu
-
-if is_av_available():
-    import av
-
-if is_cv2_available():
-    import cv2
-
-if is_yt_dlp_available():
-    from yt_dlp import YoutubeDL
 
 if TYPE_CHECKING:
     if is_torch_available():
@@ -608,6 +597,10 @@ def read_video_opencv(
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    # Lazy import cv2
+    requires_backends(read_video_opencv, ["cv2"])
+    import cv2
+
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = video.get(cv2.CAP_PROP_FPS)
@@ -661,6 +654,10 @@ def read_video_decord(
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    # Lazy import from decord
+    requires_backends(read_video_decord, ["decord"])
+    from decord import VideoReader, cpu
+
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
@@ -700,6 +697,10 @@ def read_video_pyav(
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    # Lazy import av
+    requires_backends(read_video_pyav, ["av"])
+    import av
+
     container = av.open(video_path)
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
@@ -834,6 +835,10 @@ def load_video(
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
+        # Lazy import from yt_dlp
+        requires_backends(load_video, ["yt_dlp"])
+        from yt_dlp import YoutubeDL
+
         buffer = BytesIO()
         with redirect_stdout(buffer), YoutubeDL() as f:
             f.download([video])
