@@ -35,15 +35,6 @@ from ...image_utils import (
     get_image_size,
 )
 
-# Add constants for image token handling
-START_OF_IMG = "<|START_OF_IMG|>"
-END_OF_IMG = "<|END_OF_IMG|>"
-IMG_PATCH = "<|IMG_PATCH|>"
-IMG_LINE_BREAK = "<|IMG_LINE_BREAK|>"
-
-TILE = "TILE"
-TILE_GLOBAL = "TILE_GLOBAL"
-
 
 class AyaVisionImagesKwargs(ImagesKwargs, total=False):
     crop_to_patches: Optional[bool]
@@ -104,6 +95,15 @@ class AyaVisionProcessor(ProcessorMixin):
         chat_template=None, 
         **kwargs
     ):
+        # Add constants for image token handling with defaults from kwargs
+        self.START_OF_IMG = kwargs.get("start_of_img", "<|START_OF_IMG|>")
+        self.END_OF_IMG = kwargs.get("end_of_img", "<|END_OF_IMG|>")
+        self.IMG_PATCH = kwargs.get("img_patch", "<|IMG_PATCH|>")
+        self.IMG_LINE_BREAK = kwargs.get("img_line_break", "<|IMG_LINE_BREAK|>")
+
+        self.TILE = kwargs.get("tile", "TILE")
+        self.TILE_GLOBAL = kwargs.get("tile_global", "TILE_GLOBAL")
+        
         self.patch_size = patch_size * downsample_factor
         self.img_size = kwargs.get("size", 364)
         self.max_splits_per_img = kwargs.get("max_splits_per_img", 12)
@@ -137,10 +137,11 @@ class AyaVisionProcessor(ProcessorMixin):
         w_tiles = width // self.img_size
         h_tiles = height // self.img_size
 
-        assert w_patch % 1 == 0 and h_patch % 1 == 0, "height and width doesn't match the patch size"
-        return self.create_image_str(w_tiles, h_tiles)
+        if w_patch % 1 != 0 or h_patch % 1 != 0:
+            raise ValueError("Image height and width must be divisible by the patch size")
+        return self._prompt_split_image(w_tiles, h_tiles)
 
-    def create_image_str(self, w_tiles, h_tiles):
+    def _prompt_split_image(self, w_tiles, h_tiles):
         """
         Create a structured string representation of image tokens
         
@@ -154,15 +155,15 @@ class AyaVisionProcessor(ProcessorMixin):
         idx = 1
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
 
-        img_string = f"{START_OF_IMG}"
+        img_string = f"{self.START_OF_IMG}"
         if h_tiles * w_tiles > 1:
             for h_tile in range(h_tiles):
                 for w_tile in range(w_tiles):
-                    img_string += f"{TILE}_{idx}" + f"{IMG_PATCH}" * img_patches_per_tile
+                    img_string += f"{self.TILE}_{idx}" + f"{self.IMG_PATCH}" * img_patches_per_tile
                     idx += 1
 
-        img_string += f"{TILE_GLOBAL}" + f"{IMG_PATCH}" * img_patches_per_tile
-        img_string += f"{END_OF_IMG}"
+        img_string += f"{self.TILE_GLOBAL}" + f"{self.IMG_PATCH}" * img_patches_per_tile
+        img_string += f"{self.END_OF_IMG}"
         return img_string
 
     def __call__(

@@ -90,31 +90,22 @@ class AyaVisionMultiModalProjector(nn.Module):
         self.config = config
         self.downsample_factor = config.downsample_factor
         self.alignment_intermediate_size = getattr(config, "alignment_intermediate_size", config.text_config.hidden_size)
-        self.act_fn = getattr(config, "alignment_activation_fn", "gelu")
         self.layernorm = nn.LayerNorm(config.vision_config.hidden_size*(config.downsample_factor**2), eps=config.adapter_layer_norm_eps)
         
-        # Same intermediate size for both SwiGLU and regular activation
+        # Always using SwiGLU activation
         self.linear_1 = nn.Linear(config.vision_config.hidden_size*(config.downsample_factor**2), self.alignment_intermediate_size, bias=True)
-        
-        if self.act_fn == "swiglu":
-            self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
-            # For SwiGLU, project down to half size since we split intermediate dim
-            self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
-        else:
-            self.act = ACT2FN[config.projector_hidden_act]
-            self.linear_2 = nn.Linear(self.alignment_intermediate_size, config.text_config.hidden_size, bias=True)
+        self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
+        # For SwiGLU, project down to half size since we split intermediate dim
+        self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features):
         image_features = self.pixel_shuffle(image_features)
         image_features = self.layernorm(image_features)
         hidden_states = self.linear_1(image_features)
         
-        if self.act_fn == "swiglu":
-            # Split along last dimension and apply SwiGLU
-            x, gate = hidden_states.chunk(2, dim=-1)
-            hidden_states = self.act(gate) * x
-        else:
-            hidden_states = self.act(hidden_states)
+        # Split along last dimension and apply SwiGLU
+        x, gate = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.act(gate) * x
             
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
