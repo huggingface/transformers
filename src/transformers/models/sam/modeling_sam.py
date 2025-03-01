@@ -820,9 +820,8 @@ class SamVisionAttention(nn.Module):
 
         return rel_pos_resized[relative_coords.long()]
 
-    def add_decomposed_rel_pos(
+    def get_decomposed_rel_pos(
         self,
-        attn: torch.Tensor,
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
         rel_pos_w: torch.Tensor,
@@ -834,8 +833,6 @@ class SamVisionAttention(nn.Module):
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
 
         Args:
-            attn (`torch.Tensor`):
-                attention map.
             query (`torch.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`torch.Tensor`):
@@ -848,8 +845,8 @@ class SamVisionAttention(nn.Module):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (`torch.Tensor`):
-                attention map with added relative positional embeddings.
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -860,10 +857,10 @@ class SamVisionAttention(nn.Module):
         reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
         rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = attn.reshape(batch_size, query_height, query_width, key_height, key_width)
-        attn = attn + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-        attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
-        return attn
+
+        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+
+        return decomposed_rel_pos
 
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         batch_size, height, width, _ = hidden_states.shape
@@ -879,9 +876,11 @@ class SamVisionAttention(nn.Module):
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
+            attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
@@ -909,47 +908,19 @@ class SamVisionSdpaAttention(SamVisionAttention):
     def __init__(self, config, window_size):
         super().__init__(config, window_size)
 
-    def add_decomposed_rel_pos(
-        self,
-        query: torch.Tensor,
-        rel_pos_h: torch.Tensor,
-        rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
-    ) -> torch.Tensor:
-        """
-        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
-        This method is reimplemented to follow the implementation in:
-        https://github.com/pytorch-labs/segment-anything-fast/blob/main/segment_anything_fast/modeling/image_encoder.py   # noqa B950
-        This implementation is more memory efficient when using SDPA in the forward method.
-        Args:
-            q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-            rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
-            rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
-            q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
-            k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
-
-        Returns:
-            attn (Tensor): attention map with added relative positional embeddings.
-        """
-        query_height, query_width = q_size
-        key_height, key_width = k_size
-        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
-        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
-
-        batch_size, _, dim = query.shape
-        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
-        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
-        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        rel_h = rel_h.unsqueeze(-1)
-        rel_w = rel_w.unsqueeze(-2)
-        rel_h = rel_h.reshape(batch_size, query_height * query_width, key_height, 1)
-        rel_w = rel_w.reshape(batch_size, query_height * query_width, 1, key_width)
-
-        return rel_h, rel_w
-
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        if output_attentions:
+            logger.warning_once(
+                "`SamVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`output_attentions=True`. Falling back to the manual attention implementation, but "
+                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                output_attentions=output_attentions,
+            )
+
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -960,25 +931,21 @@ class SamVisionSdpaAttention(SamVisionAttention):
         # q, k, v with shape (B * nHead, H * W, C)
         query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
 
-        rel_h, rel_w = None, None
+        attn_bias = None
         if self.use_rel_pos:
-            rel_h, rel_w = self.add_decomposed_rel_pos(
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
                 query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = decomposed_rel_pos.reshape(
+                batch_size, self.num_attention_heads, height * width, height * width
+            )
+            attn_bias = decomposed_rel_pos
 
         query = query.view(batch_size, self.num_attention_heads, height * width, -1)
         key = key.view(batch_size, self.num_attention_heads, height * width, -1)
         value = value.view(batch_size, self.num_attention_heads, height * width, -1)
 
-        if self.use_rel_pos:
-            rel_h = rel_h.view(batch_size, self.num_attention_heads, rel_h.size(1), rel_h.size(2), rel_h.size(3))
-            rel_w = rel_w.view(batch_size, self.num_attention_heads, rel_w.size(1), rel_w.size(2), rel_w.size(3))
-            attn_bias = (rel_h + rel_w).view(
-                batch_size, self.num_attention_heads, rel_h.size(2), rel_h.size(3) * rel_w.size(4)
-            )
-            attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
-        else:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value)
+        attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
 
         attn_output = (
             attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
@@ -988,17 +955,7 @@ class SamVisionSdpaAttention(SamVisionAttention):
 
         attn_output = self.proj(attn_output)
 
-        if output_attentions:
-            # For output_attentions, calculate the attention weights
-            attn_weights = (query @ key.transpose(-2, -1)) * self.scale
-            if attn_bias is not None:
-                attn_weights = attn_weights + attn_bias
-            attn_weights = F.softmax(attn_weights, dim=-1)
-            outputs = (attn_output, attn_weights)
-        else:
-            outputs = (attn_output, None)
-
-        return outputs
+        return attn_output, None
 
 
 SAM_VISION_ATTENTION_CLASSES = {
