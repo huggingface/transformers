@@ -2198,9 +2198,9 @@ class SwanLabCallback(TrainerCallback):
             release
 
         - **SWANLAB_WEB_HOST** (`str`, *optional*, defaults to `None`):
-                Web address for the SwanLab cloud environment for private version (its free)
+            Web address for the SwanLab cloud environment for private version (its free)
 
-        - **SWANLAB_WEB_HOST** (`str`, *optional*, defaults to `None`):
+        - **SWANLAB_API_HOST** (`str`, *optional*, defaults to `None`):
             API address for the SwanLab cloud environment for private version (its free)
 
         """
