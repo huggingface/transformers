@@ -14,13 +14,11 @@
 # limitations under the License.
 
 
-from functools import partial
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
-import numpy as np
 import torch
+
 from transformers.processing_utils import (
-    AllKwargsForChatTemplate,
     ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
@@ -32,7 +30,6 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
     make_flat_list_of_images,
-    get_image_size,
 )
 
 
@@ -51,6 +48,8 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "crop_to_patches": True,
+            "min_patches": 1,
+            "max_patches": 12,
         },
     }
 
@@ -75,95 +74,73 @@ class AyaVisionProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = [
-        "chat_template", 
-        "image_token", 
-        "patch_size", 
+        "chat_template",
+        "image_token",
+        "patch_size",
+        "img_size",
         "downsample_factor",
         "vision_feature_select_strategy",
-        "max_splits_per_img", 
-        "size"
+        "start_of_img_token",
+        "end_of_img_token",
+        "img_patch_token",
+        "img_line_break_token",
+        "tile_token",
+        "tile_global_token",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
-        self, 
-        image_processor=None, 
-        tokenizer=None, 
-        patch_size: int = 14,
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size: int = 28,
+        img_size: int = 364,
+        vision_feature_select_strategy="full",
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         downsample_factor: int = 1,
-        chat_template=None, 
-        **kwargs
+        start_of_img_token="<|START_OF_IMG|>",
+        end_of_img_token="<|END_OF_IMG|>",
+        img_patch_token="<|IMG_PATCH|>",
+        img_line_break_token="<|IMG_LINE_BREAK|>",
+        tile_token="TILE",
+        tile_global_token="TILE_GLOBAL",
+        chat_template=None,
+        **kwargs,
     ):
-        # Add constants for image token handling with defaults from kwargs
-        self.START_OF_IMG = kwargs.get("start_of_img", "<|START_OF_IMG|>")
-        self.END_OF_IMG = kwargs.get("end_of_img", "<|END_OF_IMG|>")
-        self.IMG_PATCH = kwargs.get("img_patch", "<|IMG_PATCH|>")
-        self.IMG_LINE_BREAK = kwargs.get("img_line_break", "<|IMG_LINE_BREAK|>")
-
-        self.TILE = kwargs.get("tile", "TILE")
-        self.TILE_GLOBAL = kwargs.get("tile_global", "TILE_GLOBAL")
-        
-        self.patch_size = patch_size * downsample_factor
-        self.img_size = kwargs.get("size", 364)
-        self.max_splits_per_img = kwargs.get("max_splits_per_img", 12)
-        self.vision_feature_select_strategy = kwargs.get("vision_feature_select_strategy", "full")
-        self.image_token = kwargs.get("image_token", "<image>")
-
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        
-        # Configure the image processor with our parameters
-        if self.image_processor is not None:
-            self.image_processor.img_size = self.img_size
-            self.image_processor.max_splits_per_image = self.max_splits_per_img
-            self.image_processor.image_mean = [0.5, 0.5, 0.5]
-            self.image_processor.image_std = [0.5, 0.5, 0.5]
 
-    def img_tokens_from_size(self, width: int, height: int) -> str:
-        """
-        Convert image dimensions to appropriate token representation
-        
-        Args:
-            width: Image width
-            height: Image height
-            
-        Returns:
-            String representation of image tokens
-        """
-        w_patch = width / self.patch_size
-        h_patch = height / self.patch_size
+        self.image_token = image_token
+        self.patch_size = patch_size * downsample_factor
+        self.img_size = img_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
 
-        # Number of crops/tiles after resizing to optimal aspect ratio
-        w_tiles = width // self.img_size
-        h_tiles = height // self.img_size
+        self.start_of_img_token = start_of_img_token
+        self.end_of_img_token = end_of_img_token
+        self.img_patch_token = img_patch_token
+        self.img_line_break_token = img_line_break_token
+        self.tile_token = tile_token
+        self.tile_global_token = tile_global_token
 
-        if w_patch % 1 != 0 or h_patch % 1 != 0:
-            raise ValueError("Image height and width must be divisible by the patch size")
-        return self._prompt_split_image(w_tiles, h_tiles)
-
-    def _prompt_split_image(self, w_tiles, h_tiles):
+    def _prompt_split_image(self, num_patches):
         """
         Create a structured string representation of image tokens
-        
+
         Args:
-            w_tiles: Number of tiles horizontally
-            h_tiles: Number of tiles vertically
-            
+           num_patches: Number of patches in the image
+
         Returns:
             String with appropriate image tokens
         """
-        idx = 1
+
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
+        img_string = f"{self.start_of_img_token}"
+        if num_patches > 1:
+            for idx in range(1, num_patches):
+                img_string += f"{self.tile_token}_{idx}" + f"{self.img_patch_token}" * img_patches_per_tile
 
-        img_string = f"{self.START_OF_IMG}"
-        if h_tiles * w_tiles > 1:
-            for h_tile in range(h_tiles):
-                for w_tile in range(w_tiles):
-                    img_string += f"{self.TILE}_{idx}" + f"{self.IMG_PATCH}" * img_patches_per_tile
-                    idx += 1
-
-        img_string += f"{self.TILE_GLOBAL}" + f"{self.IMG_PATCH}" * img_patches_per_tile
-        img_string += f"{self.END_OF_IMG}"
+        img_string += f"{self.tile_global_token}" + f"{self.img_patch_token}" * img_patches_per_tile
+        img_string += f"{self.end_of_img_token}"
         return img_string
 
     def __call__(
@@ -171,14 +148,14 @@ class AyaVisionProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         audio=None,
+        videos=None,
         **kwargs: Unpack[AyaVisionProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
-        is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
-        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
-        AyaVisionImageProcessor's [`~AyaVisionImageProcessor.__call__`] if `images` is not `None`.
+        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
+        To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
+        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -221,16 +198,9 @@ class AyaVisionProcessor(ProcessorMixin):
         if images is not None:
             images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            _image_num_patches = image_inputs.pop("num_patches")
+            num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
-            
-            # Get resized dimensions for each image
-            size = output_kwargs["images_kwargs"].get("size", None)
-            resized_dimensions = [
-                self.image_processor.get_resized_dimensions(img, size) 
-                for img in images
-            ]
-            
+
             image_index = 0
             img_start_idx = 0
             all_image_patches = []
@@ -241,15 +211,12 @@ class AyaVisionProcessor(ProcessorMixin):
                 curr_num_image_patches = 0
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
-                    height, width = resized_dimensions[image_index]
-                    image_tokens = self.img_tokens_from_size(width, height)
+                    image_tokens = self._prompt_split_image(num_patches[image_index])
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
-                    curr_num_image_patches += _image_num_patches[image_index]
+                    curr_num_image_patches += num_patches[image_index]
                     image_index += 1
 
-                all_image_patches.append(
-                    image_pixel_values[img_start_idx:img_start_idx + curr_num_image_patches]
-                )
+                all_image_patches.append(image_pixel_values[img_start_idx : img_start_idx + curr_num_image_patches])
                 processed_text.append(new_prompt)
                 image_num_patches.append(curr_num_image_patches.item())
                 img_start_idx += curr_num_image_patches
@@ -258,7 +225,15 @@ class AyaVisionProcessor(ProcessorMixin):
             # The reason we do this is because there can be multiple images per prompt -- makes them easier to handle.
             max_num_patches = max(image_num_patches)
             for i in range(len(all_image_patches)):
-                all_image_patches[i] = torch.concatenate([all_image_patches[i], torch.zeros((max_num_patches - all_image_patches[i].shape[0], *all_image_patches[i].shape[1:]), dtype=all_image_patches[i].dtype)])
+                all_image_patches[i] = torch.concatenate(
+                    [
+                        all_image_patches[i],
+                        torch.zeros(
+                            (max_num_patches - all_image_patches[i].shape[0], *all_image_patches[i].shape[1:]),
+                            dtype=all_image_patches[i].dtype,
+                        ),
+                    ]
+                )
 
             image_pixel_values = torch.stack(all_image_patches, dim=0)
 
@@ -291,8 +266,6 @@ class AyaVisionProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names) + list(image_processor_input_names)
-
-
 
 
 __all__ = ["AyaVisionProcessor"]

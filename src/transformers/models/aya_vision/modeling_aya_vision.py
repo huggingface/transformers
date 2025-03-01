@@ -14,18 +14,15 @@
 # limitations under the License.
 """PyTorch AyaVision model."""
 
-import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -89,37 +86,57 @@ class AyaVisionMultiModalProjector(nn.Module):
         super().__init__()
         self.config = config
         self.downsample_factor = config.downsample_factor
-        self.alignment_intermediate_size = getattr(config, "alignment_intermediate_size", config.text_config.hidden_size)
-        self.layernorm = nn.LayerNorm(config.vision_config.hidden_size*(config.downsample_factor**2), eps=config.adapter_layer_norm_eps)
-        
-        # Always using SwiGLU activation
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size*(config.downsample_factor**2), self.alignment_intermediate_size, bias=True)
-        self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
-        # For SwiGLU, project down to half size since we split intermediate dim
-        self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
+        self.alignment_intermediate_size = getattr(
+            config, "alignment_intermediate_size", config.text_config.hidden_size
+        )
+        self.act_fn = getattr(config, "alignment_activation_fn", "gelu")
+        self.layernorm = nn.LayerNorm(
+            config.vision_config.hidden_size * (config.downsample_factor**2), eps=config.adapter_layer_norm_eps
+        )
+
+        # Same intermediate size for both SwiGLU and regular activation
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size * (config.downsample_factor**2),
+            self.alignment_intermediate_size,
+            bias=True,
+        )
+
+        if self.act_fn == "swiglu":
+            self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
+            # For SwiGLU, project down to half size since we split intermediate dim
+            self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
+        else:
+            self.act = ACT2FN[config.projector_hidden_act]
+            self.linear_2 = nn.Linear(self.alignment_intermediate_size, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features):
         image_features = self.pixel_shuffle(image_features)
         image_features = self.layernorm(image_features)
         hidden_states = self.linear_1(image_features)
-        
-        # Split along last dimension and apply SwiGLU
-        x, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.act(gate) * x
-            
+
+        if self.act_fn == "swiglu":
+            # Split along last dimension and apply SwiGLU
+            x, gate = hidden_states.chunk(2, dim=-1)
+            hidden_states = self.act(gate) * x
+        else:
+            hidden_states = self.act(hidden_states)
+
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
-    def pixel_shuffle(self, image_features): # B, S, D
+    def pixel_shuffle(self, image_features):  # B, S, D
         b, s, d = image_features.shape
-        h = w = int(s ** 0.5)
+        h = w = int(s**0.5)
         image_features = image_features.reshape(image_features.shape[0], w, h, -1)
         c = image_features.shape[-1]
         image_features = image_features.reshape(b, w, int(h / self.downsample_factor), int(c * self.downsample_factor))
         image_features = image_features.permute(0, 2, 1, 3)
-        image_features = image_features.reshape(b, int(h / self.downsample_factor), int(w / self.downsample_factor), -1)
+        image_features = image_features.reshape(
+            b, int(h / self.downsample_factor), int(w / self.downsample_factor), -1
+        )
         image_features = image_features.permute(0, 2, 1, 3)
         return image_features
+
 
 AYA_VISION_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -187,8 +204,8 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`AyaVisionImageProcessor.__call__`] for details. [`CohereProcessor`] uses
-            [`AyaVisionImageProcessor`] for processing images.
+            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`CohereProcessor`] uses
+            [`GotOcr2ImageProcessor`] for processing images.
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
             The sizes of the images in the batch, being (height, width) for each image.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -362,7 +379,15 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         padded_image_features = []
         max_patch_len = max([img.shape[0] for img in image_features])
         for img in image_features:
-            padded_image_features.append(torch.cat([img, torch.zeros(max_patch_len - img.shape[0], *img.shape[1:], device=img.device, dtype=img.dtype)], dim=0))
+            padded_image_features.append(
+                torch.cat(
+                    [
+                        img,
+                        torch.zeros(max_patch_len - img.shape[0], *img.shape[1:], device=img.device, dtype=img.dtype),
+                    ],
+                    dim=0,
+                )
+            )
         padded_image_features = torch.stack(padded_image_features, dim=0)
         return padded_image_features
 
@@ -400,7 +425,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
                 Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-            
+
             Returns:
         """
 
@@ -523,18 +548,21 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
 
     def _merge_image_text_embeddings(self, input_ids, image_features, inputs_embeds):
         is_img_patch = input_ids == self.image_token
-        image_encoding_to_sequence_map = (is_img_patch.cumsum(axis=1) * is_img_patch).to(torch.int64) # [bsz, seqlen]
+        image_encoding_to_sequence_map = (is_img_patch.cumsum(axis=1) * is_img_patch).to(torch.int64)  # [bsz, seqlen]
         if len(image_features.shape) == 4:
-            image_features = image_features.unsqueeze(0) # add batch dimension
+            image_features = image_features.unsqueeze(0)  # add batch dimension
         B, I, H, W, D = image_features.shape
         image_features = image_features.reshape(B, I * W * H, D)
         pad_tensor = torch.zeros((B, 1, D), dtype=image_features.dtype, device=image_features.device)
         image_features = torch.cat((pad_tensor, image_features), dim=1)
         # pad to the sequence length of inputs_embeds
-        image_features = torch.cat([image_features, torch.zeros_like(inputs_embeds[:, :-image_features.size(1)])], dim=1)
+        image_features = torch.cat(
+            [image_features, torch.zeros_like(inputs_embeds[:, : -image_features.size(1)])], dim=1
+        )
         batch_indices = torch.arange(B).unsqueeze(1).expand(B, image_encoding_to_sequence_map.shape[1])
         image_features = image_features[batch_indices, image_encoding_to_sequence_map]
         output = inputs_embeds * (~is_img_patch).unsqueeze(-1) + image_features * is_img_patch.unsqueeze(-1)
         return output
+
 
 __all__ = ["AyaVisionModel", "AyaVisionPreTrainedModel"]
