@@ -20,6 +20,7 @@ from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, Deformab
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .loss_fast import FastForSceneTextRecognitionLoss
 
 
 def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
@@ -134,4 +135,5 @@ LOSS_MAPPING = {
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
+    "FastForSceneTextRecognition": FastForSceneTextRecognitionLoss,
 }
