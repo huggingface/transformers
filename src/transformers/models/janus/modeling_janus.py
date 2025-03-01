@@ -59,6 +59,33 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+class JanusPreTrainedModel(PreTrainedModel):
+    config_class = JanusConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_param_buffer_assignment = False
+
+    def _init_weights(self, module):
+        std = self.config.vision_config.initializer_range
+        if isinstance(module, JanusVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 class JanusVisionPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -722,9 +749,6 @@ JANUS_VISION_INPUTS_DOCSTRING = r"""
 
 
 class JanusVisionTransformer(nn.Module):
-    config_class = JanusVisionConfig
-    _supports_sdpa = False
-
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.config = config
@@ -777,6 +801,99 @@ class JanusVisionTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+JANUS_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`JanusConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    """The vision model from Janus without any head or projection on top.""",
+    JANUS_START_DOCSTRING,
+)
+class JanusVisionModel(JanusPreTrainedModel):
+    config_class = JanusVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: JanusVisionConfig):
+        super().__init__(config)
+
+        self.vision_model = JanusVisionTransformer(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @add_start_docstrings_to_model_forward(JANUS_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=JanusVisionConfig)
+    def forward(
+        self,
+        pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, JanusVisionModel
+
+        >>> model = JanusVisionModel.from_pretrained("google/janus-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/janus-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        # overrides this line
+        std = self.config.initializer_range
+        if isinstance(module, JanusVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class JanusVisionAlignerMLP(nn.Module):
@@ -1134,33 +1251,6 @@ class JanusVQVAEDecoder(nn.Module):
         return hidden_state
 
 
-class JanusPreTrainedModel(PreTrainedModel):
-    config_class = JanusConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    # _no_split_modules = None # Should we pass Llama Decoder Layer?
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-    _supports_param_buffer_assignment = False
-
-    def _init_weights(self, module):
-        std = self.config.vision_config.initializer_range
-        if isinstance(module, JanusVQVAE):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-
 JANUS_VQ_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1270,6 +1360,12 @@ class JanusVQVAE(JanusPreTrainedModel):
 
 
 class JanusVQVAEAligner(nn.Module):
+    _no_split_modules = [
+        "JanusVQVAEAttnBlock",
+        "JanusVQVAEResnetBlock",
+        "JanusVQVAEVectorQuantizer",
+    ]
+
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
 
@@ -1302,25 +1398,18 @@ class JanusVQVAEHead(nn.Module):
 
 
 class JanusModel(JanusPreTrainedModel):
-    # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = [
-        "JanusVisionTransformer",
-        "JanusVisionAlignerMLP",
-        "JanusVQVAE",
-        "JanusVQVAEAligner",
-        "JanusVQVAEHead",
-    ]
-
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
-        self.vision_model = JanusVisionTransformer(config.vision_config)
-        self.aligner = JanusVisionAlignerMLP(config.vision_config)
+        # This is necessary for backward compatibility, see SiglipModel initialization
+        tmp_vision_model = JanusVisionModel._from_config(config.vision_config)
+        self.vision_model = tmp_vision_model.vision_model
+        self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
 
-        self.vqmodel = JanusVQVAE(config.vq_config)
-        self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
-        self.gen_aligner = JanusVQVAEAligner(config.vq_config)
-        self.gen_head = JanusVQVAEHead(config.vq_config)
+        self.vqmodel = JanusVQVAE._from_config(config.vq_config)
+        self.gen_embed = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
+        self.gen_aligner = JanusVQVAEAligner(self.vqmodel.config)
+        self.gen_head = JanusVQVAEHead(self.vqmodel.config)
 
         self.language_model = AutoModel.from_config(config=config.text_config)
 
@@ -1414,14 +1503,6 @@ class JanusModel(JanusPreTrainedModel):
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
-    # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = [
-        "JanusVisionTransformer",
-        "JanusVisionAlignerMLP",
-        "JanusVQVAE",
-        "JanusVQVAEAligner",
-        "JanusVQVAEHead",
-    ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
