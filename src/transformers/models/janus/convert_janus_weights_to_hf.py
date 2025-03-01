@@ -361,6 +361,9 @@ def convert_model(
         vq_config=vq_config,
     )
 
+    # Fetch the image token index based on image placeholder token.
+    config.image_token_index = processor.tokenizer.vocab.get("<image_placeholder>")
+
     # Save the config
     if output_dir:
         config.save_pretrained(output_dir)

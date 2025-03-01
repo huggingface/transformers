@@ -1373,7 +1373,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if cache_position[0] != 0:
             pixel_values = None
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        # if `inputs_embeds` are passed, only use them in the 1st generation step for every prompt.
         if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
