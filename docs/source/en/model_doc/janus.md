@@ -38,6 +38,134 @@ This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgal
 The original code can be found [here](https://github.com/deepseek-ai/Janus).
 
 
+## Usage Example
+
+### Single image inference
+
+```python
+import torch  
+from PIL import Image  
+import requests  
+
+from transformers import JanusForConditionalGeneration, JanusProcessor  
+
+
+# Prepare Input for generation.
+image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
+messages = [
+    {
+        "role": "user",
+        "content": [{'type':'image'},{'type':"text", "text":"What do you see in this image?."}]
+    },
+]
+
+# Set generation mode to `text` to perform text generation.
+processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0")
+
+prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
+inputs = processor(text=prompt,images=image,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
+text = processor.decode(output[0], skip_special_tokens=True)
+print(text)
+```
+
+### Multi image inference
+
+Janus can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+
+```python
+import torch  
+from PIL import Image  
+import requests  
+
+from transformers import JanusForConditionalGeneration, JanusProcessor  
+
+
+image_cat = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
+image_stop = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+image_snowman = Image.open(requests.get("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True).raw)
+
+messages = [
+    [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What’s the difference between"},
+            {"type": "image"},
+            {"type": "text", "text": " and "},
+            {"type": "image"}
+        ]
+    }],
+    # Second prompt
+    [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What do you see in this image?"},
+            {"type": "image"}
+        ]
+    }]
+]
+
+
+# Set generation mode to `text` to perform text generation.
+processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0")
+
+prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
+inputs = processor(text=prompt,images=[image_cat,image_stop,image_snowman],return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
+text = processor.decode(output[0], skip_special_tokens=True)
+print(text)
+```
+
+## Text to Image generation
+
+Janus can also generate images given a prompt.
+
+```python
+import torch  
+from PIL import Image  
+import requests  
+
+from transformers import JanusForConditionalGeneration, JanusProcessor  
+
+# Set generation mode to `image` to prepare inputs for image generation..
+processor = JanusProcessor.from_pretrained(model_id, generation_mode="image")
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0")
+
+messages = [[{
+    "role": "user",
+    "content": [
+        {"type": "text", "text": "A portrait of young girl. masterpiece, film grained, best quality."},
+    ],},],
+    ] 
+
+
+prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+inputs = processor(text=prompt,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+# Set num_return_sequence parameter to generate multiple images per prompt.
+model.generation_config.num_return_sequences = 1
+outputs = model.generate(**inputs,
+                         generation_mode="image",
+                         do_sample=True,
+                         use_cache=True,
+                         )
+# Perform post-processing on the generated token ids.
+decoded_image = model.decode_image_tokens(outputs)
+pixel_values = processor.postprocess(list(decoded_image.float()),return_tensors="np")
+# Save the image
+pixel_values[0].save("snowman.png")
+```
+
 ## JanusConfig
 
 [[autodoc]] JanusConfig
