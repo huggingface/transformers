@@ -850,7 +850,7 @@ class JanusVisionTransformer(nn.Module):
         super().__init__()
         self.config = config
         self.embeddings = JanusVisionEmbeddings(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-6)
         self.encoder = JanusVisionEncoder(config)
         self.use_head = True if not hasattr(config, "use_vision_head") else config.use_vision_head
         if self.use_head:
