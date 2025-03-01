@@ -172,28 +172,28 @@ pixel_values[0].save("snowman.png")
 
 ## JanusVisionConfig
 
-[[autodoc]] AnoleVQVAEConfig
+[[autodoc]] JanusVisionConfig
 
 ## JanusVQVAEConfig
 
-[[autodoc]] AnoleVQVAEConfig
+[[autodoc]] JanusVQVAEConfig
 
 ## JanusProcessor
 
-[[autodoc]] AnoleProcessor
+[[autodoc]] JanusProcessor
 
 ## JanusImageProcessor
 
-[[autodoc]] AnoleImageProcessor
+[[autodoc]] JanusImageProcessor
 
 ## JanusVQVAE
 
-[[autodoc]] AnoleVQVAE
+[[autodoc]] JanusVQVAE
     - forward
 
 ## JanusModel
 
-[[autodoc]] JanusForConditionalGeneration
+[[autodoc]] JanusModel
     - forward
 
 ## JanusForConditionalGeneration
