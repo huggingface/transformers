@@ -1974,9 +1974,11 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     """
     Data collator used for padding free approach. Does the following:
 
-    - concatates the entire mini batch into single long sequence of shape [1, total_tokens]
+    - concatenates the entire mini batch into single long sequence of shape [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
-    - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+    - no padding will be added, returns `input_ids`, `labels` and `position_ids` by default
+    - optionally returns the kwargs contained in FlashAttentionKwargs
+    - optionally returns seq_idx indicating which sequence each token belongs to
 
     <Tip warning={true}>
 
