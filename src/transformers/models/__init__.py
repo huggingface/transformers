@@ -83,6 +83,7 @@ from . import (
     dinov2_with_registers,
     distilbert,
     dit,
+    doge,
     donut,
     dpr,
     dpt,

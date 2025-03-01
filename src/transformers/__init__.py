@@ -413,6 +413,7 @@ _import_structure = {
         "DistilBertTokenizer",
     ],
     "models.dit": [],
+    "models.doge": ["DogeConfig"],
     "models.donut": [
         "DonutProcessor",
         "DonutSwinConfig",
@@ -2256,6 +2257,14 @@ else:
             "DistilBertForTokenClassification",
             "DistilBertModel",
             "DistilBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.doge"].extend(
+        [
+            "DogeForCausalLM",
+            "DogeForSequenceClassification",
+            "DogeModel",
+            "DogePreTrainedModel",
         ]
     )
     _import_structure["models.donut"].extend(
@@ -5560,6 +5569,7 @@ if TYPE_CHECKING:
         DistilBertConfig,
         DistilBertTokenizer,
     )
+    from .models.doge import DogeConfig
     from .models.donut import (
         DonutProcessor,
         DonutSwinConfig,
@@ -7291,6 +7301,12 @@ if TYPE_CHECKING:
             DistilBertForTokenClassification,
             DistilBertModel,
             DistilBertPreTrainedModel,
+        )
+        from .models.doge import (
+            DogeForCausalLM,
+            DogeForSequenceClassification,
+            DogeModel,
+            DogePreTrainedModel,
         )
         from .models.donut import (
             DonutSwinModel,
