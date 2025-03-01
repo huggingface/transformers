@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -217,8 +218,8 @@ class TimesFmAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        kv_write_indices: Optional[torch.Tensor] = None,
-        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         hidden_states_shape = hidden_states.shape
@@ -236,16 +237,14 @@ class TimesFmAttention(nn.Module):
 
         # Write new kv cache.
         # [batch_size, input_len, n_local_kv_heads, head_dim]
-        if kv_cache is not None and kv_write_indices is not None:
-            k_cache, v_cache = kv_cache
-            k_cache.index_copy_(1, kv_write_indices, xk)
-            v_cache.index_copy_(1, kv_write_indices, xv)
-
-            key = k_cache
-            value = v_cache
+        if past_key_value is not None and cache_position is not None:
+            past_key_value.update(xk, xv, cache_position)
+            key = past_key_value.get_seq_length()
+            value = past_key_value.value_states
         else:
             key = xk
             value = xv
+
         if self.num_kv_heads != self.num_heads:
             # [batch_size, max_seq_len, n_local_heads, head_dim]
             key = torch.repeat_interleave(key, self.num_queries_per_kv, dim=2)
@@ -267,7 +266,6 @@ class TimesFmAttention(nn.Module):
 
         # [batch_size, n_local_heads, input_len, head_dim]
         output = torch.matmul(scores, v)
-        # return scores, output.transpose(1, 2).contiguous()
 
         # [batch_size, input_len, hidden_dim]
         output = output.transpose(1, 2).contiguous().view(batch_size, input_len, -1)
@@ -286,16 +284,16 @@ class TimesFmSdpaAttention(TimesFmAttention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        kv_write_indices: Optional[torch.Tensor] = None,
-        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         if output_attentions:
             return super().forward(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                kv_write_indices=kv_write_indices,
-                kv_cache=kv_cache,
+                past_key_value=past_key_value,
+                cache_position=cache_position,
                 output_attentions=output_attentions,
             )
 
@@ -315,12 +313,10 @@ class TimesFmSdpaAttention(TimesFmAttention):
         xq = self._scale_query(xq)
 
         # Handle KV cache
-        if kv_cache is not None and kv_write_indices is not None:
-            k_cache, v_cache = kv_cache
-            k_cache.index_copy_(1, kv_write_indices, xk)
-            v_cache.index_copy_(1, kv_write_indices, xv)
-            key = k_cache
-            value = v_cache
+        if past_key_value is not None and cache_position is not None:
+            past_key_value.update(xk, xv, cache_position)
+            key = past_key_value.key_states
+            value = past_key_value.value_states
         else:
             key = xk
             value = xv
@@ -384,18 +380,18 @@ class TimesFmDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
-        kv_write_indices: Optional[torch.Tensor] = None,
-        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
-    ) -> torch.Tensor:
+    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
         # Self Attention
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, scores = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            kv_write_indices=kv_write_indices,
-            kv_cache=kv_cache,
+            past_key_value=past_key_value,
+            cache_position=cache_position,
             output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
@@ -417,8 +413,8 @@ class TimesFmStackedDecoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         paddings: torch.Tensor,
-        kv_write_indices: Optional[torch.Tensor] = None,
-        kv_caches: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+        past_key_values: Optional[List[Cache]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> BaseModelOutput:
@@ -436,13 +432,13 @@ class TimesFmStackedDecoder(nn.Module):
 
         for i in range(len(self.layers)):
             layer = self.layers[i]
-            kv_cache = kv_caches[i] if kv_caches is not None else None
+            past_key_value = past_key_values[i] if past_key_values is not None else None
             scores, hidden_states = layer(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 paddings=paddings,
-                kv_write_indices=kv_write_indices,
-                kv_cache=kv_cache,
+                past_key_value=past_key_value,
+                cache_position=cache_position,
                 output_attentions=output_attentions,
             )
             if output_attentions:
