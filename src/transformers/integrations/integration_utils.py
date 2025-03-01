@@ -2182,10 +2182,11 @@ class SwanLabCallback(TrainerCallback):
 
         - **SWANLAB_PROJECT** (`str`, *optional*, defaults to `None`):
             Set this to a custom string to store results in a different project. If not specified, the name of the current
-            working directory is used.
+            running directory is used.
 
         - **SWANLAB_LOG_DIR** (`str`, *optional*, defaults to `swanlog`):
-            Path where SwanLab parsed log files (for local mode) are saved swanlog folder in the current working directory.
+            This environment variable specifies the storage path for log files when running in local mode.
+            By default, logs are saved in a folder named swanlog under the working directory.
 
         - **SWANLAB_MODE** (`str`, *optional*, defaults to `cloud`):
             SwanLab's parsing mode, which involves callbacks registered by the operator. Currently, there are three modes:
@@ -2221,7 +2222,7 @@ class SwanLabCallback(TrainerCallback):
                 init_args["experiment_name"] = f"{args.run_name}-{trial_name}"
             elif args.run_name is not None:
                 init_args["experiment_name"] = args.run_name
-            init_args["project"] = os.getenv("SWANLAB_PROJECTS", None)
+            init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
 
             if self._swanlab.get_run() is None:
                 self._swanlab.init(
