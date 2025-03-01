@@ -98,7 +98,7 @@ class FastConvLayer(nn.Module):
         out_channels,
         kernel_size=3,
         stride=1,
-        bias=bias,
+        bias=False,
     ):
         super().__init__()
 
@@ -427,3 +427,5 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             last_hidden_state=text_detection_output,
             hidden_states=all_hidden_states if output_hidden_states else None,
         )
+
+__all__ = ["FastForSceneTextRecognition"]

@@ -197,3 +197,5 @@ class FastConfig(PretrainedConfig):
             [`FastConfig`]: An instance of a configuration object
         """
         return cls(backbone_config=backbone_config, **kwargs)
+
+__all__ = ["FastConfig"]
