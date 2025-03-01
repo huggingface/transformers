@@ -61,6 +61,7 @@ from ...utils import (
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
+    is_torchvision_available,
     is_vision_available,
     logging,
 )
@@ -73,6 +74,9 @@ if is_torch_available():
 
 if is_vision_available():
     import PIL
+
+if is_torchvision_available():
+    from torchvision.ops.boxes import nms
 
 if is_scipy_available():
     import scipy.special
@@ -1700,88 +1704,20 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
     def post_process_object_detection(
         self,
         outputs,
-        threshold: float = 0.5,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
-        top_k: int = 100,
+        target_sizes,
+        not_to_xyxy=False,
+        test=False,
+        num_select=100,
+        nms_iou_threshold=-1,
     ):
-        """
-        Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
-
-        Args:
-            outputs ([`DetrObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
-            top_k (`int`, *optional*, defaults to 100):
-                Keep only top k bounding boxes before filtering by thresholding.
-
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        if target_sizes is not None:
-            if len(out_logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-        prob = out_logits.sigmoid()
-        prob = prob.view(out_logits.shape[0], -1)
-        k_value = min(top_k, prob.size(1))
-        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
-
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
-                boxes.device
-            )
-            boxes = boxes * scale_fct[:, None, :]
-
-        results = []
-        for s, l, b in zip(scores, labels, boxes):
-            score = s[s > threshold]
-            label = l[s > threshold]
-            box = b[s > threshold]
-            results.append({"scores": score, "labels": label, "boxes": box})
-
-        return results
-
-
-# copied from DINO repo
-class PostProcess(nn.Module):
-    """This module converts the model's output into the format expected by the coco api"""
-
-    def __init__(self, num_select=100, nms_iou_threshold=-1) -> None:
-        super().__init__()
-        self.num_select = num_select
-        self.nms_iou_threshold = nms_iou_threshold
-
-    @torch.no_grad()
-    def forward(self, outputs, target_sizes, not_to_xyxy=False, test=False):
         """Perform the computation
         Parameters:
             outputs: raw outputs of the model
             target_sizes: tensor of dimension [batch_size x 2] containing the size of each images of the batch
-                          For evaluation, this must be the original image size (before any data augmentation)
-                          For visualization, this should be the image size after data augment, but before padding
+                        For evaluation, this must be the original image size (before any data augmentation)
+                        For visualization, this should be the image size after data augment, but before padding
         """
-        num_select = self.num_select
+        num_select = num_select
         out_logits, out_bbox = outputs["pred_logits"], outputs["pred_boxes"]
 
         assert len(out_logits) == len(target_sizes)
@@ -1797,7 +1733,7 @@ class PostProcess(nn.Module):
         if not_to_xyxy:
             boxes = out_bbox
         else:
-            boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
+            boxes = center_to_corners_format(out_bbox)
 
         if test:
             assert not not_to_xyxy
@@ -1809,9 +1745,9 @@ class PostProcess(nn.Module):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        if self.nms_iou_threshold > 0:
+        if nms_iou_threshold > 0:
             item_indices = [
-                nms(b, s, iou_threshold=self.nms_iou_threshold)
+                nms(b, s, iou_threshold=nms_iou_threshold)
                 for b, s in zip(boxes, scores)
             ]
 
