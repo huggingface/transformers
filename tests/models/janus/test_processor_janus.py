@@ -78,6 +78,42 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(formatted_prompt, correct_prompt)
 
+        # Single image message with capitalization
+        messages = [
+            [
+                {
+                    "role": "User",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                        {"type": "image"},
+                    ],
+                },
+            ]
+        ]
+
+        correct_prompt = ["<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:"]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertEqual(formatted_prompt, correct_prompt)
+
+        # Single image message with uppercase
+        messages = [
+            [
+                {
+                    "role": "USER",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                        {"type": "image"},
+                    ],
+                },
+            ]
+        ]
+
+        correct_prompt = ["<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:"]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertEqual(formatted_prompt, correct_prompt)
+
         """
         Warning: normally, the other models have a test comparing chat template+tokenization as two separate steps
         versus as a single step (i.e. processor.apply_chat_template(..., tokenize=True)). However, our processor has

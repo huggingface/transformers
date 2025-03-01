@@ -468,7 +468,7 @@ class JanusIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    # @slow
+    @slow
     def test_model_text_generation(self):
         # Let's make sure we test the preprocessing to replace what is used
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
@@ -488,7 +488,7 @@ class JanusIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-#     @slow
+    @slow
     def test_model_text_generation_batched(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -517,8 +517,8 @@ class JanusIntegrationTest(unittest.TestCase):
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-#     @slow
-#     @require_bitsandbytes
+    @slow
+    @require_bitsandbytes
     @require_read_token  # BNB required if we load in 4 bit. Modify acordingly
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
@@ -540,7 +540,7 @@ class JanusIntegrationTest(unittest.TestCase):
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-    # @slow
+    @slow
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map = torch_device)
         processor = AutoProcessor.from_pretrained(
