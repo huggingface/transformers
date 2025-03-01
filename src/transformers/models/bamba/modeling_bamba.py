@@ -883,7 +883,7 @@ class BambaMixer(nn.Module):
         **kwargs,
     ):
         """
-        The `seq_idx` arg is used by the mamba2 triton kernels to handle packed sequences, similarly to how
+        The `seq_idx` arg is used by the mamba2 trion kernels to handle packed sequences, similarly to how
         other kernels use `position_ids` or `cu_seq_lens`. The three are related as in:
 
         position_ids = [0, 1, 2, 0, 1, 0, 0, ...] # position of each token within their seq
@@ -948,32 +948,6 @@ class BambaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def get_cu_seq_lens_from_position_ids(position_ids: torch.LongTensor) -> torch.LongTensor:
-    batch_size = position_ids.shape[0]
-    if batch_size != 1:
-        raise ValueError("Only batch size 1 is supported.")
-    device = position_ids.device
-    idxs = torch.arange(1, position_ids.shape[1], device=device)
-    non_increasing_pos_id = position_ids[0, 1:] <= position_ids[0, :-1]
-    next_pos_is_is_zero = position_ids[0, 1:] == 0
-    new_seq_idxs = non_increasing_pos_id | next_pos_is_is_zero
-    cu_seq_lens = torch.empty(new_seq_idxs.sum() + 2, device=device, dtype=torch.int64)
-    cu_seq_lens[0], cu_seq_lens[1:-1], cu_seq_lens[-1] = 0, idxs[new_seq_idxs], position_ids.shape[-1]
-    return cu_seq_lens
-
-
-def get_seq_idx_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    if cu_seq_lens.ndim != 1:
-        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
-    seq_idx = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
-    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
-    for idx, seq_len in enumerate(torch.diff(cu_seq_lens, dim=-1)):
-        seq_idx[start : start + seq_len] = idx
-        start += seq_len
-
-    return seq_idx[None]
-
-
 class BambaDecoderLayer(nn.Module):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
         super().__init__()
@@ -1004,7 +978,12 @@ class BambaDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        cu_seq_lens_q: Optional[torch.LongTensor] = None,
+        cu_seq_lens_k: Optional[torch.LongTensor] = None,
+        max_length_q: Optional[int] = None,
+        max_length_k: Optional[int] = None,
+        seq_idx: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1034,18 +1013,6 @@ class BambaDecoderLayer(nn.Module):
 
         # this is a hybrid decoder layer
         if self.layer_type == "mamba":
-            # Padding-free processing for efficient training. position_ids and FlashAttentionKwargs
-            # are ignored by mamba layers if not training.
-            seq_idx = None
-            if self.training:
-                if "cu_seq_lens_k" in kwargs:
-                    seq_idx = get_seq_idx_from_cu_seq_lens(kwargs["cu_seq_lens_k"])
-                elif position_ids is not None:
-                    cu_seq_lens = get_cu_seq_lens_from_position_ids(position_ids)
-                    # If cu_seq_lens only has two elements, then it is semantically equivalent to
-                    # `seq_idx=None`, which is more efficient.
-                    if len(cu_seq_lens) != 2:
-                        seq_idx = get_seq_idx_from_cu_seq_lens(cu_seq_lens)
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_value,
@@ -1065,6 +1032,10 @@ class BambaDecoderLayer(nn.Module):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                cu_seq_lens_q=cu_seq_lens_q,
+                cu_seq_lens_k=cu_seq_lens_k,
+                max_length_q=max_length_q,
+                max_length_k=max_length_k,
                 **kwargs,
             )
 
@@ -1127,20 +1098,6 @@ class BambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    if cu_seq_lens.ndim != 1:
-        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
-    pos_ids = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
-    seq_lens = cu_seq_lens.diff(dim=-1)
-    max_arange = torch.arange(seq_lens.max(), dtype=torch.int32, device=cu_seq_lens.device)
-    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
-    for s in seq_lens:
-        pos_ids[start : start + s] = max_arange[:s]
-        start += s
-
-    return pos_ids[None]
 
 
 BAMBA_INPUTS_DOCSTRING = r"""
@@ -1266,17 +1223,22 @@ class BambaModel(BambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        cu_seq_lens_q: Optional[torch.LongTensor] = None,
+        cu_seq_lens_k: Optional[torch.LongTensor] = None,
+        max_length_q: Optional[int] = None,
+        max_length_k: Optional[int] = None,
+        seq_idx: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        if (
-            self.training
-            and (position_ids is not None or "cu_seq_lens_k" in flash_attn_kwargs)
-            and (self.config._attn_implementation != "flash_attention_2" or not is_fast_path_available)
-        ):
+        padding_free_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx)
+        all_padding_free_kwargs_provided = all(x is None for x in padding_free_kwargs)
+        no_padding_free_kwargs_provided = all(x is not None for x in padding_free_kwargs)
+        if not all_padding_free_kwargs_provided or not no_padding_free_kwargs_provided:
             raise ValueError(
-                "Padding-free training using position_ids or FlashAttentionKwargs requires ",
-                "the flash_attention_2 attention implementation and mamba cuda and triton kernels.",
+                "Either all of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, "
+                "max_length_k, seq_idx) must be provided, or they must all be None."
             )
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1307,10 +1269,7 @@ class BambaModel(BambaPreTrainedModel):
         if cache_position is None:
             cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         if position_ids is None:
-            if "cu_seq_lens_q" in flash_attn_kwargs:
-                position_ids = get_position_ids_from_cu_seq_lens(flash_attn_kwargs["cu_seq_lens_q"])
-            else:
-                position_ids = cache_position.unsqueeze(0)
+            position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
@@ -1331,11 +1290,8 @@ class BambaModel(BambaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if "cu_seq_lens_q" in flash_attn_kwargs:
-                    raise NotImplementedError(
-                        "Padding-free training with FlashAttentionKwargs and gradient checkpointing"
-                        " not currently supported."
-                    )
+                # TODO: @goon - probably need branching logic for giving the right args to the right
+                # layer types here.
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
@@ -1346,6 +1302,11 @@ class BambaModel(BambaPreTrainedModel):
                     use_cache,
                     cache_position,
                     position_embeddings,
+                    cu_seq_lens_q,
+                    cu_seq_lens_k,
+                    max_length_q,
+                    max_length_k,
+                    seq_idx,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1357,7 +1318,12 @@ class BambaModel(BambaPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
+                    cu_seq_lens_q=cu_seq_lens_q,
+                    cu_seq_lens_k=cu_seq_lens_k,
+                    max_length_q=max_length_q,
+                    max_length_k=max_length_k,
+                    seq_idx=seq_idx,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1568,6 +1534,11 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        cu_seq_lens_q: Optional[torch.LongTensor] = None,
+        cu_seq_lens_k: Optional[torch.LongTensor] = None,
+        max_length_q: Optional[int] = None,
+        max_length_k: Optional[int] = None,
+        seq_idx: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
