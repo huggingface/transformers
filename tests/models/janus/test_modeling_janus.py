@@ -137,12 +137,12 @@ class JanusVisionText2TextModelTester:
         self.image_size = vision_config["image_size"]
         self.num_image_tokens = vision_config["num_image_tokens"]
         self.use_cache = use_cache
+        self.image_token_index = 0
 
         # vq model params
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
         self.vq_channel_multiplier = vq_channel_multiplier
-        self.image_token_index = 0
 
     def get_vq_config(self):
         return {

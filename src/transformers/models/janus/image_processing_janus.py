@@ -52,10 +52,6 @@ if is_torch_available():
     pass
 
 if is_vision_available():
-    from PIL import Image
-
-
-if is_vision_available():
     import PIL
 
 
@@ -67,11 +63,11 @@ def expand2square(pil_img, background_color):
     if width == height:
         return pil_img
     elif width > height:
-        result = Image.new(pil_img.mode, (width, width), background_color)
+        result = PIL.Image.new(pil_img.mode, (width, width), background_color)
         result.paste(pil_img, (0, (width - height) // 2))
         return result
     else:
-        result = Image.new(pil_img.mode, (height, height), background_color)
+        result = PIL.Image.new(pil_img.mode, (height, height), background_color)
         result.paste(pil_img, ((height - width) // 2, 0))
         return result
 
@@ -389,7 +385,7 @@ class JanusImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)  # Ensures input is a list
 
-        if isinstance(images[0], Image.Image):
+        if isinstance(images[0], PIL.Image.Image):
             return images if len(images) > 1 else images[0]
 
         if input_data_format is None:
@@ -411,7 +407,7 @@ class JanusImageProcessor(BaseImageProcessor):
 
             if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
                 image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                image = Image.fromarray(image)
+                image = PIL.Image.fromarray(image)
 
             pixel_values.append(image)
 

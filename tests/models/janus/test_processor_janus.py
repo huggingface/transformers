@@ -79,7 +79,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(formatted_prompt, correct_prompt)
 
         """
-        Warning: normally, the other models have a test comparing chat template+tokenization as two separate steps 
+        Warning: normally, the other models have a test comparing chat template+tokenization as two separate steps
         versus as a single step (i.e. processor.apply_chat_template(..., tokenize=True)). However, our processor has
         some extra steps other than simply applying prompt to tokenizer. These include prepending the default system
         prompts and, following the implementation from the Janus codebase, expanding the image token.
