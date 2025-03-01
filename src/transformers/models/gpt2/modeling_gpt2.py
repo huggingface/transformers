@@ -933,14 +933,14 @@ class GPT2Model(GPT2PreTrainedModel):
                 outputs = self._gradient_checkpointing_func(
                     block.__call__,
                     hidden_states,
-                    past_key_value=None,
-                    cache_position=None,
-                    attention_mask=causal_mask,
-                    head_mask=head_mask[i],
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
+                    None,
+                    None,
+                    causal_mask,
+                    head_mask[i],
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 outputs = block(
