@@ -156,7 +156,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         Args:
             seq_length: an optional Python int defining the output sequence length.
               if the `position` argument is specified.
-            position:   [B, seq_length], optional position for each token in the
+            position: [B, seq_length], optional position for each token in the
               sequence, only required when the sequence is packed.
 
         Returns:
@@ -411,7 +411,6 @@ class TimesFmStackedDecoder(nn.Module):
 
     def __init__(self, config: TimesFmConfig):
         super().__init__()
-
         self.layers = nn.ModuleList([TimesFmDecoderLayer(config) for _ in range(config.num_layers)])
 
     def forward(
@@ -423,9 +422,15 @@ class TimesFmStackedDecoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> BaseModelOutput:
-        padding_mask = timesfm_convert_paddings_to_mask(paddings, hidden_states.dtype)
-        atten_mask = timesfm_causal_mask(hidden_states)
-        mask = timesfm_merge_masks(padding_mask, atten_mask)
+        # Convert paddings to attention mask and combine with causal mask
+        attention_mask = _prepare_4d_attention_mask(
+            attention_mask=paddings,
+            sequence_length=hidden_states.shape[1],
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
+            is_causal=True,
+        )
+
         all_attentions = []
         all_hidden_states = []
 
@@ -434,7 +439,7 @@ class TimesFmStackedDecoder(nn.Module):
             kv_cache = kv_caches[i] if kv_caches is not None else None
             scores, hidden_states = layer(
                 hidden_states=hidden_states,
-                attention_mask=mask,
+                attention_mask=attention_mask,
                 paddings=paddings,
                 kv_write_indices=kv_write_indices,
                 kv_cache=kv_cache,
@@ -452,7 +457,59 @@ class TimesFmStackedDecoder(nn.Module):
         )
 
 
-# Move utility functions here
+def timesfm_get_large_negative_number(dtype: torch.dtype) -> torch.Tensor:
+    """Returns a large negative value for the given dtype."""
+    if dtype.is_floating_point:
+        dtype_max = torch.finfo(dtype).max
+    else:
+        dtype_max = torch.iinfo(dtype).max
+    return torch.tensor(-0.7 * dtype_max, dtype=dtype)
+
+
+def _prepare_4d_attention_mask(
+    attention_mask: Optional[torch.Tensor],
+    sequence_length: int,
+    dtype: torch.dtype,
+    device: torch.device,
+    is_causal: bool = True,
+) -> Optional[torch.Tensor]:
+    """
+    Creates 4D attention mask and combines causal and padding masks if needed.
+
+    Args:
+        attention_mask: Optional tensor of shape (batch_size, seq_length) containing padding mask
+        sequence_length: Length of the sequence
+        dtype: Data type of the mask
+        device: Device of the mask
+        is_causal: Whether to apply causal masking
+
+    Returns:
+        4D attention mask of shape (batch_size, 1, seq_length, seq_length)
+    """
+    # Handle padding mask
+    if attention_mask is not None:
+        # Convert 2D padding mask to 4D attention mask
+        attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+        attention_mask = attention_mask * timesfm_get_large_negative_number(dtype)
+
+    # Create causal mask if needed
+    if is_causal:
+        causal_mask = torch.triu(
+            torch.ones((sequence_length, sequence_length), dtype=dtype, device=device)
+            * timesfm_get_large_negative_number(dtype),
+            diagonal=1,
+        )
+        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
+
+        # Combine with padding mask if it exists
+        if attention_mask is not None:
+            attention_mask = torch.minimum(attention_mask, causal_mask)
+        else:
+            attention_mask = causal_mask
+
+    return attention_mask
+
+
 def timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Calculates mean and standard deviation of `inputs` across axis 1.
 
@@ -549,79 +606,6 @@ def timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Te
     # Apply convolution to calculate the moving average
     smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
     return [smoothed_arr, arr - smoothed_arr]
-
-
-def timesfm_get_large_negative_number(dtype: torch.dtype) -> torch.Tensor:
-    """Returns a large negative value for the given dtype."""
-    if dtype.is_floating_point:
-        dtype_max = torch.finfo(dtype).max
-    else:
-        dtype_max = torch.iinfo(dtype).max
-    return torch.tensor(-0.7 * dtype_max, dtype=dtype)
-
-
-def timesfm_causal_mask(input_t: torch.Tensor) -> torch.Tensor:
-    """Computes and returns causal mask.
-
-    Args:
-        input_t: A torch.Tensor of shape [B, T, D].
-
-    Returns:
-        An attention_mask torch.Tensor of shape [1, 1, T, T]. Attention mask has
-        already been converted to large negative values.
-    """
-    assert input_t.dtype.is_floating_point, input_t.dtype
-    large_negative_number = timesfm_get_large_negative_number(input_t.dtype)
-    t = input_t.shape[1]
-    col_idx = torch.arange(t).unsqueeze(0).repeat(t, 1)
-    row_idx = torch.arange(t).unsqueeze(1).repeat(1, t)
-    mask = (row_idx < col_idx).to(input_t.dtype) * large_negative_number
-    return mask.unsqueeze(0).unsqueeze(0).to(input_t.device)  # Equivalent to jnp.newaxis
-
-
-def timesfm_convert_paddings_to_mask(paddings: torch.Tensor, dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    """Converts binary paddings to a logit mask ready to add to attention matrix.
-
-    Args:
-        paddings: binary torch.Tensor of shape [B, T], with 1 denoting padding
-          token.
-        dtype: data type of the input.
-
-    Returns:
-        A torch.Tensor of shape [B, 1, 1, T] ready to add to attention logits.
-    """
-    attention_mask = paddings.detach().clone()
-    attention_mask = attention_mask[:, None, None, :]  # Equivalent to jnp.newaxis
-    attention_mask *= timesfm_get_large_negative_number(dtype)
-    return attention_mask
-
-
-def timesfm_merge_masks(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """Merges 2 masks.
-
-    logscale mask is expected but 0/1 mask is also fine.
-
-    Args:
-        a: torch.Tensor of shape [1|B, 1, 1|T, S].
-        b: torch.Tensor of shape [1|B, 1, 1|T, S].
-
-    Returns:
-        torch.Tensor of shape [1|B, 1, 1|T, S].
-    """
-
-    def expand_t(key_mask):
-        query_mask = key_mask.transpose(-1, -2)  # Equivalent of jnp.transpose
-        return torch.minimum(query_mask, key_mask)
-
-    if a.shape[2] != b.shape[2]:
-        if a.shape[2] == 1:
-            a = expand_t(a)
-        else:
-            assert b.shape[2] == 1
-            b = expand_t(b)
-
-    assert a.shape[1:] == b.shape[1:], f"a.shape={a.shape}, b.shape={b.shape}."
-    return torch.minimum(a, b)  # Element-wise minimum, similar to jnp.minimum
 
 
 TIMESFM_START_DOCSTRING = r"""
