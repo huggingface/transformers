@@ -1341,6 +1341,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1399,6 +1400,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
+            cache_position=cache_position,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
