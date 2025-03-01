@@ -1231,7 +1231,6 @@ else:
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.aria"].extend(["AriaImageProcessor"])
-    _import_structure["models.aya_vision"].extend(["AyaVisionImageProcessor"])
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
@@ -5323,6 +5322,10 @@ if TYPE_CHECKING:
     from .models.autoformer import (
         AutoformerConfig,
     )
+    from .models.aya_vision import (
+        AyaVisionConfig,
+        AyaVisionProcessor,
+    )
     from .models.bamba import BambaConfig
     from .models.bark import (
         BarkCoarseConfig,
@@ -5438,10 +5441,6 @@ if TYPE_CHECKING:
     )
     from .models.cohere import CohereConfig
     from .models.cohere2 import Cohere2Config
-    from .models.aya_vision import (
-        AyaVisionConfig,
-        AyaVisionProcessor,
-    )
     from .models.colpali import (
         ColPaliConfig,
         ColPaliProcessor,
@@ -6468,7 +6467,6 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
-        from .models.aya_vision import AyaVisionImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
         from .models.mask2former import Mask2FormerImageProcessor
@@ -6773,6 +6771,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.aya_vision import AyaVisionModel, AyaVisionPreTrainedModel
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
@@ -6989,11 +6988,6 @@ if TYPE_CHECKING:
         from .models.colpali import (
             ColPaliForRetrieval,
             ColPaliPreTrainedModel,
-        )
-        from .models.aya_vision import (
-            AyaVisionPreTrainedModel,
-            AyaVisionModel
-
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
