@@ -16,14 +16,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -49,10 +49,14 @@ class TimesFmOutput(BaseModelOutput):
             The mean of the time series inputs.
         scale (`torch.Tensor` of shape `(batch_size,)`):
             The scale of the time series inputs.
+        past_key_values (`List[Cache]`, *optional*):
+            Contains the precomputed key and value hidden states of the attention blocks used for
+            faster decoding. Can be used as a cache for future predictions.
     """
 
     loc: Optional[torch.Tensor] = None
     scale: Optional[torch.Tensor] = None
+    past_key_values: Optional[List[Cache]] = None
 
 
 @dataclass
@@ -65,11 +69,15 @@ class TimesFmOutputForPrediction(BaseModelOutput):
             The full predictions of the time series including the mean and the quantiles.
         loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_target` is provided):
             The loss of the TimesFM model.
+        past_key_values (`List[Cache]`, *optional*):
+            Contains the precomputed key and value hidden states of the attention blocks used for
+            faster decoding. Can be used as a cache for future predictions.
     """
 
     mean_predictions: Optional[torch.Tensor] = None
     full_predictions: Optional[torch.Tensor] = None
     loss: Optional[Union[torch.Tensor, float]] = None
+    past_key_values: Optional[List[Cache]] = None
 
 
 class TimesFmMLP(nn.Module):
@@ -239,7 +247,7 @@ class TimesFmAttention(nn.Module):
         # [batch_size, input_len, n_local_kv_heads, head_dim]
         if past_key_value is not None and cache_position is not None:
             past_key_value.update(xk, xv, cache_position)
-            key = past_key_value.get_seq_length()
+            key = past_key_value.key_states
             value = past_key_value.value_states
         else:
             key = xk
@@ -417,7 +425,7 @@ class TimesFmStackedDecoder(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> BaseModelOutput:
+    ) -> BaseModelOutputWithPast:
         # Convert paddings to attention mask and combine with causal mask
         attention_mask = _prepare_4d_attention_mask(
             attention_mask=paddings,
@@ -429,10 +437,11 @@ class TimesFmStackedDecoder(nn.Module):
 
         all_attentions = []
         all_hidden_states = []
+        current_past_key_values = [] if past_key_values is None else past_key_values
 
         for i in range(len(self.layers)):
             layer = self.layers[i]
-            past_key_value = past_key_values[i] if past_key_values is not None else None
+            past_key_value = current_past_key_values[i] if i < len(current_past_key_values) else None
             scores, hidden_states = layer(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -445,11 +454,14 @@ class TimesFmStackedDecoder(nn.Module):
                 all_attentions.append(scores)
             if output_hidden_states:
                 all_hidden_states.append(hidden_states)
+            if past_key_values is None:
+                current_past_key_values.append(past_key_value)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            attentions=all_attentions,
-            hidden_states=all_hidden_states,
+            past_key_values=current_past_key_values if current_past_key_values else None,
+            attentions=all_attentions if output_attentions else None,
+            hidden_states=all_hidden_states if output_hidden_states else None,
         )
 
 
@@ -630,8 +642,12 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
     config_class = TimesFmConfig
     base_model_prefix = "timesfm"
+    _no_split_modules = ["TimesFmDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
     main_input_name = "inputs"
     _supports_sdpa = True
+    _supports_cache_class = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
@@ -861,6 +877,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
                 attentions=transformer_output.attentions if output_attentions else None,
                 loc=stats[0],
                 scale=stats[1],
+                past_key_values=transformer_output.past_key_values,
             )
         else:
             return (
@@ -869,6 +886,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
                 transformer_output.attentions,
                 stats[0],
                 stats[1],
+                transformer_output.past_key_values,
             )
 
 
@@ -1122,6 +1140,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 mean_predictions=mean_outputs,
                 full_predictions=full_outputs,
                 loss=loss,
+                past_key_values=decoder_output.past_key_values,
             )
         else:
             return_tuple = [decoder_output.last_hidden_state]
@@ -1130,6 +1149,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             if output_attentions:
                 return_tuple.append(decoder_output.attentions)
             return_tuple += [mean_outputs, full_outputs, loss]
+            return_tuple += [decoder_output.past_key_values]
             return tuple(return_tuple)
 
 
