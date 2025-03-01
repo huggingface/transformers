@@ -291,40 +291,6 @@ class AyaVisionProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names) + list(image_processor_input_names)
 
-    def apply_chat_template(
-        self,
-        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
-        chat_template: Optional[str] = None,
-        **kwargs: Unpack[AllKwargsForChatTemplate],
-    ):
-        """
-        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
-        conversations to turn them into a single tokenizable string.
-
-        The input is expected to be in the following format, where each message content is a list consisting of text and
-        optionally image inputs. One can also provide an image, URL or local path which will be used to form
-        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
-
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-                    {"type": "text", "text": "Please describe this image in detail."},
-                ],
-            },
-        ]
-
-        Args:
-            conversation (`Union[List[Dict, [str, str]], List[List[Dict[str, str]]]]`):
-                The conversation to format.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
-                chat template is used.
-        """
-        return super().apply_chat_template(
-            conversation, chat_template, **kwargs
-        )
 
 
 
