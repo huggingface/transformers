@@ -288,7 +288,6 @@ class FASTHead(nn.Module):
         )
 
         self.pooling_size = config.head_pooling_size
-
         self.pooling_1s = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1, padding=(self.pooling_size - 1) // 2)
         self.pooling_2s = nn.MaxPool2d(
             kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2

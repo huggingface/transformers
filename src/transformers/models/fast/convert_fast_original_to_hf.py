@@ -42,6 +42,34 @@ rename_key_mappings = {
     "module.det_head": "text_detection_head",
 }
 
+def get_model_config(model_config, model_type, size, min_area, bbox_type, loss_bg):
+    model_config_map = {
+        "tiny": {
+            "config_url": tiny_config_url,
+            "expected_logits": torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523]),
+            "expected_boxes": [151, 151, 160, 56, 355, 74, 346, 169],
+        },
+        "small": {
+            "config_url": small_config_url,
+            "expected_logits": torch.tensor([-13.1852, -17.2011, -16.9553, -16.8269]),
+            "expected_boxes": [154, 151, 155, 61, 351, 63, 350, 153],
+        },
+        "base": {
+            "config_url": base_config_url,
+            "expected_logits": torch.tensor([-28.7481, -34.1635, -25.7430, -22.0260]),
+            "expected_boxes": [157, 149, 158, 66, 348, 68, 347, 151],
+        },
+    }
+    
+    if model_type not in model_config_map:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    logits_config = model_config_map[model_type]
+    config = prepare_config(
+        logits_config["config_url"], size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
+    )
+    
+    return config, logits_config["expected_logits"], logits_config["expected_boxes"]
 
 def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, loss_bg):
     config_dict = json.loads(requests.get(size_config_url).text)
@@ -178,31 +206,22 @@ def convert_fast_checkpoint(
         bbox_type = test_config.get("bbox_type", bbox_type)
         loss_bg = test_config.get("loss_emb", None) == "EmbLoss_v2"
 
-    if "tiny" in content[checkpoint_config_filename]["config"]:
-        config = prepare_config(
-            tiny_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
-        )
-        expected_slice_logits = torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523])
-        expected_slice_boxes = [151, 151, 160, 56, 355, 74, 346, 169]
+    # determine model type from content
+    model_type = None
+    for key in ["tiny", "small", "base"]:
+        if key in content[checkpoint_config_filename]["config"]:
+            model_type = key
+            break
 
-    elif "small" in content[checkpoint_config_filename]["config"]:
-        config = prepare_config(
-            small_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
-        )
-        expected_slice_logits = torch.tensor([-13.1852, -17.2011, -16.9553, -16.8269])
-        expected_slice_boxes = [154, 151, 155, 61, 351, 63, 350, 153]
+    if model_type is None:
+        raise ValueError("Model type not found in checkpoint config.")
 
-    elif "base" in content[checkpoint_config_filename]["config"]:
-        config = prepare_config(
-            base_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
-        )
-        expected_slice_logits = torch.tensor([-28.7481, -34.1635, -25.7430, -22.0260])
-        expected_slice_boxes = [157, 149, 158, 66, 348, 68, 347, 151]
-
-    if "train" in data_config:
-        if "short_size" in data_config["train"]:
-            size = data_config["train"]["short_size"]
-
+    # get model config
+    config, expected_slice_logits, expected_slice_boxes = get_model_config(
+        model_config, model_type, size, min_area, bbox_type, loss_bg
+    )
+    size = data_config.get("train", {}).get("short_size", size)
+    breakpoint()
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"shortest_edge": size},
@@ -214,8 +233,6 @@ def convert_fast_checkpoint(
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location=device, check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
     for key in state_dict:
-        # TODO: see if we add more
-
         if "backbone" or "textnet" in key:
             val = state_dict[key]
             new_key = key
@@ -229,7 +246,7 @@ def convert_fast_checkpoint(
                 stage_number = int(match.group(1)) - 1
                 return f"textnet.encoder.stages.{stage_number}.stage"
 
-            # Using regex to find and replace the pattern in the string
+            # using regex to find and replace the pattern in the string
             new_key = re.sub(pattern, adjust_stage, new_key)
             state_dict_changed[new_key] = val
 
