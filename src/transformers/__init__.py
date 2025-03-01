@@ -562,6 +562,13 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
+    "models.janus": [
+        "JanusConfig",
+        "JanusVQVAEConfig",
+        "JanusVisionConfig",
+        "JanusImageProcessor",
+        "JanusProcessor",
+    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -1265,6 +1272,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.janus"].append("JanusImageProcessor")
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -2767,6 +2775,14 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.janus"].extend(
+        [
+            "JanusModel",
+            "JanusVQVAE",
+            "JanusForConditionalGeneration",
+            "JanusPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
@@ -5680,6 +5696,12 @@ if TYPE_CHECKING:
         InstructBlipVideoVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.janus import (
+        JanusConfig,
+        JanusProcessor,
+        JanusVisionConfig,
+        JanusVQVAEConfig,
+    )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
         Kosmos2Config,
@@ -7630,6 +7652,7 @@ if TYPE_CHECKING:
             JambaModel,
             JambaPreTrainedModel,
         )
+        from .models.janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel, JanusVQVAE
         from .models.jetmoe import (
             JetMoeForCausalLM,
             JetMoeForSequenceClassification,

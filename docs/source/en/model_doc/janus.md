@@ -1,0 +1,202 @@
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Janus
+
+## Overview 
+
+The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DEEPSEEK AI team. Janus is a Vision language Model can generate both Images and Text output. The model can take both images and text as input. Note: The models doesn't generate both images and text in an interleaved format rather it could generate either text or image at a time.
+
+The abstract from the paper is the following:
+
+*In this paper, we introduce Janus, an autoregressive framework that unifies multimodal understanding and generation. Prior research often relies on a single visual encoder for both tasks, such as Chameleon. However, due to the differing levels of information granularity required by multimodal understanding and generation, this approach can lead to suboptimal performance, particularly in multimodal understanding. To address this issue, we decouple visual encoding into separate pathways, while still leveraging a single, unified transformer architecture for processing. The decoupling not only alleviates the conflict between the visual encoder's roles in understanding and generation, but also enhances the framework's flexibility. For instance, both the multimodal understanding and generation components can independently select their most suitable encoding methods. Experiments show that Janus surpasses previous unified model and matches or exceeds the performance of task-specific models. The simplicity, high flexibility, and effectiveness of Janus make it a strong candidate for next-generation unified multimodal models.*
+
+Subsequently they have released [Janus-Pro: Unified Multimodal Understanding and
+Generation with Data and Model Scaling](https://arxiv.org/abs/2501.17811) which is an advanced version of previous version of Janus. 
+
+The abstract from following `Janus-Pro` paper:
+
+*In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strategy, (2) expanded training data,
+and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant
+advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will
+inspire further exploration in the field. Code and models are publicly available.*
+
+This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali) and []().
+The original code can be found [here](https://github.com/deepseek-ai/Janus).
+
+
+## Usage Example
+
+### Single image inference
+
+```python
+import torch  
+from PIL import Image  
+import requests  
+
+from transformers import JanusForConditionalGeneration, JanusProcessor  
+
+
+# Prepare Input for generation.
+image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
+messages = [
+    {
+        "role": "user",
+        "content": [{'type':'image'},{'type':"text", "text":"What do you see in this image?."}]
+    },
+]
+
+# Set generation mode to `text` to perform text generation.
+processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0")
+
+prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
+inputs = processor(text=prompt,images=image,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
+text = processor.decode(output[0], skip_special_tokens=True)
+print(text)
+```
+
+### Multi image inference
+
+Janus can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+
+```python
+import torch  
+from PIL import Image  
+import requests  
+
+from transformers import JanusForConditionalGeneration, JanusProcessor  
+
+
+image_cat = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
+image_stop = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+image_snowman = Image.open(requests.get("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True).raw)
+
+messages = [
+    [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What’s the difference between"},
+            {"type": "image"},
+            {"type": "text", "text": " and "},
+            {"type": "image"}
+        ]
+    }],
+    # Second prompt
+    [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What do you see in this image?"},
+            {"type": "image"}
+        ]
+    }]
+]
+
+
+# Set generation mode to `text` to perform text generation.
+processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0")
+
+prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
+inputs = processor(text=prompt,images=[image_cat,image_stop,image_snowman],return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
+text = processor.decode(output[0], skip_special_tokens=True)
+print(text)
+```
+
+## Text to Image generation
+
+Janus can also generate images given a prompt.
+
+```python
+import torch  
+from PIL import Image  
+import requests  
+
+from transformers import JanusForConditionalGeneration, JanusProcessor  
+
+# Set generation mode to `image` to prepare inputs for image generation..
+processor = JanusProcessor.from_pretrained(model_id, generation_mode="image")
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0")
+
+messages = [[{
+    "role": "user",
+    "content": [
+        {"type": "text", "text": "A portrait of young girl. masterpiece, film grained, best quality."},
+    ],},],
+    ] 
+
+
+prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+inputs = processor(text=prompt,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+
+# Set num_return_sequence parameter to generate multiple images per prompt.
+model.generation_config.num_return_sequences = 1
+outputs = model.generate(**inputs,
+                         generation_mode="image",
+                         do_sample=True,
+                         use_cache=True,
+                         )
+# Perform post-processing on the generated token ids.
+decoded_image = model.decode_image_tokens(outputs)
+pixel_values = processor.postprocess(list(decoded_image.float()),return_tensors="np")
+# Save the image
+pixel_values[0].save("snowman.png")
+```
+
+## JanusConfig
+
+[[autodoc]] JanusConfig
+
+## JanusVisionConfig
+
+[[autodoc]] AnoleVQVAEConfig
+
+## JanusVQVAEConfig
+
+[[autodoc]] AnoleVQVAEConfig
+
+## JanusProcessor
+
+[[autodoc]] AnoleProcessor
+
+## JanusImageProcessor
+
+[[autodoc]] AnoleImageProcessor
+
+## JanusVQVAE
+
+[[autodoc]] AnoleVQVAE
+    - forward
+
+## JanusModel
+
+[[autodoc]] JanusForConditionalGeneration
+    - forward
+
+## JanusForConditionalGeneration
+
+[[autodoc]] JanusForConditionalGeneration
+    - forward
