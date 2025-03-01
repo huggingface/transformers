@@ -131,7 +131,7 @@ class TimesFmModelTester:
 @require_torch
 class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
-    all_generative_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
+    all_generative_model_classes = ()
     all_parallelizable_model_classes = ()
     fx_compatible = False
     test_pruning = False
