@@ -1582,7 +1582,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Prepare embeddings for the next step.
             next_token = torch.cat([next_token, next_token])
-            img_embeds = self.prepare_emeddings_for_image_generation(next_token)
+            img_embeds = self.prepare_embeddings_for_image_generation(next_token)
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
         if return_dict_in_generate:

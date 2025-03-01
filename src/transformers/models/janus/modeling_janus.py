@@ -1967,7 +1967,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
 
         # Placeholder for generated tokens
-        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=input_ids.dtype)
+        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=input_ids.dtype, device=input_ids.device)
 
         # 8. init attention / hidden states / scores tuples
         output_attentions = generation_config.output_attentions
@@ -2006,7 +2006,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Prepare embeddings for the next step.
             next_token = torch.cat([next_token, next_token])
-            img_embeds = self.prepare_emeddings_for_image_generation(next_token)
+            img_embeds = self.prepare_embeddings_for_image_generation(next_token)
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
         if return_dict_in_generate:

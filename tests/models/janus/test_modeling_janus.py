@@ -471,20 +471,17 @@ class JanusIntegrationTest(unittest.TestCase):
     # @slow
     def test_model_text_generation(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device,
-                                                              torch_dtype=torch.float16,
-                                                              attn_implementation="eager")
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
         )
-        prompt = "<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
-        # Taken from Janus codebase
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n: What is shown in this image?\n\n\n:The image shows the constellation of Leo. The stars in the image form the shape of a lion,' # fmt: skip
+        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
@@ -493,7 +490,7 @@ class JanusIntegrationTest(unittest.TestCase):
 
 #     @slow
     def test_model_text_generation_batched(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
@@ -503,8 +500,8 @@ class JanusIntegrationTest(unittest.TestCase):
             requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
         )
         prompts = [
-            '<|User|>: <image_placeholder>\nDescribe what do you see here and tell me about the history behind it?\n\n<|Assistant|>:',
-            '<|User|>: What constellation is this image showing?\n<image_placeholder>\n\n<|Assistant|>:',
+            "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?",
+            "What constellation is this image showing?<image_placeholder>\n",
         ]
 
         inputs = processor(images=[image_1, image_2], text=prompts, padding=True, return_tensors="pt").to(
@@ -513,8 +510,8 @@ class JanusIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
-            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n: \nDescribe what do you see here and tell me about the history behind it?\n\n:This image depicts the constellation of Leo, which is characterized by its lion-like shape. The stars',
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n: What constellation is this image showing?\n\n\n:The image shows a constellation with several stars forming a recognizable shape. The stars are connected by lines,",
+            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
         ]
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -524,7 +521,7 @@ class JanusIntegrationTest(unittest.TestCase):
 #     @require_bitsandbytes
     @require_read_token  # BNB required if we load in 4 bit. Modify acordingly
     def test_model_text_generation_with_multi_image(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
@@ -533,23 +530,22 @@ class JanusIntegrationTest(unittest.TestCase):
         image_2 = Image.open(
             requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
         )
-
-        prompt ='<|User|>: What do these two images\n<image_placeholder>\nand\n<image_placeholder>\nhave in common?\n\n<|Assistant|>:'
+        prompt = "What do these two images <image_placeholder> and <image_placeholder> have in common?"
 
         inputs = processor(images=[image_1, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n: What do these two images\n\nand\n\nhave in common?\n\n:The image shows a constellation with five stars, and the other image depicts the constellation of Orion. Both constellations share the following common features:\n\n1. They are part of the same star system']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     # @slow
     def test_model_generate_images(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map = torch_device)
         processor = AutoProcessor.from_pretrained(
             self.model_id,
-            generation_mode="image",
+            generation_mode="image"
         )
 
         inputs = processor(
