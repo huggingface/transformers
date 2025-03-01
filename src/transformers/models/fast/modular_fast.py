@@ -23,10 +23,6 @@ if is_torch_available():
 from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
 
 class FastImageProcessor(TextNetImageProcessor):
-    def __init__(self):
-        # add the main class
-        super().__init__()
-
     def _max_pooling(self, input_tensor, scale=1):
         kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
         padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2

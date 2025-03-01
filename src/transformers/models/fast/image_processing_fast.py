@@ -99,7 +99,22 @@ class FastImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        size_divisor: int = 32,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        do_center_crop: bool = False,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
+        image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
+        do_convert_rgb: bool = True,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 640}
         size = get_size_dict(size, default_to_square=False)
