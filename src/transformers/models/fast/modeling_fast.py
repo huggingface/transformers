@@ -230,7 +230,7 @@ class FastPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight.data, mode='fan_out', nonlinearity='relu')
+            module.weight.data.zero_()
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.BatchNorm2d):

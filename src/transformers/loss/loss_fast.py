@@ -16,6 +16,7 @@
 import torch
 import torch.nn as nn
 from typing import Tuple
+import torch.nn.functional as F
 
 class FastForSceneTextRecognitionLoss(nn.Module):
     """
