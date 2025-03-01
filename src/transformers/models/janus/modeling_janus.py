@@ -21,7 +21,6 @@
 
 import collections.abc
 import copy
-import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -1191,59 +1190,25 @@ class JanusVQVAEDecoder(nn.Module):
         self.conv_out = torch.nn.Conv2d(block_in, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
-
-        start_time = time.time()
         hidden_state = self.conv_in(hidden_state)
-        print(f"Conv In Time: {time.time() - start_time:.4f} sec")
 
         # middle
-        start_time = time.time()
         hidden_state = self.mid.block_1(hidden_state)
-        print(f"Mid Block 1 Time: {time.time() - start_time:.4f} sec")
-
-        start_time = time.time()
         hidden_state = self.mid.attn_1(hidden_state)
-        print(f"Mid Attn Time: {time.time() - start_time:.4f} sec")
-
-        start_time = time.time()
         hidden_state = self.mid.block_2(hidden_state)
 
-        print(f"Mid Block 2 Time: {time.time() - start_time:.4f} sec")
-        dtype = hidden_state.dtype
-        print(dtype)
-
         # upsampling
-        # with torch.amp.autocast(hidden_state.device.type,dtype=torch.float32):
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks + 1):
-                start_time = time.time()
                 hidden_state = self.up[i_level].block[i_block](hidden_state)
-
-                print(f"Up[{i_level}]-Block[{i_block}] Time: {time.time() - start_time:.4f} sec")
-
                 if len(self.up[i_level].attn) > 0:
-                    start_time = time.time()
                     hidden_state = self.up[i_level].attn[i_block](hidden_state)
-                    print(f"Up[{i_level}]-Attn[{i_block}] Time: {time.time() - start_time:.4f} sec")
-
             if i_level != self.num_resolutions - 1:
-                start_time = time.time()
                 hidden_state = self.up[i_level].upsample(hidden_state)
-            print(f"Up[{i_level}]-Upsample Time: {time.time() - start_time:.4f} sec")
 
-        start_time = time.time()
-        hidden_state = hidden_state.to(dtype)
         hidden_state = self.norm_out(hidden_state)
-        print(f"Norm Out Time: {time.time() - start_time:.4f} sec")
-
-        start_time = time.time()
         hidden_state *= torch.sigmoid(hidden_state)
-        print(f"Sigmoid Multiply Time: {time.time() - start_time:.4f} sec")
-
-        start_time = time.time()
         hidden_state = self.conv_out(hidden_state)
-        print(f"Conv Out Time: {time.time() - start_time:.4f} sec")
-
         return hidden_state
 
 
@@ -1374,10 +1339,7 @@ class JanusVQVAE(JanusPreTrainedModel):
             )
         codebook_entry = self.quantize.get_codebook_entry(image_tokens)
         hidden_states = self.post_quant_conv(codebook_entry)
-        # with torch.amp.autocast(hidden_states.device.type,dtype=torch.float32):
         pixel_values = self.decoder(hidden_states)
-        # pixel_values = pixel_values.to(hidden_states.dtype)
-        print("taking too much time decoder")
         return pixel_values
 
     def forward(

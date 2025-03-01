@@ -28,7 +28,7 @@ if is_vision_available():
     pass
 
 # This will be changed to HUB location once the final converted model is uploaded there
-TMP_LOCATION = "./hub_files"
+TMP_LOCATION = "yaswanthgali/Janus-Pro-1B-HF"
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
