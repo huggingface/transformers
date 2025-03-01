@@ -2188,7 +2188,7 @@ class SwanLabCallback(TrainerCallback):
             This environment variable specifies the storage path for log files when running in local mode.
             By default, logs are saved in a folder named swanlog under the working directory.
 
-        - **SWANLAB_MODE** (`str`, *optional*, defaults to `cloud`):
+        - **SWANLAB_MODE** (`Literal["local", "cloud", "disabled"]`, *optional*, defaults to `cloud`):
             SwanLab's parsing mode, which involves callbacks registered by the operator. Currently, there are three modes:
             local, cloud, and disabled. Note: Case-sensitive. Find more information
             [here](https://docs.swanlab.cn/en/api/py-init.html#swanlab-init)
