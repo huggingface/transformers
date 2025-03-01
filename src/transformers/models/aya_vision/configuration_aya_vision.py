@@ -134,3 +134,5 @@ class AyaVisionConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+__all__ = ["AyaVisionConfig"]

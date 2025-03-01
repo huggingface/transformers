@@ -18,7 +18,7 @@ from functools import partial
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-
+import torch
 from transformers.processing_utils import (
     AllKwargsForChatTemplate,
     ImagesKwargs,
@@ -220,7 +220,7 @@ class AyaVisionProcessor(ProcessorMixin):
         if images is not None:
             images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_num_patches = image_inputs.pop("num_patches")
+            _image_num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
             
             # Get resized dimensions for each image
@@ -231,25 +231,40 @@ class AyaVisionProcessor(ProcessorMixin):
             ]
             
             image_index = 0
+            img_start_idx = 0
+            all_image_patches = []
             processed_text = []
-            # sample_patch_idx = [0]
+            image_num_patches = []
             for prompt in text:
                 new_prompt = prompt
-                # sample_patch_idx.append(sample_patch_idx[-1] + image_num_patches[image_index])
+                curr_num_image_patches = 0
                 while "<image>" in new_prompt:
                     # Replace the image placeholder with structured image tokens
                     height, width = resized_dimensions[image_index]
                     image_tokens = self.img_tokens_from_size(width, height)
                     new_prompt = new_prompt.replace("<image>", image_tokens, 1)
+                    curr_num_image_patches += _image_num_patches[image_index]
                     image_index += 1
-                processed_text.append(new_prompt)
 
-            # sample_patch_idx = sample_patch_idx[:-1] # Remove the last one
+                all_image_patches.append(
+                    image_pixel_values[img_start_idx:img_start_idx + curr_num_image_patches]
+                )
+                processed_text.append(new_prompt)
+                image_num_patches.append(curr_num_image_patches.item())
+                img_start_idx += curr_num_image_patches
+
+            # Pad the image patches to the maximum number of patches.
+            # The reason we do this is because there can be multiple images per prompt -- makes them easier to handle.
+            max_num_patches = max(image_num_patches)
+            for i in range(len(all_image_patches)):
+                all_image_patches[i] = torch.concatenate([all_image_patches[i], torch.zeros((max_num_patches - all_image_patches[i].shape[0], *all_image_patches[i].shape[1:]), dtype=all_image_patches[i].dtype)])
+
+            image_pixel_values = torch.stack(all_image_patches, dim=0)
 
             if image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
 
-            image_inputs = {"pixel_values": image_pixel_values}
+            image_inputs = {"pixel_values": image_pixel_values, "image_num_patches": torch.tensor(image_num_patches)}
             text = processed_text
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
