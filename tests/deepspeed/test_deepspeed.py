@@ -45,12 +45,14 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
+    require_torch_fp16,
     require_torch_multi_accelerator,
+    run_first,
     slow,
     torch_device,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device
+from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
 
 if is_torch_available():
@@ -150,10 +152,12 @@ optims = [HF_OPTIM, DS_OPTIM]
 schedulers = [HF_SCHEDULER, DS_SCHEDULER]
 
 stages = [ZERO2, ZERO3]
+
+dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
-    dtypes = [FP16, BF16]
-else:
-    dtypes = [FP16]
+    dtypes.append(BF16)
+if is_torch_fp16_available_on_device(torch_device):
+    dtypes.append(FP16)
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -194,6 +198,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # reset the ds config global so that tests state doesn't leak
         unset_hf_deepspeed_config()
 
+    @require_torch_fp16
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
         ds_config = {
@@ -418,6 +423,7 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
 
 
 @require_deepspeed
+@require_torch_fp16
 @require_torch_accelerator
 class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, TrainerIntegrationCommon):
     """
@@ -1062,6 +1068,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
 
 @slow
+@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedWithLauncher(TestCasePlus):
@@ -1160,6 +1167,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_inference(self, dtype):
         if dtype == "bf16" and not is_torch_bf16_available_on_device(torch_device):
             self.skipTest(reason="test requires bfloat16 hardware support")
+
+        if dtype == "fp16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(reason="test requires fp16 hardware support")
 
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
@@ -1343,6 +1353,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
+    @require_torch_fp16
     def test_clm_from_config_zero3_fp16(self):
         # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
 
