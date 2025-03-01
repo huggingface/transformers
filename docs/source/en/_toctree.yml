@@ -395,6 +395,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_v3
+        title: DeepSeek-V3
       - local: model_doc/dialogpt
         title: DialoGPT
       - local: model_doc/diffllama
