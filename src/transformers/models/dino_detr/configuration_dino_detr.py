@@ -151,6 +151,98 @@ class DinoDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        d_model,
+        num_feature_levels,
+        num_heads,
+        n_points,
+        n_levels,
+        disable_custom_kernels,
+        use_timm_backbone,
+        num_channels,
+        dilation,
+        backbone,
+        use_pretrained_backbone,
+        backbone_self,
+        position_embedding_type,
+        encoder_attention_heads,
+        encoder_n_points,
+        dropout,
+        activation_function,
+        activation_dropout,
+        encoder_ffn_dim,
+        module_seq,
+        d_ffn,
+        activation,
+        key_aware_type,
+        decoder_sa_type,
+        num_layers,
+        enc_layer_share,
+        num_queries,
+        deformable_encoder,
+        enc_layer_dropout_prob,
+        two_stage_type,
+        return_intermediate,
+        query_dim,
+        use_detached_boxes_dec_out,
+        deformable_decoder,
+        rm_dec_query_scale,
+        modulate_hw_attn,
+        dec_layer_number,
+        dec_layer_dropout_prob,
+        decoder_layer_noise,
+        dln_xy_noise,
+        dln_hw_noise,
+        num_encoder_layers,
+        num_unicoder_layers,
+        num_decoder_layers,
+        two_stage_keep_all_tokens,
+        random_refpoints_xy,
+        use_deformable_box_attn,
+        layer_share_type,
+        normalize_before,
+        decoder_query_perturber,
+        nhead,
+        num_patterns,
+        learnable_tgt_init,
+        embed_init_tgt,
+        two_stage_pat_embed,
+        two_stage_add_query_num,
+        two_stage_learn_wh,
+        rm_self_attn_layers,
+        rm_detach,
+        init_std,
+        two_stage,
+        num_classes,
+        nheads,
+        dn_labelbook_size,
+        hidden_dim,
+        fix_refpoints_hw,
+        dn_number,
+        dn_box_noise_scale,
+        dn_label_noise_ratio,
+        in_channels,
+        aux_loss,
+        iter_update,
+        dec_pred_class_embed_share,
+        dec_pred_bbox_embed_share,
+        two_stage_bbox_embed_share,
+        two_stage_class_embed_share,
+        class_cost,
+        bbox_cost,
+        giou_cost,
+        mask_loss_coefficient,
+        dice_loss_coefficient,
+        bbox_loss_coefficient,
+        giou_loss_coefficient,
+        eos_coefficient,
+        focal_alpha,
+        with_box_refine,
+        backbone_config,
+        backbone_kwargs,
+        is_encoder_decoder,
+        **kwargs,
+    ):
+        """
         num_classes,
         num_queries_dino,
         random_refpoints_xy,
@@ -215,7 +307,7 @@ class DinoDetrConfig(PretrainedConfig):
         focal_alpha=0.25,
         disable_custom_kernels=False,
         **kwargs,
-    ):
+        """
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
         if use_timm_backbone and backbone_kwargs is None:
@@ -246,60 +338,125 @@ class DinoDetrConfig(PretrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
 
-        # dino
+        self.d_model = d_model
+        self.num_feature_levels = num_feature_levels
+        self.num_heads = num_heads
+        self.n_points = n_points
+        self.n_levels = n_levels
+        self.disable_custom_kernels = disable_custom_kernels
+
+        self.use_timm_backbone = use_timm_backbone
+        self.num_feature_levels = num_feature_levels
+        self.num_channels = num_channels
+        self.dilation = dilation
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.backbone_self = backbone_self
+
+        self.position_embedding_type = position_embedding_type
+
+        self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_n_points = encoder_n_points
+        self.dropout = dropout
+        self.activation_function = activation_function
+        self.activation_dropout = activation_dropout
+        self.encoder_ffn_dim = encoder_ffn_dim
+
+        self.module_seq = module_seq
+        self.num_heads = num_heads
+        self.n_points = n_points
+        self.dropout = dropout
+        self.d_model = d_model
+        self.d_ffn = d_ffn
+        self.activation = activation
+        self.key_aware_type = key_aware_type
+        self.decoder_sa_type = decoder_sa_type
+
+        self.num_layers = num_layers
+        self.enc_layer_share = enc_layer_share
+        self.num_queries = num_queries
+        self.deformable_encoder = deformable_encoder
+        self.num_layers = num_layers
+        self.d_model = d_model
+        self.enc_layer_dropout_prob = enc_layer_dropout_prob
+        self.two_stage_type = two_stage_type
+
+        self.num_layers = num_layers
+        self.return_intermediate = return_intermediate
+        self.query_dim = query_dim
+        self.num_feature_levels = num_feature_levels
+        self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
+        self.query_dim = query_dim
+        self.d_model = d_model
+        self.deformable_decoder = deformable_decoder
+        self.rm_dec_query_scale = rm_dec_query_scale
+        self.modulate_hw_attn = modulate_hw_attn
+        self.deformable_decoder = deformable_decoder
+        self.modulate_hw_attn = modulate_hw_attn
+        self.dec_layer_number = dec_layer_number
+        self.dec_layer_dropout_prob = dec_layer_dropout_prob
+
+        self.decoder_layer_noise = decoder_layer_noise
+        self.dln_xy_noise = dln_xy_noise
+        self.dln_hw_noise = dln_hw_noise
+        self.num_feature_levels = num_feature_levels
+        self.num_encoder_layers = num_encoder_layers
+        self.num_unicoder_layers = num_unicoder_layers
+        self.num_decoder_layers = num_decoder_layers
+        self.deformable_encoder = deformable_encoder
+        self.deformable_decoder = deformable_decoder
+        self.two_stage_keep_all_tokens = two_stage_keep_all_tokens
+        self.num_queries = num_queries
+        self.random_refpoints_xy = random_refpoints_xy
+        self.use_detached_boxes_dec_out = use_detached_boxes_dec_out
+        self.query_dim = query_dim
+        self.use_deformable_box_attn = use_deformable_box_attn
+        self.layer_share_type = layer_share_type
+        self.decoder_sa_type = decoder_sa_type
+        self.d_model = d_model
+        self.normalize_before = normalize_before
+        self.decoder_query_perturber = decoder_query_perturber
+        self.nhead = nhead
+        self.num_patterns = num_patterns
+        self.learnable_tgt_init = learnable_tgt_init
+        self.embed_init_tgt = embed_init_tgt
+        self.two_stage_type = two_stage_type
+        self.two_stage_pat_embed = two_stage_pat_embed
+        self.two_stage_add_query_num = two_stage_add_query_num
+        self.two_stage_learn_wh = two_stage_learn_wh
+        self.rm_self_attn_layers = rm_self_attn_layers
+        self.rm_detach = rm_detach
+
+        self.init_std = init_std
+        self.two_stage = two_stage
+
+        self.num_queries = num_queries
         self.num_classes = num_classes
-        self.num_queries_dino = num_queries_dino
-        self.aux_loss = aux_loss
-        self.iter_update = iter_update
+        self.num_feature_levels = num_feature_levels
+        self.nheads = nheads
+        self.dn_labelbook_size = dn_labelbook_size
+        self.hidden_dim = hidden_dim
         self.query_dim = query_dim
         self.random_refpoints_xy = random_refpoints_xy
         self.fix_refpoints_hw = fix_refpoints_hw
-        self.num_feature_levels_dino = num_feature_levels_dino
-        self.nheads = nheads
-        self.dec_pred_class_embed_share = dec_pred_class_embed_share
-        self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
-        self.two_stage_type = two_stage_type
-        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
-        self.two_stage_class_embed_share = two_stage_class_embed_share
-        self.decoder_sa_type = decoder_sa_type
         self.num_patterns = num_patterns
         self.dn_number = dn_number
         self.dn_box_noise_scale = dn_box_noise_scale
         self.dn_label_noise_ratio = dn_label_noise_ratio
-        self.dn_labelbook_size = dn_labelbook_size if dn_labelbook_size else num_classes
-        # deformable attibutes 1
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_config = backbone_config
-        self.num_channels = num_channels
-        self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.auxiliary_loss = auxiliary_loss
-        self.position_embedding_type = position_embedding_type
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
-        self.dilation = dilation
-        # deformable attributes
-        self.num_feature_levels = num_feature_levels
-        self.encoder_n_points = encoder_n_points
-        self.decoder_n_points = decoder_n_points
-        self.two_stage = two_stage
-        self.two_stage_num_proposals = two_stage_num_proposals
-        self.with_box_refine = with_box_refine
+        self.dn_labelbook_size = dn_labelbook_size
+        self.in_channels = in_channels
+        self.two_stage_type = two_stage_type
+        self.aux_loss = aux_loss
+        self.iter_update = iter_update
+        self.dec_pred_class_embed_share = dec_pred_class_embed_share
+        self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
+        self.num_classes = num_classes
+        self.hidden_dim = hidden_dim
+        self.two_stage_add_query_num = two_stage_add_query_num
+        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
+        self.two_stage_class_embed_share = two_stage_class_embed_share
+        self.decoder_sa_type = decoder_sa_type
+
         if two_stage is True and with_box_refine is False:
             raise ValueError("If two_stage is True, with_box_refine must be True.")
         # Hungarian matcher
