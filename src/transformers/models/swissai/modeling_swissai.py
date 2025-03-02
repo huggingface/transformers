@@ -255,6 +255,8 @@ class SwissAIDecoderLayer(nn.Module):
         self.mlp = SwissAIMLP(config)
         self.attention_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.feedforward_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        
+        self.post_norm = config.post_norm
 
     def forward(
         self,
@@ -270,7 +272,7 @@ class SwissAIDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
-        if not self.config.post_norm:
+        if not self.post_norm:
             hidden_states = self.attention_layernorm(hidden_states)
 
         # Self Attention
@@ -285,16 +287,16 @@ class SwissAIDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        if self.config.post_norm:
+        if self.post_norm:
             hidden_states = self.attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        if not self.config.post_norm:
+        if not self.post_norm:
             hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if self.config.post_norm:
+        if self.post_norm:
             hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
