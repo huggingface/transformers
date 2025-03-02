@@ -889,12 +889,14 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 class Phi4MultimodalAudioMLP(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.act_fn = ACT2FN[config.activation]
         self.gate_up_proj = nn.Linear(config.hidden_size, config.intermediate_size * 2)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
+        hidden_states = self.layer_norm(hidden_states)
         up_states = self.gate_up_proj(hidden_states)
         up_states, gate = up_states.chunk(2, dim=-1)
         up_states = up_states * self.act_fn(gate)
@@ -1041,10 +1043,10 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
         mask: Optional[torch.Tensor],
         relative_attention_bias: Optional[torch.Tensor] = None,
     ):
-        hidden_states = hidden_states + 0.5 * self.feed_forward_in(hidden_states)
-        hidden_states = self.layer_norm_att(hidden_states)
+        residual = hidden_states + 0.5 * self.feed_forward_in(hidden_states)
+        hidden_states = self.layer_norm_att(residual)
 
-        hidden_states = hidden_states + self.self_attn(hidden_states, mask, relative_attention_bias)
+        hidden_states = residual + self.self_attn(hidden_states, mask, relative_attention_bias)
         hidden_states = hidden_states + self.conv(hidden_states)
         hidden_states = hidden_states + 0.5 * self.feed_forward_out(hidden_states)
 
