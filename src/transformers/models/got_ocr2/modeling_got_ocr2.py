@@ -293,6 +293,123 @@ class GotOcr2VisionLayer(nn.Module):
         return outputs
 
 
+class GotOcr2MultiModalProjector(nn.Module):
+    def __init__(self, config: GotOcr2Config):
+        super().__init__()
+        vision_output_channels = config.vision_config.output_channels
+        language_hidden_size = config.text_config.hidden_size
+        self.conv_upsampler1 = nn.Conv2d(
+            vision_output_channels, vision_output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.conv_upsampler2 = nn.Conv2d(
+            vision_output_channels * 2, language_hidden_size, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.multimodal_projector = nn.Linear(language_hidden_size, language_hidden_size)
+
+    def forward(self, vision_embeddings: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.conv_upsampler1(vision_embeddings)
+        hidden_state = self.conv_upsampler2(hidden_state)
+        hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
+        hidden_state = self.multimodal_projector(hidden_state)
+        return hidden_state
+
+
+@dataclass
+class GotOcr2CausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for GotOcr2 causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
+
+
+GOT_OCR2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`GotOcr2Config`] or [`GotOcr2VisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    GOT_OCR2_START_DOCSTRING,
+)
+class GotOcr2PreTrainedModel(PreTrainedModel):
+    config_class = GotOcr2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["GotOcr2VisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        # important: this ported version of GotOcr2 isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+        # https://github.com/haotian-liu/GotOcr2/tree/main/got_ocr2 should serve for that purpose
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 @dataclass
 class GotOcr2VisionEncoderOutput(ModelOutput):
     """
@@ -406,22 +523,6 @@ class GotOcr2VisionNeck(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = self.layer_norm2(hidden_states)
         return hidden_states
-
-
-GOT_OCR2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`GotOcr2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 GOT_OCR2_VISION_INPUTS_DOCSTRING = """
@@ -549,106 +650,6 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-class GotOcr2MultiModalProjector(nn.Module):
-    def __init__(self, config: GotOcr2Config):
-        super().__init__()
-        vision_output_channels = config.vision_config.output_channels
-        language_hidden_size = config.text_config.hidden_size
-        self.conv_upsampler1 = nn.Conv2d(
-            vision_output_channels, vision_output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.conv_upsampler2 = nn.Conv2d(
-            vision_output_channels * 2, language_hidden_size, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.multimodal_projector = nn.Linear(language_hidden_size, language_hidden_size)
-
-    def forward(self, vision_embeddings: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.conv_upsampler1(vision_embeddings)
-        hidden_state = self.conv_upsampler2(hidden_state)
-        hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
-        hidden_state = self.multimodal_projector(hidden_state)
-        return hidden_state
-
-
-@dataclass
-class GotOcr2CausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for GotOcr2 causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-
-
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    GOT_OCR2_START_DOCSTRING,
-)
-class GotOcr2PreTrainedModel(PreTrainedModel):
-    config_class = GotOcr2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GotOcr2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        # important: this ported version of GotOcr2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/GotOcr2/tree/main/got_ocr2 should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 GOT_OCR2_INPUTS_DOCSTRING = r"""

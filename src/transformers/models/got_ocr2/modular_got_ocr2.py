@@ -695,10 +695,6 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.window_size = window_size
 
 
-class GotOcr2VisionEncoder(SamVisionEncoder):
-    pass
-
-
 class GotOcr2MultiModalProjector(nn.Module):
     def __init__(self, config: GotOcr2Config):
         super().__init__()
@@ -725,6 +721,10 @@ class GotOcr2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
+    pass
+
+
+class GotOcr2VisionEncoder(SamVisionEncoder):
     pass
 
 
