@@ -46,8 +46,6 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "crop_to_patches": True,
-            "min_patches": 1,
-            "max_patches": 12,
         },
     }
 

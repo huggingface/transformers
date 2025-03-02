@@ -360,6 +360,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("aria_text", "AriaText"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("autoformer", "Autoformer"),
+        ("aya_vision", "AyaVision"),
         ("bamba", "Bamba"),
         ("bark", "Bark"),
         ("bart", "BART"),

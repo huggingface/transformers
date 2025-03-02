@@ -284,42 +284,27 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
-        self.image_token = self.config.image_token
         self.post_init()
 
-    @property
-    def padding_side(self):
-        return self._padding_side
-
-    @padding_side.setter
-    def padding_side(self, padding_side: str):
-        if padding_side not in ["left", "right"]:
-            raise ValueError(f"{padding_side} is not `left` or `right`.")
-        self._padding_side = padding_side
-
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.set_decoder
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
 
@@ -389,6 +374,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: int = 0,
         num_logits_to_keep: int = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
         Args:
@@ -437,10 +423,10 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
 
-            special_image_mask = (input_ids == self.config.image_token).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token).sum()
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
@@ -458,7 +444,9 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            last_cache_position=last_cache_position,
             num_logits_to_keep=num_logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs[0]
