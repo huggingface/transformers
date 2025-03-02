@@ -41,6 +41,11 @@ The original code can be found [here](https://github.com/deepseek-ai/Janus).
 
 ### Single image inference
 
+Here is the example of visual understanding with a single image.
+
+> [!NOTE]
+> Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
+
 ```python
 import torch  
 from PIL import Image  
@@ -77,11 +82,11 @@ print(text)
 Janus can perform inference with multiple images as input, where images can belong to the same prompt or different prompts in batched inference, where the model processes many conversations in parallel. Here is how you can do it:
 
 ```python
-import torch  
-from PIL import Image  
-import requests  
+import torch
+from PIL import Image
+import requests
 
-from transformers import JanusForConditionalGeneration, JanusProcessor  
+from transformers import JanusForConditionalGeneration, JanusProcessor
 
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
 image_cat = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
@@ -111,16 +116,21 @@ messages = [
 
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
-model = JanusForConditionalGeneration.from_pretrained(model_id,     
+model = JanusForConditionalGeneration.from_pretrained(model_id,
         torch_dtype=torch.bfloat16,
         device_map="auto")
 
 prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
-inputs = processor(text=prompt,images=[image_cat,image_stop,image_snowman],return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(text=prompt,
+                   images=[image_cat,image_stop,image_snowman],
+                   return_tensors="pt",
+                   padding=True).to(model.device, dtype=torch.bfloat16)
 
-output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
-text = processor.decode(output[0], skip_special_tokens=True)
-print(text)
+output = model.generate(**inputs, max_new_tokens=40, generation_mode='text', do_sample=False)
+for o in output:
+    text = processor.decode(o, skip_special_tokens=True)
+    print(text)
+    print("-"*80)
 ```
 
 ## Text to Image generation
@@ -128,31 +138,30 @@ print(text)
 Janus can also generate images given a prompt.
 
 ```python
-import torch  
-from PIL import Image  
-import requests  
-
-from transformers import JanusForConditionalGeneration, JanusProcessor  
+import torch
+from transformers import JanusForConditionalGeneration, JanusProcessor
 
 # Set generation mode to `image` to prepare inputs for image generation..
+model_id = "yaswanthgali/Janus-Pro-1B-HF"
 processor = JanusProcessor.from_pretrained(model_id, generation_mode="image")
-model = JanusForConditionalGeneration.from_pretrained(model_id,     
+model = JanusForConditionalGeneration.from_pretrained(model_id,
         torch_dtype=torch.bfloat16,
-        device_map="cuda:0")
+        device_map="auto")
 
-messages = [[{
-    "role": "user",
-    "content": [
-        {"type": "text", "text": "A portrait of young girl. masterpiece, film grained, best quality."},
-    ],},],
-    ] 
-
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "A dog running under the rain."},
+        ],
+     }
+]
 
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
 inputs = processor(text=prompt,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 # Set num_return_sequence parameter to generate multiple images per prompt.
-model.generation_config.num_return_sequences = 1
+model.generation_config.num_return_sequences = 2
 outputs = model.generate(**inputs,
                          generation_mode="image",
                          do_sample=True,
@@ -160,9 +169,10 @@ outputs = model.generate(**inputs,
                          )
 # Perform post-processing on the generated token ids.
 decoded_image = model.decode_image_tokens(outputs)
-pixel_values = processor.postprocess(list(decoded_image.float()),return_tensors="np")
+images = processor.postprocess(list(decoded_image.float()),return_tensors="PIL.Image.Image")
 # Save the image
-pixel_values[0].save("snowman.png")
+for i, image in enumerate(images['pixel_values']):
+    image.save(f"result{i}.png")
 ```
 
 ## JanusConfig
