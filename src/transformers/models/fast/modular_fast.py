@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for FAST."""
-from ...utils.import_utils import is_cv2_available, is_torch_available, is_scipy_available
-
-if is_scipy_available():
-    import scipy.spatial
-
+from ...utils.import_utils import is_cv2_available, is_torch_available
+import math
+if is_cv2_available():
+    import cv2
 if is_torch_available():
     import torch
     import torch.nn as nn
@@ -25,6 +24,62 @@ if is_torch_available():
 from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
 
 class FastImageProcessor(TextNetImageProcessor):
+    def resize(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Resize an image. The shortest edge of the image is resized to size["shortest_edge"] , with the longest edge
+        resized to keep the input aspect ratio. Both the height and width are resized to be divisible by 32.
+
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            size (`Dict[str, int]`):
+                Size of the output image.
+            size_divisor (`int`, *optional*, defaults to `32`):
+                Ensures height and width are rounded to a multiple of this value after resizing.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+                Resampling filter to use when resiizing the image.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+            default_to_square (`bool`, *optional*, defaults to `False`):
+                The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
+                `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or
+                not.Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
+        """
+        if "shortest_edge" in size:
+            size = size["shortest_edge"]
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+
+        height, width = get_resize_output_image_size(
+            image, size=size, input_data_format=input_data_format, default_to_square=False
+        )
+        if height % self.size_divisor != 0:
+            height += self.size_divisor - (height % self.size_divisor)
+        if width % self.size_divisor != 0:
+            width += self.size_divisor - (width % self.size_divisor)
+        #TODO: would be great to find a more efficient way in modular
+        # as we're only adding this line of code
+        self.img_size = (height, width)
+        return resize(
+            image,
+            size=(height, width),
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
     def _max_pooling(self, input_tensor, scale=1):
         kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
         padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2
@@ -35,121 +90,87 @@ class FastImageProcessor(TextNetImageProcessor):
         return pooled_output
 
     def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", img_size=None):
-        """Post-processes the model's segmentation maps into bounding boxes."""
         scale = 2
-        img_size = img_size or self.img_size
-        batch_size = output["last_hidden_state"].size(0)
-        score_maps = self._compute_score_maps(output["last_hidden_state"], img_size, scale)
-        labels = self._compute_instance_labels(output["last_hidden_state"], img_size, scale)
-        keys = [torch.unique(labels[i], sorted=True) for i in range(batch_size)]
-        results = self._generate_boxes(keys, labels, score_maps, target_sizes, img_size, threshold, bbox_type)
+        img_size = img_size if img_size is not None else self.img_size
+        out = output["last_hidden_state"]
+        batch_size = out.size(0)
+        final_results = {}
+
+        texts = F.interpolate(
+            out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+        )  # B*1*320*320
+        texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
+        score_maps = torch.sigmoid_(texts)  # B*1*320*320
+        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
+        score_maps = score_maps.squeeze(1)  # B*640*640
+
+        kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
+        labels_ = []
+        for kernel in kernels.numpy():
+            import cv2
+
+            ret, label_ = cv2.connectedComponents(kernel)
+            labels_.append(label_)
+        labels_ = np.array(labels_)
+        labels_ = torch.from_numpy(labels_)
+        labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
+        labels = F.interpolate(
+            labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+        )  # B*1*320*320
+        labels = self._max_pooling(labels, scale=scale)
+        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
+        labels = labels.squeeze(1).to(torch.int32)  # B*640*640
+
+        keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
+
+        final_results.update({"kernels": kernels.data.cpu()})
+
+        results = []
+        for i in range(batch_size):
+            org_img_size = target_sizes[i]
+            scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
+
+            bboxes, scores = self.generate_bbox(
+                keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
+            )
+            results.append({"bboxes": bboxes, "scores": scores})
+        final_results.update({"results": results})
 
         return results
 
-    def _compute_score_maps(self, out, img_size, scale):
-        """Computes score maps using max pooling and sigmoid activation."""
-        texts = F.interpolate(out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest")
-        texts = self._max_pooling(texts, scale=scale)
-        score_maps = torch.sigmoid(texts)
-        score_maps = F.interpolate(score_maps, size=img_size, mode="nearest")
-        return score_maps.squeeze(1)
-
-    def _compute_instance_labels(self, out, img_size, scale):
-        """Generates instance segmentation labels without using cv2."""
-        kernels = (out[:, 0, :, :] > 0).to(torch.uint8)
-
-        labels = torch.zeros_like(kernels, dtype=torch.int32)
-        label_counter = 1
-        for i in range(kernels.shape[0]):  # iterate over batch
-            y, x = torch.where(kernels[i] > 0)
-            if len(y) > 0:
-                labels[i, y, x] = label_counter
-                label_counter += 1
-
-        labels = labels.unsqueeze(1).float()
-        labels = F.interpolate(labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest")
-        labels = self._max_pooling(labels, scale=scale)
-        labels = F.interpolate(labels, size=img_size, mode="nearest").squeeze(1).int()
-        return labels
-
-    def _generate_boxes(self, keys, labels, score_maps, target_sizes, img_size, threshold, bbox_type):
-        """Converts instance segmentation maps into bounding boxes."""
-        results = []
-        for i in range(labels.shape[0]):  # iterate over batch
-            original_size = target_sizes[i]
-            scales = (original_size[1] / img_size[1], original_size[0] / img_size[0])
+    def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
+        label_num = len(keys)
+        bboxes = []
+        scores = []
+        for index in range(1, label_num):
+            i = keys[index]
+            ind = label == i
+            ind_np = ind.data.cpu().numpy()
+            points = np.array(np.where(ind_np)).transpose((1, 0))
+            if points.shape[0] < self.min_area:
+                label[ind] = 0
+                continue
+            score_i = score[ind].mean().item()
+            if score_i < threshold:
+                label[ind] = 0
+                continue
 
             if bbox_type == "rect":
-                boxes, scores = self._generate_rect_boxes(keys[i], labels[i], score_maps[i], scales, threshold)
-            else:
-                boxes, scores = self._generate_poly_boxes(keys[i], labels[i], score_maps[i], scales, threshold)
+                rect = cv2.minAreaRect(points[:, ::-1])
+                alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
+                rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
+                bbox = cv2.boxPoints(rect) * scales
 
-            results.append({"boxes": boxes, "scores": scores})
+            elif bbox_type == "poly":
+                binary = np.zeros(label.shape, dtype="uint8")
+                binary[ind_np] = 1
+                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                bbox = contours[0] * scales
+            bbox = bbox.astype("int32")
+            bboxes.append(bbox.reshape(-1).tolist())
+            scores.append(score_i)
 
-        return results
-
-    def _generate_rect_boxes(self, keys, label, score_map, scales, threshold):
-        """Generates rectangular bounding boxes """
-        boxes, scores = [], []
-        for i in keys[1:]:  # skip background label 0
-            mask = (label == i).cpu().numpy()
-            points = np.array(np.where(mask)).T  # (y, x)
-
-            if points.shape[0] < self.min_area:
-                label[label == i] = 0
-                continue
-
-            score = score_map[label == i].mean().item()
-            if score < threshold:
-                label[label == i] = 0
-                continue
-
-            ymin, xmin = points.min(axis=0)
-            ymax, xmax = points.max(axis=0)
-            box = np.array([[xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax]]) * scales
-            boxes.append(box.astype(np.int32).flatten().tolist())
-            scores.append(score)
-
-        return boxes, scores
-
-    def _generate_poly_boxes(self, keys, label, score_map, scales, threshold):
-        """Generates polygonal bounding boxes """
-        boxes, scores = [], []
-        for i in keys[1:]:  # skip background label 0
-            mask = (label == i).cpu().numpy()
-            points = np.array(np.where(mask)).T  # (y, x)
-
-            if points.shape[0] < self.min_area:
-                label[label == i] = 0
-                continue
-
-            score = score_map[label == i].mean().item()
-            if score < threshold:
-                label[label == i] = 0
-                continue
-
-            # approximate convex hull using numpy
-            hull = self._convex_hull(points)
-            box = hull * scales
-            boxes.append(box.astype(np.int32).flatten().tolist())
-            scores.append(score)
-
-        return boxes, scores
-
-    def _convex_hull(self, points):
-        """Computes a convex hull using NumPy (alternative to cv2.findContours)."""
-        from scipy.spatial import ConvexHull  # use scipy only for convex hull computation
-
-        if points.shape[0] < 3:
-            return np.array([[points.min(axis=0)], [points.max(axis=0)]])  # return min-max rect if <3 points
-
-        hull = ConvexHull(points)
-        return points[hull.vertices]
-
-    def _max_pooling(self, tensor, scale):
-        """Performs max pooling on the given tensor."""
-        kernel_size = scale * 2
-        return F.max_pool2d(tensor, kernel_size=kernel_size, stride=scale, padding=kernel_size // 2)
+        return bboxes, scores
 
 __all__ = [
     "FastImageProcessor",

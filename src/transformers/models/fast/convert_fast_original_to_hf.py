@@ -273,7 +273,8 @@ def convert_fast_checkpoint(
         output, target_sizes, threshold, bbox_type="rect"
     )
 
-    assert text_locations[0]["bboxes"][0] == expected_slice_boxes
+    breakpoint()
+    assert text_locations[0]["boxes"][0] == expected_slice_boxes
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")
