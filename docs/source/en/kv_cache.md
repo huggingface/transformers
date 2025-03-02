@@ -109,6 +109,7 @@ Refer to the table below to see the difference between cache types and choose th
 | Offloaded Cache        | Yes              | No                       | No                         | Low     | Yes                     |
 | Offloaded Static Cache | No               | Yes                      | Yes                        | High    | Yes                     |
 | Quantized Cache        | Yes              | No                       | No                         | Low     | Yes                     |
+| Shared Cache           | Yes              | No                       | No                         | Low     | Yes                     |
 | Sliding Window Cache   | No               | Yes                      | Yes                        | High    | No                      |
 | Sink Cache             | Yes              | No                       | Yes                        | Mid     | Yes                     |
 
@@ -264,6 +265,24 @@ This will use the [`~OffloadedStaticCache`] implementation instead.
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
 ```
 Cache offloading requires a CUDA GPU.
+
+
+### Shared Cache
+
+Unlike quantized cache, this cache reduces memory usage by sharing the cache across multiple groups of layers, instead of quantizing the cache. This cache inherits from the `DynamicCache` class and supports dynamic growth. You can use this cache by passing `cache_implementation="shared"`.
+
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+>>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-60M-Instruct")
+>>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-60M-Instruct", torch_dtype=torch.float16, device_map="auto")
+>>> inputs = tokenizer("Hay, How are you today?", return_tensors="pt").to(model.device)
+
+>>> out = model.generate(**inputs, max_new_tokens=20, cache_implementation="shared", cache_config={"shared_cache_layer_groups": 2})
+>>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+"Hey, How are you today? I'm doing well, thank you for asking. What can I help you with today?"
+```
 
 
 ### Sliding Window Cache
