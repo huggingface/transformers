@@ -48,6 +48,8 @@ from ...utils import (
 from ...utils.backbone_utils import load_backbone
 from .configuration_dino_detr import DinoDetrConfig
 
+import torch
+import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -2350,67 +2352,296 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         return dict_outputs
 
 
-# copied from DINO repo
-@MODULE_BUILD_FUNCS.registe_with_name(module_name="dino")
-def build_dino(args):
-    # the `num_classes` naming here is somewhat misleading.
-    # it indeed corresponds to `max_obj_id + 1`, where max_obj_id
-    # is the maximum id for a class in your dataset. For example,
-    # COCO has a max_obj_id of 90, so we pass `num_classes` to be 91.
-    # As another example, for a dataset that has a single class with id 1,
-    # you should pass `num_classes` to be 2 (max_obj_id + 1).
-    # For more details on this, check the following discussion
-    # https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223
-    # num_classes = 20 if args.dataset_file != 'coco' else 91
-    # if args.dataset_file == "coco_panoptic":
-    #     # for panoptic, we just add a num_classes that is large enough to hold
-    #     # max_obj_id + 1, but the exact value doesn't really matter
-    #     num_classes = 250
-    # if args.dataset_file == 'o365':
-    #     num_classes = 366
-    # if args.dataset_file == 'vanke':
-    #     num_classes = 51
-    num_classes = args.num_classes
+class MLP(nn.Module):
+    """Very simple multi-layer perceptron (also called FFN)"""
 
-    backbone = build_backbone(args)
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
+        )
 
-    transformer = build_deformable_transformer(args)
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
 
-    match_unstable_error = getattr(args, "match_unstable_error", True)
-    dn_labelbook_size = getattr(args, "dn_labelbook_size", num_classes)
-    dec_pred_class_embed_share = getattr(args, "dec_pred_class_embed_share", True)
-    dec_pred_bbox_embed_share = getattr(args, "dec_pred_bbox_embed_share", True)
 
-    model = DINO(
-        backbone,
-        transformer,
-        num_classes=num_classes,
-        num_queries=args.num_queries,
-        aux_loss=True,
-        iter_update=True,
-        query_dim=4,
-        random_refpoints_xy=args.random_refpoints_xy,
-        fix_refpoints_hw=args.fix_refpoints_hw,
-        num_feature_levels=args.num_feature_levels,
-        nheads=args.nheads,
-        dec_pred_class_embed_share=dec_pred_class_embed_share,
-        dec_pred_bbox_embed_share=dec_pred_bbox_embed_share,
-        # two stage
-        two_stage_type=args.two_stage_type,
-        # box_share
-        two_stage_bbox_embed_share=args.two_stage_bbox_embed_share,
-        two_stage_class_embed_share=args.two_stage_class_embed_share,
-        decoder_sa_type=args.decoder_sa_type,
-        num_patterns=args.num_patterns,
-        dn_number=args.dn_number if args.use_dn else 0,
-        dn_box_noise_scale=args.dn_box_noise_scale,
-        dn_label_noise_ratio=args.dn_label_noise_ratio,
-        dn_labelbook_size=dn_labelbook_size,
-    )
-    if args.masks:
-        model = DETRsegm(model, freeze_detr=(args.frozen_weights is not None))
+class NestedTensor(object):
+    def __init__(self, tensors, mask: Optional[Tensor]):
+        self.tensors = tensors
+        self.mask = mask
+        if mask == "auto":
+            self.mask = torch.zeros_like(tensors).to(tensors.device)
+            if self.mask.dim() == 3:
+                self.mask = self.mask.sum(0).to(bool)
+            elif self.mask.dim() == 4:
+                self.mask = self.mask.sum(1).to(bool)
+            else:
+                raise ValueError(
+                    "tensors dim must be 3 or 4 but {}({})".format(
+                        self.tensors.dim(), self.tensors.shape
+                    )
+                )
 
-    return model
+    def imgsize(self):
+        res = []
+        for i in range(self.tensors.shape[0]):
+            mask = self.mask[i]
+            maxH = (~mask).sum(0).max()
+            maxW = (~mask).sum(1).max()
+            res.append(torch.Tensor([maxH, maxW]))
+        return res
+
+    def to(self, device):
+        # type: (Device) -> NestedTensor # noqa
+        cast_tensor = self.tensors.to(device)
+        mask = self.mask
+        if mask is not None:
+            assert mask is not None
+            cast_mask = mask.to(device)
+        else:
+            cast_mask = None
+        return NestedTensor(cast_tensor, cast_mask)
+
+    def to_img_list_single(self, tensor, mask):
+        assert tensor.dim() == 3, "dim of tensor should be 3 but {}".format(
+            tensor.dim()
+        )
+        maxH = (~mask).sum(0).max()
+        maxW = (~mask).sum(1).max()
+        img = tensor[:, :maxH, :maxW]
+        return img
+
+    def to_img_list(self):
+        """remove the padding and convert to img list
+
+        Returns:
+            [type]: [description]
+        """
+        if self.tensors.dim() == 3:
+            return self.to_img_list_single(self.tensors, self.mask)
+        else:
+            res = []
+            for i in range(self.tensors.shape[0]):
+                tensor_i = self.tensors[i]
+                mask_i = self.mask[i]
+                res.append(self.to_img_list_single(tensor_i, mask_i))
+            return res
+
+    @property
+    def device(self):
+        return self.tensors.device
+
+    def decompose(self):
+        return self.tensors, self.mask
+
+    def __repr__(self):
+        return str(self.tensors)
+
+    @property
+    def shape(self):
+        return {"tensors.shape": self.tensors.shape, "mask.shape": self.mask.shape}
+
+
+def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+    def _max_by_axis(the_list):
+        # type: (List[List[int]]) -> List[int]
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+
+    if tensor_list[0].ndim == 3:
+        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+        batch_shape = [len(tensor_list)] + max_size
+        b, c, h, w = batch_shape
+        dtype = tensor_list[0].dtype
+        device = tensor_list[0].device
+        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        for img, pad_img, m in zip(tensor_list, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            m[: img.shape[1], : img.shape[2]] = False
+    else:
+        raise ValueError("not supported")
+    return NestedTensor(tensor, mask)
+
+
+def prepare_for_cdn(dn_args, training, num_queries, num_classes, hidden_dim, label_enc):
+    """
+    A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding in its detector
+    forward function and use learnable tgt embedding, so we change this function a little bit.
+    :param dn_args: targets, dn_number, label_noise_ratio, box_noise_scale
+    :param training: if it is training or inference
+    :param num_queries: number of queires
+    :param num_classes: number of classes
+    :param hidden_dim: transformer hidden dim
+    :param label_enc: encode labels in dn
+    :return:
+    """
+    if training:
+        targets, dn_number, label_noise_ratio, box_noise_scale = dn_args
+        # positive and negative dn queries
+        dn_number = dn_number * 2
+        known = [(torch.ones_like(t["labels"])).cuda() for t in targets]
+        batch_size = len(known)
+        known_num = [sum(k) for k in known]
+        if int(max(known_num)) == 0:
+            dn_number = 1
+        else:
+            if dn_number >= 100:
+                dn_number = dn_number // (int(max(known_num) * 2))
+            elif dn_number < 1:
+                dn_number = 1
+        if dn_number == 0:
+            dn_number = 1
+        unmask_bbox = unmask_label = torch.cat(known)
+        labels = torch.cat([t["labels"] for t in targets])
+        boxes = torch.cat([t["boxes"] for t in targets])
+        batch_idx = torch.cat(
+            [torch.full_like(t["labels"].long(), i) for i, t in enumerate(targets)]
+        )
+
+        known_indice = torch.nonzero(unmask_label + unmask_bbox)
+        known_indice = known_indice.view(-1)
+
+        known_indice = known_indice.repeat(2 * dn_number, 1).view(-1)
+        known_labels = labels.repeat(2 * dn_number, 1).view(-1)
+        known_bid = batch_idx.repeat(2 * dn_number, 1).view(-1)
+        known_bboxs = boxes.repeat(2 * dn_number, 1)
+        known_labels_expaned = known_labels.clone()
+        known_bbox_expand = known_bboxs.clone()
+
+        if label_noise_ratio > 0:
+            p = torch.rand_like(known_labels_expaned.float())
+            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(
+                -1
+            )  # half of bbox prob
+            new_label = torch.randint_like(
+                chosen_indice, 0, num_classes
+            )  # randomly put a new one here
+            known_labels_expaned.scatter_(0, chosen_indice, new_label)
+        single_pad = int(max(known_num))
+
+        pad_size = int(single_pad * 2 * dn_number)
+        positive_idx = (
+            torch.tensor(range(len(boxes)))
+            .long()
+            .cuda()
+            .unsqueeze(0)
+            .repeat(dn_number, 1)
+        )
+        positive_idx += (
+            (torch.tensor(range(dn_number)) * len(boxes) * 2).long().cuda().unsqueeze(1)
+        )
+        positive_idx = positive_idx.flatten()
+        negative_idx = positive_idx + len(boxes)
+        if box_noise_scale > 0:
+            known_bbox_ = torch.zeros_like(known_bboxs)
+            known_bbox_[:, :2] = known_bboxs[:, :2] - known_bboxs[:, 2:] / 2
+            known_bbox_[:, 2:] = known_bboxs[:, :2] + known_bboxs[:, 2:] / 2
+
+            diff = torch.zeros_like(known_bboxs)
+            diff[:, :2] = known_bboxs[:, 2:] / 2
+            diff[:, 2:] = known_bboxs[:, 2:] / 2
+
+            rand_sign = (
+                torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32)
+                * 2.0
+                - 1.0
+            )
+            rand_part = torch.rand_like(known_bboxs)
+            rand_part[negative_idx] += 1.0
+            rand_part *= rand_sign
+            known_bbox_ = (
+                known_bbox_ + torch.mul(rand_part, diff).cuda() * box_noise_scale
+            )
+            known_bbox_ = known_bbox_.clamp(min=0.0, max=1.0)
+            known_bbox_expand[:, :2] = (known_bbox_[:, :2] + known_bbox_[:, 2:]) / 2
+            known_bbox_expand[:, 2:] = known_bbox_[:, 2:] - known_bbox_[:, :2]
+
+        m = known_labels_expaned.long().to("cuda")
+        input_label_embed = label_enc(m)
+        input_bbox_embed = inverse_sigmoid(known_bbox_expand)
+
+        padding_label = torch.zeros(pad_size, hidden_dim).cuda()
+        padding_bbox = torch.zeros(pad_size, 4).cuda()
+
+        input_query_label = padding_label.repeat(batch_size, 1, 1)
+        input_query_bbox = padding_bbox.repeat(batch_size, 1, 1)
+
+        map_known_indice = torch.tensor([]).to("cuda")
+        if len(known_num):
+            map_known_indice = torch.cat(
+                [torch.tensor(range(num)) for num in known_num]
+            )  # [1,2, 1,2,3]
+            map_known_indice = torch.cat(
+                [map_known_indice + single_pad * i for i in range(2 * dn_number)]
+            ).long()
+        if len(known_bid):
+            input_query_label[(known_bid.long(), map_known_indice)] = input_label_embed
+            input_query_bbox[(known_bid.long(), map_known_indice)] = input_bbox_embed
+
+        tgt_size = pad_size + num_queries
+        attn_mask = torch.ones(tgt_size, tgt_size).to("cuda") < 0
+        # match query cannot see the reconstruct
+        attn_mask[pad_size:, :pad_size] = True
+        # reconstruct cannot see each other
+        for i in range(dn_number):
+            if i == 0:
+                attn_mask[
+                    single_pad * 2 * i : single_pad * 2 * (i + 1),
+                    single_pad * 2 * (i + 1) : pad_size,
+                ] = True
+            if i == dn_number - 1:
+                attn_mask[
+                    single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * i * 2
+                ] = True
+            else:
+                attn_mask[
+                    single_pad * 2 * i : single_pad * 2 * (i + 1),
+                    single_pad * 2 * (i + 1) : pad_size,
+                ] = True
+                attn_mask[
+                    single_pad * 2 * i : single_pad * 2 * (i + 1), : single_pad * 2 * i
+                ] = True
+
+        dn_meta = {
+            "pad_size": pad_size,
+            "num_dn_group": dn_number,
+        }
+    else:
+
+        input_query_label = None
+        input_query_bbox = None
+        attn_mask = None
+        dn_meta = None
+
+    return input_query_label, input_query_bbox, attn_mask, dn_meta
+
+
+def dn_post_process(outputs_class, outputs_coord, dn_meta, aux_loss, _set_aux_loss):
+    """
+    post process of dn after output from the transformer
+    put the dn part in the dn_meta
+    """
+    if dn_meta and dn_meta["pad_size"] > 0:
+        output_known_class = outputs_class[:, :, : dn_meta["pad_size"], :]
+        output_known_coord = outputs_coord[:, :, : dn_meta["pad_size"], :]
+        outputs_class = outputs_class[:, :, dn_meta["pad_size"] :, :]
+        outputs_coord = outputs_coord[:, :, dn_meta["pad_size"] :, :]
+        out = {
+            "pred_logits": output_known_class[-1],
+            "pred_boxes": output_known_coord[-1],
+        }
+        if aux_loss:
+            out["aux_outputs"] = _set_aux_loss(output_known_class, output_known_coord)
+        dn_meta["output_known_lbs_bboxes"] = out
+    return outputs_class, outputs_coord
 
 
 # copied from DINO repo

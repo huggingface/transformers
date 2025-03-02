@@ -151,6 +151,26 @@ class DinoDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        num_classes,
+        num_queries_dino,
+        random_refpoints_xy,
+        fix_refpoints_hw,
+        num_feature_levels_dino,
+        nheads,
+        two_stage_type,
+        two_stage_bbox_embed_share,
+        two_stage_class_embed_share,
+        decoder_sa_type,
+        num_patterns,
+        dn_box_noise_scale,
+        dn_label_noise_ratio,
+        dn_labelbook_size=None,
+        dec_pred_class_embed_share=True,
+        dec_pred_bbox_embed_share=True,
+        dn_number=0,
+        aux_loss=True,
+        iter_update=True,
+        query_dim=4,
         use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
@@ -226,6 +246,28 @@ class DinoDetrConfig(PretrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
 
+        # dino
+        self.num_classes = num_classes
+        self.num_queries_dino = num_queries_dino
+        self.aux_loss = aux_loss
+        self.iter_update = iter_update
+        self.query_dim = query_dim
+        self.random_refpoints_xy = random_refpoints_xy
+        self.fix_refpoints_hw = fix_refpoints_hw
+        self.num_feature_levels_dino = num_feature_levels_dino
+        self.nheads = nheads
+        self.dec_pred_class_embed_share = dec_pred_class_embed_share
+        self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
+        self.two_stage_type = two_stage_type
+        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
+        self.two_stage_class_embed_share = two_stage_class_embed_share
+        self.decoder_sa_type = decoder_sa_type
+        self.num_patterns = num_patterns
+        self.dn_number = dn_number
+        self.dn_box_noise_scale = dn_box_noise_scale
+        self.dn_label_noise_ratio = dn_label_noise_ratio
+        self.dn_labelbook_size = dn_labelbook_size if dn_labelbook_size else num_classes
+        # deformable attibutes 1
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
