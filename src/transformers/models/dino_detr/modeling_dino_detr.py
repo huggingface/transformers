@@ -16,6 +16,7 @@
 
 import copy
 import math
+import random
 import os
 import warnings
 from dataclasses import dataclass
@@ -536,6 +537,25 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
+class RandomBoxPerturber:
+    def __init__(
+        self, x_noise_scale=0.2, y_noise_scale=0.2, w_noise_scale=0.2, h_noise_scale=0.2
+    ) -> None:
+        self.noise_scale = torch.Tensor(
+            [x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale]
+        )
+
+    def __call__(self, refanchors: Tensor) -> Tensor:
+        nq, bs, query_dim = refanchors.shape
+        device = refanchors.device
+
+        noise_raw = torch.rand_like(refanchors)
+        noise_scale = self.noise_scale.to(device)[:query_dim]
+
+        new_refanchors = refanchors * (1 + (noise_raw - 0.5) * noise_scale)
+        return new_refanchors.clamp_(0, 1)
+
+
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->DinoDetr
 class DinoDetrFrozenBatchNorm2d(nn.Module):
     """
@@ -821,6 +841,124 @@ def build_position_encoding(config):
     return position_embedding
 
 
+def _get_activation_fn(activation, d_model=256, batch_dim=0):
+    """Return an activation function given a string"""
+    if activation == "relu":
+        return F.relu
+    if activation == "gelu":
+        return F.gelu
+    if activation == "glu":
+        return F.glu
+    if activation == "prelu":
+        return nn.PReLU()
+    if activation == "selu":
+        return F.selu
+
+    raise RuntimeError(f"activation should be relu/gelu, not {activation}.")
+
+
+def gen_sineembed_for_position(pos_tensor):
+    # n_query, bs, _ = pos_tensor.size()
+    # sineembed_tensor = torch.zeros(n_query, bs, 256)
+    scale = 2 * math.pi
+    dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = 10000 ** (2 * (dim_t // 2) / 128)
+    x_embed = pos_tensor[:, :, 0] * scale
+    y_embed = pos_tensor[:, :, 1] * scale
+    pos_x = x_embed[:, :, None] / dim_t
+    pos_y = y_embed[:, :, None] / dim_t
+    pos_x = torch.stack(
+        (pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3
+    ).flatten(2)
+    pos_y = torch.stack(
+        (pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3
+    ).flatten(2)
+    if pos_tensor.size(-1) == 2:
+        pos = torch.cat((pos_y, pos_x), dim=2)
+    elif pos_tensor.size(-1) == 4:
+        w_embed = pos_tensor[:, :, 2] * scale
+        pos_w = w_embed[:, :, None] / dim_t
+        pos_w = torch.stack(
+            (pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3
+        ).flatten(2)
+
+        h_embed = pos_tensor[:, :, 3] * scale
+        pos_h = h_embed[:, :, None] / dim_t
+        pos_h = torch.stack(
+            (pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3
+        ).flatten(2)
+
+        pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
+    else:
+        raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
+    return pos
+
+
+def gen_encoder_output_proposals(
+    memory: Tensor, memory_padding_mask: Tensor, spatial_shapes: Tensor, learnedwh=None
+):
+    """
+    Input:
+        - memory: bs, \sum{hw}, d_model
+        - memory_padding_mask: bs, \sum{hw}
+        - spatial_shapes: nlevel, 2
+        - learnedwh: 2
+    Output:
+        - output_memory: bs, \sum{hw}, d_model
+        - output_proposals: bs, \sum{hw}, 4
+    """
+    N_, S_, C_ = memory.shape
+    base_scale = 4.0
+    proposals = []
+    _cur = 0
+    for lvl, (H_, W_) in enumerate(spatial_shapes):
+        mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H_ * W_)].view(
+            N_, H_, W_, 1
+        )
+        valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
+        valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
+
+        grid_y, grid_x = torch.meshgrid(
+            torch.linspace(0, H_ - 1, H_, dtype=torch.float32, device=memory.device),
+            torch.linspace(0, W_ - 1, W_, dtype=torch.float32, device=memory.device),
+        )
+        grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)  # H_, W_, 2
+
+        scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(
+            N_, 1, 1, 2
+        )
+        grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
+
+        if learnedwh is not None:
+            wh = torch.ones_like(grid) * learnedwh.sigmoid() * (2.0**lvl)
+        else:
+            wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
+
+        proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
+        proposals.append(proposal)
+        _cur += H_ * W_
+
+    output_proposals = torch.cat(proposals, 1)
+    output_proposals_valid = (
+        (output_proposals > 0.01) & (output_proposals < 0.99)
+    ).all(-1, keepdim=True)
+    output_proposals = torch.log(output_proposals / (1 - output_proposals))  # unsigmoid
+    output_proposals = output_proposals.masked_fill(
+        memory_padding_mask.unsqueeze(-1), float("inf")
+    )
+    output_proposals = output_proposals.masked_fill(
+        ~output_proposals_valid, float("inf")
+    )
+
+    output_memory = memory
+    output_memory = output_memory.masked_fill(
+        memory_padding_mask.unsqueeze(-1), float(0)
+    )
+    output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
+
+    return output_memory, output_proposals
+
+
 class DinoDetrMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
@@ -1064,123 +1202,219 @@ class DinoDetrEncoderLayer(nn.Module):
 
 class DinoDetrDecoderLayer(nn.Module):
     def __init__(self, config: DinoDetrConfig):
+        """
+        d_model=256,
+        d_ffn=1024,
+        dropout=0.1,
+        activation="relu",
+        n_levels=4,
+        n_heads=8,
+        n_points=4,
+        use_deformable_box_attn=False,
+        box_attn_type="roi_align",
+        key_aware_type=None,
+        decoder_sa_type="ca",
+        module_seq=["sa", "ca", "ffn"],
+        """
         super().__init__()
-        self.embed_dim = config.d_model
-
-        # self-attention
-        self.self_attn = DinoDetrMultiheadAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
+        self.module_seq = config.module_seq
+        assert sorted(config.module_seq) == ["ca", "ffn", "sa"]
+        # cross attention
+        self.cross_attn = DinoDetrMultiscaleDeformableAttention(
+            config, config.n_heads, config.n_points
         )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
+        self.dropout1 = nn.Dropout(config.dropout)
+        self.norm1 = nn.LayerNorm(config.d_model)
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        # cross-attention
-        self.encoder_attn = DinoDetrMultiscaleDeformableAttention(
-            config,
-            num_heads=config.decoder_attention_heads,
-            n_points=config.decoder_n_points,
+        # self attention
+        self.self_attn = nn.MultiheadAttention(
+            config.d_model, config.n_heads, dropout=config.dropout
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        # feedforward neural networks
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout2 = nn.Dropout(config.dropout)
+        self.norm2 = nn.LayerNorm(config.d_model)
+
+        # ffn
+        self.linear1 = nn.Linear(config.d_model, config.d_ffn)
+        self.activation = _get_activation_fn(
+            config.activation, d_model=config.d_ffn, batch_dim=1
+        )
+        self.dropout3 = nn.Dropout(config.dropout)
+        self.linear2 = nn.Linear(config.d_ffn, config.d_model)
+        self.dropout4 = nn.Dropout(config.dropout)
+        self.norm3 = nn.LayerNorm(config.d_model)
+
+        self.key_aware_type = config.key_aware_type
+        self.key_aware_proj = None
+        self.decoder_sa_type = config.decoder_sa_type
+        assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
+
+        if config.decoder_sa_type == "ca_content":
+            self.self_attn = DinoDetrMultiscaleDeformableAttention(
+                config, config.n_heads, config.n_points
+            )
+
+    def rm_self_attn_modules(self):
+        self.self_attn = None
+        self.dropout2 = None
+        self.norm2 = None
+
+    @staticmethod
+    def with_pos_embed(tensor, pos):
+        return tensor if pos is None else tensor + pos
+
+    def forward_ffn(self, tgt):
+        tgt2 = self.linear2(self.dropout3(self.activation(self.linear1(tgt))))
+        tgt = tgt + self.dropout4(tgt2)
+        tgt = self.norm3(tgt)
+        return tgt
+
+    def forward_sa(
+        self,
+        # for tgt
+        tgt: Optional[Tensor],  # nq, bs, d_model
+        tgt_query_pos: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
+        tgt_query_sine_embed: Optional[Tensor] = None,  # pos for query. Sine(pos)
+        tgt_key_padding_mask: Optional[Tensor] = None,
+        tgt_reference_points: Optional[Tensor] = None,  # nq, bs, 4
+        # for memory
+        memory: Optional[Tensor] = None,  # hw, bs, d_model
+        memory_key_padding_mask: Optional[Tensor] = None,
+        memory_level_start_index: Optional[Tensor] = None,  # num_levels
+        memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        memory_pos: Optional[Tensor] = None,  # pos for memory
+        # sa
+        self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
+        cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
+    ):
+        # self attention
+        if self.self_attn is not None:
+            if self.decoder_sa_type == "sa":
+                q = k = self.with_pos_embed(tgt, tgt_query_pos)
+                tgt2 = self.self_attn(q, k, tgt, attn_mask=self_attn_mask)[0]
+                tgt = tgt + self.dropout2(tgt2)
+                tgt = self.norm2(tgt)
+            elif self.decoder_sa_type == "ca_label":
+                bs = tgt.shape[1]
+                k = v = self.label_embedding.weight[:, None, :].repeat(1, bs, 1)
+                tgt2 = self.self_attn(tgt, k, v, attn_mask=self_attn_mask)[0]
+                tgt = tgt + self.dropout2(tgt2)
+                tgt = self.norm2(tgt)
+            elif self.decoder_sa_type == "ca_content":
+                tgt2, attn_weights = self.self_attn(
+                    self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
+                    tgt_reference_points.transpose(0, 1).contiguous(),
+                    memory.transpose(0, 1),
+                    memory_spatial_shapes,
+                    memory_level_start_index,
+                    memory_key_padding_mask,
+                )
+                tgt2 = tgt2.transpose(0, 1)
+                tgt = tgt + self.dropout2(tgt2)
+                tgt = self.norm2(tgt)
+            else:
+                raise NotImplementedError(
+                    "Unknown decoder_sa_type {}".format(self.decoder_sa_type)
+                )
+
+        return tgt
+
+    def forward_ca(
+        self,
+        # for tgt
+        tgt: Optional[Tensor],  # nq, bs, d_model
+        tgt_query_pos: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
+        tgt_query_sine_embed: Optional[Tensor] = None,  # pos for query. Sine(pos)
+        tgt_key_padding_mask: Optional[Tensor] = None,
+        tgt_reference_points: Optional[Tensor] = None,  # nq, bs, 4
+        # for memory
+        memory: Optional[Tensor] = None,  # hw, bs, d_model
+        memory_key_padding_mask: Optional[Tensor] = None,
+        memory_level_start_index: Optional[Tensor] = None,  # num_levels
+        memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        memory_pos: Optional[Tensor] = None,  # pos for memory
+        # sa
+        self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
+        cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
+    ):
+        # cross attention
+        if self.key_aware_type is not None:
+            if self.key_aware_type == "mean":
+                tgt = tgt + memory.mean(0, keepdim=True)
+            elif self.key_aware_type == "proj_mean":
+                tgt = tgt + self.key_aware_proj(memory).mean(0, keepdim=True)
+            else:
+                raise NotImplementedError(
+                    "Unknown key_aware_type: {}".format(self.key_aware_type)
+                )
+        tgt2, attn_weights = self.cross_attn(
+            self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
+            tgt_reference_points.transpose(0, 1).contiguous(),
+            memory.transpose(0, 1),
+            memory_spatial_shapes,
+            memory_level_start_index,
+            memory_key_padding_mask,
+        )
+        tgt2 = tgt2.transpose(0, 1)
+        tgt = tgt + self.dropout1(tgt2)
+        tgt = self.norm1(tgt)
+
+        return tgt
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        # for tgt
+        tgt: Optional[Tensor],  # nq, bs, d_model
+        tgt_query_pos: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
+        tgt_query_sine_embed: Optional[Tensor] = None,  # pos for query. Sine(pos)
+        tgt_key_padding_mask: Optional[Tensor] = None,
+        tgt_reference_points: Optional[Tensor] = None,  # nq, bs, 4
+        # for memory
+        memory: Optional[Tensor] = None,  # hw, bs, d_model
+        memory_key_padding_mask: Optional[Tensor] = None,
+        memory_level_start_index: Optional[Tensor] = None,  # num_levels
+        memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        memory_pos: Optional[Tensor] = None,  # pos for memory
+        # sa
+        self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
+        cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
     ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
+        for funcname in self.module_seq:
+            if funcname == "ffn":
+                tgt = self.forward_ffn(tgt)
+            elif funcname == "ca":
+                tgt = self.forward_ca(
+                    tgt,
+                    tgt_query_pos,
+                    tgt_query_sine_embed,
+                    tgt_key_padding_mask,
+                    tgt_reference_points,
+                    memory,
+                    memory_key_padding_mask,
+                    memory_level_start_index,
+                    memory_spatial_shapes,
+                    memory_pos,
+                    self_attn_mask,
+                    cross_attn_mask,
+                )
+            elif funcname == "sa":
+                tgt = self.forward_sa(
+                    tgt,
+                    tgt_query_pos,
+                    tgt_query_sine_embed,
+                    tgt_key_padding_mask,
+                    tgt_reference_points,
+                    memory,
+                    memory_key_padding_mask,
+                    memory_level_start_index,
+                    memory_spatial_shapes,
+                    memory_pos,
+                    self_attn_mask,
+                    cross_attn_mask,
+                )
+            else:
+                raise ValueError("unknown funcname {}".format(funcname))
 
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
-        )
-
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        second_residual = hidden_states
-
-        # Cross-Attention
-        cross_attn_weights = None
-        hidden_states, cross_attn_weights = self.encoder_attn(
-            hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            output_attentions=output_attentions,
-        )
-
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
-        hidden_states = second_residual + hidden_states
-
-        hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.activation_dropout, training=self.training
-        )
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return tgt
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
@@ -1205,6 +1439,891 @@ class DinoDetrMLPPredictionHead(nn.Module):
         for i, layer in enumerate(self.layers):
             x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
+
+
+class DinoDetrEncoder(nn.Module):
+    def __init__(self, encoder_layer, norm, config):
+        """
+        encoder_layer,
+        num_layers,
+        norm=None,
+        d_model=256,
+        num_queries=300,
+        deformable_encoder=False,
+        enc_layer_share=False,
+        enc_layer_dropout_prob=None,
+        two_stage_type="no",  # ['no', 'standard', 'early', 'combine', 'enceachlayer', 'enclayer1']
+        """
+        super().__init__()
+        # prepare layers
+        if config.num_layers > 0:
+            self.layers = _get_clones(
+                encoder_layer, config.num_layers, layer_share=config.enc_layer_share
+            )
+        else:
+            self.layers = []
+            del encoder_layer
+
+        self.query_scale = None
+        self.num_queries = config.num_queries
+        self.deformable_encoder = config.deformable_encoder
+        self.num_layers = config.num_layers
+        self.norm = norm
+        self.d_model = config.d_model
+
+        self.enc_layer_dropout_prob = config.enc_layer_dropout_prob
+        if config.enc_layer_dropout_prob is not None:
+            assert isinstance(config.enc_layer_dropout_prob, list)
+            assert len(config.enc_layer_dropout_prob) == config.num_layers
+            for i in config.enc_layer_dropout_prob:
+                assert 0.0 <= i <= 1.0
+
+        self.two_stage_type = config.two_stage_type
+        if config.two_stage_type in ["enceachlayer", "enclayer1"]:
+            _proj_layer = nn.Linear(config.d_model, config.d_model)
+            _norm_layer = nn.LayerNorm(config.d_model)
+            if config.two_stage_type == "enclayer1":
+                self.enc_norm = nn.ModuleList([_norm_layer])
+                self.enc_proj = nn.ModuleList([_proj_layer])
+            else:
+                self.enc_norm = nn.ModuleList(
+                    [copy.deepcopy(_norm_layer) for i in range(config.num_layers - 1)]
+                )
+                self.enc_proj = nn.ModuleList(
+                    [copy.deepcopy(_proj_layer) for i in range(config.num_layers - 1)]
+                )
+
+    @staticmethod
+    def get_reference_points(spatial_shapes, valid_ratios, device):
+        reference_points_list = []
+        for lvl, (H_, W_) in enumerate(spatial_shapes):
+            ref_y, ref_x = torch.meshgrid(
+                torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
+                torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
+            )
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref = torch.stack((ref_x, ref_y), -1)
+            reference_points_list.append(ref)
+        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
+        return reference_points
+
+    def forward(
+        self,
+        src: Tensor,
+        pos: Tensor,
+        spatial_shapes: Tensor,
+        level_start_index: Tensor,
+        valid_ratios: Tensor,
+        key_padding_mask: Tensor,
+        ref_token_index: Optional[Tensor] = None,
+        ref_token_coord: Optional[Tensor] = None,
+    ):
+        """
+        Input:
+            - src: [bs, sum(hi*wi), 256]
+            - pos: pos embed for src. [bs, sum(hi*wi), 256]
+            - spatial_shapes: h,w of each level [num_level, 2]
+            - level_start_index: [num_level] start point of level in sum(hi*wi).
+            - valid_ratios: [bs, num_level, 2]
+            - key_padding_mask: [bs, sum(hi*wi)]
+
+            - ref_token_index: bs, nq
+            - ref_token_coord: bs, nq, 4
+        Intermedia:
+            - reference_points: [bs, sum(hi*wi), num_level, 2]
+        Outpus:
+            - output: [bs, sum(hi*wi), 256]
+        """
+        if self.two_stage_type in ["no", "standard", "enceachlayer", "enclayer1"]:
+            assert ref_token_index is None
+
+        output = src
+        # preparation and reshape
+        if self.num_layers > 0:
+            if self.deformable_encoder:
+                reference_points = self.get_reference_points(
+                    spatial_shapes, valid_ratios, device=src.device
+                )
+
+        intermediate_output = []
+        intermediate_ref = []
+        if ref_token_index is not None:
+            out_i = torch.gather(
+                output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model)
+            )
+            intermediate_output.append(out_i)
+            intermediate_ref.append(ref_token_coord)
+
+        # main process
+        for layer_id, layer in enumerate(self.layers):
+            # main process
+            dropflag = False
+            if self.enc_layer_dropout_prob is not None:
+                prob = random.random()
+                if prob < self.enc_layer_dropout_prob[layer_id]:
+                    dropflag = True
+
+            if not dropflag:
+                if self.deformable_encoder:
+                    output = layer(
+                        src=output,
+                        pos=pos,
+                        reference_points=reference_points,
+                        spatial_shapes=spatial_shapes,
+                        level_start_index=level_start_index,
+                        key_padding_mask=key_padding_mask,
+                    )
+                else:
+                    output = layer(
+                        src=output.transpose(0, 1),
+                        pos=pos.transpose(0, 1),
+                        key_padding_mask=key_padding_mask,
+                    ).transpose(0, 1)
+
+            if (
+                (layer_id == 0 and self.two_stage_type in ["enceachlayer", "enclayer1"])
+                or (self.two_stage_type == "enceachlayer")
+            ) and (layer_id != self.num_layers - 1):
+                output_memory, output_proposals = gen_encoder_output_proposals(
+                    output, key_padding_mask, spatial_shapes
+                )
+                output_memory = self.enc_norm[layer_id](
+                    self.enc_proj[layer_id](output_memory)
+                )
+
+                # gather boxes
+                topk = self.num_queries
+                enc_outputs_class = self.class_embed[layer_id](output_memory)
+                ref_token_index = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[
+                    1
+                ]  # bs, nq
+                ref_token_coord = torch.gather(
+                    output_proposals, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, 4)
+                )
+
+                output = output_memory
+
+            # aux loss
+            if (layer_id != self.num_layers - 1) and ref_token_index is not None:
+                out_i = torch.gather(
+                    output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model)
+                )
+                intermediate_output.append(out_i)
+                intermediate_ref.append(ref_token_coord)
+
+        if self.norm is not None:
+            output = self.norm(output)
+
+        if ref_token_index is not None:
+            intermediate_output = torch.stack(
+                intermediate_output
+            )  # n_enc/n_enc-1, bs, \sum{hw}, d_model
+            intermediate_ref = torch.stack(intermediate_ref)
+        else:
+            intermediate_output = intermediate_ref = None
+
+        return output, intermediate_output, intermediate_ref
+
+
+class DinoDetrDecoder(nn.Module):
+    def __init__(self, decoder_layer, norm, decoder_query_perturber, config):
+        """
+        decoder_layer,
+        num_layers,
+        norm=None,
+        return_intermediate=False,
+        d_model=256,
+        query_dim=4,
+        modulate_hw_attn=False,
+        num_feature_levels=1,
+        deformable_decoder=False,
+        decoder_query_perturber=None,
+        dec_layer_number=None,  # number of queries each layer in decoder
+        rm_dec_query_scale=False,
+        dec_layer_share=False,
+        dec_layer_dropout_prob=None,
+        use_detached_boxes_dec_out=False,
+        """
+        super().__init__()
+        if config.num_layers > 0:
+            self.layers = _get_clones(
+                decoder_layer, config.num_layers, layer_share=config.dec_layer_share
+            )
+        else:
+            self.layers = []
+        self.num_layers = config.num_layers
+        self.norm = norm
+        self.return_intermediate = config.return_intermediate
+        assert config.return_intermediate, "support return_intermediate only"
+        self.query_dim = config.query_dim
+        assert config.query_dim in [2, 4], "query_dim should be 2/4 but {}".format(
+            config.query_dim
+        )
+        self.num_feature_levels = config.num_feature_levels
+        self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
+
+        self.ref_point_head = MLP(
+            config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
+        )
+        if not config.deformable_decoder:
+            self.query_pos_sine_scale = MLP(
+                config.d_model, config.d_model, config.d_model, 2
+            )
+        else:
+            self.query_pos_sine_scale = None
+
+        if config.rm_dec_query_scale:
+            self.query_scale = None
+        else:
+            raise NotImplementedError
+            self.query_scale = MLP(config.d_model, config.d_model, config.d_model, 2)
+        self.bbox_embed = None
+        self.class_embed = None
+
+        self.d_model = config.d_model
+        self.modulate_hw_attn = config.modulate_hw_attn
+        self.deformable_decoder = config.deformable_decoder
+
+        if not config.deformable_decoder and config.modulate_hw_attn:
+            self.ref_anchor_head = MLP(config.d_model, config.d_model, 2, 2)
+        else:
+            self.ref_anchor_head = None
+
+        self.decoder_query_perturber = decoder_query_perturber
+        self.box_pred_damping = None
+
+        self.dec_layer_number = config.dec_layer_number
+        if config.dec_layer_number is not None:
+            assert isinstance(config.dec_layer_number, list)
+            assert len(config.dec_layer_number) == config.num_layers
+
+        self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
+        if config.dec_layer_dropout_prob is not None:
+            assert isinstance(config.dec_layer_dropout_prob, list)
+            assert len(config.dec_layer_dropout_prob) == config.num_layers
+            for i in config.dec_layer_dropout_prob:
+                assert 0.0 <= i <= 1.0
+
+        self.rm_detach = None
+
+    def forward(
+        self,
+        tgt,
+        memory,
+        tgt_mask: Optional[Tensor] = None,
+        memory_mask: Optional[Tensor] = None,
+        tgt_key_padding_mask: Optional[Tensor] = None,
+        memory_key_padding_mask: Optional[Tensor] = None,
+        pos: Optional[Tensor] = None,
+        refpoints_unsigmoid: Optional[Tensor] = None,  # num_queries, bs, 2
+        # for memory
+        level_start_index: Optional[Tensor] = None,  # num_levels
+        spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        valid_ratios: Optional[Tensor] = None,
+    ):
+        """
+        Input:
+            - tgt: nq, bs, d_model
+            - memory: hw, bs, d_model
+            - pos: hw, bs, d_model
+            - refpoints_unsigmoid: nq, bs, 2/4
+            - valid_ratios/spatial_shapes: bs, nlevel, 2
+        """
+        output = tgt
+
+        intermediate = []
+        reference_points = refpoints_unsigmoid.sigmoid()
+        ref_points = [reference_points]
+
+        for layer_id, layer in enumerate(self.layers):
+            # preprocess ref points
+            if (
+                self.training
+                and self.decoder_query_perturber is not None
+                and layer_id != 0
+            ):
+                reference_points = self.decoder_query_perturber(reference_points)
+
+            if self.deformable_decoder:
+                if reference_points.shape[-1] == 4:
+                    reference_points_input = (
+                        reference_points[:, :, None]
+                        * torch.cat([valid_ratios, valid_ratios], -1)[None, :]
+                    )  # nq, bs, nlevel, 4
+                else:
+                    assert reference_points.shape[-1] == 2
+                    reference_points_input = (
+                        reference_points[:, :, None] * valid_ratios[None, :]
+                    )
+                query_sine_embed = gen_sineembed_for_position(
+                    reference_points_input[:, :, 0, :]
+                )  # nq, bs, 256*2
+            else:
+                query_sine_embed = gen_sineembed_for_position(
+                    reference_points
+                )  # nq, bs, 256*2
+                reference_points_input = None
+
+            # conditional query
+            raw_query_pos = self.ref_point_head(query_sine_embed)  # nq, bs, 256
+            pos_scale = self.query_scale(output) if self.query_scale is not None else 1
+            query_pos = pos_scale * raw_query_pos
+            if not self.deformable_decoder:
+                query_sine_embed = query_sine_embed[
+                    ..., : self.d_model
+                ] * self.query_pos_sine_scale(output)
+
+            # modulated HW attentions
+            if not self.deformable_decoder and self.modulate_hw_attn:
+                refHW_cond = self.ref_anchor_head(output).sigmoid()  # nq, bs, 2
+                query_sine_embed[..., self.d_model // 2 :] *= (
+                    refHW_cond[..., 0] / reference_points[..., 2]
+                ).unsqueeze(-1)
+                query_sine_embed[..., : self.d_model // 2] *= (
+                    refHW_cond[..., 1] / reference_points[..., 3]
+                ).unsqueeze(-1)
+
+            # random drop some layers if needed
+            dropflag = False
+            if self.dec_layer_dropout_prob is not None:
+                prob = random.random()
+                if prob < self.dec_layer_dropout_prob[layer_id]:
+                    dropflag = True
+            if not dropflag:
+                output = layer(
+                    tgt=output,
+                    tgt_query_pos=query_pos,
+                    tgt_query_sine_embed=query_sine_embed,
+                    tgt_key_padding_mask=tgt_key_padding_mask,
+                    tgt_reference_points=reference_points_input,
+                    memory=memory,
+                    memory_key_padding_mask=memory_key_padding_mask,
+                    memory_level_start_index=level_start_index,
+                    memory_spatial_shapes=spatial_shapes,
+                    memory_pos=pos,
+                    self_attn_mask=tgt_mask,
+                    cross_attn_mask=memory_mask,
+                )
+
+            # iter update
+            if self.bbox_embed is not None:
+                reference_before_sigmoid = inverse_sigmoid(reference_points)
+                delta_unsig = self.bbox_embed[layer_id](output)
+                outputs_unsig = delta_unsig + reference_before_sigmoid
+                new_reference_points = outputs_unsig.sigmoid()
+
+                # select # ref points
+                if (
+                    self.dec_layer_number is not None
+                    and layer_id != self.num_layers - 1
+                ):
+                    nq_now = new_reference_points.shape[0]
+                    select_number = self.dec_layer_number[layer_id + 1]
+                    if nq_now != select_number:
+                        class_unselected = self.class_embed[layer_id](
+                            output
+                        )  # nq, bs, 91
+                        topk_proposals = torch.topk(
+                            class_unselected.max(-1)[0], select_number, dim=0
+                        )[
+                            1
+                        ]  # new_nq, bs
+                        new_reference_points = torch.gather(
+                            new_reference_points,
+                            0,
+                            topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+                        )  # unsigmoid
+
+                if self.rm_detach and "dec" in self.rm_detach:
+                    reference_points = new_reference_points
+                else:
+                    reference_points = new_reference_points.detach()
+                if self.use_detached_boxes_dec_out:
+                    ref_points.append(reference_points)
+                else:
+                    ref_points.append(new_reference_points)
+
+            intermediate.append(self.norm(output))
+            if self.dec_layer_number is not None and layer_id != self.num_layers - 1:
+                if nq_now != select_number:
+                    output = torch.gather(
+                        output,
+                        0,
+                        topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
+                    )  # unsigmoid
+
+        return [
+            [itm_out.transpose(0, 1) for itm_out in intermediate],
+            [itm_refpoint.transpose(0, 1) for itm_refpoint in ref_points],
+        ]
+
+
+class DinoDeformableTransformer(nn.Module):
+    def __init__(self, config):
+        """
+        d_model=256,
+        nhead=8,
+        num_queries=300,
+        num_encoder_layers=6,
+        num_unicoder_layers=0,
+        num_decoder_layers=6,
+        dim_feedforward=2048,
+        dropout=0.0,
+        activation="relu",
+        normalize_before=False,
+        return_intermediate_dec=False,
+        query_dim=4,
+        num_patterns=0,
+        modulate_hw_attn=False,
+        # for deformable encoder
+        deformable_encoder=False,
+        deformable_decoder=False,
+        num_feature_levels=1,
+        enc_n_points=4,
+        dec_n_points=4,
+        use_deformable_box_attn=False,
+        box_attn_type="roi_align",
+        # init query
+        learnable_tgt_init=False,
+        decoder_query_perturber=None,
+        add_channel_attention=False,
+        add_pos_value=False,
+        random_refpoints_xy=False,
+        # two stage
+        two_stage_type="no",  # ['no', 'standard', 'early', 'combine', 'enceachlayer', 'enclayer1']
+        two_stage_pat_embed=0,
+        two_stage_add_query_num=0,
+        two_stage_learn_wh=False,
+        two_stage_keep_all_tokens=False,
+        # evo of #anchors
+        dec_layer_number=None,
+        rm_enc_query_scale=True,
+        rm_dec_query_scale=True,
+        rm_self_attn_layers=None,
+        key_aware_type=None,
+        # layer share
+        layer_share_type=None,
+        # for detach
+        rm_detach=None,
+        decoder_sa_type="ca",
+        module_seq=["sa", "ca", "ffn"],
+        # for dn
+        embed_init_tgt=False,
+        use_detached_boxes_dec_out=False,
+        """
+        super().__init__()
+        if config.decoder_layer_noise:
+            self.decoder_query_perturber = RandomBoxPerturber(
+                x_noise_scale=config.dln_xy_noise,
+                y_noise_scale=config.dln_xy_noise,
+                w_noise_scale=config.dln_hw_noise,
+                h_noise_scale=config.dln_hw_noise,
+            )
+        else:
+            self.decoder_query_perturber = None
+
+        self.num_feature_levels = config.num_feature_levels
+        self.num_encoder_layers = config.num_encoder_layers
+        self.num_unicoder_layers = config.num_unicoder_layers
+        self.num_decoder_layers = config.num_decoder_layers
+        self.deformable_encoder = config.deformable_encoder
+        self.deformable_decoder = config.deformable_decoder
+        self.two_stage_keep_all_tokens = config.two_stage_keep_all_tokens
+        self.num_queries = config.num_queries
+        self.random_refpoints_xy = config.random_refpoints_xy
+        self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
+        assert config.query_dim == 4
+
+        if config.num_feature_levels > 1:
+            assert (
+                config.deformable_encoder
+            ), "only support deformable_encoder for num_feature_levels > 1"
+        if config.use_deformable_box_attn:
+            assert config.deformable_encoder or config.deformable_encoder
+
+        assert config.layer_share_type in [None, "encoder", "decoder", "both"]
+        if config.layer_share_type in ["encoder", "both"]:
+            enc_layer_share = True
+        else:
+            enc_layer_share = False
+        if config.layer_share_type in ["decoder", "both"]:
+            dec_layer_share = True
+        else:
+            dec_layer_share = False
+        assert config.layer_share_type is None
+
+        self.decoder_sa_type = config.decoder_sa_type
+        assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
+
+        # choose encoder layer type
+        if config.deformable_encoder:
+            encoder_layer = DinoDetrEncoderLayer(config)
+        else:
+            raise NotImplementedError
+        encoder_norm = nn.LayerNorm(config.d_model) if config.normalize_before else None
+        self.encoder = DinoDetrEncoder(encoder_layer, encoder_norm, config)
+
+        # choose decoder layer type
+        if config.deformable_decoder:
+            decoder_layer = DinoDetrDecoderLayer(config)
+
+        else:
+            raise NotImplementedError
+
+        decoder_norm = nn.LayerNorm(config.d_model)
+        self.decoder = DinoDetrDecoder(
+            decoder_layer=decoder_layer,
+            norm=decoder_norm,
+            decoder_query_perturber=self.decoder_query_perturber,
+            config=config,
+        )
+
+        self.d_model = config.d_model
+        self.nhead = config.nhead
+        self.dec_layers = config.num_decoder_layers
+        self.num_queries = config.num_queries  # useful for single stage model only
+        self.num_patterns = config.num_patterns
+        if not isinstance(config.num_patterns, int):
+            Warning(
+                "num_patterns should be int but {}".format(type(config.num_patterns))
+            )
+            self.num_patterns = 0
+
+        if config.num_feature_levels > 1:
+            if self.num_encoder_layers > 0:
+                self.level_embed = nn.Parameter(
+                    torch.Tensor(config.num_feature_levels, config.d_model)
+                )
+            else:
+                self.level_embed = None
+
+        self.learnable_tgt_init = config.learnable_tgt_init
+        assert config.learnable_tgt_init, "why not learnable_tgt_init"
+        self.embed_init_tgt = config.embed_init_tgt
+        if (config.two_stage_type != "no" and config.embed_init_tgt) or (
+            config.two_stage_type == "no"
+        ):
+            self.tgt_embed = nn.Embedding(self.num_queries, config.d_model)
+            nn.init.normal_(self.tgt_embed.weight.data)
+        else:
+            self.tgt_embed = None
+
+        # for two stage
+        self.two_stage_type = config.two_stage_type
+        self.two_stage_pat_embed = config.two_stage_pat_embed
+        self.two_stage_add_query_num = config.two_stage_add_query_num
+        self.two_stage_learn_wh = config.two_stage_learn_wh
+        assert config.two_stage_type in [
+            "no",
+            "standard",
+        ], "unknown param {} of two_stage_type".format(config.two_stage_type)
+        if config.two_stage_type == "standard":
+            # anchor selection at the output of encoder
+            self.enc_output = nn.Linear(config.d_model, config.d_model)
+            self.enc_output_norm = nn.LayerNorm(config.d_model)
+
+            if config.two_stage_pat_embed > 0:
+                self.pat_embed_for_2stage = nn.Parameter(
+                    torch.Tensor(config.two_stage_pat_embed, config.d_model)
+                )
+                nn.init.normal_(self.pat_embed_for_2stage)
+
+            if config.two_stage_add_query_num > 0:
+                self.tgt_embed = nn.Embedding(
+                    self.two_stage_add_query_num, config.d_model
+                )
+
+            if config.two_stage_learn_wh:
+                self.two_stage_wh_embedding = nn.Embedding(1, 2)
+            else:
+                self.two_stage_wh_embedding = None
+
+        if config.two_stage_type == "no":
+            self.init_ref_points(config.num_queries)  # init self.refpoint_embed
+
+        self.enc_out_class_embed = None
+        self.enc_out_bbox_embed = None
+
+        # evolution of anchors
+        self.dec_layer_number = config.dec_layer_number
+        if config.dec_layer_number is not None:
+            if self.two_stage_type != "no" or config.num_patterns == 0:
+                assert (
+                    config.dec_layer_number[0] == config.num_queries
+                ), f"dec_layer_number[0]({config.dec_layer_number[0]}) != num_queries({config.num_queries})"
+            else:
+                assert (
+                    config.dec_layer_number[0]
+                    == config.num_queries * config.num_patterns
+                ), f"dec_layer_number[0]({config.dec_layer_number[0]}) != num_queries({config.num_queries}) * num_patterns({config.num_patterns})"
+
+        self._reset_parameters()
+
+        self.rm_self_attn_layers = config.rm_self_attn_layers
+        if config.rm_self_attn_layers is not None:
+            print(
+                "Removing the self-attn in {} decoder layers".format(
+                    config.rm_self_attn_layers
+                )
+            )
+            for lid, dec_layer in enumerate(self.decoder.layers):
+                if lid in config.rm_self_attn_layers:
+                    dec_layer.rm_self_attn_modules()
+
+        self.rm_detach = config.rm_detach
+        if self.rm_detach:
+            assert isinstance(config.rm_detach, list)
+            assert any([i in ["enc_ref", "enc_tgt", "dec"] for i in config.rm_detach])
+        self.decoder.rm_detach = config.rm_detach
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+        for m in self.modules():
+            if isinstance(m, MultiScaleDeformableAttention):
+                m._reset_parameters()
+        if self.num_feature_levels > 1 and self.level_embed is not None:
+            nn.init.normal_(self.level_embed)
+
+        if self.two_stage_learn_wh:
+            nn.init.constant_(
+                self.two_stage_wh_embedding.weight, math.log(0.05 / (1 - 0.05))
+            )
+
+    def get_valid_ratio(self, mask):
+        _, H, W = mask.shape
+        valid_H = torch.sum(~mask[:, :, 0], 1)
+        valid_W = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_h = valid_H.float() / H
+        valid_ratio_w = valid_W.float() / W
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        return valid_ratio
+
+    def init_ref_points(self, use_num_queries):
+        self.refpoint_embed = nn.Embedding(use_num_queries, 4)
+
+        if self.random_refpoints_xy:
+            self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
+            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(
+                self.refpoint_embed.weight.data[:, :2]
+            )
+            self.refpoint_embed.weight.data[:, :2].requires_grad = False
+
+    def forward(self, srcs, masks, refpoint_embed, pos_embeds, tgt, attn_mask=None):
+        """
+        Input:
+            - srcs: List of multi features [bs, ci, hi, wi]
+            - masks: List of multi masks [bs, hi, wi]
+            - refpoint_embed: [bs, num_dn, 4]. None in infer
+            - pos_embeds: List of multi pos embeds [bs, ci, hi, wi]
+            - tgt: [bs, num_dn, d_model]. None in infer
+
+        """
+        # prepare input for encoder
+        src_flatten = []
+        mask_flatten = []
+        lvl_pos_embed_flatten = []
+        spatial_shapes = []
+        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
+            bs, c, h, w = src.shape
+            spatial_shape = (h, w)
+            spatial_shapes.append(spatial_shape)
+
+            src = src.flatten(2).transpose(1, 2)  # bs, hw, c
+            mask = mask.flatten(1)  # bs, hw
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)  # bs, hw, c
+            if self.num_feature_levels > 1 and self.level_embed is not None:
+                lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
+            else:
+                lvl_pos_embed = pos_embed
+            lvl_pos_embed_flatten.append(lvl_pos_embed)
+            src_flatten.append(src)
+            mask_flatten.append(mask)
+        src_flatten = torch.cat(src_flatten, 1)  # bs, \sum{hxw}, c
+        mask_flatten = torch.cat(mask_flatten, 1)  # bs, \sum{hxw}
+        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)  # bs, \sum{hxw}, c
+        spatial_shapes = torch.as_tensor(
+            spatial_shapes, dtype=torch.long, device=src_flatten.device
+        )
+        level_start_index = torch.cat(
+            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+        )
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+
+        # two stage
+        enc_topk_proposals = enc_refpoint_embed = None
+
+        #########################################################
+        # Begin Encoder
+        #########################################################
+        memory, enc_intermediate_output, enc_intermediate_refpoints = self.encoder(
+            src_flatten,
+            pos=lvl_pos_embed_flatten,
+            level_start_index=level_start_index,
+            spatial_shapes=spatial_shapes,
+            valid_ratios=valid_ratios,
+            key_padding_mask=mask_flatten,
+            ref_token_index=enc_topk_proposals,  # bs, nq
+            ref_token_coord=enc_refpoint_embed,  # bs, nq, 4
+        )
+        #########################################################
+        # End Encoder
+        # - memory: bs, \sum{hw}, c
+        # - mask_flatten: bs, \sum{hw}
+        # - lvl_pos_embed_flatten: bs, \sum{hw}, c
+        # - enc_intermediate_output: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
+        # - enc_intermediate_refpoints: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
+        #########################################################
+
+        if self.two_stage_type == "standard":
+            if self.two_stage_learn_wh:
+                input_hw = self.two_stage_wh_embedding.weight[0]
+            else:
+                input_hw = None
+            output_memory, output_proposals = gen_encoder_output_proposals(
+                memory, mask_flatten, spatial_shapes, input_hw
+            )
+            output_memory = self.enc_output_norm(self.enc_output(output_memory))
+
+            if self.two_stage_pat_embed > 0:
+                bs, nhw, _ = output_memory.shape
+                # output_memory: bs, n, 256; self.pat_embed_for_2stage: k, 256
+                output_memory = output_memory.repeat(1, self.two_stage_pat_embed, 1)
+                _pats = self.pat_embed_for_2stage.repeat_interleave(nhw, 0)
+                output_memory = output_memory + _pats
+                output_proposals = output_proposals.repeat(
+                    1, self.two_stage_pat_embed, 1
+                )
+
+            if self.two_stage_add_query_num > 0:
+                assert refpoint_embed is not None
+                output_memory = torch.cat((output_memory, tgt), dim=1)
+                output_proposals = torch.cat((output_proposals, refpoint_embed), dim=1)
+
+            enc_outputs_class_unselected = self.enc_out_class_embed(output_memory)
+            enc_outputs_coord_unselected = (
+                self.enc_out_bbox_embed(output_memory) + output_proposals
+            )  # (bs, \sum{hw}, 4) unsigmoid
+            topk = self.num_queries
+            topk_proposals = torch.topk(
+                enc_outputs_class_unselected.max(-1)[0], topk, dim=1
+            )[
+                1
+            ]  # bs, nq
+
+            # gather boxes
+            refpoint_embed_undetach = torch.gather(
+                enc_outputs_coord_unselected,
+                1,
+                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+            )  # unsigmoid
+            refpoint_embed_ = refpoint_embed_undetach.detach()
+            init_box_proposal = torch.gather(
+                output_proposals, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
+            ).sigmoid()  # sigmoid
+
+            # gather tgt
+            tgt_undetach = torch.gather(
+                output_memory,
+                1,
+                topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
+            )
+            if self.embed_init_tgt:
+                tgt_ = (
+                    self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)
+                )  # nq, bs, d_model
+            else:
+                tgt_ = tgt_undetach.detach()
+
+            if refpoint_embed is not None:
+                refpoint_embed = torch.cat([refpoint_embed, refpoint_embed_], dim=1)
+                tgt = torch.cat([tgt, tgt_], dim=1)
+            else:
+                refpoint_embed, tgt = refpoint_embed_, tgt_
+
+        elif self.two_stage_type == "no":
+            tgt_ = (
+                self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)
+            )  # nq, bs, d_model
+            refpoint_embed_ = (
+                self.refpoint_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)
+            )  # nq, bs, 4
+
+            if refpoint_embed is not None:
+                refpoint_embed = torch.cat([refpoint_embed, refpoint_embed_], dim=1)
+                tgt = torch.cat([tgt, tgt_], dim=1)
+            else:
+                refpoint_embed, tgt = refpoint_embed_, tgt_
+
+            if self.num_patterns > 0:
+                tgt_embed = tgt.repeat(1, self.num_patterns, 1)
+                refpoint_embed = refpoint_embed.repeat(1, self.num_patterns, 1)
+                tgt_pat = self.patterns.weight[None, :, :].repeat_interleave(
+                    self.num_queries, 1
+                )  # 1, n_q*n_pat, d_model
+                tgt = tgt_embed + tgt_pat
+
+            init_box_proposal = refpoint_embed_.sigmoid()
+
+        else:
+            raise NotImplementedError(
+                "unknown two_stage_type {}".format(self.two_stage_type)
+            )
+        #########################################################
+        # End preparing tgt
+        # - tgt: bs, NQ, d_model
+        # - refpoint_embed(unsigmoid): bs, NQ, d_model
+        #########################################################
+
+        #########################################################
+        # Begin Decoder
+        #########################################################
+        hs, references = self.decoder(
+            tgt=tgt.transpose(0, 1),
+            memory=memory.transpose(0, 1),
+            memory_key_padding_mask=mask_flatten,
+            pos=lvl_pos_embed_flatten.transpose(0, 1),
+            refpoints_unsigmoid=refpoint_embed.transpose(0, 1),
+            level_start_index=level_start_index,
+            spatial_shapes=spatial_shapes,
+            valid_ratios=valid_ratios,
+            tgt_mask=attn_mask,
+        )
+        #########################################################
+        # End Decoder
+        # hs: n_dec, bs, nq, d_model
+        # references: n_dec+1, bs, nq, query_dim
+        #########################################################
+
+        #########################################################
+        # Begin postprocess
+        #########################################################
+        if self.two_stage_type == "standard":
+            if self.two_stage_keep_all_tokens:
+                hs_enc = output_memory.unsqueeze(0)
+                ref_enc = enc_outputs_coord_unselected.unsqueeze(0)
+                init_box_proposal = output_proposals
+
+            else:
+                hs_enc = tgt_undetach.unsqueeze(0)
+                ref_enc = refpoint_embed_undetach.sigmoid().unsqueeze(0)
+        else:
+            hs_enc = ref_enc = None
+        #########################################################
+        # End postprocess
+        # hs_enc: (n_enc+1, bs, nq, d_model) or (1, bs, nq, d_model) or (n_enc, bs, nq, d_model) or None
+        # ref_enc: (n_enc+1, bs, nq, query_dim) or (1, bs, nq, query_dim) or (n_enc, bs, nq, d_model) or None
+        #########################################################
+
+        return hs, references, hs_enc, ref_enc, init_box_proposal
+        # hs: (n_dec, bs, nq, d_model)
+        # references: sigmoid coordinates. (n_dec+1, bs, bq, 4)
+        # hs_enc: (n_enc+1, bs, nq, d_model) or (1, bs, nq, d_model) or None
+        # ref_enc: sigmoid coordinates. \
+        #           (n_enc+1, bs, nq, query_dim) or (1, bs, nq, query_dim) or None
 
 
 DINO_DETR_START_DOCSTRING = r"""
@@ -1318,387 +2437,6 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.level_embed)
 
 
-class DinoDetrEncoder(DinoDetrPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
-    [`DinoDetrEncoderLayer`].
-
-    The encoder updates the flattened multi-scale feature maps through multiple deformable attention layers.
-
-    Args:
-        config: DinoDetrConfig
-    """
-
-    def __init__(self, config: DinoDetrConfig):
-        super().__init__(config)
-        self.gradient_checkpointing = False
-
-        self.dropout = config.dropout
-        self.layers = nn.ModuleList(
-            [DinoDetrEncoderLayer(config) for _ in range(config.encoder_layers)]
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
-        """
-        Get reference points for each feature map. Used in decoder.
-
-        Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Valid ratios of each feature map.
-            device (`torch.device`):
-                Device on which to create the tensors.
-        Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
-        """
-        reference_points_list = []
-        for level, (height, width) in enumerate(spatial_shapes):
-            ref_y, ref_x = meshgrid(
-                torch.linspace(
-                    0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device
-                ),
-                torch.linspace(
-                    0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device
-                ),
-                indexing="ij",
-            )
-            # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Dino-DETR/issues/36
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
-            ref = torch.stack((ref_x, ref_y), -1)
-            reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, 1)
-        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
-        return reference_points
-
-    def forward(
-        self,
-        inputs_embeds=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
-        )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
-
-        spatial_shapes_tuple = tuple(spatial_shapes_list)
-        reference_points = self.get_reference_points(
-            spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device
-        )
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        for i, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings,
-                    reference_points,
-                    spatial_shapes,
-                    spatial_shapes_list,
-                    level_start_index,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings=position_embeddings,
-                    reference_points=reference_points,
-                    spatial_shapes=spatial_shapes,
-                    spatial_shapes_list=spatial_shapes_list,
-                    level_start_index=level_start_index,
-                    output_attentions=output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, encoder_states, all_attentions]
-                if v is not None
-            )
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
-        )
-
-
-class DinoDetrDecoder(DinoDetrPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DinoDetrDecoderLayer`].
-
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-    Some tweaks for Dino DETR:
-
-    - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
-    - it also returns a stack of intermediate outputs and reference points from all decoding layers.
-
-    Args:
-        config: DinoDetrConfig
-    """
-
-    def __init__(self, config: DinoDetrConfig):
-        super().__init__(config)
-
-        self.dropout = config.dropout
-        self.layers = nn.ModuleList(
-            [DinoDetrDecoderLayer(config) for _ in range(config.decoder_layers)]
-        )
-        self.gradient_checkpointing = False
-
-        # hack implementation for iterative bounding box refinement and two-stage Dino DETR
-        self.bbox_embed = None
-        self.class_embed = None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings=None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
-        )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = (
-            () if (output_attentions and encoder_hidden_states is not None) else None
-        )
-        intermediate = ()
-        intermediate_reference_points = ()
-
-        for idx, decoder_layer in enumerate(self.layers):
-            num_coordinates = reference_points.shape[-1]
-            if num_coordinates == 4:
-                reference_points_input = (
-                    reference_points[:, :, None]
-                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
-                )
-            elif reference_points.shape[-1] == 2:
-                reference_points_input = (
-                    reference_points[:, :, None] * valid_ratios[:, None]
-                )
-            else:
-                raise ValueError("Reference points' last dimension must be of size 2")
-
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    position_embeddings,
-                    reference_points_input,
-                    spatial_shapes,
-                    spatial_shapes_list,
-                    level_start_index,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    reference_points=reference_points_input,
-                    spatial_shapes=spatial_shapes,
-                    spatial_shapes_list=spatial_shapes_list,
-                    level_start_index=level_start_index,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            # hack implementation for iterative bounding box refinement
-            if self.bbox_embed is not None:
-                tmp = self.bbox_embed[idx](hidden_states)
-                num_coordinates = reference_points.shape[-1]
-                if num_coordinates == 4:
-                    new_reference_points = tmp + inverse_sigmoid(reference_points)
-                    new_reference_points = new_reference_points.sigmoid()
-                elif num_coordinates == 2:
-                    new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(
-                        reference_points
-                    )
-                    new_reference_points = new_reference_points.sigmoid()
-                else:
-                    raise ValueError(
-                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
-                    )
-                reference_points = new_reference_points.detach()
-
-            intermediate += (hidden_states,)
-            intermediate_reference_points += (reference_points,)
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
-        # Keep batch_size as first dimension
-        intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(
-            intermediate_reference_points, dim=1
-        )
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    intermediate,
-                    intermediate_reference_points,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return DinoDetrDecoderOutput(
-            last_hidden_state=hidden_states,
-            intermediate_hidden_states=intermediate,
-            intermediate_reference_points=intermediate_reference_points,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-        )
-
-
 @add_start_docstrings(
     """
     The bare Dino DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
@@ -1709,195 +2447,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 class DinoDetrModel(DinoDetrPreTrainedModel):
     def __init__(self, config: DinoDetrConfig):
         super().__init__(config)
-
-        # Create backbone + positional encoding
-        backbone = DinoDetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
-        self.backbone = DinoDetrConvModel(backbone, position_embeddings)
-
-        # Create input projection layers
-        if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.intermediate_channel_sizes)
-            input_proj_list = []
-            for _ in range(num_backbone_outs):
-                in_channels = backbone.intermediate_channel_sizes[_]
-                input_proj_list.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                )
-            for _ in range(config.num_feature_levels - num_backbone_outs):
-                input_proj_list.append(
-                    nn.Sequential(
-                        nn.Conv2d(
-                            in_channels,
-                            config.d_model,
-                            kernel_size=3,
-                            stride=2,
-                            padding=1,
-                        ),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                )
-                in_channels = config.d_model
-            self.input_proj = nn.ModuleList(input_proj_list)
-        else:
-            self.input_proj = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(
-                            backbone.intermediate_channel_sizes[-1],
-                            config.d_model,
-                            kernel_size=1,
-                        ),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                ]
-            )
-
-        if not config.two_stage:
-            self.query_position_embeddings = nn.Embedding(
-                config.num_queries, config.d_model * 2
-            )
-
-        self.encoder = DinoDetrEncoder(config)
-        self.decoder = DinoDetrDecoder(config)
-
-        self.level_embed = nn.Parameter(
-            torch.Tensor(config.num_feature_levels, config.d_model)
-        )
-
-        if config.two_stage:
-            self.enc_output = nn.Linear(config.d_model, config.d_model)
-            self.enc_output_norm = nn.LayerNorm(config.d_model)
-            self.pos_trans = nn.Linear(config.d_model * 2, config.d_model * 2)
-            self.pos_trans_norm = nn.LayerNorm(config.d_model * 2)
-        else:
-            self.reference_points = nn.Linear(config.d_model, 2)
-
-        self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
-    def freeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
-            param.requires_grad_(False)
-
-    def unfreeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
-            param.requires_grad_(True)
-
-    def get_valid_ratio(self, mask, dtype=torch.float32):
-        """Get the valid ratio of all feature maps."""
-
-        _, height, width = mask.shape
-        valid_height = torch.sum(mask[:, :, 0], 1)
-        valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_height = valid_height.to(dtype) / height
-        valid_ratio_width = valid_width.to(dtype) / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
-        return valid_ratio
-
-    def get_proposal_pos_embed(self, proposals):
-        """Get the position embedding of the proposals."""
-
-        num_pos_feats = self.config.d_model // 2
-        temperature = 10000
-        scale = 2 * math.pi
-
-        dim_t = torch.arange(
-            num_pos_feats, dtype=proposals.dtype, device=proposals.device
-        )
-        dim_t = temperature ** (
-            2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats
-        )
-        # batch_size, num_queries, 4
-        proposals = proposals.sigmoid() * scale
-        # batch_size, num_queries, 4, 128
-        pos = proposals[:, :, :, None] / dim_t
-        # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
-        pos = torch.stack(
-            (pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4
-        ).flatten(2)
-        return pos
-
-    def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
-        """Generate the encoder output proposals from encoded enc_output.
-
-        Args:
-            enc_output (Tensor[batch_size, sequence_length, hidden_size]): Output of the encoder.
-            padding_mask (Tensor[batch_size, sequence_length]): Padding mask for `enc_output`.
-            spatial_shapes (List[Tuple[int, int]]): Spatial shapes of the feature maps.
-
-        Returns:
-            `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
-                - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
-                  directly predict a bounding box. (without the need of a decoder)
-                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
-                  sigmoid.
-        """
-        batch_size = enc_output.shape[0]
-        proposals = []
-        _cur = 0
-        for level, (height, width) in enumerate(spatial_shapes):
-            mask_flatten_ = padding_mask[:, _cur : (_cur + height * width)].view(
-                batch_size, height, width, 1
-            )
-            valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
-            valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
-
-            grid_y, grid_x = meshgrid(
-                torch.linspace(
-                    0,
-                    height - 1,
-                    height,
-                    dtype=enc_output.dtype,
-                    device=enc_output.device,
-                ),
-                torch.linspace(
-                    0,
-                    width - 1,
-                    width,
-                    dtype=enc_output.dtype,
-                    device=enc_output.device,
-                ),
-                indexing="ij",
-            )
-            grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
-
-            scale = torch.cat(
-                [valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1
-            ).view(batch_size, 1, 1, 2)
-            grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
-            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
-            proposals.append(proposal)
-            _cur += height * width
-        output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = (
-            (output_proposals > 0.01) & (output_proposals < 0.99)
-        ).all(-1, keepdim=True)
-        output_proposals = torch.log(
-            output_proposals / (1 - output_proposals)
-        )  # inverse sigmoid
-        output_proposals = output_proposals.masked_fill(
-            padding_mask.unsqueeze(-1), float("inf")
-        )
-        output_proposals = output_proposals.masked_fill(
-            ~output_proposals_valid, float("inf")
-        )
-
-        # assign each pixel as an object query
-        object_query = enc_output
-        object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
-        object_query = object_query.masked_fill(~output_proposals_valid, float(0))
-        object_query = self.enc_output_norm(self.enc_output(object_query))
-        return object_query, output_proposals
 
     @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -1939,188 +2488,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
-        )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        batch_size, num_channels, height, width = pixel_values.shape
-        device = pixel_values.device
-
-        if pixel_mask is None:
-            pixel_mask = torch.ones(
-                ((batch_size, height, width)), dtype=torch.long, device=device
-            )
-
-        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # which is a list of tuples
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
-
-        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        sources = []
-        masks = []
-        for level, (source, mask) in enumerate(features):
-            sources.append(self.input_proj[level](source))
-            masks.append(mask)
-            if mask is None:
-                raise ValueError("No attention mask was provided")
-
-        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
-        if self.config.num_feature_levels > len(sources):
-            _len_sources = len(sources)
-            for level in range(_len_sources, self.config.num_feature_levels):
-                if level == _len_sources:
-                    source = self.input_proj[level](features[-1][0])
-                else:
-                    source = self.input_proj[level](sources[-1])
-                mask = nn.functional.interpolate(
-                    pixel_mask[None].to(pixel_values.dtype), size=source.shape[-2:]
-                ).to(torch.bool)[0]
-                pos_l = self.backbone.position_embedding(source, mask).to(source.dtype)
-                sources.append(source)
-                masks.append(mask)
-                position_embeddings_list.append(pos_l)
-
-        # Create queries
-        query_embeds = None
-        if not self.config.two_stage:
-            query_embeds = self.query_position_embeddings.weight
-
-        # Prepare encoder inputs (by flattening)
-        source_flatten = []
-        mask_flatten = []
-        lvl_pos_embed_flatten = []
-        spatial_shapes_list = []
-        for level, (source, mask, pos_embed) in enumerate(
-            zip(sources, masks, position_embeddings_list)
-        ):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes_list.append(spatial_shape)
-            source = source.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
-            lvl_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
-            lvl_pos_embed_flatten.append(lvl_pos_embed)
-            source_flatten.append(source)
-            mask_flatten.append(mask)
-        source_flatten = torch.cat(source_flatten, 1)
-        mask_flatten = torch.cat(mask_flatten, 1)
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(
-            spatial_shapes_list, dtype=torch.long, device=source_flatten.device
-        )
-        level_start_index = torch.cat(
-            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
-        )
-        valid_ratios = torch.stack(
-            [self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1
-        )
-
-        # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
-        # Also provide spatial_shapes, level_start_index and valid_ratios
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                inputs_embeds=source_flatten,
-                attention_mask=mask_flatten,
-                position_embeddings=lvl_pos_embed_flatten,
-                spatial_shapes=spatial_shapes,
-                spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
-                valid_ratios=valid_ratios,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        # Fifth, prepare decoder inputs
-        batch_size, _, num_channels = encoder_outputs[0].shape
-        enc_outputs_class = None
-        enc_outputs_coord_logits = None
-        if self.config.two_stage:
-            object_query_embedding, output_proposals = (
-                self.gen_encoder_output_proposals(
-                    encoder_outputs[0], ~mask_flatten, spatial_shapes_list
-                )
-            )
-
-            # hack implementation for two-stage Dino DETR
-            # apply a detection head to each pixel (A.4 in paper)
-            # linear projection for bounding box binary classification (i.e. foreground and background)
-            enc_outputs_class = self.decoder.class_embed[-1](object_query_embedding)
-            # 3-layer FFN to predict bounding boxes coordinates (bbox regression branch)
-            delta_bbox = self.decoder.bbox_embed[-1](object_query_embedding)
-            enc_outputs_coord_logits = delta_bbox + output_proposals
-
-            # only keep top scoring `config.two_stage_num_proposals` proposals
-            topk = self.config.two_stage_num_proposals
-            topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
-            topk_coords_logits = torch.gather(
-                enc_outputs_coord_logits,
-                1,
-                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
-            )
-
-            topk_coords_logits = topk_coords_logits.detach()
-            reference_points = topk_coords_logits.sigmoid()
-            init_reference_points = reference_points
-            pos_trans_out = self.pos_trans_norm(
-                self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits))
-            )
-            query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
-        else:
-            query_embed, target = torch.split(query_embeds, num_channels, dim=1)
-            query_embed = query_embed.unsqueeze(0).expand(batch_size, -1, -1)
-            target = target.unsqueeze(0).expand(batch_size, -1, -1)
-            reference_points = self.reference_points(query_embed).sigmoid()
-            init_reference_points = reference_points
-
-        decoder_outputs = self.decoder(
-            inputs_embeds=target,
-            position_embeddings=query_embed,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=mask_flatten,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            valid_ratios=valid_ratios,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            enc_outputs = tuple(
-                value
-                for value in [enc_outputs_class, enc_outputs_coord_logits]
-                if value is not None
-            )
-            tuple_outputs = (
-                (init_reference_points,)
-                + decoder_outputs
-                + encoder_outputs
-                + enc_outputs
-            )
-
-            return tuple_outputs
 
         return DinoDetrModelOutput(
             init_reference_points=init_reference_points,
@@ -2156,43 +2523,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
 
         # Dino DETR encoder-decoder model
         self.model = DinoDetrModel(config)
-        # Detection heads on top
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.bbox_embed = DinoDetrMLPPredictionHead(
-            input_dim=config.d_model,
-            hidden_dim=config.d_model,
-            output_dim=4,
-            num_layers=3,
-        )
-
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
-
-        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = (
-            (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
-        )
-        if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
-            # hack implementation for iterative bounding box refinement
-            self.model.decoder.bbox_embed = self.bbox_embed
-        else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-            self.class_embed = nn.ModuleList(
-                [self.class_embed for _ in range(num_pred)]
-            )
-            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-            self.model.decoder.bbox_embed = None
-        if config.two_stage:
-            # hack implementation for two-stage
-            self.model.decoder.class_embed = self.class_embed
-            for box_embed in self.bbox_embed:
-                nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2254,9 +2584,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
         outputs = self.model(
@@ -2270,64 +2597,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        hidden_states = (
-            outputs.intermediate_hidden_states if return_dict else outputs[2]
-        )
-        init_reference = outputs.init_reference_points if return_dict else outputs[0]
-        inter_references = (
-            outputs.intermediate_reference_points if return_dict else outputs[3]
-        )
-
-        # class logits + predicted bounding boxes
-        outputs_classes = []
-        outputs_coords = []
-
-        for level in range(hidden_states.shape[1]):
-            if level == 0:
-                reference = init_reference
-            else:
-                reference = inter_references[:, level - 1]
-            reference = inverse_sigmoid(reference)
-            outputs_class = self.class_embed[level](hidden_states[:, level])
-            delta_bbox = self.bbox_embed[level](hidden_states[:, level])
-            if reference.shape[-1] == 4:
-                outputs_coord_logits = delta_bbox + reference
-            elif reference.shape[-1] == 2:
-                delta_bbox[..., :2] += reference
-                outputs_coord_logits = delta_bbox
-            else:
-                raise ValueError(
-                    f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}"
-                )
-            outputs_coord = outputs_coord_logits.sigmoid()
-            outputs_classes.append(outputs_class)
-            outputs_coords.append(outputs_coord)
-        outputs_class = torch.stack(outputs_classes)
-        outputs_coord = torch.stack(outputs_coords)
-
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits,
-                labels,
-                self.device,
-                pred_boxes,
-                self.config,
-                outputs_class,
-                outputs_coord,
-            )
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
-
-            return tuple_outputs
 
         dict_outputs = DinoDetrObjectDetectionOutput(
             loss=loss,
@@ -2648,8 +2917,8 @@ def dn_post_process(outputs_class, outputs_coord, dn_meta, aux_loss, _set_aux_lo
 class DINO(nn.Module):
     """This is the Cross-Attention Detector module that performs object detection"""
 
-    def __init__(
-        self,
+    def __init__(self, config):
+        """
         backbone,
         transformer,
         num_classes,
@@ -2674,7 +2943,7 @@ class DINO(nn.Module):
         dn_box_noise_scale=0.4,
         dn_label_noise_ratio=0.5,
         dn_labelbook_size=100,
-    ):
+        """
         """Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -2689,44 +2958,54 @@ class DINO(nn.Module):
                                 -2 : learn a shared w and h
         """
         super().__init__()
-        self.num_queries = num_queries
-        self.transformer = transformer
-        self.num_classes = num_classes
-        self.hidden_dim = hidden_dim = transformer.d_model
-        self.num_feature_levels = num_feature_levels
-        self.nheads = nheads
-        self.label_enc = nn.Embedding(dn_labelbook_size + 1, hidden_dim)
+        # create deformable transformer
+        self.transformer = DinoDeformableTransformer(config=config)
+        self.num_queries = config.num_queries
+        self.num_classes = config.num_classes
+        self.hidden_dim = hidden_dim = self.transformer.d_model
+        self.num_feature_levels = config.num_feature_levels
+        self.nheads = config.nheads
+        self.label_enc = nn.Embedding(config.dn_labelbook_size + 1, config.hidden_dim)
 
         # setting query dim
-        self.query_dim = query_dim
-        assert query_dim == 4
-        self.random_refpoints_xy = random_refpoints_xy
-        self.fix_refpoints_hw = fix_refpoints_hw
+        self.query_dim = config.query_dim
+        assert config.query_dim == 4
+        self.random_refpoints_xy = config.random_refpoints_xy
+        self.fix_refpoints_hw = config.fix_refpoints_hw
 
         # for dn training
-        self.num_patterns = num_patterns
-        self.dn_number = dn_number
-        self.dn_box_noise_scale = dn_box_noise_scale
-        self.dn_label_noise_ratio = dn_label_noise_ratio
-        self.dn_labelbook_size = dn_labelbook_size
+        self.num_patterns = config.num_patterns
+        self.dn_number = config.dn_number
+        self.dn_box_noise_scale = config.dn_box_noise_scale
+        self.dn_label_noise_ratio = config.dn_label_noise_ratio
+        self.dn_labelbook_size = config.dn_labelbook_size
+
+        # Create backbone + positional encoding
+        backbone = DinoDetrConvEncoder(config)
+        position_embeddings = build_position_encoding(config)
+        self.backbone = DinoDetrConvModel(backbone, position_embeddings)
 
         # prepare input projection layers
-        if num_feature_levels > 1:
-            num_backbone_outs = len(backbone.num_channels)
+        if config.num_feature_levels > 1:
+            num_backbone_outs = len(self.backbone.num_channels)
             input_proj_list = []
             for _ in range(num_backbone_outs):
-                in_channels = backbone.num_channels[_]
+                in_channels = self.backbone.num_channels[_]
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(in_channels, hidden_dim, kernel_size=1),
                         nn.GroupNorm(32, hidden_dim),
                     )
                 )
-            for _ in range(num_feature_levels - num_backbone_outs):
+            for _ in range(config.num_feature_levels - num_backbone_outs):
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(
-                            in_channels, hidden_dim, kernel_size=3, stride=2, padding=1
+                            config.in_channels,
+                            hidden_dim,
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
                         ),
                         nn.GroupNorm(32, hidden_dim),
                     )
@@ -2735,29 +3014,30 @@ class DINO(nn.Module):
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
             assert (
-                two_stage_type == "no"
+                config.two_stage_type == "no"
             ), "two_stage_type should be no if num_feature_levels=1 !!!"
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(backbone.num_channels[-1], hidden_dim, kernel_size=1),
+                        nn.Conv2d(
+                            self.backbone.num_channels[-1], hidden_dim, kernel_size=1
+                        ),
                         nn.GroupNorm(32, hidden_dim),
                     )
                 ]
             )
 
-        self.backbone = backbone
-        self.aux_loss = aux_loss
-        self.box_pred_damping = box_pred_damping = None
+        self.aux_loss = config.aux_loss
+        self.box_pred_damping = None
 
-        self.iter_update = iter_update
-        assert iter_update, "Why not iter_update?"
+        self.iter_update = config.iter_update
+        assert config.iter_update, "Why not iter_update?"
 
         # prepare pred layers
-        self.dec_pred_class_embed_share = dec_pred_class_embed_share
-        self.dec_pred_bbox_embed_share = dec_pred_bbox_embed_share
+        self.dec_pred_class_embed_share = config.dec_pred_class_embed_share
+        self.dec_pred_bbox_embed_share = config.dec_pred_bbox_embed_share
         # prepare class & box embed
-        _class_embed = nn.Linear(hidden_dim, num_classes)
+        _class_embed = nn.Linear(config.hidden_dim, config.num_classes)
         _bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         # init the two embed layers
         prior_prob = 0.01
@@ -2766,23 +3046,23 @@ class DINO(nn.Module):
         nn.init.constant_(_bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
 
-        if dec_pred_bbox_embed_share:
+        if config.dec_pred_bbox_embed_share:
             box_embed_layerlist = [
-                _bbox_embed for i in range(transformer.num_decoder_layers)
+                _bbox_embed for _ in range(self.transformer.num_decoder_layers)
             ]
         else:
             box_embed_layerlist = [
                 copy.deepcopy(_bbox_embed)
-                for i in range(transformer.num_decoder_layers)
+                for _ in range(self.transformer.num_decoder_layers)
             ]
-        if dec_pred_class_embed_share:
+        if config.dec_pred_class_embed_share:
             class_embed_layerlist = [
-                _class_embed for i in range(transformer.num_decoder_layers)
+                _class_embed for _ in range(self.transformer.num_decoder_layers)
             ]
         else:
             class_embed_layerlist = [
                 copy.deepcopy(_class_embed)
-                for i in range(transformer.num_decoder_layers)
+                for _ in range(self.transformer.num_decoder_layers)
             ]
         self.bbox_embed = nn.ModuleList(box_embed_layerlist)
         self.class_embed = nn.ModuleList(class_embed_layerlist)
@@ -2790,33 +3070,39 @@ class DINO(nn.Module):
         self.transformer.decoder.class_embed = self.class_embed
 
         # two stage
-        self.two_stage_type = two_stage_type
-        self.two_stage_add_query_num = two_stage_add_query_num
-        assert two_stage_type in [
+        self.two_stage_type = config.two_stage_type
+        self.two_stage_add_query_num = config.two_stage_add_query_num
+        assert config.two_stage_type in [
             "no",
             "standard",
-        ], "unknown param {} of two_stage_type".format(two_stage_type)
-        if two_stage_type != "no":
-            if two_stage_bbox_embed_share:
-                assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
+        ], "unknown param {} of two_stage_type".format(config.two_stage_type)
+        if config.two_stage_type != "no":
+            if config.two_stage_bbox_embed_share:
+                assert (
+                    config.dec_pred_class_embed_share
+                    and config.dec_pred_bbox_embed_share
+                )
                 self.transformer.enc_out_bbox_embed = _bbox_embed
             else:
                 self.transformer.enc_out_bbox_embed = copy.deepcopy(_bbox_embed)
 
-            if two_stage_class_embed_share:
-                assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
+            if config.two_stage_class_embed_share:
+                assert (
+                    config.dec_pred_class_embed_share
+                    and config.dec_pred_bbox_embed_share
+                )
                 self.transformer.enc_out_class_embed = _class_embed
             else:
                 self.transformer.enc_out_class_embed = copy.deepcopy(_class_embed)
 
             self.refpoint_embed = None
             if self.two_stage_add_query_num > 0:
-                self.init_ref_points(two_stage_add_query_num)
+                self.init_ref_points(config.two_stage_add_query_num)
 
-        self.decoder_sa_type = decoder_sa_type
-        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        if decoder_sa_type == "ca_label":
-            self.label_embedding = nn.Embedding(num_classes, hidden_dim)
+        self.decoder_sa_type = config.decoder_sa_type
+        assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
+        if config.decoder_sa_type == "ca_label":
+            self.label_embedding = nn.Embedding(config.num_classes, hidden_dim)
             for layer in self.transformer.decoder.layers:
                 layer.label_embedding = self.label_embedding
         else:
@@ -2935,7 +3221,7 @@ class DINO(nn.Module):
         # deformable-detr-like anchor update
         # reference_before_sigmoid = inverse_sigmoid(reference[:-1]) # n_dec, bs, nq, 4
         outputs_coord_list = []
-        for dec_lid, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
+        for _, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
             zip(reference[:-1], self.bbox_embed, hs)
         ):
             layer_delta_unsig = layer_bbox_embed(layer_hs)
@@ -3009,6 +3295,21 @@ class DINO(nn.Module):
                 ]
 
         out["dn_meta"] = dn_meta
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                out["pred_logits"],  #
+                labels,
+                self.device,
+                out["pred_boxes"],  # out["pred_boxes"],
+                self.config,
+                outputs_class,
+                outputs_coord_list,
+            )
+
+        out["loss"] = loss
+        out["loss_dict"] = loss_dict
 
         return out
 
