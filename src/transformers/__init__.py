@@ -8261,8 +8261,8 @@ if TYPE_CHECKING:
         )
         from .models.sam import (
             SamModel,
-            SamVisionEncoder,
             SamPreTrainedModel,
+            SamVisionEncoder,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
