@@ -463,7 +463,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
         # Later remove this func and replace with hub URL, for now we use a symbolic link to the folder
-        self.model_id = "./hub_files"
+        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

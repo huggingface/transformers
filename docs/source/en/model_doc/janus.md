@@ -18,25 +18,24 @@ rendered properly in your Markdown viewer.
 
 ## Overview 
 
-The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DEEPSEEK AI team. Janus is a Vision language Model can generate both Images and Text output. The model can take both images and text as input. Note: The models doesn't generate both images and text in an interleaved format rather it could generate either text or image at a time.
+The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DeepSeek AI team and later refined in [Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling](https://github.com/briankb/DeepSeek-Janus/blob/main/janus_pro_tech_report.pdf). Janus is a vision-language model that can generate both image and text output, it can also take both images and text as input.
 
-The abstract from the paper is the following:
+> [!NOTE]
+> The model doesn't generate both images and text in an interleaved format. The user has to pass a parameter indicating whether to generate or image.
+
+The abstract from the original paper is the following:
 
 *In this paper, we introduce Janus, an autoregressive framework that unifies multimodal understanding and generation. Prior research often relies on a single visual encoder for both tasks, such as Chameleon. However, due to the differing levels of information granularity required by multimodal understanding and generation, this approach can lead to suboptimal performance, particularly in multimodal understanding. To address this issue, we decouple visual encoding into separate pathways, while still leveraging a single, unified transformer architecture for processing. The decoupling not only alleviates the conflict between the visual encoder's roles in understanding and generation, but also enhances the framework's flexibility. For instance, both the multimodal understanding and generation components can independently select their most suitable encoding methods. Experiments show that Janus surpasses previous unified model and matches or exceeds the performance of task-specific models. The simplicity, high flexibility, and effectiveness of Janus make it a strong candidate for next-generation unified multimodal models.*
 
-Subsequently they have released [Janus-Pro: Unified Multimodal Understanding and
-Generation with Data and Model Scaling](https://arxiv.org/abs/2501.17811) which is an advanced version of previous version of Janus. 
-
-The abstract from following `Janus-Pro` paper:
+The abstract from the aforementioned `Janus-Pro` paper, released afterwards, is the following:
 
 *In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strategy, (2) expanded training data,
 and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant
 advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will
 inspire further exploration in the field. Code and models are publicly available.*
 
-This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali) and []().
+This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali) and [Hugo Silva](https://huggingface.co/hugosilva664).
 The original code can be found [here](https://github.com/deepseek-ai/Janus).
-
 
 ## Usage Example
 
@@ -49,7 +48,7 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor  
 
-
+model_id = "yaswanthgali/Janus-Pro-1B-HF"
 # Prepare Input for generation.
 image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
 messages = [
@@ -63,7 +62,7 @@ messages = [
 processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
 model = JanusForConditionalGeneration.from_pretrained(model_id,     
         torch_dtype=torch.bfloat16,
-        device_map="cuda:0")
+        device_map="auto")
 
 prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
 inputs = processor(text=prompt,images=image,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
@@ -75,7 +74,7 @@ print(text)
 
 ### Multi image inference
 
-Janus can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+Janus can perform inference with multiple images as input, where images can belong to the same prompt or different prompts in batched inference, where the model processes many conversations in parallel. Here is how you can do it:
 
 ```python
 import torch  
@@ -84,7 +83,7 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor  
 
-
+model_id = "yaswanthgali/Janus-Pro-1B-HF"
 image_cat = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
 image_stop = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 image_snowman = Image.open(requests.get("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True).raw)
@@ -114,7 +113,7 @@ messages = [
 processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
 model = JanusForConditionalGeneration.from_pretrained(model_id,     
         torch_dtype=torch.bfloat16,
-        device_map="cuda:0")
+        device_map="auto")
 
 prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
 inputs = processor(text=prompt,images=[image_cat,image_stop,image_snowman],return_tensors="pt").to(model.device, dtype=torch.bfloat16)

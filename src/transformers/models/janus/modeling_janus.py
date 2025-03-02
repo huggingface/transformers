@@ -72,7 +72,7 @@ JANUS_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlamaConfig`]):
+        config ([`JanusConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -87,6 +87,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     config_class = JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1360,8 +1361,11 @@ class JanusVQVAE(JanusPreTrainedModel):
     """Vision Transformer-based VQ-VAE model for encoding and decoding pixel values."""
 
     config_class = JanusVQVAEConfig
-    _no_split_modules = ["JanusVQVAEVectorQuantizer"]
-
+    _no_split_modules = [
+        "JanusVQVAEAttnBlock",
+        "JanusVQVAEResnetBlock",
+        "JanusVQVAEVectorQuantizer",
+    ]
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
@@ -1442,12 +1446,6 @@ class JanusVQVAE(JanusPreTrainedModel):
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
-    _no_split_modules = [
-        "JanusVQVAEAttnBlock",
-        "JanusVQVAEResnetBlock",
-        "JanusVQVAEVectorQuantizer",
-    ]
-
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
 
@@ -1551,7 +1549,7 @@ JANUS_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The Janus model which consists of a siglip vision backbone,a llamalanguage model and a VQ model.""",
+    """The Janus model which consists of a siglip vision backbone, a Llama language model and a VQ model.""",
     JANUS_START_DOCSTRING,
 )
 class JanusModel(JanusPreTrainedModel):
@@ -1960,7 +1958,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
                 batch_size=batch_size * 2,
-                # we should have atleast a cache len of seq_len + num_image_tokens
+                # we should have at most a cache len of seq_len + num_image_tokens
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
                 device=input_ids,
                 model_kwargs=model_kwargs,
@@ -1983,7 +1981,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         for i in tqdm(range(num_image_tokens)):
             # Fix me: What to do with attention mask when expanding and repeating input ids.
-            # Should be also modify the attention mask if passed?
+            # Should we also modify the attention mask if passed?
             outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,

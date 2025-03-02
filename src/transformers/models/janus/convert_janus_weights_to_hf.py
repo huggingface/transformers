@@ -86,7 +86,7 @@ MAPPINGS = (
 
 
 CHAT_TEMPLATE = (
-    "{%set seps=['\n\n','<\uff5cend▁of▁sentence\uff5c>']%}"
+    "{%set seps=['\n\n','<\uff5cend\u2581of\u2581sentence\uff5c>']%}"
     "{%set i=0%}"
     "{%for message in messages%}"
     "{%if message['role']|lower=='user'%}"
@@ -375,7 +375,7 @@ def convert_model(
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
     model.generation_config.pad_token_id = tokenizer.vocab.get(
-        "<｜▁pad▁｜>"
+        "<\uff5c\u2581pad\u2581\uff5c>"
     )  # If fixed for all janus variants then hardcode it.
 
     # Load and convert state dict
@@ -405,7 +405,7 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        # TODO: warning about weights been not tied is raised here
+        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
         JanusForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 

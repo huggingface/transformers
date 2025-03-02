@@ -28,7 +28,7 @@ if is_vision_available():
     pass
 
 # This will be changed to HUB location once the final converted model is uploaded there
-TMP_LOCATION = "yaswanthgali/Janus-Pro-1B-HF"
+HUB_LOCATION = "yaswanthgali/Janus-Pro-1B-HF"
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -37,7 +37,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         # Similar to Qwen2VLProcessorTest. Tests are done with 1B processor (7B tokenizer is different)
-        processor = self.processor_class.from_pretrained(TMP_LOCATION)
+        processor = self.processor_class.from_pretrained(HUB_LOCATION)
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
