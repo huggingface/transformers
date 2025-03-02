@@ -510,7 +510,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             # 7: "",
             8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-            #  9: """,
+            9: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
         }
 
         self.model.to(torch_device)
