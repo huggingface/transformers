@@ -144,6 +144,12 @@ alt="drawing" width="900"/>
 [[autodoc]] SamImageProcessor
 
 
+## SamVisionEncoder
+
+[[autodoc]] SamVisionEncoder
+    - forward
+
+
 ## SamModel
 
 [[autodoc]] SamModel

@@ -3501,6 +3501,7 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+            "SamVisionEncoder",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -8263,6 +8264,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+            SamVisionEncoder,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
