@@ -189,7 +189,15 @@ class MaskGenerationPipeline(ChunkPipeline):
                 inference_context = self.get_inference_context()
                 with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+                    embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+
+                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
+                    if isinstance(embeddings, tuple):
+                        image_embeddings, intermediate_embeddings = embeddings
+                        model_inputs["intermediate_embeddings"] = intermediate_embeddings
+                    else:
+                        image_embeddings = embeddings
+
                     model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]
@@ -226,7 +234,14 @@ class MaskGenerationPipeline(ChunkPipeline):
         original_sizes = model_inputs.pop("original_sizes").tolist()
         reshaped_input_sizes = model_inputs.pop("reshaped_input_sizes").tolist()
 
-        model_outputs = self.model(**model_inputs)
+        # Only pop intermediate_embeddings if it exists (SAM-HQ case)
+        intermediate_embeddings = model_inputs.pop("intermediate_embeddings", None)
+
+        # Only pass intermediate_embeddings if it exists
+        if intermediate_embeddings is not None:
+            model_outputs = self.model(**model_inputs, intermediate_embeddings=intermediate_embeddings)
+        else:
+            model_outputs = self.model(**model_inputs)
 
         # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]
