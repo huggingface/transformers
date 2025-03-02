@@ -979,7 +979,7 @@ class ProcessorMixin(PushToHubMixin):
                     kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
-                if kwarg_value != "__empty__":
+                if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
                     used_keys.add(modality_key)
 
