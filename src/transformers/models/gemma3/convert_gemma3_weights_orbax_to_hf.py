@@ -508,7 +508,7 @@ def main(*args):
     del args
 
     variant = _VARIANT.value
-    dtype = _PRECISION.value
+    dtype = getattr(torch, _PRECISION.value)
     config = _VARIANTS[variant]
 
     if variant == _VARIANT_GEMMA_3_1B:
@@ -521,7 +521,7 @@ def main(*args):
         config.vision_config = None
         output_path = f"{_OUTPUT_PATH.value}_textonly"
         tokenizer.save_pretrained(output_path)
-        logging.info("Saved GemmaTokenizer for %s (fast? %s)", variant, tokenizer.is_fast)
+        logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
         del tokenizer
     else:
         output_path = _OUTPUT_PATH.value
@@ -529,14 +529,15 @@ def main(*args):
             image_processor=SiglipImageProcessor(image_seq_length=1024),
             tokenizer=tokenizer
         )
+        config.text_config.mm_soft_token_id = processor.image_soft_token_id
         processor.save_pretrained(output_path)
-        logging.info("Saved Gemma3Processor for %s (fast? %s)", variant, processor.tokenizer.is_fast)
+        logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
         del processor
         del tokenizer
 
     logging.info("Gemma 3 (%s) configured as: %s", variant, config)
     logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
-    result = convert(_CHECKPOINT_PATH.value, config, getattr(torch, dtype))
+    result = convert(_CHECKPOINT_PATH.value, config, dtype)
     logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
 
     with accelerate.init_empty_weights():
@@ -547,11 +548,20 @@ def main(*args):
 
     model.load_state_dict(result.state_tree, assign=True, strict=True)
     model.config.torch_dtype = dtype
-    logging.info("Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.", variant, type(model).__name__)
+    logging.info(
+        "Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.",
+        variant,
+        type(model).__name__
+    )
     model.save_pretrained(output_path, safe_serialization=True)
-    logging.info("Saved Gemma 3 (%s) to SafeTensors using %s", variant, type(model).__name__)
-    del result
+    logging.info(
+        "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
+        variant,
+        output_path,
+        type(model).__name__,
+    )
     del model
+    del result
 
 
 if __name__ == "__main__":

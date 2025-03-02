@@ -313,7 +313,6 @@ class Gemma3DecoderLayer(nn.Module):
         last_cache_position: int = 0,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        logger.info("Entering decoder layer %d", self.layer_idx)
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
@@ -367,7 +366,6 @@ class Gemma3DecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        logger.info("Exiting decoder layer %d", self.layer_idx)
         return outputs
 
 
@@ -568,7 +566,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        logger.info("Entering the decoder layers")
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -805,7 +802,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        logger.info("Entering the Gemma3Model")
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -998,6 +995,10 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         self.mm_soft_emb_norm = Gemma3RMSNorm(
             config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
         )
+
+        patches_per_image = config.vision_config.image_size // config.vision_config.patch_size
+        avg_pool_k = patches_per_image**2 // config.text_config.mm_tokens_per_image
+        self.avg_pool = nn.AvgPool1d(kernel_size=avg_pool_k, stride=avg_pool_k)
         self.vocab_size = config.text_config.vocab_size
         self.pad_token_id = pad_token_id if (pad_token_id := config.text_config.pad_token_id) is not None else -1
         self.post_init()
@@ -1028,9 +1029,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     def encode_vision(self, x: torch.Tensor) -> torch.Tensor:
         x = self.mm_soft_emb_norm(x)
-        logger.info("x.shape after norm: %s", x.shape)
         x = self.mm_input_projection(x)
-        logger.info("x.shape after projection: %s", x.shape)
         return x
 
     def get_image_features(self, pixel_values: Sequence[torch.Tensor]) -> torch.Tensor:
@@ -1045,12 +1044,14 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         """
         image_features = []
         for i, prompt_images in enumerate(pixel_values):
-            logger.info("Encoding images for prompt @ idx %d", i)
-            image_outputs = self.vision_model(pixel_values=prompt_images)
-            prompt_image_features = image_outputs.last_hidden_state
-            logger.info("prompt_image_features.shape after vision model: %s", prompt_image_features.shape)
-            prompt_image_features = self.encode_vision(prompt_image_features)
-            logger.info("prompt_image_features.shape after vision encoding: %s", prompt_image_features.shape)
+            vision_outputs = self.vision_model(pixel_values=prompt_images).last_hidden_state
+            b, n, l = vision_outputs.shape
+            reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
+            reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
+            reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
+            pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
+            pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
+            prompt_image_features = self.encode_vision(pooled_vision_outputs)
             image_features.append(prompt_image_features)
         return torch.nested.nested_tensor(image_features)
 
@@ -1130,9 +1131,11 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         is_training = token_type_ids is not None and labels is not None
 
+        if input_ids is not None and image_soft_token_mask is None:
+            image_soft_token_mask = input_ids == self.config.text_config.mm_soft_token_id
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-            logger.info("inputs_embeds.shape = %s", inputs_embeds.shape)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1143,23 +1146,20 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
+            position_ids = cache_position.unsqueeze(0) + 1
 
         # Merge text and images
-        if pixel_values is not None:
+        if pixel_values is not None and image_soft_token_mask is not None:
             image_features = self.get_image_features(pixel_values)
 
             image_mask = image_soft_token_mask.unsqueeze(-1)
             image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            logger.info("image_mask.shape = %s", image_mask.shape)
 
             if inputs_embeds[image_mask].numel() != image_features.numel():
                 raise ValueError("Number of images does not match number of special image tokens in the input text. ")
 
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            logger.info("image_features.shape = %s", image_features.shape)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-            logger.info("inputs_embeds.shape = %s", inputs_embeds.shape)
 
         # mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
@@ -1177,7 +1177,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             inputs_embeds,
             is_training,
         )
-        logger.info("Entering the language model")
         outputs = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,

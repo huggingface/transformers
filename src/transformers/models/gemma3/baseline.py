@@ -35,31 +35,42 @@ def main(*args):
         loaded - start,
     )
 
-    generate_ids = model.generate(**inputs, max_new_tokens=24)
-    generated = time.time()
-    print(
-        "timecheck - generated",
-        generated - loaded,
-        generated - processed,
-        generated - data_t,
-        generated - start,
-    )
+    image_outputs = model.vision_tower(inputs.pixel_values).last_hidden_state
+    print("image_outputs", image_outputs.shape)
+    image_features = model.multi_modal_projector(image_outputs)
+    print("image_features", image_features.shape)
+    image_features = image_features / (model.config.text_config.hidden_size**0.5)
+    print("text hidden size", model.config.text_config.hidden_size)
+    print("text hidden size^0.5", model.config.text_config.hidden_size**0.5)
+    print("image_features post norm", image_features.shape)
 
-    outputs = processor.batch_decode(
-        generate_ids,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False
-    )
-    done = time.time()
-    print(outputs)
-    print(
-        "timecheck - done",
-        done - generated,
-        done - loaded,
-        done - processed,
-        done - data_t,
-        done - start,
-    )
+
+
+    # generate_ids = model.generate(**inputs, max_new_tokens=24)
+    # generated = time.time()
+    # print(
+    #     "timecheck - generated",
+    #     generated - loaded,
+    #     generated - processed,
+    #     generated - data_t,
+    #     generated - start,
+    # )
+
+    # outputs = processor.batch_decode(
+    #     generate_ids,
+    #     skip_special_tokens=True,
+    #     clean_up_tokenization_spaces=False
+    # )
+    # done = time.time()
+    # print(outputs)
+    # print(
+    #     "timecheck - done",
+    #     done - generated,
+    #     done - loaded,
+    #     done - processed,
+    #     done - data_t,
+    #     done - start,
+    # )
 
 
 if __name__ == "__main__":

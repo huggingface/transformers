@@ -41,9 +41,10 @@ class Gemma3RotaryEmbeddingConfig(PretrainedConfig):
         max_position_embeddings: int = 131_072,
         partial_rotary_factor: Optional[float] = None,
         rope_scaling: Optional[Mapping[str, Union[int, float]]] = None,
+        torch_dtype: str = "bfloat16",
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(torch_dtype=torch_dtype, **kwargs)
         self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
         self.num_attention_heads = num_attention_heads
@@ -175,6 +176,8 @@ class Gemma3TextConfig(PretrainedConfig):
         # Config parameters found in all implementations, name differences noted
         vocab_size: int = 262_144,  # num_embed in FLAX
         mm_vocab_size: int = 128,
+        mm_tokens_per_image: int = 256,
+        mm_soft_token_id: int = -1,
         hidden_size: int = 2304,  # embed_dim in FLAX
         intermediate_size: int = 9216,  # hidden_dim in FLAX
         num_hidden_layers: int = 26,  # num_layers in FLAX
@@ -199,6 +202,7 @@ class Gemma3TextConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         use_cache: bool = True,
         cache_implementation: str = "hybrid",
+        torch_dtype: str = "bfloat16",
         compression_type: Optional[enum.Enum] = None,  # quant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
@@ -207,10 +211,13 @@ class Gemma3TextConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
+            torch_dtype=torch_dtype,
             **kwargs,
         )
         self.vocab_size = vocab_size
         self.mm_vocab_size = mm_vocab_size
+        self.mm_tokens_per_image = mm_tokens_per_image
+        self.mm_soft_token_id = mm_soft_token_id
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -250,6 +257,7 @@ class Gemma3VisionConfig(SiglipVisionConfig):
         hidden_act: str = "gelu_pytorch_tanh",
         layer_norm_eps: float = 0.000001,
         vision_use_head: bool = False,
+        torch_dtype: str = "bfloat16",
         **kwargs,
     ):
         super().__init__(
@@ -263,6 +271,7 @@ class Gemma3VisionConfig(SiglipVisionConfig):
             hidden_act=hidden_act,
             layer_norm_eps=layer_norm_eps,
             attention_dropout=attention_dropout,
+            torch_dtype=torch_dtype,
             **kwargs,
         )
 
@@ -280,6 +289,7 @@ class Gemma3Config(PretrainedConfig):
         self,
         text_config: Optional[Gemma3TextConfig] = None,
         vision_config: Optional[Gemma3VisionConfig] = None,
+        torch_dtype: str = "bfloat16",
         **kwargs,
     ):
         if text_config is None:
@@ -303,7 +313,7 @@ class Gemma3Config(PretrainedConfig):
                 "to text tasks."
             )
 
-        super().__init__(**kwargs)
+        super().__init__(torch_dtype=torch_dtype, **kwargs)
 
 
 __all__ = ["Gemma3Config", "Gemma3TextConfig", "Gemma3VisionConfig"]

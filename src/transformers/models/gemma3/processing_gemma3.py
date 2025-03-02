@@ -37,7 +37,7 @@ from ...processing_utils import (
     _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
-from ..gemma import GemmaTokenizer
+from ..gemma import GemmaTokenizer, GemmaTokenizerFast
 from ..siglip import SiglipImageProcessor
 
 
@@ -171,7 +171,7 @@ class Gemma3Processor(ProcessorMixin):
     def __init__(
         self,
         image_processor: SiglipImageProcessor,
-        tokenizer: GemmaTokenizer,
+        tokenizer: Union[GemmaTokenizer, GemmaTokenizerFast],
         chat_template: Optional[str] = None,
         num_mm_soft_tokens_per_image: int = 256,
         **kwargs,

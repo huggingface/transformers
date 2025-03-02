@@ -34,15 +34,50 @@ def main(*args):
         attn_implementation="sdpa",
         torch_dtype=torch.bfloat16,
     )
+    print("model dtypes", model.dtype, model.language_model.dtype, model.vision_model.dtype)
     model.to(torch.get_default_device())
     loaded = time.time()
     print("timecheck - loaded", loaded - start)
 
-    # pixel_values = inputs["pixel_values"][0]
-    # print("pre-vision encode", type(inputs["pixel_values"]), type(pixel_values), pixel_values.shape)
-    # vision_outputs = model.vision_model(pixel_values=pixel_values)
+    # inputs_embeds = model.get_input_embeddings()(inputs.input_ids)
+    # image_mask = inputs.image_soft_token_mask.unsqueeze(-1)
+    # image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+
+    # print(
+    #     "embs and masks shapes, ",
+    #     inputs_embeds.shape,
+    #     inputs.image_soft_token_mask.shape,
+    #     image_mask.shape,
+    # )
+
+    # pixel_values = inputs.pixel_values[0].to(model.device, model.dtype)
+    # print("pre-vision encode", type(pixel_values), pixel_values.shape, pixel_values.dtype)
+    # vision_outputs = model.vision_model(pixel_values=pixel_values).last_hidden_state
+    # print("vision_outputs", vision_outputs.shape)
+
+    # b, n, l = vision_outputs.shape
+    # kernel = vision_outputs.shape[1] // 256
+    # avg_pool = torch.nn.AvgPool1d(kernel_size=kernel, stride=kernel)
+
+    # reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
+    # reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
+    # reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
+    # print("reshaped_vision_outputs", reshaped_vision_outputs.shape)
+
+    # pooled_vision_outputs = avg_pool(reshaped_vision_outputs)
+    # pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
+    # print("pooled_vision_outputs", pooled_vision_outputs.shape)
+
+    # image_features = model.encode_vision(pooled_vision_outputs)
     # vision_encoded = time.time()
-    # print("timecheck - vision encoded", vision_encoded - start, type(vision_outputs))
+    # print(
+    #     "timecheck - vision encoded",
+    #     vision_encoded - start,
+    #     image_features.shape,
+    # )
+
+    # inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+    # print(inputs_embeds.shape)
 
     generate_ids = model.generate(**inputs, max_new_tokens=24)
     generated = time.time()
