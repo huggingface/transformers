@@ -53,6 +53,7 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor  
 
+# use "hugosilva664/Janus-Pro-7B-HF" for the 7B version
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
 # Prepare Input for generation.
 image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
@@ -88,6 +89,7 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
 
+# use "hugosilva664/Janus-Pro-7B-HF" for the 7B version
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
 image_cat = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
 image_stop = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
@@ -142,6 +144,7 @@ import torch
 from transformers import JanusForConditionalGeneration, JanusProcessor
 
 # Set generation mode to `image` to prepare inputs for image generation..
+# use "hugosilva664/Janus-Pro-7B-HF" for the 7B version
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
 processor = JanusProcessor.from_pretrained(model_id, generation_mode="image")
 model = JanusForConditionalGeneration.from_pretrained(model_id,

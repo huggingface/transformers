@@ -249,6 +249,20 @@ def convert_model(
     input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
 
     # Load configuration files
+    required_files = [
+        "config.json",
+        "preprocessor_config.json",
+        "special_tokens_map.json",
+        "tokenizer_config.json"
+    ]
+
+    missing_files = [f for f in required_files if not os.path.exists(os.path.join(input_path, f))]
+    if missing_files:
+        raise ValueError(
+            f"The following required configuration files are missing from {input_path}: {', '.join(missing_files)}. "
+            "Please ensure you have downloaded all necessary model files."
+        )
+
     with open(os.path.join(input_path, "config.json"), "r") as f:
         config_data = json.load(f)
     with open(os.path.join(input_path, "preprocessor_config.json"), "r") as f:
