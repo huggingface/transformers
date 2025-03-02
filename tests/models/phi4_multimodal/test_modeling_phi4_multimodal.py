@@ -302,8 +302,6 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
         # Yes, it is truly the expected response... Even though the model correctly treats the audio file
-        EXPECTED_RESPONSE = (
-            "I'm sorry, but I can't listen to audio. However, if you describe the audio or provide some"
-        )
+        EXPECTED_RESPONSE = "I'm sorry, but I can't listen to audio. However, if you describe the audio to me,"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
