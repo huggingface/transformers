@@ -111,6 +111,8 @@ class DogeConfig(PretrainedConfig):
             If it is not specified, will default to `num_attention_heads`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        keep_window_size (`int`, *optional*, defaults to 2048):
+            The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
         dynamic_mask_ratio (`float`, *optional*, defaults to 0.0):
             The ratio to control the proportion of the dynamic mask filled with the minimum value. For more details checkout [this paper](https://arxiv.org/pdf/2412.11834).
         is_moe (`bool`, *optional*, defaults to `False`):
@@ -174,6 +176,7 @@ class DogeConfig(PretrainedConfig):
         num_attention_heads=8,
         num_key_value_heads=None,
         attention_dropout=0.0,
+        keep_window_size=2048,
         dynamic_mask_ratio=0.0,
         is_moe=False,
         num_experts=2048,
@@ -199,6 +202,7 @@ class DogeConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.attention_dropout = attention_dropout
+        self.keep_window_size = keep_window_size
         self.dynamic_mask_ratio = dynamic_mask_ratio
         self.is_moe = is_moe
         self.num_experts = num_experts

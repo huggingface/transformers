@@ -230,6 +230,7 @@ class DogeDynamicMaskAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
+        self.keep_window_size = config.keep_window_size
         self.dynamic_mask_ratio = config.dynamic_mask_ratio
 
         self.q_proj = nn.Linear(
@@ -282,6 +283,7 @@ class DogeDynamicMaskAttention(nn.Module):
         attn_mask = self.prepare_dynamic_mask(
             hidden_states=hidden_states,
             dynamic_mask=dynamic_mask,
+            keep_window_size=self.keep_window_size,
             dynamic_mask_ratio=self.dynamic_mask_ratio,
             attention_mask=attention_mask,
         )
@@ -315,27 +317,32 @@ class DogeDynamicMaskAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         dynamic_mask: torch.Tensor,
+        keep_window_size: int = 2048,
         dynamic_mask_ratio: float = 0.0,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         """
+        The core idea of DMA is to calculate the dynamic attention mask to mask the tokens that should be masked, so as to form sparse attention.
+
         Combine `dynamic_mask` with `attention_mask` to generate the final `attn_mask`.
 
         Args:
             hidden_states (`torch.Tensor`): The input hidden_states, used to determine the minimum value of the current input precision.
             dynamic_mask (`torch.Tensor`): dynamic mask of shape `(batch_size, num_heads, key_sequence_length)`.
-            dynamic_mask_ratio (`float`, *optional*): Ratio from 0.0 to 1.0 used to control the proportion of the dynamic mask filled with the minimum value.
+            keep_window_size (`int`): The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
+            dynamic_mask_ratio (`float`): Ratio from 0.0 to 1.0 used to control the proportion of the dynamic mask filled with the minimum value.
             attention_mask (`torch.Tensor`, *optional*): attention mask of shape `(batch_size, 1, query_sequence_length, key_sequence_length)`.
         """
         attn_mask = dynamic_mask[:, :, None, :]
-        if 0.0 < dynamic_mask_ratio < 1.0:
-            min_type = torch.finfo(hidden_states.dtype).min
-            num_dynamic_mask = int(attn_mask.shape[-1] * dynamic_mask_ratio)
-            if num_dynamic_mask > 0:
-                rate_value = torch.kthvalue(attn_mask, num_dynamic_mask, dim=-1, keepdim=True).values
-                attn_mask = attn_mask.masked_fill(attn_mask < rate_value, min_type)
-        else:
-            ValueError("`dynamic_mask_ratio` should be in the range (0.0, 1.0)")
+        if dynamic_mask.shape[-1] > keep_window_size:
+            if 0.0 < dynamic_mask_ratio < 1.0:
+                min_type = torch.finfo(hidden_states.dtype).min
+                num_dynamic_mask = int(attn_mask.shape[-1] * dynamic_mask_ratio)
+                if num_dynamic_mask > 0:
+                    rate_value = torch.kthvalue(attn_mask, num_dynamic_mask, dim=-1, keepdim=True).values
+                    attn_mask = attn_mask.masked_fill(attn_mask < rate_value, min_type)
+            else:
+                ValueError("`dynamic_mask_ratio` should be in the range (0.0, 1.0)")
         if attention_mask is not None:
             attn_mask = attn_mask + attention_mask[:, :, :, : attn_mask.shape[-1]]
 
