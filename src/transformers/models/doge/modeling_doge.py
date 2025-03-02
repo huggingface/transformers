@@ -335,9 +335,9 @@ class DogeDynamicMaskAttention(nn.Module):
         """
         attn_mask = dynamic_mask[:, :, None, :]
         if dynamic_mask.shape[-1] > keep_window_size:
-            if 0.0 < dynamic_mask_ratio < 1.0:
+            if 0.0 < dynamic_mask_ratio <= 1.0:
                 min_type = torch.finfo(hidden_states.dtype).min
-                num_dynamic_mask = int(attn_mask.shape[-1] * dynamic_mask_ratio)
+                num_dynamic_mask = int((attn_mask.shape[-1] - keep_window_size) * dynamic_mask_ratio)
                 if num_dynamic_mask > 0:
                     rate_value = torch.kthvalue(attn_mask, num_dynamic_mask, dim=-1, keepdim=True).values
                     attn_mask = attn_mask.masked_fill(attn_mask < rate_value, min_type)
