@@ -376,6 +376,9 @@ def convert_model(
         image_token_index=tokenizer.vocab.get("<image_placeholder>"),
     )
 
+    # Fetch the image token index based on image placeholder token.
+    config.image_token_index = processor.tokenizer.vocab.get("<image_placeholder>")
+
     # Save the config
     if output_dir:
         config.save_pretrained(output_dir)
