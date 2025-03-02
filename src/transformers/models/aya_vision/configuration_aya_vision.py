@@ -15,7 +15,6 @@
 """AyaVision model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -51,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 class AyaVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AyaVisionModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`AyaVisionForConditionalGeneration`]. It is used to instantiate an
     AyaVision model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -134,5 +133,6 @@ class AyaVisionConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
 
 __all__ = ["AyaVisionConfig"]

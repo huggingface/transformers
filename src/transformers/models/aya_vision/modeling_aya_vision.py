@@ -275,7 +275,7 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
     """The AyaVision model which consists of a vision backbone and a language model.""",
     AYA_VISION_START_DOCSTRING,
 )
-class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
+class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -525,4 +525,4 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["AyaVisionModel", "AyaVisionPreTrainedModel"]
+__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"]

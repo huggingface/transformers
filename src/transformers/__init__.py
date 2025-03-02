@@ -1862,7 +1862,7 @@ else:
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
     _import_structure["models.cohere2"].extend(["Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"])
-    _import_structure["models.aya_vision"].extend(["AyaVisionPreTrainedModel", "AyaVisionModel"])
+    _import_structure["models.aya_vision"].extend(["AyaVisionPreTrainedModel", "AyaVisionForConditionalGeneration"])
     _import_structure["models.colpali"].extend(
         [
             "ColPaliForRetrieval",
@@ -6771,7 +6771,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
-        from .models.aya_vision import AyaVisionModel, AyaVisionPreTrainedModel
+        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,

@@ -71,7 +71,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("codegen", "CodeGenModel"),
         ("cohere", "CohereModel"),
         ("cohere2", "Cohere2Model"),
-        ("aya_vision", "AyaVisionModel"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
@@ -506,7 +505,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("codegen", "CodeGenForCausalLM"),
         ("cohere", "CohereForCausalLM"),
         ("cohere2", "Cohere2ForCausalLM"),
-        ("aya_vision", "AyaVisionModel"),
         ("cpmant", "CpmAntForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("data2vec-text", "Data2VecTextForCausalLM"),
@@ -820,6 +818,7 @@ MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
         ("aria", "AriaForConditionalGeneration"),
+        ("aya_vision", "AyaVisionForConditionalGeneration"),
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("chameleon", "ChameleonForConditionalGeneration"),
