@@ -18,19 +18,39 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The {model_name} model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Aya Vision 8B model is a state-of-the-art multilingual multimodal model developed by Cohere For AI. It builds on the Aya Expanse 8B recipe to handle both visual and textual information without compromising on the strong multilingual textual performance of the original model.
 
-The abstract from the paper is the following:
+Aya Vision combines the `Siglip2-so400-384-14` vision encoder with the Cohere CommandR-7B language model further post-trained with the Aya Expanse recipe, creating a powerful vision-language model capable of understanding images and generating text across 23 languages.
 
-*<INSERT PAPER ABSTRACT HERE>*
+Key features of Aya Vision include:
+- Multimodal capabilities in 23 languages
+- Strong text-only multilingual capabilities inherited from CommandR-7B post-trained with the Aya Expanse recipe
+- High-quality visual understanding using the Siglip2-so400-384-14 vision encoder
+- Seamless integration of visual and textual information
+
+<!-- <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/aya_vision_architecture.webp"
+alt="drawing" width="600"/>
+
+<small> Aya Vision architecture. </small> -->
 
 Tips:
 
+- Aya Vision is a multimodal model that takes images and text as input and produces text as output.
+- Images are represented using the `<image>` tag in the templated input.
+- For best results, use the `apply_chat_template` method of the processor to format your inputs correctly.
+- The model can process multiple images in a single conversation.
+- Aya Vision can understand and generate text in 23 languages, making it suitable for multilingual multimodal applications.
+
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [saurabhdash](https://huggingface.co/saurabhdash) and [yonigozlan](https://huggingface.co/yonigozlan).
+
+
+## Usage
+
+Here's how to use Aya Vision for inference:
+
+<!-- todo: add usage examples, see tests for examples with apply_chat_template -->
 
 ## How to use
 
