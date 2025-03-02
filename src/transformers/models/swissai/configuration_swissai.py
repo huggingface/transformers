@@ -3,9 +3,8 @@ from ...configuration_utils import PretrainedConfig
 
 class SwissAIConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SwissAIModel`]. It is used to instantiate an OLMo2
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [allenai/SwissAI-7B-1124-hf](https://huggingface.co/allenai/SwissAI-7B-1124-hf).
+    This is the configuration class to store the configuration of a [`SwissAIModel`]. It is used to instantiate a SwissAI
+    model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
