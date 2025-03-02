@@ -3499,8 +3499,8 @@ else:
     _import_structure["models.sam"].extend(
         [
             "SamModel",
-            "SamVisionEncoder",
             "SamPreTrainedModel",
+            "SamVisionEncoder",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(

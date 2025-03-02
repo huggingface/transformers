@@ -32,7 +32,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("sam", "SamVisionEncoder"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
@@ -243,6 +242,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rt_detr", "RTDetrModel"),
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
+        ("sam", "SamVisionEncoder"),
         ("sam", "SamModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Model"),
