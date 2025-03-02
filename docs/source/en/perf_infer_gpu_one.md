@@ -38,6 +38,7 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 
 FlashAttention-2 is currently supported for the following architectures:
 * [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaForConditionalGeneration)
+* [AyaVision](https://huggingface.co/docs/transformers/model_doc/aya_vision#transformers.AyaVisionForConditionalGeneration)
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
 * [Bamba](https://huggingface.co/docs/transformers/model_doc/bamba#transformers.BambaModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
@@ -232,6 +233,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Albert](https://huggingface.co/docs/transformers/model_doc/albert#transformers.AlbertModel)
 * [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaForConditionalGeneration)
 * [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
+* [AyaVision](https://huggingface.co/docs/transformers/model_doc/aya_vision#transformers.AyaVisionForConditionalGeneration)
 * [Bamba](https://huggingface.co/docs/transformers/model_doc/bamba#transformers.BambaModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Beit](https://huggingface.co/docs/transformers/model_doc/beit#transformers.BeitModel)

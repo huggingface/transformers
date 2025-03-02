@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_aya_vision import *
     from .modeling_aya_vision import *
     from .processing_aya_vision import *
-    from .image_processing_aya_vision import *
 else:
     import sys
 

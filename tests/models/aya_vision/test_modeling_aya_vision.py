@@ -354,7 +354,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_torch
 class AyaVisionQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "../early_ckpt_refactor"
+        self.model_checkpoint = "Cohere-hf/aya-vision-early-ckpt-hf"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -488,11 +488,11 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         print("decoded_output", decoded_output)
         expected_output = "Wooden bridge stretches\nMirror lake reflects the sky\nPeaceful mountain's gaze"  # fmt: skip
-        # self.assertEqual(
-        #     decoded_output,
-        #     expected_output,
-        #     f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
-        # )
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -553,11 +553,11 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_output = "Wooden bridge stretches\nMirror lake reflects the sky\nPeaceful mountain's gaze"  # fmt: skip
         print("decoded_output", decoded_output)
-        # self.assertEqual(
-        #     decoded_output,
-        #     expected_output,
-        #     f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
-        # )
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)

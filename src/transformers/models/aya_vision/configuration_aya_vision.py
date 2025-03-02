@@ -25,7 +25,9 @@ logger = logging.get_logger(__name__)
 class AyaVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AyaVisionForConditionalGeneration`]. It is used to instantiate an
-    AyaVision model according to the specified arguments, defining the model architecture.
+    AyaVision model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of AyaVision.
+    e.g. [Cohere-hf/aya-vision-early-ckpt](https://huggingface.co/Cohere-hf/aya-vision-early-ckpt) # todo: replace with actual model
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -35,20 +37,20 @@ class AyaVisionConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
-            The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
         vision_feature_layer (`int`, *optional*, defaults to -1):
             The index of the layer to select the vision feature.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+        downsample_factor (`int`, *optional*, defaults to 2):
+            The downsample factor to apply to the vision features.
+        adapter_layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon value used for layer normalization in the adapter.
+        image_token_index (`int`, *optional*, defaults to 255036):
+            The image token index to encode the image prompt.
     """
 
     model_type = "aya_vision"
@@ -61,7 +63,6 @@ class AyaVisionConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
-        tie_word_embeddings=True,
         downsample_factor=2,
         adapter_layer_norm_eps=1e-6,
         image_token_index=255036,
@@ -106,7 +107,7 @@ class AyaVisionConfig(PretrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["AyaVisionConfig"]

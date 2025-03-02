@@ -60,10 +60,28 @@ class AyaVisionProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        patch_size (`int`, *optional*, defaults to 14):
+        patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
+        img_size (`int`, *optional*, defaults to 364):
+            The size of the image to be tokenized. This should correspond to the size given to the image processor.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            The token to be used to represent an image in the text.
         downsample_factor (`int`, *optional*, defaults to 1):
             The factor by which to scale the patch size.
+        start_of_img_token (`str`, *optional*, defaults to `"<|START_OF_IMG|>"`):
+            The token to be used to represent the start of an image in the text.
+        end_of_img_token (`str`, *optional*, defaults to `"<|END_OF_IMG|>"`):
+            The token to be used to represent the end of an image in the text.
+        img_patch_token (`str`, *optional*, defaults to `"<|IMG_PATCH|>"`):
+            The token to be used to represent an image patch in the text.
+        img_line_break_token (`str`, *optional*, defaults to `"<|IMG_LINE_BREAK|>"`):
+            The token to be used to represent a line break in the text.
+        tile_token (`str`, *optional*, defaults to `"TILE"`):
+            The token to be used to represent an image patch in the text.
+        tile_global_token (`str`, *optional*, defaults to `"TILE_GLOBAL"`):
+            The token to be used to represent the cover image in the text.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """

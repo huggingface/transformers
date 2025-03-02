@@ -81,7 +81,6 @@ class AyaVisionCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.cohere.modeling_cohere.CohereMultiModalProjector with Cohere->AyaVision
 class AyaVisionMultiModalProjector(nn.Module):
     def __init__(self, config: AyaVisionConfig):
         super().__init__()
@@ -160,7 +159,6 @@ AYA_VISION_START_DOCSTRING = r"""
     "The bare Aya Vision Model outputting raw hidden-states without any specific head on top.",
     AYA_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.cohere.modeling_cohere.CoherePreTrainedModel with Cohere->AyaVision
 class AyaVisionPreTrainedModel(PreTrainedModel):
     config_class = AyaVisionConfig
     base_model_prefix = "model"
@@ -207,8 +205,6 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`CohereProcessor`] uses
             [`GotOcr2ImageProcessor`] for processing images.
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
-            The sizes of the images in the batch, being (height, width) for each image.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -308,11 +304,9 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.tie_weights
     def tie_weights(self):
         return self.language_model.tie_weights()
 
-    # Copied from transformers.models.cohere.modeling_cohere.AyaVisionForConditionalGeneration.resize_token_embeddings
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
@@ -332,8 +326,6 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
                The tensors corresponding to the input images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
             vision_feature_layer (`int`):
                 The index of the layer to select the vision feature.
             vision_feature_select_strategy (`str`):
