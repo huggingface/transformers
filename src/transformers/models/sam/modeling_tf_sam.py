@@ -1041,7 +1041,7 @@ class TFSamVisionAttention(keras.layers.Layer):
             decomposed_rel_pos = self.get_decomposed_rel_pos(
                 query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
-            decomposed_rel_pos = tf.reshape(decomposed_rel_pos, attn_weights.shape)
+            decomposed_rel_pos = tf.reshape(decomposed_rel_pos, shape_list(attn_weights))
             attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
