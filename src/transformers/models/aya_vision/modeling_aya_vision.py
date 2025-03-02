@@ -28,6 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -337,7 +338,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        image_num_patches: torch.Tensor,
         vision_feature_layer: int,
         vision_feature_select_strategy: str,
     ):
@@ -359,14 +359,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
 
-        if pixel_values.dim() == 5:
-            # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(_pixel_values_list, dim=0)
-        elif pixel_values.dim() != 4:
-            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
-
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
@@ -374,22 +366,8 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = torch.split(image_features, image_num_patches.tolist(), dim=0)
-        # pad image_features to the same length and stack them
-        padded_image_features = []
-        max_patch_len = max([img.shape[0] for img in image_features])
-        for img in image_features:
-            padded_image_features.append(
-                torch.cat(
-                    [
-                        img,
-                        torch.zeros(max_patch_len - img.shape[0], *img.shape[1:], device=img.device, dtype=img.dtype),
-                    ],
-                    dim=0,
-                )
-            )
-        padded_image_features = torch.stack(padded_image_features, dim=0)
-        return padded_image_features
+
+        return image_features
 
     @add_start_docstrings_to_model_forward(AYA_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AyaVisionCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -397,8 +375,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
-        image_num_patches: Optional[torch.LongTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -454,17 +430,23 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_features = None
-        if pixel_values is not None and pixel_values.size(0) > 0:
+        if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values,
-                image_num_patches,
+                pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
 
-        if image_features is not None:
-            inputs_embeds = self._merge_image_text_embeddings(input_ids, image_features, inputs_embeds)
+            special_image_mask = (input_ids == self.config.image_token).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -518,8 +500,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        image_num_patches=None,
-        image_sizes=None,
         attention_mask=None,
         cache_position=None,
         num_logits_to_keep=None,
@@ -541,28 +521,8 @@ class AyaVisionModel(AyaVisionPreTrainedModel, GenerationMixin):
         # Otherwise we need pixel values to be passed to model
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-            model_inputs["image_num_patches"] = image_num_patches
 
         return model_inputs
-
-    def _merge_image_text_embeddings(self, input_ids, image_features, inputs_embeds):
-        is_img_patch = input_ids == self.image_token
-        image_encoding_to_sequence_map = (is_img_patch.cumsum(axis=1) * is_img_patch).to(torch.int64)  # [bsz, seqlen]
-        if len(image_features.shape) == 4:
-            image_features = image_features.unsqueeze(0)  # add batch dimension
-        B, I, H, W, D = image_features.shape
-        image_features = image_features.reshape(B, I * W * H, D)
-        pad_tensor = torch.zeros((B, 1, D), dtype=image_features.dtype, device=image_features.device)
-        image_features = torch.cat((pad_tensor, image_features), dim=1)
-        # pad to the sequence length of inputs_embeds
-        image_features = torch.cat(
-            [image_features, torch.zeros_like(inputs_embeds[:, : -image_features.size(1)])], dim=1
-        )
-        batch_indices = torch.arange(B).unsqueeze(1).expand(B, image_encoding_to_sequence_map.shape[1])
-        image_features = image_features[batch_indices, image_encoding_to_sequence_map]
-        output = inputs_embeds * (~is_img_patch).unsqueeze(-1) + image_features * is_img_patch.unsqueeze(-1)
-        return output
 
 
 __all__ = ["AyaVisionModel", "AyaVisionPreTrainedModel"]
