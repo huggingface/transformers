@@ -25,7 +25,6 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
-from ..swissai import SwissAIForCausalLM
 
 
 logger = logging.get_logger(__name__)
@@ -1917,6 +1916,4 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
             "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
             FutureWarning,
         )
-        if config_class.model_type == "swissai":
-            return SwissAIForCausalLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
