@@ -1307,24 +1307,6 @@ class SamVisionEncoder(SamPreTrainedModel):
         r"""
         Returns:
 
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, SamVisionEncoder
-
-        >>> model = SamVisionEncoder.from_pretrained("facebook/sam-vit-base")
-        >>> processor = AutoProcessor.from_pretrained("facebook/sam-vit-base")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(inputs.pixel_values)
-        >>> last_hidden_state = outputs.last_hidden_state
-        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
