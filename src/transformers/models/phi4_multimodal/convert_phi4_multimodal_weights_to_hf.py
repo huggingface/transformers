@@ -122,6 +122,9 @@ def convert_config(original_config: dict):
     audio_config = Phi4MultimodalAudioConfig(**audio_config)
     vision_config = Phi4MultimodalVisionConfig(**vision_embd_layer)
 
+    # Add 2nd eos to config
+    original_config["eos_token_id"] = [199999, 200020]
+
     new_config = Phi4MultimodalConfig(**original_config, vision_config=vision_config, audio_config=audio_config)
     return new_config
 
@@ -148,11 +151,11 @@ def convert_and_write_model(input_dir: str, output_dir: str):
         model = Phi4MultimodalForCausalLM(config)
     missing, unexpected = model.load_state_dict(full_state_dict, strict=False, assign=True)
     # The lm_head is missing because it's tied
-    if missing != ['lm_head.weight']:
+    if missing != ["lm_head.weight"]:
         raise ValueError("Missing keys:\n{missing}")
     if len(unexpected) > 0:
         raise ValueError(f"Unexpected keys:\n{unexpected}")
-    
+
     model.tie_weights()
     model.save_pretrained(output_dir)
 

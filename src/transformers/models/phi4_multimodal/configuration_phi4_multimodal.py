@@ -256,7 +256,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32064):
+        vocab_size (`int`, *optional*, defaults to 200064):
             Vocabulary size of the Phi-3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Phi3Model`].
         hidden_size (`int`, *optional*, defaults to 3072):
@@ -267,7 +267,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -283,7 +283,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
             The dropout ratio after computing the attention scores.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         original_max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model was trained with. This is used to determine the size of the
@@ -306,11 +306,11 @@ class Phi4MultimodalConfig(PretrainedConfig):
             divided by the number of attention heads divided by 2.
         partial_rotary_factor (`float`, *optional*, defaults to 1.0):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
-        bos_token_id (`int`, *optional*, defaults to 1):
+        bos_token_id (`int`, *optional*, defaults to 199999):
             The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 32000):
+        eos_token_id (`int` or `list[int]`, *optional*, defaults to [199999, 200020]):
             The id of the "end-of-sequence" token.
-        pad_token_id (`int`, *optional*, defaults to 32000):
+        pad_token_id (`int`, *optional*, defaults to 199999):
             The id of the padding token.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If `None`, no sliding window is applied.
@@ -375,7 +375,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         rope_scaling=None,
         partial_rotary_factor=1,
         bos_token_id=199999,
-        eos_token_id=199999,
+        eos_token_id=[199999, 200020],
         pad_token_id=199999,
         original_max_position_embeddings=4096,
         sliding_window=None,
