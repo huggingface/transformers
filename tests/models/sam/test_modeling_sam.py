@@ -135,7 +135,9 @@ class SamVisionTester:
         with torch.no_grad():
             result = model(pixel_values)
         output_size = self.image_size // self.patch_size
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.output_channels, output_size, output_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_channels, output_size, output_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -161,7 +163,7 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SamVisionTester(self)
-        common_properties = ["initializer_range"] # TODO
+        common_properties = ["initializer_range"]  # TODO
         self.config_tester = ConfigTester(
             self, config_class=SamVisionConfig, has_text_modality=False, common_properties=common_properties
         )
