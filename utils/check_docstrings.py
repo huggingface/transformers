@@ -332,6 +332,7 @@ OBJECTS_TO_IGNORE = [
     "IBertModel",
     "IdeficsConfig",
     "IdeficsProcessor",
+    "IJepaConfig",
     "IJepaModel",
     "ImageClassificationPipeline",
     "ImageFeatureExtractionPipeline",
