@@ -154,27 +154,21 @@ _VARIANTS = {
 
 # ==== Flags ====
 
-_CHECKPOINT_PATH = flags.DEFINE_string(
+CHECKPOINT_PATH = flags.DEFINE_string(
     name="checkpoint_path",
     default=None,
     help="Path to the Orbax checkpoint.",
     required=True,
 )
 
-_DEVICE = flags.DEFINE_string(
-    name="device",
-    default="cpu",
-    help="Torch device to use for conversion.",
-)
-
-_OUTPUT_PATH = flags.DEFINE_string(
+OUTPUT_PATH = flags.DEFINE_string(
     name="output_path",
     default=None,
     help="Path to store the HF checkpoint.",
     required=True,
 )
 
-_PRECISION = flags.DEFINE_enum(
+PRECISION = flags.DEFINE_enum(
     name="precision",
     default=None,
     help="The floating point precision (aka dtype) of the model.",
@@ -191,7 +185,7 @@ _TEXT_ONLY = flags.DEFINE_bool(
     ),
 )
 
-_TOKENIZER_PATH = flags.DEFINE_string(
+TOKENIZER_PATH = flags.DEFINE_string(
     name="tokenizer_path",
     default=None,
     help="Path to the SentencePiece model file.",
@@ -200,14 +194,13 @@ _TOKENIZER_PATH = flags.DEFINE_string(
 
 _VARIANT = flags.DEFINE_enum(
     name="variant",
-    default=None,
+    default=_VARIANT_GEMMA_3_4B,
     help="The model variant to convert.",
     enum_values=set(_VARIANTS.keys()),
-    required=True,
 )
 
 
-def _convert_siglip_weight(
+def convert_siglip_weight(
     config: Gemma3VisionConfig,
     paths: Sequence[str],
     weights: np.ndarray,
@@ -316,7 +309,7 @@ def _convert_siglip_weight(
     return normalized_path, updated_weights
 
 
-def _convert_transformer_weights(
+def convert_transformer_weights(
     config: Gemma3TextConfig,
     paths: Sequence[str],
     weights: np.ndarray,
@@ -471,12 +464,12 @@ def convert(
             if config.vision_config is None:
                 continue
 
-            path, weights = _convert_siglip_weight(
+            path, weights = convert_siglip_weight(
                 config=config.vision_config, paths=paths, weights=value
             )
             update_tree(path, weights)
         else:
-            for path, weights in _convert_transformer_weights(
+            for path, weights in convert_transformer_weights(
                 config=config.text_config, paths=paths, weights=value
             ):
                 if config.vision_config is None:
@@ -509,24 +502,23 @@ def main(*args):
     del args
 
     variant = _VARIANT.value
-    dtype = getattr(torch, _PRECISION.value)
+    dtype = getattr(torch, PRECISION.value)
     config = _VARIANTS[variant]
-    device = torch.device(_DEVICE.value)
 
     if variant == _VARIANT_GEMMA_3_1B:
         flags.FLAGS.set_default(_TEXT_ONLY.name, True)
 
-    tokenizer = GemmaTokenizerFast(_TOKENIZER_PATH.value)
+    tokenizer = GemmaTokenizerFast(TOKENIZER_PATH.value)
 
     if _TEXT_ONLY.value:
         config.text_config.mm_vocab_size = 0
         config.vision_config = None
-        output_path = f"{_OUTPUT_PATH.value}_textonly"
+        output_path = f"{OUTPUT_PATH.value}_textonly"
         tokenizer.save_pretrained(output_path)
         logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
         del tokenizer
     else:
-        output_path = _OUTPUT_PATH.value
+        output_path = OUTPUT_PATH.value
         processor = Gemma3Processor(
             image_processor=SiglipImageProcessor(image_seq_length=1024),
             tokenizer=tokenizer
@@ -539,7 +531,7 @@ def main(*args):
 
     logging.info("Gemma 3 (%s) configured as: %s", variant, config)
     logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
-    result = convert(_CHECKPOINT_PATH.value, config, dtype)
+    result = convert(CHECKPOINT_PATH.value, config, dtype)
     logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
 
     with accelerate.init_empty_weights():
