@@ -136,7 +136,7 @@ if __name__ == "__main__":
                 continue
             logger.debug(f"loading: {entry.name}")
             module = import_from_path(entry.name.split(".")[0], entry.path)
-            logger.info(f"runnning benchmarks in: {entry.name}")
+            logger.info(f"running benchmarks in: {entry.name}")
             module.run_benchmark(logger, branch, commit_id, commit_msg)
         except ImportModuleException as e:
             logger.error(e)
