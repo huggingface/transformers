@@ -135,7 +135,7 @@ conversation3 = [
 ]
 
 
-# Conversation with mixed midia
+# Conversation with mixed media
 conversation4 = [
     {
         "role": "user",

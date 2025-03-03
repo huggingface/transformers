@@ -13,7 +13,7 @@ The following is the recipe on how to effectively debug `bitsandbytes` integrati
 
 The following instructions are tested with 2 NVIDIA-Tesla T4 GPUs. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100, A6000 should be supported. 
 
-## Virutal envs
+## Virtual envs
 
 ```bash
 conda create --name int8-testing python==3.8
@@ -61,17 +61,17 @@ This happens when some Linear weights are set to the CPU when using `accelerate`
 
 Use the latest version of `accelerate` with a command such as: `pip install -U accelerate` and the problem should be solved.
 
-### `Parameter has no attribue .CB` 
+### `Parameter has no attribute .CB` 
 
 Same solution as above.
 
 ### `RuntimeError: CUDA error: an illegal memory access was encountered ... consider passing CUDA_LAUNCH_BLOCKING=1`
 
-Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as described in the next section.
+Run your script by prepending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as described in the next section.
 
 ### `CUDA illegal memory error: an illegal memory access at line...`:
 
-Check the CUDA verisons with:
+Check the CUDA versions with:
 ```bash
 nvcc --version
 ```

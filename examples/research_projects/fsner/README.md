@@ -48,7 +48,7 @@ model = FSNERModel("sayef/fsner-bert-base-uncased")
 
 tokenizer = FSNERTokenizerUtils("sayef/fsner-bert-base-uncased")
 
-# size of query and supports must be the same. If you want to find all the entitites in one particular query, just repeat the same query n times where n is equal to the number of supports (or entities).
+# size of query and supports must be the same. If you want to find all the entities in one particular query, just repeat the same query n times where n is equal to the number of supports (or entities).
 
 
 query = [

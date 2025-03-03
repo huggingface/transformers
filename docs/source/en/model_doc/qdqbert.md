@@ -49,7 +49,7 @@ This model was contributed by [shangz](https://huggingface.co/shangz).
 - QDQBERT requires the dependency of [Pytorch Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization). To install `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
 - QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *google-bert/bert-base-uncased*), and
   perform Quantization Aware Training/Post Training Quantization.
-- A complete example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for
+- A complete example of using QDQBERT model to perform Quantization Aware Training and Post Training Quantization for
   SQUAD task can be found at [transformers/examples/research_projects/quantization-qdqbert/](examples/research_projects/quantization-qdqbert/).
 
 ### Set default quantizers

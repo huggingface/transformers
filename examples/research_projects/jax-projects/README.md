@@ -742,7 +742,7 @@ def run_model(input_ids, attention_mask):
 outputs = run_model(**inputs)
 ```
 
-We use `jax.jit` to compile the function to get maximum performance. Note that in the above example, we set `padding=max_length` to pad all examples to the same length. We do this because JAX's compiler has to recompile a function everytime its input shape changes - in a sense a compiled function is not only defined by its code but also by its input and output shape. It is usually much more effective to pad the input to be of a fixed static shape than having to recompile every the function multiple times.
+We use `jax.jit` to compile the function to get maximum performance. Note that in the above example, we set `padding=max_length` to pad all examples to the same length. We do this because JAX's compiler has to recompile a function every time its input shape changes - in a sense a compiled function is not only defined by its code but also by its input and output shape. It is usually much more effective to pad the input to be of a fixed static shape than having to recompile every the function multiple times.
 
 
 #### **How to write a training loop**
@@ -752,7 +752,7 @@ Now let's see how we can write a simple training loop to train Flax models, we w
 A training loop for Flax models typically consists of
 - A loss function that takes the parameters and inputs, runs the forward pass and returns the loss. 
 - We then transform the loss function using `jax.grad` or `jax.value_and_grad`  so that we get the gradients of all parameters.
-- An optimizer to update the paramteres using the gradients returned by the transformed loss function.
+- An optimizer to update the parameters using the gradients returned by the transformed loss function.
 - A train step function which combines the loss function and optimizer update, does the forward and backward pass and returns the updated parameters.
 
 Lets see how that looks like in code:
@@ -836,7 +836,7 @@ model.save_pretrained("awesome-flax-model", params=params)
 ```
 
 Note that, as JAX is backed by the [XLA](https://www.tensorflow.org/xla) compiler any JAX/Flax code can run on all `XLA` compliant device without code change!
-That menas you could use the same training script on CPUs, GPUs, TPUs.
+That means you could use the same training script on CPUs, GPUs, TPUs.
 
 To know more about how to train the Flax models on different devices (GPU, multi-GPUs, TPUs) and use the example scripts, please look at the [examples README](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
@@ -1195,7 +1195,7 @@ All the widgets are open sourced in the `huggingface_hub` [repo](https://github.
 * **Feature Extraction:** Retrieve the input embeddings. [Example](https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens?text=test).
 * **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/google-bert/bert-base-uncased?).
 * **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad).
-* **Sentence Simmilarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
+* **Sentence Similarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
 * **Summarization:** Given a text, output a summary of it. [Example](https://huggingface.co/sshleifer/distilbart-cnn-12-6).
 * **Table Question Answering:** Given a table and a question, predict the answer. [Example](https://huggingface.co/google/tapas-base-finetuned-wtq).
 * **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/openai-community/gpt2)
@@ -1280,7 +1280,7 @@ Please make sure that your submitted project includes a demo as well as informat
 ### Process
 
 * **July 17, 12h00 CEST**: TPU VM access closes.
-* **July 19, 12h00 CEST**: Project completition ends (including demo).
+* **July 19, 12h00 CEST**: Project completion ends (including demo).
 * **July 19-21** A group of event organizers (Suraj, Patrick, Suzana, and Omar) will do an initial filter to find the top 15 projects.
 * **July 22-26** The jury will go over the 15 projects and pick the top three projects out of them.
 * **July 27.** Winner projects are announced

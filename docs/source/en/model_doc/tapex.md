@@ -72,9 +72,9 @@ based on the configuration file of the checkpoint on the hub.
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("microsoft/tapex-large-finetuned-wtq")
 
 >>> # prepare table + question
->>> data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
+>>> data = {"Actors": ["Brad Pitt", "Leonardo DiCaprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
 >>> table = pd.DataFrame.from_dict(data)
->>> question = "how many movies does Leonardo Di Caprio have?"
+>>> question = "how many movies does Leonardo DiCaprio have?"
 
 >>> encoding = tokenizer(table, question, return_tensors="pt")
 
@@ -95,7 +95,7 @@ and multiple questions, or a batch of a single query and multiple tables. Let's 
 >>> data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
 >>> table = pd.DataFrame.from_dict(data)
 >>> questions = [
-...     "how many movies does Leonardo Di Caprio have?",
+...     "how many movies does Leonardo DiCaprio have?",
 ...     "which actor has 69 movies?",
 ...     "what's the first name of the actor who has 87 movies?",
 ... ]
@@ -120,7 +120,7 @@ benchmark for table fact checking (it achieves 84% accuracy). The code example b
 >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/tapex-large-finetuned-tabfact")
 
 >>> # prepare table + sentence
->>> data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
+>>> data = {"Actors": ["Brad Pitt", "Leonardo DiCaprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
 >>> table = pd.DataFrame.from_dict(data)
 >>> sentence = "George Clooney has 30 movies"
 

@@ -107,7 +107,7 @@ As you can see in the following code, you only need to add four additional lines
 
 ## Train
 
-Once you've added the relevant lines of code, launch your training in a script or a notebook like Colaboratory.
+Once you've added the relevant lines of code, launch your training in a script or a notebook like Collaboratory.
 
 ### Train with a script
 

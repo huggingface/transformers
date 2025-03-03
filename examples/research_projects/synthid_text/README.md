@@ -1,7 +1,7 @@
 # SynthID Text
 
 This project showcases the use of SynthIDText for watermarking LLMs. The code shown in this repo also
-demostrates the training of the detector for detecting such watermarked text. This detector can be uploaded onto
+demonstrates the training of the detector for detecting such watermarked text. This detector can be uploaded onto
 a private HF hub repo (private for security reasons) and can be initialized again through pretrained model loading also shown in this script.
 
 See our blog post: https://huggingface.co/blog/synthid-text
@@ -25,7 +25,7 @@ pip install -r requirements.txt
 python detector_training.py --model_name=google/gemma-7b-it
 ```
 
-Check the script for more parameters are are tunable and check out paper at link
+Check the script for more parameters are tunable and check out paper at link
 https://www.nature.com/articles/s41586-024-08025-4 for more information on these parameters.
 
 ## Caveat
