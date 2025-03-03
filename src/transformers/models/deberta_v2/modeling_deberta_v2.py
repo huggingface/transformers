@@ -236,10 +236,7 @@ class DebertaV2SelfOutput(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        if config.ort:
-            self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        else:
-            self.dropout = StableDropout(config.hidden_dropout_prob)
+        self.dropout = StableDropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -380,10 +377,7 @@ class DisentangledSelfAttention(nn.Module):
                     self.pos_query_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        if config.ort:
-            self.pos_dropout = TorchNNDropout(config.hidden_dropout_prob)
-        else:
-            self.pos_dropout = StableDropout(config.hidden_dropout_prob)
+        self.pos_dropout = StableDropout(config.hidden_dropout_prob)
 
     def transpose_for_scores(self, x, attention_heads) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (attention_heads, -1)
@@ -605,10 +599,7 @@ class DebertaV2Output(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        if config.ort:
-            self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        else:
-            self.dropout = StableDropout(config.hidden_dropout_prob)
+        self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
     def forward(self, hidden_states, input_tensor):
@@ -662,10 +653,7 @@ class ConvLayer(nn.Module):
             config.hidden_size, config.hidden_size, kernel_size, padding=(kernel_size - 1) // 2, groups=groups
         )
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        if config.ort:
-            self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        else:
-            self.dropout = StableDropout(config.hidden_dropout_prob)
+        self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
     def forward(self, hidden_states, residual_states, input_mask):
@@ -718,10 +706,7 @@ class DebertaV2Embeddings(nn.Module):
             self.embed_proj = None
 
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        if config.ort:
-            self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        else:
-            self.dropout = StableDropout(config.hidden_dropout_prob)
+        self.dropout = StableDropout(config.hidden_dropout_prob)
         self.config = config
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -1297,10 +1282,7 @@ class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.pooler_hidden_size, config.pooler_hidden_size)
-        if config.ort:
-            self.dropout = nn.Dropout(config.pooler_dropout)
-        else:
-            self.dropout = StableDropout(config.pooler_dropout)
+        self.dropout = StableDropout(config.pooler_dropout)
         self.config = config
 
     def forward(self, hidden_states):
@@ -1339,10 +1321,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         self.classifier = nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
-        if config.ort:
-            self.dropout = nn.Dropout(drop_out)
-        else:
-            self.dropout = StableDropout(drop_out)
+        self.dropout = StableDropout(drop_out)
 
         # Initialize weights and apply final processing
         self.post_init()
