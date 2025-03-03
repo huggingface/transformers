@@ -89,50 +89,41 @@ class AyaVisionMultiModalProjector(nn.Module):
         self.alignment_intermediate_size = getattr(
             config, "alignment_intermediate_size", config.text_config.hidden_size
         )
-        self.act_fn = getattr(config, "alignment_activation_fn", "gelu")
         self.layernorm = nn.LayerNorm(
             config.vision_config.hidden_size * (config.downsample_factor**2), eps=config.adapter_layer_norm_eps
         )
 
-        # Same intermediate size for both SwiGLU and regular activation
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * (config.downsample_factor**2),
             self.alignment_intermediate_size,
             bias=True,
         )
 
-        if self.act_fn == "swiglu":
-            self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
-            # For SwiGLU, project down to half size since we split intermediate dim
-            self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
-        else:
-            self.act = ACT2FN[config.projector_hidden_act]
-            self.linear_2 = nn.Linear(self.alignment_intermediate_size, config.text_config.hidden_size, bias=True)
+        self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
+        # For SwiGLU, project down to half size since we split intermediate dim
+        self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features):
         image_features = self.pixel_shuffle(image_features)
         image_features = self.layernorm(image_features)
         hidden_states = self.linear_1(image_features)
 
-        if self.act_fn == "swiglu":
-            # Split along last dimension and apply SwiGLU
-            x, gate = hidden_states.chunk(2, dim=-1)
-            hidden_states = self.act(gate) * x
-        else:
-            hidden_states = self.act(hidden_states)
+        # Split along last dimension and apply SwiGLU
+        x, gate = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.act(gate) * x
 
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
     def pixel_shuffle(self, image_features):  # B, S, D
-        b, s, d = image_features.shape
-        h = w = int(s**0.5)
-        image_features = image_features.reshape(image_features.shape[0], w, h, -1)
-        c = image_features.shape[-1]
-        image_features = image_features.reshape(b, w, int(h / self.downsample_factor), int(c * self.downsample_factor))
+        batch_size, seq_length, feature_dim = image_features.shape
+        height = width = int(seq_length**0.5)
+        image_features = image_features.reshape(image_features.shape[0], width, height, -1)
+        channels = image_features.shape[-1]
+        image_features = image_features.reshape(batch_size, width, int(height / self.downsample_factor), int(channels * self.downsample_factor))
         image_features = image_features.permute(0, 2, 1, 3)
         image_features = image_features.reshape(
-            b, int(h / self.downsample_factor), int(w / self.downsample_factor), -1
+            batch_size, int(height / self.downsample_factor), int(width / self.downsample_factor), -1
         )
         image_features = image_features.permute(0, 2, 1, 3)
         return image_features
@@ -281,7 +272,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [f"language_model.{key}" for key in self.language_model._tied_weights_keys]
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
