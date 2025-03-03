@@ -941,10 +941,6 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
                 module, param_type = get_module_from_name(model, fixed_param_name)
-                print(model)
-                print(fixed_param_name)
-                print(param)
-                print(module)
                 module.load_state_dict(
                     {param_type: param.to(param_device)},
                     strict=False,
