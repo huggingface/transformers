@@ -229,6 +229,8 @@ class DinoDetrConfig(PretrainedConfig):
         use_dn=True,
         match_unstable_error=True,
         focal_alpha=0.25,
+        enc_layer_share=None,
+        dec_layer_share=None,
         backbone_config=None,
         backbone_kwargs=None,
         is_encoder_decoder=True,
@@ -384,6 +386,9 @@ class DinoDetrConfig(PretrainedConfig):
         self.no_interm_box_loss = no_interm_box_loss
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+
+        self.enc_layer_share = enc_layer_share
+        self.dec_layer_share = dec_layer_share
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

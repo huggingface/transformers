@@ -850,7 +850,7 @@ def compute_segments(
     return segmentation, segments
 
 
-class DeformableDetrImageProcessor(BaseImageProcessor):
+class DinoDetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Deformable DETR image processor.
 
@@ -1764,4 +1764,4 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         return results
 
 
-__all__ = ["DeformableDetrImageProcessor"]
+__all__ = ["DinoDetrImageProcessor"]

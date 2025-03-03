@@ -466,7 +466,6 @@ else:
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
 
-
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
