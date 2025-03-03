@@ -664,9 +664,9 @@ class ViTPooler(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.pooler_size)
 	if isinstance(config.pooler_act, str):
-		self.activation = {'tanh': nn.Tanh(), 'identity': lambda x: x, 'none': lambda x: x, 'relu': nn.Relu()}[config.pooler_act]
+            self.activation = {'tanh': nn.Tanh(), 'identity': lambda x: x, 'none': lambda x: x, 'relu': nn.Relu()}[config.pooler_act]
 	else:
-		self.activation = config.pooler_act
+	    self.activation = config.pooler_act
 
     def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
