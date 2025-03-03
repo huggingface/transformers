@@ -50,11 +50,12 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     [`~Phi4MultimodalProcessor.__call__`] and [`~Phi4MultimodalProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Phi4MultimodalImageProcessor`]):
-            The image processor is a required input.
-        audio_processor (`<fill_type>`): <fill_docstring>
-        tokenizer ([`GPT2Tokenizer`]):
-            The tokenizer is a required input.
+        image_processor (`Phi4MultimodalImageProcessor`):
+            The image processor to use for images.
+        audio_processor (`Phi4MultimodalFeatureExtractor`):
+            The audio processor to use for audio inputs.
+        tokenizer (`GPT2Tokenizer`):
+            The tokenizer to use for text.
     """
 
     attributes = ["image_processor", "audio_processor", "tokenizer"]
@@ -88,37 +89,19 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+            audios (`List[Union[np.ndarray, torch.Tensor]]`):
+                List of the audios to be prepared.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
             - **input_image_embeds** -- Pixel values to be fed to a model.
             - **image_sizes** -- List of tuples specifying the size of each image in `input_image_embeds`.
             - **image_attention_mask** -- List of attention masks for each image in `input_image_embeds`.
             - **input_audio_embeds** -- Audio embeddings to be fed to a model.
             - **audio_embed_sizes** -- List of integers specifying the size of each audio in `input_audio_embeds`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
         """
 
         return_tensors = kwargs.get("return_tensors", None)
