@@ -39,6 +39,10 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
+if is_deepspeed_zero3_enabled():
+    import deepspeed
+
+
 logger = logging.get_logger(__name__)
 
 

@@ -46,6 +46,10 @@ from ...utils import (
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
+if is_deepspeed_zero3_enabled():
+    import deepspeed
+
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/hf-seamless-m4t-medium"
