@@ -2012,7 +2012,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
-        unresolved_files = []
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
@@ -2040,12 +2039,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
-
-        if len(unresolved_files) > 0:
-            logger.info(
-                f"Can't load following files from cache: {unresolved_files} and cannot check if these "
-                "files are necessary for the tokenizer to operate."
-            )
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
