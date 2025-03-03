@@ -203,6 +203,7 @@ class SamVisionConfig(PretrainedConfig):
     ```"""
 
     base_config_key = "vision_config"
+    model_type = "sam_vision_encoder"
 
     def __init__(
         self,
