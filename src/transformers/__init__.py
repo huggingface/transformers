@@ -194,6 +194,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.autoformer": ["AutoformerConfig"],
+    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor"],
     "models.bamba": ["BambaConfig"],
     "models.bark": [
         "BarkCoarseConfig",
@@ -308,7 +309,6 @@ _import_structure = {
     ],
     "models.cohere": ["CohereConfig"],
     "models.cohere2": ["Cohere2Config"],
-    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor"],
     "models.colpali": [
         "ColPaliConfig",
         "ColPaliProcessor",
@@ -1601,6 +1601,7 @@ else:
             "AutoformerPreTrainedModel",
         ]
     )
+    _import_structure["models.aya_vision"].extend(["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"])
     _import_structure["models.bamba"].extend(
         [
             "BambaForCausalLM",
@@ -1862,7 +1863,6 @@ else:
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
     _import_structure["models.cohere2"].extend(["Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"])
-    _import_structure["models.aya_vision"].extend(["AyaVisionPreTrainedModel", "AyaVisionForConditionalGeneration"])
     _import_structure["models.colpali"].extend(
         [
             "ColPaliForRetrieval",
