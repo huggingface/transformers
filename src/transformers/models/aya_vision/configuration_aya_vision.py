@@ -27,7 +27,7 @@ class AyaVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`AyaVisionForConditionalGeneration`]. It is used to instantiate an
     AyaVision model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of AyaVision.
-    e.g. [Cohere-hf/aya-vision-early-ckpt](https://huggingface.co/Cohere-hf/aya-vision-early-ckpt) # todo: replace with actual model
+    e.g. [CohereForAI/aya-vision-8b](https://huggingface.co/CohereForAI/aya-vision-8b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
