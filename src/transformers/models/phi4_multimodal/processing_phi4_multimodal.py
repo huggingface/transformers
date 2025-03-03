@@ -152,7 +152,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
                 "You should add as much audio tokens `<|audio_i|>` in your prompt as you pass `audios` to the processor"
             )
 
-        # Add appropriate number of image/audio tokens
+        # Add appropriate number of image/audio tokens (note that the count of replacement is dynamic)
         image_count_iter = iter(num_img_tokens)
         audio_count_iter = iter(audio_embed_sizes)
         processed_text = [
