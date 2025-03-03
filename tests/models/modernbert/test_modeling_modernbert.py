@@ -292,7 +292,12 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
                 if param.requires_grad and not (
                     name == "classifier.weight"
-                    and model_class in [ModernBertForSequenceClassification, ModernBertForTokenClassification]
+                    and model_class
+                    in [
+                        ModernBertForSequenceClassification,
+                        ModernBertForTokenClassification,
+                        ModernBertForQuestionAnswering,
+                    ]
                 ):
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
