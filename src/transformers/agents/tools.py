@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
+from huggingface_hub.utils._deprecation import _deprecate_method
 from packaging import version
 
 from ..dynamic_module_utils import (
@@ -132,9 +133,17 @@ class Tool:
     inputs: Dict[str, Dict[str, Union[str, type]]]
     output_type: type
 
+    @_deprecate_method(
+        version="4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
+    @_deprecate_method(
+        version="4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         validate_after_init(cls, do_validate_forward=False)

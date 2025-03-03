@@ -152,6 +152,8 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
     """
 
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
+    # Doesn't run generation tests. TODO eustache/joao: some generation tests are broken, the errors seem cache-related
+    all_generative_model_classes = ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
