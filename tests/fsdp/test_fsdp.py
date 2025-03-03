@@ -150,13 +150,13 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         }
 
         self.fsdp_config = {
-            "backward_prefetch": "backward_pre",
-            "forward_prefetch": "False",
-            "limit_all_gathers": "False",
-            "use_orig_params": "True",
-            "sync_module_states": "True",
-            "cpu_ram_efficient_loading": "True",
-            "activation_checkpointing": "False",
+            "backward_prefetch": "BACKWARD_PRE",
+            "forward_prefetch": "false",
+            "limit_all_gathers": "false",
+            "use_orig_params": "true",
+            "sync_module_states": "true",
+            "cpu_ram_efficient_loading": "true",
+            "activation_checkpointing": "false",
             "min_num_params": 1,
         }
 
@@ -212,7 +212,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(
                 os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
             )
-            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"].upper())
+            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"])
             self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
             self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
             self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
