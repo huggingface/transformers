@@ -534,6 +534,7 @@ str_to_torch_dtype = {
 if is_torch_greater_or_equal("2.4.0"):
     str_to_torch_dtype["U16"] = torch.uint16
 
+
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
