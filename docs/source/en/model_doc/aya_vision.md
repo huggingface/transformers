@@ -24,9 +24,9 @@ Aya Vision 8B combines the `Siglip2-so400-384-14` vision encoder with the Cohere
 
 Key features of Aya Vision include:
 - Multimodal capabilities in 23 languages
-- Strong text-only multilingual capabilities inherited from CommandR-7B post-trained with the Aya Expanse recipe
+- Strong text-only multilingual capabilities inherited from CommandR-7B post-trained with the Aya Expanse recipe and Aya Expanse 32B
 - High-quality visual understanding using the Siglip2-so400-384-14 vision encoder
-- Seamless integration of visual and textual information
+- Seamless integration of visual and textual information in 23 languages.
 
 <!-- <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/aya_vision_architecture.webp"
 alt="drawing" width="600"/>
@@ -40,8 +40,6 @@ Tips:
 - For best results, use the `apply_chat_template` method of the processor to format your inputs correctly.
 - The model can process multiple images in a single conversation.
 - Aya Vision can understand and generate text in 23 languages, making it suitable for multilingual multimodal applications.
-
-<INSERT TIPS ABOUT MODEL HERE>
 
 This model was contributed by [saurabhdash](https://huggingface.co/saurabhdash) and [yonigozlan](https://huggingface.co/yonigozlan).
 
@@ -83,11 +81,150 @@ gen_tokens = model.generate(
 
 gen_text = print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
 ```
+### Pipeline
 
-## How to use
+```python
+from transformers import pipeline
 
-<INSERT Usage examples here>
+pipe = pipeline(model="CohereForAI/aya-vision-8b", task="image-text-to-text", device_map="auto")
 
+# Format message with the aya-vision chat template
+messages = [
+    {"role": "user",
+     "content": [
+       {"type": "image", "url": "https://media.istockphoto.com/id/458012057/photo/istanbul-turkey.jpg?s=612x612&w=0&k=20&c=qogAOVvkpfUyqLUMr_XJQyq-HkACXyYUSZbKhBlPrxo="},
+        {"type": "text", "text": "Bu resimde hangi anıt gösterilmektedir?"},
+    ]},
+    ]
+outputs = pipe(text=messages, max_new_tokens=300, return_full_text=False)
+
+print(outputs)
+```
+
+### Multiple Images and Batched Inputs
+
+Aya Vision can process multiple images in a single conversation. Here's how to use it with multiple images:
+
+```python
+from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+
+model_id = "CohereForAI/aya-vision-8b"
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id, device_map="cuda:0", torch_dtype=torch.float16
+)
+
+# Example with multiple images in a single message
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+            },
+            {
+                "type": "image",
+                "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+            },
+            {
+                "type": "text",
+                "text": "These images depict two different landmarks. Can you identify them?",
+            },
+        ],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+).to(model.device)
+
+gen_tokens = model.generate(
+    **inputs, 
+    max_new_tokens=300, 
+    do_sample=True, 
+    temperature=0.3,
+)
+
+gen_text = processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(gen_text)
+```
+
+For processing batched inputs (multiple conversations at once):
+
+```python
+from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+
+model_id = "CohereForAI/aya-vision-8b"
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id, device_map="cuda:0", torch_dtype=torch.float16
+)
+
+# Prepare two different conversations
+batch_messages = [
+    # First conversation with a single image
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "text", "text": "Write a haiku for this image"},
+            ],
+        },
+    ],
+    # Second conversation with multiple images
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                },
+                {
+                    "type": "image",
+                    "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                },
+                {
+                    "type": "text",
+                    "text": "These images depict two different landmarks. Can you identify them?",
+                },
+            ],
+        },
+    ],
+]
+
+# Process each conversation separately and combine into a batch
+batch_inputs = processor.apply_chat_template(
+    batch_messages, 
+    padding=True, 
+    add_generation_prompt=True, 
+    tokenize=True, 
+    return_dict=True, 
+    return_tensors="pt"
+).to(model.device)
+
+# Generate responses for the batch
+batch_outputs = model.generate(
+    **batch_inputs,
+    max_new_tokens=300,
+    do_sample=True,
+    temperature=0.3,
+)
+
+# Decode the generated responses
+for i, output in enumerate(batch_outputs):
+    response = processor.tokenizer.decode(
+        output[batch_inputs.input_ids.shape[1]:], 
+        skip_special_tokens=True
+    )
+    print(f"Response {i+1}:\n{response}\n")
+```
 
 ## AyaVisionProcessor
 

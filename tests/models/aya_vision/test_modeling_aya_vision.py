@@ -354,7 +354,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_torch
 class AyaVisionQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "Cohere-hf/aya-vision-early-ckpt-hf"
+        self.model_checkpoint = "CohereForAI/aya-vision-8b"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -385,7 +385,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
 
         actual_logits = output.logits[0, -1, :5].cpu()
         print("actual_logits", actual_logits)
-        expected_logits = torch.tensor([0.8848, 2.6191, 1.2451, 3.6582, 0.8306], dtype=torch.float16)
+        expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -418,7 +418,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         print("decoded_output", decoded_output)
-        expected_output = "Whispering autumn breeze,\nLeaves dance upon the forest floor,\nNature's gentle sigh."
+        expected_output = "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song."
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -447,7 +447,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         print("decoded_output", decoded_output)
-        expected_output = "The image depicts a cozy scene featuring two cats resting on a vibrant pink blanket. The cats have"  # fmt: skip
+        expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -487,7 +487,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         print("decoded_output", decoded_output)
-        expected_output = "Wooden bridge stretches\nMirror lake reflects the sky\nPeaceful mountain's gaze"  # fmt: skip
+        expected_output = "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene."  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -497,7 +497,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         print("decoded_output", decoded_output)
-        expected_output = 'The image captures a vibrant street scene in what appears to be a Chinatown district. At the center, a large, ornate'  # fmt: skip
+        expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -551,7 +551,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = "Wooden bridge stretches\nMirror lake reflects the sky\nPeaceful mountain's gaze"  # fmt: skip
+        expected_output = "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene."  # fmt: skip
         print("decoded_output", decoded_output)
         self.assertEqual(
             decoded_output,
@@ -562,7 +562,7 @@ class AyaVisionQwen2IntegrationTest(unittest.TestCase):
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         print("decoded_output", decoded_output)
-        expected_output = "Certainly! The first image showcases the Statue of Liberty, a world-renowned monument located on Liberty Island in New York Harbor"  # fmt: skip
+        expected_output = "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at a"  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
