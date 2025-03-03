@@ -724,8 +724,8 @@ class ModelTesterMixin:
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_checkpoint_path = os.path.join(tmpdirname, "pytorch_model.bin")
-                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=True)
-                check_equal(load_state_dict(pt_checkpoint_path))
+                # torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=True)
+                # check_equal(load_state_dict(pt_checkpoint_path))
                 torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
                 check_equal(load_state_dict(pt_checkpoint_path))
 

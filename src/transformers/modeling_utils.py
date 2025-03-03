@@ -535,11 +535,11 @@ str_to_torch_dtype = {
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
-    map_location: Optional[Union[str, torch.device]] = "meta",
+    map_location: Optional[Union[str, torch.device]] = "cpu",
     weights_only: bool = True,
 ):
     """
-    Reads a `safetensor` or a `.bin` checkpoint file into `meta` if requested.
+    Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
     """
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
         with safe_open(checkpoint_file, framework="pt") as f:
@@ -770,6 +770,7 @@ def _load_state_dict_into_meta_model(
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     device_mesh=None,
     shard_file=None,
+    weights_only=True
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -799,7 +800,14 @@ def _load_state_dict_into_meta_model(
     if shard_file.endswith(".safetensors"):
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
     else:
-        bin_state_dict = load_state_dict(shard_file, map_location="cpu")
+        map_location = "cpu"
+        if (device_map is not None
+            and hf_quantizer is not None
+            and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+            and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+            ):
+            map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+        bin_state_dict = load_state_dict(shard_file, map_location=map_location, weights_only=weights_only)
 
     error_msgs = []
 
@@ -4224,7 +4232,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0], weights_only=weights_only)
+                                one_state_dict = load_state_dict(resolved_archive_file[0], map_location="meta", weights_only=weights_only)
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -4928,6 +4936,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
                     resolved_archive_file=resolved_archive_file,
+                    weights_only=weights_only
                 )
             else:
                 # We need to read the state dict as it is meta otherwise
@@ -4972,16 +4981,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                map_location = None
-                if (
-                    device_map is not None
-                    and hf_quantizer is not None
-                    and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                    and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-                ):
-                    map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
                 state_dict = load_state_dict(
-                    shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
+                    shard_file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only
                 )
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
@@ -5021,6 +5022,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             unexpected_keys=unexpected_keys,
                             device_mesh=device_mesh,
                             shard_file=shard_file,
+                            weights_only=weights_only
                         )
                         error_msgs += new_error_msgs
                 else:
