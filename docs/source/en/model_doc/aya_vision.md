@@ -53,10 +53,12 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
 model_id = "CohereForAI/aya-vision-8b"
+torch_device = "cuda:0"
 
-processor = AutoProcessor.from_pretrained(model_id)
+# Use fast image processor
+processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="cuda:0", torch_dtype=torch.float16
+    model_id, device_map=torch_device, torch_dtype=torch.float16
 )
 
 # Format message with the aya-vision chat template
@@ -68,8 +70,9 @@ messages = [
     ]},
     ]
 
+# Process image on CUDA
 inputs = processor.apply_chat_template(
-    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", device=torch_device
 ).to(model.device)
 
 gen_tokens = model.generate(
