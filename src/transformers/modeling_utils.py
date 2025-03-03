@@ -887,11 +887,13 @@ def _load_state_dict_into_meta_model(
                 output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
                 distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
             else:
+                param = param[:]
                 if old_param is not None and old_param.is_contiguous():
                     param = param.contiguous()
-                module_to_tp.load_state_dict({param_type: param[:]}, strict=False, assign=True)
+                module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
 
         else:
+            param = param[:]
             if param_casting_dtype is not None:
                 param = param.to(param_casting_dtype)
             if old_param is not None and old_param.is_contiguous():
@@ -908,9 +910,9 @@ def _load_state_dict_into_meta_model(
 
             if param_device == "disk":
                 if not is_safetensors:
-                    offload_index = offload_weight(param[:], fixed_param_name, offload_folder, offload_index)
+                    offload_index = offload_weight(param, fixed_param_name, offload_folder, offload_index)
             elif param_device == "cpu" and state_dict_index is not None:
-                state_dict_index = offload_weight(param[:], fixed_param_name, state_dict_folder, state_dict_index)
+                state_dict_index = offload_weight(param, fixed_param_name, state_dict_folder, state_dict_index)
             elif (
                 not is_quantized
                 or (not hf_quantizer.requires_parameters_quantization)
@@ -929,13 +931,13 @@ def _load_state_dict_into_meta_model(
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
                 module, param_type = find_submodule_and_param_name(model, fixed_param_name)
                 module.load_state_dict(
-                    {param_type: param[:].to(param_device)},
+                    {param_type: param.to(param_device)},
                     strict=False,
                     assign=True,
                 )
             else:
                 hf_quantizer.create_quantized_param(
-                    model, param[:], fixed_param_name, param_device, state_dict, unexpected_keys
+                    model, param, fixed_param_name, param_device, state_dict, unexpected_keys
                 )
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
