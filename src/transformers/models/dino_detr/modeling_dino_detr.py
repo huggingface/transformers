@@ -157,7 +157,7 @@ def multi_scale_deformable_attention(
     sampling_locations: Tensor,
     attention_weights: Tensor,
 ) -> Tensor:
-    batch_size, _, num_heads, hidden_dim = value.shape
+    batch_size, _, num_heads, d_model = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
     value_list = value.split(
         [height * width for height, width in value_spatial_shapes], dim=1
@@ -165,15 +165,15 @@ def multi_scale_deformable_attention(
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, hidden_dim
-        # -> batch_size, height*width, num_heads*hidden_dim
-        # -> batch_size, num_heads*hidden_dim, height*width
-        # -> batch_size*num_heads, hidden_dim, height, width
+        # batch_size, height*width, num_heads, d_model
+        # -> batch_size, height*width, num_heads*d_model
+        # -> batch_size, num_heads*d_model, height*width
+        # -> batch_size*num_heads, d_model, height, width
         value_l_ = (
             value_list[level_id]
             .flatten(2)
             .transpose(1, 2)
-            .reshape(batch_size * num_heads, hidden_dim, height, width)
+            .reshape(batch_size * num_heads, d_model, height, width)
         )
         # batch_size, num_queries, num_heads, num_points, 2
         # -> batch_size, num_heads, num_queries, num_points, 2
@@ -181,7 +181,7 @@ def multi_scale_deformable_attention(
         sampling_grid_l_ = (
             sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
         )
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        # batch_size*num_heads, d_model, num_queries, num_points
         sampling_value_l_ = nn.functional.grid_sample(
             value_l_,
             sampling_grid_l_,
@@ -199,7 +199,7 @@ def multi_scale_deformable_attention(
     output = (
         (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
         .sum(-1)
-        .view(batch_size, num_heads * hidden_dim, num_queries)
+        .view(batch_size, num_heads * d_model, num_queries)
     )
     return output.transpose(1, 2).contiguous()
 
@@ -734,10 +734,10 @@ class DinoDetrConvModel(nn.Module):
 class MLP(nn.Module):
     """Very simple multi-layer perceptron (also called FFN)"""
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, input_dim, d_model, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
+        h = [d_model] * (num_layers - 1)
         self.layers = nn.ModuleList(
             nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
         )
@@ -850,7 +850,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     return NestedTensor(tensor, mask)
 
 
-def prepare_for_cdn(dn_args, training, num_queries, num_classes, hidden_dim, label_enc):
+def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_enc):
     """
     A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding in its detector
     forward function and use learnable tgt embedding, so we change this function a little bit.
@@ -858,7 +858,7 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, hidden_dim, lab
     :param training: if it is training or inference
     :param num_queries: number of queires
     :param num_classes: number of classes
-    :param hidden_dim: transformer hidden dim
+    :param d_model: transformer hidden dim
     :param label_enc: encode labels in dn
     :return:
     """
@@ -947,7 +947,7 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, hidden_dim, lab
         input_label_embed = label_enc(m)
         input_bbox_embed = inverse_sigmoid(known_bbox_expand)
 
-        padding_label = torch.zeros(pad_size, hidden_dim).cuda()
+        padding_label = torch.zeros(pad_size, d_model).cuda()
         padding_bbox = torch.zeros(pad_size, 4).cuda()
 
         input_query_label = padding_label.repeat(batch_size, 1, 1)
@@ -1383,7 +1383,7 @@ class DinoDetrEncoderLayer(nn.Module):
         self.embed_dim = config.d_model
         self.self_attn = DinoDetrMultiscaleDeformableAttention(
             config,
-            num_heads=config.encoder_attention_heads,
+            num_heads=config.num_heads,
             n_points=config.encoder_n_points,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1495,7 +1495,7 @@ class DinoDetrDecoderLayer(nn.Module):
         assert sorted(config.module_seq) == ["ca", "ffn", "sa"]
         # cross attention
         self.cross_attn = DinoDetrMultiscaleDeformableAttention(
-            config, config.n_heads, config.n_points
+            config, config.n_heads, config.decoder_n_points
         )
         self.dropout1 = nn.Dropout(config.dropout)
         self.norm1 = nn.LayerNorm(config.d_model)
@@ -1524,7 +1524,7 @@ class DinoDetrDecoderLayer(nn.Module):
 
         if config.decoder_sa_type == "ca_content":
             self.self_attn = DinoDetrMultiscaleDeformableAttention(
-                config, config.n_heads, config.n_points
+                config, config.n_heads, config.decoder_n_points
             )
 
     def rm_self_attn_modules(self):
@@ -1701,10 +1701,10 @@ class DinoDetrMLPPredictionHead(nn.Module):
 
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, input_dim, d_model, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
+        h = [d_model] * (num_layers - 1)
         self.layers = nn.ModuleList(
             nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
         )
@@ -1719,7 +1719,7 @@ class DinoDetrEncoder(nn.Module):
     def __init__(self, encoder_layer, norm, config):
         """
         encoder_layer,
-        num_layers,
+        num_encoder_layers,
         norm=None,
         d_model=256,
         num_queries=300,
@@ -1730,9 +1730,11 @@ class DinoDetrEncoder(nn.Module):
         """
         super().__init__()
         # prepare layers
-        if config.num_layers > 0:
+        if config.num_encoder_layers > 0:
             self.layers = _get_clones(
-                encoder_layer, config.num_layers, layer_share=config.enc_layer_share
+                encoder_layer,
+                config.num_encoder_layers,
+                layer_share=config.enc_layer_share,
             )
         else:
             self.layers = []
@@ -1741,14 +1743,14 @@ class DinoDetrEncoder(nn.Module):
         self.query_scale = None
         self.num_queries = config.num_queries
         self.deformable_encoder = config.deformable_encoder
-        self.num_layers = config.num_layers
+        self.num_encoder_layers = config.num_encoder_layers
         self.norm = norm
         self.d_model = config.d_model
 
         self.enc_layer_dropout_prob = config.enc_layer_dropout_prob
         if config.enc_layer_dropout_prob is not None:
             assert isinstance(config.enc_layer_dropout_prob, list)
-            assert len(config.enc_layer_dropout_prob) == config.num_layers
+            assert len(config.enc_layer_dropout_prob) == config.num_encoder_layers
             for i in config.enc_layer_dropout_prob:
                 assert 0.0 <= i <= 1.0
 
@@ -1761,10 +1763,16 @@ class DinoDetrEncoder(nn.Module):
                 self.enc_proj = nn.ModuleList([_proj_layer])
             else:
                 self.enc_norm = nn.ModuleList(
-                    [copy.deepcopy(_norm_layer) for i in range(config.num_layers - 1)]
+                    [
+                        copy.deepcopy(_norm_layer)
+                        for i in range(config.num_encoder_layers - 1)
+                    ]
                 )
                 self.enc_proj = nn.ModuleList(
-                    [copy.deepcopy(_proj_layer) for i in range(config.num_layers - 1)]
+                    [
+                        copy.deepcopy(_proj_layer)
+                        for i in range(config.num_encoder_layers - 1)
+                    ]
                 )
 
     @staticmethod
@@ -1815,7 +1823,7 @@ class DinoDetrEncoder(nn.Module):
 
         output = src
         # preparation and reshape
-        if self.num_layers > 0:
+        if self.num_encoder_layers > 0:
             if self.deformable_encoder:
                 reference_points = self.get_reference_points(
                     spatial_shapes, valid_ratios, device=src.device
@@ -1859,7 +1867,7 @@ class DinoDetrEncoder(nn.Module):
             if (
                 (layer_id == 0 and self.two_stage_type in ["enceachlayer", "enclayer1"])
                 or (self.two_stage_type == "enceachlayer")
-            ) and (layer_id != self.num_layers - 1):
+            ) and (layer_id != self.num_encoder_layers - 1):
                 output_memory, output_proposals = gen_encoder_output_proposals(
                     output, key_padding_mask, spatial_shapes
                 )
@@ -1880,7 +1888,9 @@ class DinoDetrEncoder(nn.Module):
                 output = output_memory
 
             # aux loss
-            if (layer_id != self.num_layers - 1) and ref_token_index is not None:
+            if (
+                layer_id != self.num_encoder_layers - 1
+            ) and ref_token_index is not None:
                 out_i = torch.gather(
                     output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model)
                 )
@@ -1905,7 +1915,7 @@ class DinoDetrDecoder(nn.Module):
     def __init__(self, decoder_layer, norm, decoder_query_perturber, config):
         """
         decoder_layer,
-        num_layers,
+        num_decoder_layers,
         norm=None,
         return_intermediate=False,
         d_model=256,
@@ -1921,13 +1931,15 @@ class DinoDetrDecoder(nn.Module):
         use_detached_boxes_dec_out=False,
         """
         super().__init__()
-        if config.num_layers > 0:
+        if config.num_decoder_layers > 0:
             self.layers = _get_clones(
-                decoder_layer, config.num_layers, layer_share=config.dec_layer_share
+                decoder_layer,
+                config.num_decoder_layers,
+                layer_share=config.dec_layer_share,
             )
         else:
             self.layers = []
-        self.num_layers = config.num_layers
+        self.num_decoder_layers = config.num_decoder_layers
         self.norm = norm
         self.return_intermediate = config.return_intermediate
         assert config.return_intermediate, "support return_intermediate only"
@@ -1971,12 +1983,12 @@ class DinoDetrDecoder(nn.Module):
         self.dec_layer_number = config.dec_layer_number
         if config.dec_layer_number is not None:
             assert isinstance(config.dec_layer_number, list)
-            assert len(config.dec_layer_number) == config.num_layers
+            assert len(config.dec_layer_number) == config.num_decoder_layers
 
         self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
         if config.dec_layer_dropout_prob is not None:
             assert isinstance(config.dec_layer_dropout_prob, list)
-            assert len(config.dec_layer_dropout_prob) == config.num_layers
+            assert len(config.dec_layer_dropout_prob) == config.num_decoder_layers
             for i in config.dec_layer_dropout_prob:
                 assert 0.0 <= i <= 1.0
 
@@ -2091,7 +2103,7 @@ class DinoDetrDecoder(nn.Module):
                 # select # ref points
                 if (
                     self.dec_layer_number is not None
-                    and layer_id != self.num_layers - 1
+                    and layer_id != self.num_decoder_layers - 1
                 ):
                     nq_now = new_reference_points.shape[0]
                     select_number = self.dec_layer_number[layer_id + 1]
@@ -2120,7 +2132,10 @@ class DinoDetrDecoder(nn.Module):
                     ref_points.append(new_reference_points)
 
             intermediate.append(self.norm(output))
-            if self.dec_layer_number is not None and layer_id != self.num_layers - 1:
+            if (
+                self.dec_layer_number is not None
+                and layer_id != self.num_decoder_layers - 1
+            ):
                 if nq_now != select_number:
                     output = torch.gather(
                         output,
@@ -2255,7 +2270,7 @@ class DinoDeformableTransformer(nn.Module):
         )
 
         self.d_model = config.d_model
-        self.nhead = config.nhead
+        self.num_heads = config.num_heads
         self.dec_layers = config.num_decoder_layers
         self.num_queries = config.num_queries  # useful for single stage model only
         self.num_patterns = config.num_patterns
@@ -2731,7 +2746,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         random_refpoints_xy=False,
         fix_refpoints_hw=-1,
         num_feature_levels=1,
-        nheads=8,
+        num_heads=8,
         # two stage
         two_stage_type="no",  # ['no', 'standard']
         two_stage_add_query_num=0,
@@ -2751,10 +2766,10 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.transformer = DinoDeformableTransformer(config=config)
         self.num_queries = config.num_queries
         self.num_classes = config.num_classes
-        self.hidden_dim = hidden_dim = self.transformer.d_model
+        self.d_model = d_model = self.transformer.d_model
         self.num_feature_levels = config.num_feature_levels
-        self.nheads = config.nheads
-        self.label_enc = nn.Embedding(config.dn_labelbook_size + 1, config.hidden_dim)
+        self.num_heads = config.num_heads
+        self.label_enc = nn.Embedding(config.dn_labelbook_size + 1, config.d_model)
 
         # setting query dim
         self.query_dim = config.query_dim
@@ -2782,24 +2797,24 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 in_channels = self.backbone.num_channels[_]
                 input_proj_list.append(
                     nn.Sequential(
-                        nn.Conv2d(in_channels, hidden_dim, kernel_size=1),
-                        nn.GroupNorm(32, hidden_dim),
+                        nn.Conv2d(in_channels, d_model, kernel_size=1),
+                        nn.GroupNorm(32, d_model),
                     )
                 )
             for _ in range(config.num_feature_levels - num_backbone_outs):
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(
-                            config.in_channels,
-                            hidden_dim,
+                            in_channels,
+                            d_model,
                             kernel_size=3,
                             stride=2,
                             padding=1,
                         ),
-                        nn.GroupNorm(32, hidden_dim),
+                        nn.GroupNorm(32, d_model),
                     )
                 )
-                in_channels = hidden_dim
+                in_channels = d_model
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
             assert (
@@ -2809,9 +2824,9 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 [
                     nn.Sequential(
                         nn.Conv2d(
-                            self.backbone.num_channels[-1], hidden_dim, kernel_size=1
+                            self.backbone.num_channels[-1], d_model, kernel_size=1
                         ),
-                        nn.GroupNorm(32, hidden_dim),
+                        nn.GroupNorm(32, d_model),
                     )
                 ]
             )
@@ -2826,8 +2841,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.dec_pred_class_embed_share = config.dec_pred_class_embed_share
         self.dec_pred_bbox_embed_share = config.dec_pred_bbox_embed_share
         # prepare class & box embed
-        _class_embed = nn.Linear(config.hidden_dim, config.num_classes)
-        _bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        _class_embed = nn.Linear(config.d_model, config.num_classes)
+        _bbox_embed = MLP(d_model, d_model, 4, 3)
         # init the two embed layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -2891,7 +2906,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.decoder_sa_type = config.decoder_sa_type
         assert config.decoder_sa_type in ["sa", "ca_label", "ca_content"]
         if config.decoder_sa_type == "ca_label":
-            self.label_embedding = nn.Embedding(config.num_classes, hidden_dim)
+            self.label_embedding = nn.Embedding(config.num_classes, d_model)
             for layer in self.transformer.decoder.layers:
                 layer.label_embedding = self.label_embedding
         else:
@@ -3009,7 +3024,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 training=self.training,
                 num_queries=self.num_queries,
                 num_classes=self.num_classes,
-                hidden_dim=self.hidden_dim,
+                d_model=self.d_model,
                 label_enc=self.label_enc,
             )
         else:
