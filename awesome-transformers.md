@@ -29,7 +29,7 @@ Keywords: inpainting, SD, Stable Diffusion
 
 ## [flair](https://github.com/flairNLP/flair)
 
-FLAIR is a powerful PyTorch NLP framework, convering several important tasks: NER, sentiment-analysis, part-of-speech tagging, text and document embeddings, among other things.
+FLAIR is a powerful PyTorch NLP framework, covering several important tasks: NER, sentiment-analysis, part-of-speech tagging, text and document embeddings, among other things.
 
 Keywords: NLP, text embedding, document embedding, biomedical, NER, PoS, sentiment-analysis
 
