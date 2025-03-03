@@ -4886,7 +4886,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             folder = None
 
-        model.expected_keys = expected_keys
+        model_to_load.expected_keys = expected_keys
         if device_map is not None:
             expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
             if hf_quantizer is None:
