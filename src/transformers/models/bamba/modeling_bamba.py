@@ -1005,6 +1005,7 @@ class BambaDecoderLayer(nn.Module):
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
+            TODO: @goon - doc string update
         """
 
         residual = hidden_states
@@ -1231,12 +1232,14 @@ class BambaModel(BambaPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         padding_free_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx)
-        all_padding_free_kwargs_provided = all(x is None for x in padding_free_kwargs)
-        no_padding_free_kwargs_provided = all(x is not None for x in padding_free_kwargs)
-        if not all_padding_free_kwargs_provided or not no_padding_free_kwargs_provided:
+        padding_free_all_provided = all(x is not None for x in padding_free_kwargs)
+        padding_free_none_provided = all(x is None for x in padding_free_kwargs)
+        if not (padding_free_all_provided or padding_free_none_provided) or (
+            padding_free_all_provided and position_ids is None
+        ):
             raise ValueError(
-                "Either all of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, "
-                "max_length_k, seq_idx) must be provided, or they must all be None."
+                "Either all of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, "
+                "seq_idx) must be None, or they must all be provided along with position_ids."
             )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1534,11 +1537,8 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        cu_seq_lens_q: Optional[torch.LongTensor] = None,
-        cu_seq_lens_k: Optional[torch.LongTensor] = None,
-        max_length_q: Optional[int] = None,
-        max_length_k: Optional[int] = None,
-        seq_idx: Optional[torch.Tensor] = None,
+        # NOTE: @goon - padding-free kwargs intentionally omitted. Need to change LlamaForCausalLM,
+        # or the code gen tool, for explicitly included padding-free kwargs be properly processed.
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""

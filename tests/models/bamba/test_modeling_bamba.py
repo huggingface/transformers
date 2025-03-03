@@ -21,7 +21,6 @@ import pytest
 from pytest import mark
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -539,24 +538,32 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 ],
                 dim=-1,
             )
+            position_ids = torch.cat(position_ids_list, dim=-1)[None]
+            seq_idx = torch.cat(
+                [
+                    torch.full(p.shape, idx, device=p.device, dtype=torch.int32)
+                    for idx, p in enumerate(position_ids_list)
+                ],
+                dim=-1,
+            )[None]
 
-            position_ids_inputs = {"input_ids": padding_free_input_ids, "position_ids": position_ids}
-            position_ids_logits = model(**position_ids_inputs).logits
-
-            flash_attn_kwargs = FlashAttentionKwargs(
-                cu_seq_lens_q=cu_seq_lens,
-                cu_seq_lens_k=cu_seq_lens,
-                max_length_q=seq_lens.max(),
-                max_length_k=seq_lens.max(),
-            )
-            flash_attn_kwargs_logits = model(input_ids=padding_free_input_ids, **flash_attn_kwargs).logits
+            padding_free_kwargs = {
+                "input_ids": padding_free_input_ids,
+                "position_ids": position_ids,
+                "cu_seq_lens_q": cu_seq_lens,
+                "cu_seq_lens_k": cu_seq_lens,
+                "max_length_q": seq_lens.max(),
+                "max_length_k": seq_lens.max(),
+                "seq_idx": seq_idx,
+            }
+            padding_free_logits = model(**padding_free_kwargs).logits
 
             attn_mask_logits_reshaped = torch.cat(
                 [batch[mask.bool()] for batch, mask in zip(attn_mask_logits, input_mask)], dim=0
             )[None]
 
-            torch.testing.assert_close(position_ids_logits, attn_mask_logits_reshaped)
-            torch.testing.assert_close(position_ids_logits, flash_attn_kwargs_logits)
+            torch.testing.assert_close(padding_free_logits, attn_mask_logits_reshaped)
+
 
 def get_cu_seq_lens_from_position_ids(position_ids: torch.LongTensor) -> torch.LongTensor:
     batch_size = position_ids.shape[0]
@@ -596,6 +603,7 @@ def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor
         start += s
 
     return pos_ids[None]
+
 
 @slow
 @require_torch
