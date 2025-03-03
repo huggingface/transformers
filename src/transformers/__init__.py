@@ -425,6 +425,7 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPTConfig"],
+    "models.efficientloftr": ["EfficientLoFTRConfig"],
     "models.efficientnet": ["EfficientNetConfig"],
     "models.electra": [
         "ElectraConfig",
@@ -2281,6 +2282,12 @@ else:
             "DPTForSemanticSegmentation",
             "DPTModel",
             "DPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.efficientloftr"].extend(
+        [
+            "EfficientLoFTRForKeypointMatching",
+            "EfficientLoFTRPreTrainedModel",
         ]
     )
     _import_structure["models.efficientnet"].extend(
@@ -5572,6 +5579,7 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPTConfig
+    from .models.efficientloftr import EfficientLoFTRConfig
     from .models.efficientnet import (
         EfficientNetConfig,
     )
@@ -7311,6 +7319,7 @@ if TYPE_CHECKING:
             DPTModel,
             DPTPreTrainedModel,
         )
+        from .models.efficientloftr import EfficientLoFTRForKeypointMatching, EfficientLoFTRPreTrainedModel
         from .models.efficientnet import (
             EfficientNetForImageClassification,
             EfficientNetModel,
