@@ -63,8 +63,9 @@ if is_torch_fp16_available_on_device(torch_device):
 
 sharding_strategies = ["full_shard", "shard_grad_op"]
 state_dict_types = ["FULL_STATE_DICT", "SHARDED_STATE_DICT"]
-set_seed(42)
 params = list(itertools.product(sharding_strategies, dtypes))
+
+set_seed(42)
 
 
 def get_master_port(real_launcher=False):
@@ -133,7 +134,6 @@ def _parameterized_custom_name_func(func, param_num, param):
     return f"{func.__name__}_{param_based_name}"
 
 
-@run_first
 @require_accelerate
 @require_torch_accelerator
 @require_fsdp_version
@@ -223,6 +223,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     def test_basic_run(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
@@ -235,6 +236,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     def test_basic_run_with_gradient_accumulation(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
@@ -247,6 +249,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(dtypes)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
@@ -260,6 +263,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(state_dict_types, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
+    @run_first
     @slow
     def test_training_and_can_resume_normally(self, state_dict_type):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
@@ -296,9 +300,8 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
 
     @require_torch_multi_accelerator
+    @run_first
     @slow
-    @require_torch_accelerator
-    @require_fsdp
     def test_fsdp_cpu_offloading(self):
         try:
             subprocess.run(
