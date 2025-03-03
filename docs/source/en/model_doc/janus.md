@@ -132,7 +132,6 @@ output = model.generate(**inputs, max_new_tokens=40, generation_mode='text', do_
 for o in output:
     text = processor.decode(o, skip_special_tokens=True)
     print(text)
-    print("-"*80)
 ```
 
 ## Text to Image generation

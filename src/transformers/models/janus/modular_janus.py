@@ -131,7 +131,10 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
-        std = self.config.vision_config.initializer_range
+        std = (self.config.vision_config.initializer_range
+               if hasattr(self.config, "vision_config")
+               else self.config.initializer_range
+               )
         if isinstance(module, JanusVQVAE):
             module.apply(module._init_weights)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -718,15 +721,13 @@ class JanusVisionTransformer(SiglipVisionTransformer, nn.Module):
         nn.Module.__init__()
         self.config = config
         self.embeddings = JanusVisionEmbeddings(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = JanusVisionEncoder(config)
         self.use_head = True if not hasattr(config, "use_vision_head") else config.use_vision_head
         if self.use_head:
             self.head = JanusVisionAttentionPoolLatent(config)
 
 
-# This class is necessary for backward compatibility, see SiglipModel initialization. SDPA attention produces
-# inconsistent behavior if we pass JanusVisionTransformer directly as the vision model
 class JanusVisionModel(SiglipVisionModel):
     config_class = JanusVisionConfig
 
@@ -736,21 +737,6 @@ class JanusVisionModel(SiglipVisionModel):
         self.vision_model = JanusVisionTransformer(config)
 
         self.post_init()
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # overrides this line
-        std = self.config.initializer_range
-        if isinstance(module, JanusVQVAE):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 class JanusVisionAlignerMLP(nn.Module):
     def __init__(self, config: JanusVisionConfig):
@@ -973,7 +959,7 @@ class JanusVQVAE(ChameleonVQVAE):
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
 
-        # Initilaize the VQVAE model.
+        # Initialize the VQVAE model.
         self.post_init()
 
     def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
@@ -1523,12 +1509,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # 7. Prepare input and model caches
         batch_size, seq_len = input_ids.shape
 
-        try:
-            # try to get from here first. As the model init creates this config with deepcopy and the one
-            # in self.config.vision_config becomes obsolete
-            num_image_tokens = self.model.vision_model.config.num_image_tokens
-        except AttributeError:
-            num_image_tokens = self.config.vision_config.num_image_tokens
+        num_image_tokens = self.model.vision_model.config.num_image_tokens
         
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
 
@@ -1543,14 +1524,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
                 batch_size=batch_size * 2,
-                # we should have at most a cache len of seq_len + num_image_tokens
+                # we should have at least a cache len of seq_len + num_image_tokens
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
                 device=input_ids,
                 model_kwargs=model_kwargs,
             )
 
         # Placeholder for generated tokens
-        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=input_ids.dtype, device=input_ids.device)
+        dtype, device = input_ids.dtype, input_ids.device
+        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=dtype, device=device)
 
         # 8. init attention / hidden states / scores tuples
         output_attentions = generation_config.output_attentions

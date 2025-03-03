@@ -97,7 +97,11 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
-        std = self.config.vision_config.initializer_range
+        std = (
+            self.config.vision_config.initializer_range
+            if hasattr(self.config, "vision_config")
+            else self.config.initializer_range
+        )
         if isinstance(module, JanusVQVAE):
             module.apply(module._init_weights)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -851,7 +855,7 @@ class JanusVisionTransformer(nn.Module):
         super().__init__()
         self.config = config
         self.embeddings = JanusVisionEmbeddings(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = JanusVisionEncoder(config)
         self.use_head = True if not hasattr(config, "use_vision_head") else config.use_vision_head
         if self.use_head:
@@ -961,21 +965,6 @@ class JanusVisionModel(JanusPreTrainedModel):
             return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # overrides this line
-        std = self.config.initializer_range
-        if isinstance(module, JanusVQVAE):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 class JanusVisionAlignerMLP(nn.Module):
@@ -1391,7 +1380,7 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
 
-        # Initilaize the VQVAE model.
+        # Initialize the VQVAE model.
         self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
@@ -1965,14 +1954,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
                 batch_size=batch_size * 2,
-                # we should have at most a cache len of seq_len + num_image_tokens
+                # we should have at least a cache len of seq_len + num_image_tokens
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
                 device=input_ids,
                 model_kwargs=model_kwargs,
             )
 
         # Placeholder for generated tokens
-        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=input_ids.dtype, device=input_ids.device)
+        dtype, device = input_ids.dtype, input_ids.device
+        generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=dtype, device=device)
 
         # 8. init attention / hidden states / scores tuples
         output_attentions = generation_config.output_attentions

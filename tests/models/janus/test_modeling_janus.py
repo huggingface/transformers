@@ -465,20 +465,18 @@ class JanusIntegrationTest(unittest.TestCase):
         # Later remove this func and replace with hub URL, for now we use a symbolic link to the folder
         self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_model_text_generation(self):
         # Let's make sure we test the preprocessing to replace what is used
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
         )
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
@@ -490,7 +488,7 @@ class JanusIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_text_generation_batched(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
@@ -521,7 +519,7 @@ class JanusIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_read_token  # BNB required if we load in 4 bit. Modify acordingly
     def test_model_text_generation_with_multi_image(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
@@ -542,7 +540,7 @@ class JanusIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_generate_images(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map = torch_device)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(
             self.model_id,
             generation_mode="image"

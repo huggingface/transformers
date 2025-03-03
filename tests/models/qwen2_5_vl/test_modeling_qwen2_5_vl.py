@@ -351,9 +351,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
 
-    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
-    def test_generate_compile_fullgraph(self):
-        pass
 
     @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
     def test_prompt_lookup_decoding_matches_greedy_search(self):
