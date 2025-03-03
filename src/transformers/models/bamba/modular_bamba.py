@@ -757,11 +757,10 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
                 Maximum sequence length of any independent key tensor. Used for padding-free
                 training.
             seq_idx (`torch.IntTensor`, *optional`):
-                Index of each independent sequence in the batch. Used for padding-free training.
+                Index of the sequence each token comes from. Used for padding-free training.
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
-            TODO: @goon - doc string update
         """
 
         residual = hidden_states
@@ -926,6 +925,20 @@ BAMBA_INPUTS_DOCSTRING = r"""
             Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
+        cu_seq_lens_q (`torch.LongTensor` of shape `(1, num_sequences + 1)`, *optional*):
+            Tensor containing the cumulative sequence lengths of all independent query tensors.
+            Used for padding-free training.
+        cu_seq_lens_k (`torch.LongTensor` of shape `(1, num_sequences + 1)`, *optional*):
+            Tensor containing the cumulative sequence lengths of all independent key tensors.
+            Used for padding-free training.
+        max_length_q (`int`, *optional*):
+            Maximum sequence length of any independent query tensor. Used for padding-free
+            training.
+        max_length_k (`int`, *optional*):
+            Maximum sequence length of any independent key tensor. Used for padding-free
+            training.
+        seq_idx (`torch.IntTensor` of shape `(1, sum_of_sequence_lengths)`, *optional`):
+            Index of the sequence each token comes from. Used for padding-free training.
 """
 
 
@@ -1057,7 +1070,7 @@ class BambaModel(BambaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                # TODO: @goon - probably need branching logic for giving the right args to the right
+                # TODO: @goon - need branching logic for giving the right args to the right
                 # layer types here.
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
