@@ -83,12 +83,11 @@ class TimesFmOutputForPrediction(BaseModelOutput):
 class TimesFmMLP(nn.Module):
     """Pax MLP in pytorch."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-    ):
+    def __init__(self, config: TimesFmConfig):
         super().__init__()
+        hidden_size = config.model_dim
+        intermediate_size = config.intermediate_size
+
         self.gate_proj = nn.Linear(hidden_size, intermediate_size)
         self.down_proj = nn.Linear(intermediate_size, hidden_size)
         self.layer_norm = nn.LayerNorm(normalized_shape=hidden_size, eps=1e-6)
@@ -131,13 +130,13 @@ class TimesFmResidualBlock(nn.Module):
 
 
 class TimesFmRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, config: TimesFmConfig):
         """
         TimesFmRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        self.weight = nn.Parameter(torch.ones(config.model_dim))
+        self.variance_epsilon = config.rms_norm_eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
@@ -153,7 +152,7 @@ class TimesFmRMSNorm(nn.Module):
 class TimesFmPositionalEmbedding(nn.Module):
     """Generates position embedding for a given 1-d sequence."""
 
-    def __init__(self, config: TimesFmConfig) -> None:
+    def __init__(self, config: TimesFmConfig):
         super().__init__()
         self.min_timescale = config.min_timescale
         self.max_timescale = config.max_timescale
@@ -380,8 +379,8 @@ class TimesFmDecoderLayer(nn.Module):
         attention_class = TIMESFM_ATTENTION_CLASSES[config._attn_implementation]
 
         self.self_attn = attention_class(config)
-        self.mlp = TimesFmMLP(config.model_dim, config.intermediate_size)
-        self.input_layernorm = TimesFmRMSNorm(config.model_dim, eps=config.rms_norm_eps)
+        self.mlp = TimesFmMLP(config)
+        self.input_layernorm = TimesFmRMSNorm(config)
 
     def forward(
         self,
