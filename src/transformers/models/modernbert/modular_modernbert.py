@@ -826,14 +826,11 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertForMaskedLM):
             init_weight(module.decoder, stds["out"])
-        elif isinstance(module, 
-                (
-                    ModernBertForSequenceClassification,
-                    ModernBertForTokenClassification,
-                    ModernBertForQuestionAnswering
-                )
-            ):
-                init_weight(module.classifier, stds["final_out"])
+        elif isinstance(
+            module,
+            (ModernBertForSequenceClassification, ModernBertForTokenClassification, ModernBertForQuestionAnswering),
+        ):
+            init_weight(module.classifier, stds["final_out"])
 
     @classmethod
     def _autoset_attn_implementation(
