@@ -664,7 +664,7 @@ class ViTPooler(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.pooler_size)
 	if isinstance(config.pooler_act, str):
-            self.activation = {'tanh': nn.Tanh(), 'identity': lambda x: x, 'none': lambda x: x, 'relu': nn.Relu()}[config.pooler_act]
+            self.activation = ACT2FN[config.pooler_act]
 	else:
 	    self.activation = config.pooler_act
 

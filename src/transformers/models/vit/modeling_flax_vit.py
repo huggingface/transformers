@@ -419,7 +419,7 @@ class FlaxViTPooler(nn.Module):
             dtype=self.dtype,
         )
         if isinstance(config.pooler_act, str):
-	    self.act = {'tanh': nn.tanh, 'relu': nn.relu, 'identity': lambda x: x, 'none': lambda x: x}[config.pooler_act]
+	    self.act = ACT2FN[config.pooler_act]
 	else:
 	    self.act = config.pooler_act
 
