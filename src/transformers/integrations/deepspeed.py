@@ -27,6 +27,7 @@ from ..utils import is_accelerate_available, is_torch_available, is_torch_mlu_av
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -309,6 +310,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, start_prefix, a
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
+
     Nearly identical code to PyTorch's `_load_from_state_dict`
     """
     # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
@@ -321,7 +323,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, start_prefix, a
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: torch.nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
+    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
 
