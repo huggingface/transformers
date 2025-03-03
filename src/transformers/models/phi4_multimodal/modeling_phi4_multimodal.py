@@ -704,22 +704,15 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             area_ratio = height_ratio * width_ratio
 
             global_img = img_features[idx, :1]
-            global_img = (
-                global_img.reshape(1, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
-                .permute(0, 1, 3, 2, 4, 5)
-                .reshape(1, base_feat_size, base_feat_size, self.image_dim_out)
-                .contiguous()
-            )
+            global_img = global_img.reshape(1, base_feat_size, base_feat_size, self.image_dim_out).contiguous()
             temporary_extensor = self.sub_img_feature_extensor.repeat(1, base_feat_size, 1, 1)
             global_img = torch.cat([global_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
 
             sub_img = img_features[idx, 1:]
             sub_img = sub_img[:area_ratio]
             sub_img = (
-                sub_img.reshape(area_ratio, base_feat_size, 1, base_feat_size, 1, self.image_dim_out)
-                .permute(0, 1, 3, 2, 4, 5)
-                .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size, -1)
-                .permute(0, 1, 3, 2, 4, 5)
+                sub_img.reshape(height_ratio, width_ratio, base_feat_size, base_feat_size, -1)
+                .transpose(1, 2)
                 .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size, self.image_dim_out)
                 .contiguous()
             )
@@ -727,8 +720,8 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             if image_attention_mask is not None:
                 reshaped_image_attention_mask = (
                     image_attention_mask[idx, 1 : area_ratio + 1, 0::2, 0::2]
-                    .reshape(1, height_ratio, width_ratio, base_feat_size, base_feat_size)
-                    .permute(0, 1, 3, 2, 4)
+                    .reshape(height_ratio, width_ratio, base_feat_size, base_feat_size)
+                    .transpose(1, 2)
                     .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size)
                 )
                 useful_height = int(reshaped_image_attention_mask[0, :, 0].sum().item())
