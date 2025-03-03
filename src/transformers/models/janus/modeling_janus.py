@@ -1934,12 +1934,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # 7. Prepare input and model caches
         batch_size, seq_len = input_ids.shape
 
-        try:
-            # try to get from here first. As the model init creates this config with deepcopy and the one
-            # in self.config.vision_config becomes obsolete
-            num_image_tokens = self.model.vision_model.config.num_image_tokens
-        except AttributeError:
-            num_image_tokens = self.config.vision_config.num_image_tokens
+        num_image_tokens = self.model.vision_model.config.num_image_tokens
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
 
