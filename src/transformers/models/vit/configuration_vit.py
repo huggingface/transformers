@@ -70,8 +70,8 @@ class ViTConfig(PretrainedConfig):
            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
         pooler_output_size (`int`, *optional*, defaults to None):
            Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
-        pooler_act (`str` or `function`, defaults to "tanh"):
-           The activation function to be used by the pooler. If string, keys of ACT2FN are supported for Flax and
+        pooler_act (`str`, defaults to "tanh"):
+           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
            Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
            supported for Tensorflow.
 

@@ -418,10 +418,7 @@ class FlaxViTPooler(nn.Module):
             ),
             dtype=self.dtype,
         )
-        if isinstance(self.config.pooler_act, str):
-            self.act = ACT2FN[self.config.pooler_act]
-        else:
-            self.act = self.config.pooler_act
+        self.act = ACT2FN[self.config.pooler_act]
 
     def __call__(self, hidden_states):
         cls_hidden_state = hidden_states[:, 0]
