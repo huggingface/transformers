@@ -438,6 +438,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
             cache_position=cache_position,
             last_cache_position=last_cache_position,
             num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=0,
             **lm_kwargs,
         )
 
