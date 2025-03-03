@@ -238,7 +238,7 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
 
         self.d_model = config.d_model
         self.n_levels = config.num_feature_levels
-        self.n_heads = num_heads
+        self.num_heads = num_heads
         self.n_points = n_points
 
         self.sampling_offsets = nn.Linear(
@@ -287,18 +287,18 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
             # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
         value = value.view(
-            batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads
+            batch_size, sequence_length, self.num_heads, self.d_model // self.num_heads
         )
         sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
+            batch_size, num_queries, self.num_heads, self.n_levels, self.n_points, 2
         )
         attention_weights = self.attention_weights(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
+            batch_size, num_queries, self.num_heads, self.n_levels * self.n_points
         )
         attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
+            batch_size, num_queries, self.num_heads, self.n_levels, self.n_points
         )
-        # batch_size, num_queries, n_heads, n_levels, n_points, 2
+        # batch_size, num_queries, num_heads, n_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
             offset_normalizer = torch.stack(
@@ -508,8 +508,11 @@ class DinoDetrObjectDetectionOutput(ModelOutput):
     auxiliary_outputs: Optional[List[Dict]] = None
 
 
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+def _get_clones(module, N, layer_share=False):
+    if layer_share:
+        return nn.ModuleList([module for i in range(N)])
+    else:
+        return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -1482,7 +1485,7 @@ class DinoDetrDecoderLayer(nn.Module):
         dropout=0.1,
         activation="relu",
         n_levels=4,
-        n_heads=8,
+        num_heads=8,
         n_points=4,
         use_deformable_box_attn=False,
         box_attn_type="roi_align",
@@ -1495,14 +1498,14 @@ class DinoDetrDecoderLayer(nn.Module):
         assert sorted(config.module_seq) == ["ca", "ffn", "sa"]
         # cross attention
         self.cross_attn = DinoDetrMultiscaleDeformableAttention(
-            config, config.n_heads, config.decoder_n_points
+            config, config.num_heads, config.decoder_n_points
         )
         self.dropout1 = nn.Dropout(config.dropout)
         self.norm1 = nn.LayerNorm(config.d_model)
 
         # self attention
         self.self_attn = nn.MultiheadAttention(
-            config.d_model, config.n_heads, dropout=config.dropout
+            config.d_model, config.num_heads, dropout=config.dropout
         )
         self.dropout2 = nn.Dropout(config.dropout)
         self.norm2 = nn.LayerNorm(config.d_model)
@@ -1524,7 +1527,7 @@ class DinoDetrDecoderLayer(nn.Module):
 
         if config.decoder_sa_type == "ca_content":
             self.self_attn = DinoDetrMultiscaleDeformableAttention(
-                config, config.n_heads, config.decoder_n_points
+                config, config.num_heads, config.decoder_n_points
             )
 
     def rm_self_attn_modules(self):
@@ -2234,13 +2237,13 @@ class DinoDeformableTransformer(nn.Module):
 
         assert config.layer_share_type in [None, "encoder", "decoder", "both"]
         if config.layer_share_type in ["encoder", "both"]:
-            enc_layer_share = True
+            config.enc_layer_share = True
         else:
-            enc_layer_share = False
+            config.enc_layer_share = False
         if config.layer_share_type in ["decoder", "both"]:
-            dec_layer_share = True
+            config.dec_layer_share = True
         else:
-            dec_layer_share = False
+            config.dec_layer_share = False
         assert config.layer_share_type is None
 
         self.decoder_sa_type = config.decoder_sa_type
@@ -2372,7 +2375,7 @@ class DinoDeformableTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
         for m in self.modules():
-            if isinstance(m, MultiScaleDeformableAttention):
+            if isinstance(m, DinoDetrMultiscaleDeformableAttention):
                 m._reset_parameters()
         if self.num_feature_levels > 1 and self.level_embed is not None:
             nn.init.normal_(self.level_embed)
@@ -2690,13 +2693,13 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(
+            thetas = torch.arange(module.num_heads, dtype=torch.int64).to(
                 default_dtype
-            ) * (2.0 * math.pi / module.n_heads)
+            ) * (2.0 * math.pi / module.num_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
+                .view(module.num_heads, 1, 1, 2)
                 .repeat(1, module.n_levels, module.n_points, 1)
             )
             for i in range(module.n_points):
