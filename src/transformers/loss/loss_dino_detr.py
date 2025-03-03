@@ -715,7 +715,7 @@ def _set_aux_loss(outputs_class, outputs_coord):
     ]
 
 
-def ForObjectDetectionLoss(
+def DinoDetrForObjectDetectionLoss(
     logits,
     labels,
     device,

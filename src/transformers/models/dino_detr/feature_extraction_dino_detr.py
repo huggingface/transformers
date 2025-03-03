@@ -18,7 +18,7 @@ import warnings
 
 from ...image_transforms import rgb_to_id as _rgb_to_id
 from ...utils import logging
-from .image_processing_deformable_detr import DeformableDetrImageProcessor
+from .image_processing_dino_detr import DinoDetrImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -33,7 +33,7 @@ def rgb_to_id(x):
     return _rgb_to_id(x)
 
 
-class DeformableDetrFeatureExtractor(DeformableDetrImageProcessor):
+class DinoDetrFeatureExtractor(DinoDetrImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
             "The class DeformableDetrFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
@@ -43,4 +43,4 @@ class DeformableDetrFeatureExtractor(DeformableDetrImageProcessor):
         super().__init__(*args, **kwargs)
 
 
-__all__ = ["DeformableDetrFeatureExtractor"]
+__all__ = ["DinoDetrFeatureExtractor"]
