@@ -813,9 +813,9 @@ class TFDeiTPooler(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.pooler_size,
+            units=config.pooler_output_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            activation=config.pooler_act,
+            activation=config.pooler_output_size,
             name="dense",
         )
         self.config = config

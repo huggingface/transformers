@@ -412,7 +412,7 @@ class FlaxViTPooler(nn.Module):
 
     def setup(self):
         self.dense = nn.Dense(
-            self.config.pooler_size,
+            self.config.pooler_output_size,
             kernel_init=jax.nn.initializers.variance_scaling(
                 self.config.initializer_range**2, "fan_in", "truncated_normal"
             ),

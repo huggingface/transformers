@@ -662,7 +662,7 @@ class ViTModel(ViTPreTrainedModel):
 class ViTPooler(nn.Module):
     def __init__(self, config: ViTConfig):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.pooler_size)
+        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
         self.activation = ACT2FN[config.pooler_act]
 
     def forward(self, hidden_states):
