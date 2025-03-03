@@ -40,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AyaVisionConfig"
 
+
 # copied from transformers.models.Llava.modeling_llava.LlavaCausalLMOutputWithPast
 @dataclass
 class AyaVisionCausalLMOutputWithPast(ModelOutput):
@@ -120,7 +121,9 @@ class AyaVisionMultiModalProjector(nn.Module):
         height = width = int(seq_length**0.5)
         image_features = image_features.reshape(image_features.shape[0], width, height, -1)
         channels = image_features.shape[-1]
-        image_features = image_features.reshape(batch_size, width, int(height / self.downsample_factor), int(channels * self.downsample_factor))
+        image_features = image_features.reshape(
+            batch_size, width, int(height / self.downsample_factor), int(channels * self.downsample_factor)
+        )
         image_features = image_features.permute(0, 2, 1, 3)
         image_features = image_features.reshape(
             batch_size, int(height / self.downsample_factor), int(width / self.downsample_factor), -1

@@ -37,8 +37,6 @@ class AyaVisionConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
@@ -60,7 +58,6 @@ class AyaVisionConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        projector_hidden_act="gelu",
         vision_feature_select_strategy="full",
         vision_feature_layer=-1,
         downsample_factor=2,
@@ -69,7 +66,6 @@ class AyaVisionConfig(PretrainedConfig):
         **kwargs,
     ):
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
         self.downsample_factor = downsample_factor
         self.adapter_layer_norm_eps = adapter_layer_norm_eps
         if vision_feature_select_strategy not in ["default", "full"]:
