@@ -821,20 +821,33 @@ def _load_state_dict_into_meta_model(
             if shard_file.endswith(".safetensors")
             else bin_state_dict[serialized_param_name]
         )
+
+        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
+        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
+        # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+
+        old_param = model
+        splits = fixed_param_name.split(".")
+        for split in splits:
+            # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
+            old_param = getattr(old_param, split, None)
+            if old_param is None:
+                break
+
+        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+            old_param = None
+
         # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
         param_casting_dtype = None
         is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-
-        if dtype is not None and empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-            if (
-                keep_in_fp32_modules is not None
-                and keep_in_fp32_modules.search(fixed_param_name)
-                and dtype == torch.float16
-            ):
+        if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+            if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(fixed_param_name):
                 param_casting_dtype = torch.float32
-            else:
+            elif dtype is not None:
                 param_casting_dtype = dtype
+            elif old_param is not None:
+                param_casting_dtype = old_param.dtype
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
             module_to_tp, param_type = find_submodule_and_param_name(model, fixed_param_name)
@@ -858,8 +871,10 @@ def _load_state_dict_into_meta_model(
                 else:
                     param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                     shard = Shard(0)
-                if param_casting_dtype is not None and param_casting_dtype != empty_param.dtype:
+                if param_casting_dtype is not None:
                     param = param.to(param_casting_dtype)
+                if old_param.is_contiguous():
+                    param = param.contiguous()
                 local_parameter = DTensor.from_local(
                     param,
                     device_mesh=device_mesh,
@@ -872,9 +887,16 @@ def _load_state_dict_into_meta_model(
                 output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
                 distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
             else:
+                if old_param is not None and old_param.is_contiguous():
+                    param = param.contiguous()
                 module_to_tp.load_state_dict({param_type: param[:]}, strict=False, assign=True)
 
         else:
+            if param_casting_dtype is not None:
+                param = param.to(param_casting_dtype)
+            if old_param is not None and old_param.is_contiguous():
+                param = param.contiguous()
+
             if device_map is None:
                 param_device = "cpu"
             else:
@@ -906,8 +928,6 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
                 module, param_type = find_submodule_and_param_name(model, fixed_param_name)
-                if param_casting_dtype is not None and param_casting_dtype != empty_param.dtype:
-                    param = param[:].to(param_casting_dtype)
                 module.load_state_dict(
                     {param_type: param[:].to(param_device)},
                     strict=False,
