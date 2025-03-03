@@ -89,6 +89,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
+    require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
@@ -3903,6 +3904,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(skip_memory_metrics=True, output_dir=tmp_dir)
             self.check_mem_metrics(trainer, self.assertNotIn)
 
+    @require_torch_fp16
     @require_torch_accelerator
     def test_fp16_full_eval(self):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
