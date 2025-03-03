@@ -292,7 +292,7 @@ class BambaMixer(nn.Module):
         hidden_states: torch.Tensor,
         cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        seq_idx: Optional[torch.Tensor] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
         use_precomputed_states: bool = False,
     ):
         # 1. Gated MLP's linear projection
@@ -649,7 +649,7 @@ class BambaMixer(nn.Module):
         cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        seq_idx: Optional[torch.Tensor] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
         **kwargs,
     ):
         """
@@ -724,7 +724,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         cu_seq_lens_k: Optional[torch.LongTensor] = None,
         max_length_q: Optional[int] = None,
         max_length_k: Optional[int] = None,
-        seq_idx: Optional[torch.Tensor] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -744,6 +744,20 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
             position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
+            cu_seq_lens_q (`torch.LongTensor`, *optional*):
+                Tensor containing the cumulative sequence lengths of all independent query tensors.
+                Used for padding-free training.
+            cu_seq_lens_k (`torch.LongTensor`, *optional*):
+                Tensor containing the cumulative sequence lengths of all independent key tensors.
+                Used for padding-free training.
+            max_length_q (`int`, *optional*):
+                Maximum sequence length of any independent query tensor. Used for padding-free
+                training.
+            max_length_k (`int`, *optional*):
+                Maximum sequence length of any independent key tensor. Used for padding-free
+                training.
+            seq_idx (`torch.IntTensor`, *optional`):
+                Index of each independent sequence in the batch. Used for padding-free training.
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
@@ -970,7 +984,7 @@ class BambaModel(BambaPreTrainedModel):
         cu_seq_lens_k: Optional[torch.LongTensor] = None,
         max_length_q: Optional[int] = None,
         max_length_k: Optional[int] = None,
-        seq_idx: Optional[torch.Tensor] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         # Padding-free args correctness checks: seq_idx and position_ids must always be provided
