@@ -40,50 +40,36 @@ from transformers import (
 from transformers.models.janus.image_processing_janus import JanusImageProcessor
 from transformers.models.janus.processing_janus import JanusProcessor
 
-
-# It is done as a list to guarantee order of application
-MAPPINGS = (
-    (r"(.+)", r"model.\1"),
-    (
-        r"(?<!gen_)vision_model",
-        (
-            ("vision_model.vision_tower.blocks", "vision_model.encoder.layers"),
-            ("vision_model.vision_tower.pos_embed", "vision_model.embeddings.position_embeddings.weight"),
-            ("vision_model.vision_tower.patch_embed.proj", "vision_model.embeddings.patch_embeddings.projection"),
-            ("vision_model.vision_tower.norm", "vision_model.post_layernorm"),
-            ("vision_model.vision_tower.attn_pool", "vision_model.head"),
-            (r"(?<=\.)proj(?=\.|$)", "projection_layer"),
-            (r"(?<=\.)norm(?=\.|$)", "layer_norm"),
-            (r"(?<=\.)norm1(?=\.|$)", "layer_norm1"),
-            (r"(?<=\.)norm2(?=\.|$)", "layer_norm2"),
-        ),
-    ),
-    (
-        "gen_vision_model",
-        (
-            ("gen_vision_model", "vqmodel"),
-            ("decoder.conv_blocks", "decoder.up"),
-            ("encoder.conv_blocks", "encoder.down"),
-            (".res.", ".block."),
-            ("mid.0", "mid.block_1"),
-            ("mid.1", "mid.attn_1"),
-            ("mid.2", "mid.block_2"),
-        ),
-    ),
-    (
-        "aligner",
-        (
-            ("aligner.layers.0", "aligner.fc1"),
-            ("aligner.layers.2", "aligner.hidden_layers.0"),
-        ),
-    ),
-    ("gen_head.output_mlp_projector", "gen_head.proj_out"),
-    (
-        "language_model",
-        (("language_model.model", "language_model"), ("model.language_model.lm_head.weight", "lm_head.weight")),
-    ),
-)
-
+# Mappings
+MAPPINGS = {
+    # Vision model
+    r"(?<!gen_)vision_model.vision_tower.blocks": "model.vision_model.encoder.layers",
+    r"(?<!gen_)vision_model.vision_tower.pos_embed": "model.vision_model.embeddings.position_embeddings.weight",
+    r"(?<!gen_)vision_model.vision_tower.patch_embed.proj": "model.vision_model.embeddings.patch_embeddings.projection",
+    r"(?<!gen_)vision_model.vision_tower.norm": "model.vision_model.post_layernorm",
+    r"(?<!gen_)vision_model.vision_tower.attn_pool": "model.vision_model.head",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)proj(?=\.|\s|$)": r"\g<pre>projection_layer",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm(?=\.|\s|$)": r"\g<pre>layer_norm",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm1(?=\.|\s|$)": r"\g<pre>layer_norm1",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm2(?=\.|\s|$)": r"\g<pre>layer_norm2",
+    # VQ Model
+    r"gen_vision_model": "model.vqmodel",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)decoder\.conv_blocks(?=\.|\s|$)": r"\g<pre>decoder.up",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)encoder\.conv_blocks(?=\.|\s|$)": r"\g<pre>encoder.down",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)res(?=\.|\s|$)": r"\g<pre>block",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)mid\.0(?=\.|\s|$)": r"\g<pre>mid.block_1",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)mid\.1(?=\.|\s|$)": r"\g<pre>mid.attn_1",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)mid\.2(?=\.|\s|$)": r"\g<pre>mid.block_2",
+    r"((gen_)?aligner)\.layers\.0": r"model.\1.fc1",
+    r"((gen_)?aligner)\.layers\.2": r"model.\1.hidden_layers.0",
+    "gen_head.output_mlp_projector": "model.gen_head.proj_out",
+    r"(\s|^)gen_embed": r"\1model.gen_embed",
+    r"(\s|^)gen_head": r"\1model.gen_head",
+    r"\b(gen_vision_model|model\.vqmodel)\.quantize\.codebook_used": None,
+    # Language model
+    r"(\s|^)language_model\.model": r"\1model.language_model",
+    r"\b(model\.language_model|(?<!model\.)language_model)\.lm_head\.weight": "lm_head.weight",
+}
 
 CHAT_TEMPLATE = (
     "{%set seps=['\n\n','<\uff5cend\u2581of\u2581sentence\uff5c>']%}"
@@ -124,27 +110,26 @@ CHAT_TEMPLATE = (
 )
 
 
-def convert_key(key, mappings=MAPPINGS):
-    for pattern, replacement in mappings:
-        if isinstance(replacement, str):
-            # it is a simple replacement
-            key = re.sub(pattern, replacement, key)
+def convert_old_keys_to_new_keys(state_dict):
+    keys_as_text = "\n".join(state_dict.keys())
+    new_keys_as_text = keys_as_text
+    for old, repl in MAPPINGS.items():
+        if repl is None:
+            new_keys_as_text = re.sub(old, "", new_keys_as_text)
         else:
-            # you have to match the pattern to access a new set of replacements
-            if re.search(pattern, key):
-                key = convert_key(key, replacement)
-    return key
+            new_keys_as_text = re.sub(old, repl, new_keys_as_text)
+    output_dict = dict(zip(keys_as_text.split("\n"), new_keys_as_text.split("\n")))
+    return output_dict
 
 
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
+    conversion_dict = convert_old_keys_to_new_keys(state_dict)
     converted_state_dict = {}
-    for key, value in state_dict.items():
-        new_key = convert_key(key)
-        converted_state_dict[new_key] = value
+    for old_key, new_key in conversion_dict.items():
+        if new_key:
+            converted_state_dict[new_key] = state_dict[old_key]
 
-    # Key not present in HF implementation
-    del converted_state_dict["model.vqmodel.quantize.codebook_used"]
     # Embeddings will not have initial dimension
     converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"] = converted_state_dict[
         "model.vision_model.embeddings.position_embeddings.weight"
