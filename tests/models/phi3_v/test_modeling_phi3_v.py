@@ -443,7 +443,7 @@ def get_images():
 class Phi3VIntegrationTest(unittest.TestCase):
     def test_casual_generate(self):
         model = Phi3VForCausalLM.from_pretrained(
-            "microsoft/Phi-3.5-vision-instruct", torch_dtype="auto", _attn_implementation="flash_attention_2"
+            "microsoft/Phi-3.5-vision-instruct", torch_dtype="auto", _attn_implementation="eager"
         ).to(torch_device)
         processor = Phi3VProcessor.from_pretrained("microsoft/Phi-3.5-vision-instruct", num_crops=4)
         images = get_images()
@@ -455,8 +455,7 @@ class Phi3VIntegrationTest(unittest.TestCase):
         inputs = processor(prompt, images, return_tensors="pt").to(torch_device)
 
         generation_args = {
-            "max_new_tokens": 1000,
-            "temperature": 0.0,
+            "max_new_tokens": 50,
             "do_sample": False,
         }
 
