@@ -480,9 +480,12 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @mark.flash_attn_test
     def test_attn_mask_position_ids_flash_attn_equality(self):
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_padding_free_logits(self):
         r"""
-        Verify that the logits agree when using an attention mask, position_ids, or
-        FlashAttentionKwargs.
+        Verify that the logits agree when using an attention mask or padding-free kwargs.
         """
         torch.manual_seed(42)
         decoder_only_classes = []
@@ -517,7 +520,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             )
 
             non_padding_free_inputs = {"input_ids": input_ids, "attention_mask": input_mask}
-            attn_mask_logits = model(**non_padding_free_inputs).logits
+            logits_attn_mask = model(**non_padding_free_inputs).logits
 
             # Build up padding-free tensors
             padding_free_input_ids = torch.cat(
@@ -547,22 +550,32 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 dim=-1,
             )[None]
 
+            # There are two viable code paths:
+            # 1) Provide position_ids and seq_idx only.
+            # 2) Provide FlashAttentionKwargs in addition to the above. This is more torch.compile
+            # friendly. See https://github.com/huggingface/transformers/pull/33932
             padding_free_kwargs = {
                 "input_ids": padding_free_input_ids,
                 "position_ids": position_ids,
-                "cu_seq_lens_q": cu_seq_lens,
-                "cu_seq_lens_k": cu_seq_lens,
-                "max_length_q": seq_lens.max(),
-                "max_length_k": seq_lens.max(),
                 "seq_idx": seq_idx,
             }
-            padding_free_logits = model(**padding_free_kwargs).logits
+            logits_pad_free = model(**padding_free_kwargs).logits
+            padding_free_kwargs.update(
+                {
+                    "cu_seq_lens_q": cu_seq_lens,
+                    "cu_seq_lens_k": cu_seq_lens,
+                    "max_length_q": seq_lens.max(),
+                    "max_length_k": seq_lens.max(),
+                }
+            )
+            logits_pad_free_all_kwargs = model(**padding_free_kwargs).logits
 
-            attn_mask_logits_reshaped = torch.cat(
-                [batch[mask.bool()] for batch, mask in zip(attn_mask_logits, input_mask)], dim=0
+            logits_attn_mask_flat = torch.cat(
+                [batch[mask.bool()] for batch, mask in zip(logits_attn_mask, input_mask)], dim=0
             )[None]
 
-            torch.testing.assert_close(padding_free_logits, attn_mask_logits_reshaped)
+            torch.testing.assert_close(logits_pad_free, logits_attn_mask_flat)
+            torch.testing.assert_close(logits_pad_free_all_kwargs, logits_attn_mask_flat)
 
 
 @slow
