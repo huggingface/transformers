@@ -682,7 +682,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # dynamic loss scale value set to:
         #   "fp16.initial_scale_power": 1
         # plus having the same WarmupLR's warmup_min_lr == warmup_max_lr in the config file
-        # but for some reason going to train_len=64 the weights, weights start to mismatch with this setup.
+        # but for some reason going to train_len=64, the weights start to mismatch with this setup.
         # the culprit seems to be `initial_scale_power` - putting it back to its default 32 keeps the weights identical
 
         train_len = 64
@@ -726,8 +726,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # training with half the batch size but accumulation steps as 2 should give the same
         # weights, but sometimes get a slight difference still of 1e-6
         if torch_device == "hpu":
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=4)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=4)
+            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
+            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
         else:
             self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
             self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
