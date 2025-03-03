@@ -67,6 +67,7 @@ from .pytorch_utils import (  # noqa: F401
     translate_to_torch_parallel_style,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ACCELERATE_MIN_VERSION,
@@ -860,7 +861,7 @@ def _load_state_dict_into_meta_model(
                 param_casting_dtype = old_param.dtype
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            module_to_tp, param_type = find_submodule_and_param_name(model, fixed_param_name)
+            module_to_tp, param_type = get_module_from_name(model, fixed_param_name)
             current_module_plan = None
             full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
             if plan := re.search(full_tp_plan_, fixed_param_name):
@@ -939,7 +940,11 @@ def _load_state_dict_into_meta_model(
             ):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                module, param_type = find_submodule_and_param_name(model, fixed_param_name)
+                module, param_type = get_module_from_name(model, fixed_param_name)
+                print(model)
+                print(fixed_param_name)
+                print(param)
+                print(module)
                 module.load_state_dict(
                     {param_type: param.to(param_device)},
                     strict=False,
@@ -953,7 +958,7 @@ def _load_state_dict_into_meta_model(
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    module, param_type = find_submodule_and_param_name(model, fixed_param_name)
+                    module, param_type = get_module_from_name(model, fixed_param_name)
                     value = getattr(module, param_type)
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
