@@ -968,12 +968,12 @@ class MixedInt8LlamaTest(MixedInt8Test):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
-@require_bitsandbytes
-@require_accelerate
-@require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
-@slow
-@apply_skip_if_not_implemented
+# @require_bitsandbytes
+# @require_accelerate
+# @require_torch
+# @require_torch_gpu_if_bnb_not_multi_backend_enabled
+# @slow
+# @apply_skip_if_not_implemented
 class Bnb8bitCompile(unittest.TestCase):
     model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
     input_text = "Hello my name is"
@@ -981,22 +981,22 @@ class Bnb8bitCompile(unittest.TestCase):
     def setUp(self):
         # Models and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
 
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         with self.assertRaises(Exception):
-            self.model_4bit.generate(
-                input_ids=encoded_input["input_ids"].to(self.model_4bit.device),
+            self.model_8bit.generate(
+                input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
                 max_new_tokens=10,
                 cache_implementation="static",
                 disable_compile=False,
             )
 
         # if nothing is set, compile will be disabled for bnb
-        self.model_4bit.generate(
-            input_ids=encoded_input["input_ids"].to(self.model_4bit.device),
+        self.model_8bit.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
             max_new_tokens=10,
             cache_implementation="static",
         )
