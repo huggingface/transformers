@@ -14,23 +14,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch Phi3V model."""
 
-import gc
 import unittest
 
 import pytest
-from packaging import version
+import requests
 
-from transformers import AutoTokenizer, Phi3VConfig, is_torch_available, is_vision_available, set_seed
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import Phi3VConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
-    backend_empty_cache,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
+    require_vision,
     slow,
-    torch_device, require_vision,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -447,21 +443,15 @@ def get_images():
 class Phi3VIntegrationTest(unittest.TestCase):
     def test_casual_generate(self):
         model = Phi3VForCausalLM.from_pretrained(
-            "microsoft/Phi-3.5-vision-instruct",
-            torch_dtype="auto",
-            _attn_implementation='flash_attention_2').to(torch_device)
-        processor = Phi3VProcessor.from_pretrained("microsoft/Phi-3.5-vision-instruct",
-                                                   num_crops=4)
+            "microsoft/Phi-3.5-vision-instruct", torch_dtype="auto", _attn_implementation="flash_attention_2"
+        ).to(torch_device)
+        processor = Phi3VProcessor.from_pretrained("microsoft/Phi-3.5-vision-instruct", num_crops=4)
         images = get_images()
         messages = [
             {"role": "user", "content": "<|image_1|>\nWhat in this image is in motion?"},
         ]
 
-        prompt = processor.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        prompt = processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = processor(prompt, images, return_tensors="pt").to(torch_device)
 
         generation_args = {
@@ -471,9 +461,9 @@ class Phi3VIntegrationTest(unittest.TestCase):
         }
 
         predictions = model.generate(**inputs, eos_token_id=processor.tokenizer.eos_token_id, **generation_args)
-        predictions = predictions[:, inputs['input_ids'].shape[1]:]
+        predictions = predictions[:, inputs["input_ids"].shape[1] :]
 
         self.assertEqual(
             processor.batch_decode(predictions, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0],
-            "The black SUV is in motion, as indicated by the position of the wheels and the blurred background."
+            "The black SUV is in motion, as indicated by the position of the wheels and the blurred background.",
         )
