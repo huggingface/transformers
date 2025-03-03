@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Bamba model."""
 
 import inspect
+import tempfile
 import unittest
 
 import pytest
@@ -479,7 +480,88 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    def test_attn_mask_position_ids_flash_attn_equality(self):
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        """
+        Overwrite the ModelTesterMixin version of this test to account for the need to provide
+        seq_idx.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                        low_cpu_mem_usage=True,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
+                    for k, v in inputs_dict.items()
+                    if not k == "attention_mask"
+                }
+                # add position_ids
+                padfree_inputs_dict["position_ids"] = (
+                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                    .long()
+                    .unsqueeze(0)
+                    .to(torch_device)
+                )
+                padfree_inputs_dict["seq_idx"] = torch.cat(
+                    [
+                        torch.full((m.sum(),), idx, dtype=torch.int32, device=m.device)
+                        for idx, m in enumerate(dummy_attention_mask)
+                    ]
+                )[None]
+
+                res_padded = model(**inputs_dict)
+                res_padfree = model(**padfree_inputs_dict)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
+                # acceptable numerical instability
+                tol = torch.finfo(torch.float16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
