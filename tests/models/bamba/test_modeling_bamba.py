@@ -565,46 +565,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             torch.testing.assert_close(padding_free_logits, attn_mask_logits_reshaped)
 
 
-def get_cu_seq_lens_from_position_ids(position_ids: torch.LongTensor) -> torch.LongTensor:
-    batch_size = position_ids.shape[0]
-    if batch_size != 1:
-        raise ValueError("Only batch size 1 is supported.")
-    device = position_ids.device
-    idxs = torch.arange(1, position_ids.shape[1], device=device)
-    non_increasing_pos_id = position_ids[0, 1:] <= position_ids[0, :-1]
-    next_pos_is_is_zero = position_ids[0, 1:] == 0
-    new_seq_idxs = non_increasing_pos_id | next_pos_is_is_zero
-    cu_seq_lens = torch.empty(new_seq_idxs.sum() + 2, device=device, dtype=torch.int64)
-    cu_seq_lens[0], cu_seq_lens[1:-1], cu_seq_lens[-1] = 0, idxs[new_seq_idxs], position_ids.shape[-1]
-    return cu_seq_lens
-
-
-def get_seq_idx_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    if cu_seq_lens.ndim != 1:
-        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
-    seq_idx = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
-    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
-    for idx, seq_len in enumerate(torch.diff(cu_seq_lens, dim=-1)):
-        seq_idx[start : start + seq_len] = idx
-        start += seq_len
-
-    return seq_idx[None]
-
-
-def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    if cu_seq_lens.ndim != 1:
-        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
-    pos_ids = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
-    seq_lens = cu_seq_lens.diff(dim=-1)
-    max_arange = torch.arange(seq_lens.max(), dtype=torch.int32, device=cu_seq_lens.device)
-    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
-    for s in seq_lens:
-        pos_ids[start : start + s] = max_arange[:s]
-        start += s
-
-    return pos_ids[None]
-
-
 @slow
 @require_torch
 @require_torch_gpu
