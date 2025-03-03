@@ -138,7 +138,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
     for processing high resolution images as explained in the [InternLM-XComposer2-4KHD](https://arxiv.org/pdf/2404.06512)
 
     Args:
-        num_crops (`int`, *optional*, defaults to 1): <fill_docstring>
+        num_crops (`int`, *optional*, defaults to 1): Number of different image crops to use.
         image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
