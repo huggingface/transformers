@@ -94,6 +94,7 @@ _VARIANTS = {
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256 ** -0.5,
+            max_position_embeddings=32_768,
         ),
         vision_config=None,
     ),
@@ -510,6 +511,7 @@ def main(*args):
     variant = _VARIANT.value
     dtype = getattr(torch, _PRECISION.value)
     config = _VARIANTS[variant]
+    device = torch.device(_DEVICE.value)
 
     if variant == _VARIANT_GEMMA_3_1B:
         flags.FLAGS.set_default(_TEXT_ONLY.name, True)

@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import Optional, Union, cast
 
 import PIL.Image
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
@@ -231,10 +232,23 @@ class Gemma3Processor(ProcessorMixin):
         if images is not None:
             batched_images = self._process_images(images=images, **output_kwargs["images_kwargs"])
             batch_flattened_images = self._batch_flatten_pas_images(batched_images=batched_images)
-            pixel_values = [
-                self.image_processor(prompt_images, **output_kwargs["images_kwargs"])["pixel_values"]
-                for prompt_images in batch_flattened_images
-            ]
+            # The Hugging Face implementation of the SigLIP Vision Model expects a single Tensor of shape [F, C, W, H]
+            # where:
+            #
+            # - F is the number of images to encode
+            # - C is the number of channels in each image
+            # - W and H are the width and height of the image, which in this case are the same since Gemma 3 only
+            #   supports 896x896 images.
+            #
+            # So we concat all images across all batches into a single flat list prior to sending it to the
+            # `Gemma3ForConditionalGeneration.vision_model` for ecnoding and use `torch.masked_scatter()` to
+            # sequentially update the text embeddings wth the pooled vision embdeddings.
+            pixel_values = torch.cat(
+                [
+                    self.image_processor(prompt_images, **output_kwargs["images_kwargs"])["pixel_values"]
+                    for prompt_images in batch_flattened_images
+                ]
+            )
         else:
             batched_images = None
             pixel_values = None

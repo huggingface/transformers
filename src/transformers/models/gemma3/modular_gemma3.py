@@ -573,10 +573,21 @@ class Gemma3Processor(ProcessorMixin):
                 images=images, **output_kwargs["images_kwargs"]
             )
             batch_flattened_images = self._batch_flatten_pas_images(batched_images=batched_images)
-            pixel_values = [
+            # The Hugging Face implementation of the SigLIP Vision Model expects a single Tensor of shape [F, C, W, H]
+            # where:
+            #
+            # - F is the number of images to encode
+            # - C is the number of channels in each image
+            # - W and H are the width and height of the image, which in this case are the same since Gemma 3 only
+            #   supports 896x896 images.
+            #
+            # So we concat all images across all batches into a single flat list prior to sending it to the
+            # `Gemma3ForConditionalGeneration.vision_model` for ecnoding and use `torch.masked_scatter()` to
+            # sequentially update the text embeddings wth the pooled vision embdeddings.
+            pixel_values = torch.cat([
                 self.image_processor(prompt_images, **output_kwargs["images_kwargs"])["pixel_values"]
                 for prompt_images in batch_flattened_images
-            ]
+            ])
         else:
             batched_images = None
             pixel_values = None
@@ -681,11 +692,9 @@ class Gemma3RMSNorm(GemmaRMSNorm):
 
 class Gemma3MultimodalInputProjection(nn.Module):
 
-    def __init__(self, config: Gemma3Config):
+    def __init__(self, vision_dim: int, text_dim: int):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(
-            (config.vision_config.hidden_size, config.text_config.hidden_size)
-        ))
+        self.weight = nn.Parameter(torch.zeros(vision_dim, text_dim))
 
     def forward(self, x):
         output = torch.einsum('btm,md->btd', x, self.weight)
@@ -1643,20 +1652,30 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         super().__init__(config)
 
         self.config = config
-        self.language_model = Gemma3ForCausalLM(config=config.text_config)
-        self.vision_model = SiglipVisionModel(config=config.vision_config)
-        self.mm_input_projection = Gemma3MultimodalInputProjection(config=config)
+        text_config = self.config.text_config
+        vision_config = self.config.vision_config
+        if vision_config is None:
+            raise ValueError(
+                "Atempted to initialize a `Gemma3ForConditionalGeneration` instance without a `Gemma3VisionConfig`; "
+                "either provide a vision config or use a `Gemma3ForCausalLM` instace for text-only generation."
+            )
+
+        self.language_model = Gemma3ForCausalLM(config=text_config)
+        self.vision_model = SiglipVisionModel(config=vision_config)
+        self.mm_input_projection = Gemma3MultimodalInputProjection(
+            vision_dim=vision_config.hidden_size, text_dim=text_config.hidden_size
+        )
         self.mm_soft_emb_norm = Gemma3RMSNorm(
-            config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
+            vision_config.hidden_size, eps=vision_config.layer_norm_eps
         )
 
-        patches_per_image = config.vision_config.image_size // config.vision_config.patch_size
-        avg_pool_k = patches_per_image ** 2 // config.text_config.mm_tokens_per_image
+        patches_per_image = vision_config.image_size // vision_config.patch_size
+        avg_pool_k = patches_per_image ** 2 // text_config.mm_tokens_per_image
         self.avg_pool = nn.AvgPool1d(kernel_size=avg_pool_k, stride=avg_pool_k)
-        self.vocab_size = config.text_config.vocab_size
+        self.vocab_size = text_config.vocab_size
         self.pad_token_id = (
             pad_token_id
-            if (pad_token_id := config.text_config.pad_token_id) is not None
+            if (pad_token_id := text_config.pad_token_id) is not None
             else -1
         )
         self.post_init()
@@ -1690,7 +1709,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         x = self.mm_input_projection(x)
         return x
 
-    def get_image_features(self, pixel_values: Sequence[torch.Tensor]) -> torch.Tensor:
+    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
 
@@ -1700,18 +1719,15 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_features = []
-        for i, prompt_images in enumerate(pixel_values):
-            vision_outputs = self.vision_model(pixel_values=prompt_images).last_hidden_state
-            b, n, l = vision_outputs.shape
-            reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
-            reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
-            reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
-            pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
-            pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
-            prompt_image_features = self.encode_vision(pooled_vision_outputs)
-            image_features.append(prompt_image_features)
-        return torch.nested.nested_tensor(image_features)
+        vision_outputs = self.vision_model(pixel_values=pixel_values).last_hidden_state
+        b, n, l = vision_outputs.shape
+        reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
+        reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
+        reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
+        pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
+        pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
+        image_features = self.encode_vision(pooled_vision_outputs)
+        return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
@@ -1822,7 +1838,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         # Merge text and images
         if pixel_values is not None and image_soft_token_mask is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values).to(inputs_embeds.device, inputs_embeds.dtype)
 
             image_mask = image_soft_token_mask.unsqueeze(-1)
             image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -1830,7 +1846,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             if inputs_embeds[image_mask].numel() != image_features.numel():
                 raise ValueError("Number of images does not match number of special image tokens in the input text. ")
 
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         # mask out pad-token-ids in labels for BC

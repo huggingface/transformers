@@ -14,6 +14,7 @@ def main(*args):
     del args
     start = time.time()
     prompt = "<image> Where is the cow standing?"
+    prompt2 = "What is in this image? <image>"
     url = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
     image = Image.open(requests.get(url, stream=True).raw)
     data_t = time.time()
@@ -24,7 +25,13 @@ def main(*args):
     processor_ready = time.time()
     print("timecheck - processor ready", processor_ready - start, processor.tokenizer.is_fast)
 
-    inputs = processor(images=image, text=prompt,  return_tensors="pt")
+    inputs = processor(
+        images=[image, image],
+        text=[prompt, prompt2],
+        return_tensors="pt",
+        padding=True,
+        padding_side="left",
+    )
     inputs = inputs.to(torch.get_default_device())
     processed = time.time()
     print("timecheck - processed", processed - start, inputs.keys())
@@ -39,58 +46,62 @@ def main(*args):
     loaded = time.time()
     print("timecheck - loaded", loaded - start)
 
-    # inputs_embeds = model.get_input_embeddings()(inputs.input_ids)
-    # image_mask = inputs.image_soft_token_mask.unsqueeze(-1)
-    # image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+    inputs_embeds = model.get_input_embeddings()(inputs.input_ids)
+    image_mask = inputs.image_soft_token_mask.unsqueeze(-1)
+    image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
-    # print(
-    #     "embs and masks shapes, ",
-    #     inputs_embeds.shape,
-    #     inputs.image_soft_token_mask.shape,
-    #     image_mask.shape,
-    # )
-
-    # pixel_values = inputs.pixel_values[0].to(model.device, model.dtype)
-    # print("pre-vision encode", type(pixel_values), pixel_values.shape, pixel_values.dtype)
-    # vision_outputs = model.vision_model(pixel_values=pixel_values).last_hidden_state
-    # print("vision_outputs", vision_outputs.shape)
-
-    # b, n, l = vision_outputs.shape
-    # kernel = vision_outputs.shape[1] // 256
-    # avg_pool = torch.nn.AvgPool1d(kernel_size=kernel, stride=kernel)
-
-    # reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
-    # reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
-    # reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
-    # print("reshaped_vision_outputs", reshaped_vision_outputs.shape)
-
-    # pooled_vision_outputs = avg_pool(reshaped_vision_outputs)
-    # pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
-    # print("pooled_vision_outputs", pooled_vision_outputs.shape)
-
-    # image_features = model.encode_vision(pooled_vision_outputs)
-    # vision_encoded = time.time()
-    # print(
-    #     "timecheck - vision encoded",
-    #     vision_encoded - start,
-    #     image_features.shape,
-    # )
-
-    # inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
-    # print(inputs_embeds.shape)
-
-    generate_ids = model.generate(**inputs, max_new_tokens=24)
-    generated = time.time()
-    print("timecheck - generated", generated - start)
-
-    outputs = processor.batch_decode(
-        generate_ids,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False
+    print(
+        "embs and masks shapes, ",
+        inputs_embeds.shape,
+        inputs.image_soft_token_mask.shape,
+        image_mask.shape,
     )
-    print(outputs)
-    done = time.time()
-    print("timecheck - done", done - start)
+
+    print("type of pixel_values: ", type(inputs.pixel_values))
+
+    pixel_values = inputs.pixel_values
+    print("pre-vision encode", type(pixel_values), pixel_values.shape, pixel_values.dtype)
+    vision_outputs = model.vision_model(pixel_values=pixel_values).last_hidden_state
+    print("vision_outputs", vision_outputs.shape)
+
+
+    patches_per_image = model.config.vision_config.image_size // model.config.vision_config.patch_size
+    avg_pool_k = patches_per_image ** 2 // model.config.text_config.mm_tokens_per_image
+    avg_pool = torch.nn.AvgPool1d(kernel_size=avg_pool_k, stride=avg_pool_k)
+
+    b, n, l = vision_outputs.shape
+    reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
+    reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
+    reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
+    print("reshaped_vision_outputs", reshaped_vision_outputs.shape)
+
+    pooled_vision_outputs = avg_pool(reshaped_vision_outputs)
+    pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
+    print("pooled_vision_outputs", pooled_vision_outputs.shape)
+
+    image_features = model.encode_vision(pooled_vision_outputs)
+    vision_encoded = time.time()
+    print(
+        "timecheck - vision encoded",
+        vision_encoded - start,
+        image_features.shape,
+    )
+
+    inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+    print(inputs_embeds[0][4])
+
+    # generate_ids = model.generate(**inputs, max_new_tokens=24)
+    # generated = time.time()
+    # print("timecheck - generated", generated - start)
+
+    # outputs = processor.batch_decode(
+    #     generate_ids,
+    #     skip_special_tokens=True,
+    #     clean_up_tokenization_spaces=False
+    # )
+    # print(outputs)
+    # done = time.time()
+    # print("timecheck - done", done - start)
 
 
 if __name__ == "__main__":
