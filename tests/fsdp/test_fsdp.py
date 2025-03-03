@@ -303,6 +303,10 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @run_first
     @slow
     def test_fsdp_cpu_offloading(self):
+        # the file doesn't exist in the repo
+        if not os.path.exists("utils/testing_scripts/fsdp_cpu_offloading.py"):
+            raise unittest.SkipTest("FSDP CPU offloading script not found!")
+
         try:
             subprocess.run(
                 "accelerate launch utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
