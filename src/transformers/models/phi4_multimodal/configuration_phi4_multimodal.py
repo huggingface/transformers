@@ -57,8 +57,6 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         crop_size (`int`, *optional*, defaults to 448):
             Crop size for the input images.
-        hd_transform_order (`str`, *optional*, defaults to `"sub_glb"`):
-            Concatenation order for the image feature extractor. One of `"sub_glb"` or `"sub_glb"`.
         image_token_id (`int`, *optional*, defaults to 200010):
             The image token id.
         feature_layer (`int`, *optional*, defaults to -2):
@@ -89,7 +87,6 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         crop_size: int = 448,
-        hd_transform_order: str = "sub_glb",
         image_token_id: int = 200010,
         feature_layer: int = -2,
         **kwargs,
@@ -107,7 +104,6 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.crop_size = crop_size
-        self.hd_transform_order = hd_transform_order
         self.image_token_id = image_token_id
         self.feature_layer = feature_layer
 

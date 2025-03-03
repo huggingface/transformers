@@ -89,8 +89,6 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
             The dropout ratio for the attention probabilities.
         crop_size (`int`, *optional*, defaults to 448):
             Crop size for the input images.
-        hd_transform_order (`str`, *optional*, defaults to `"sub_glb"`):
-            Concatenation order for the image feature extractor. One of `"sub_glb"` or `"sub_glb"`.
         image_token_id (`int`, *optional*, defaults to 200010):
             The image token id.
         feature_layer (`int`, *optional*, defaults to -2):
@@ -120,7 +118,6 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         crop_size: int = 448,
-        hd_transform_order: str = "sub_glb",
         image_token_id: int = 200010,
         feature_layer: int = -2,
         **kwargs,
@@ -139,7 +136,6 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
             **kwargs,
         )
         self.crop_size = crop_size
-        self.hd_transform_order = hd_transform_order
         self.image_token_id = image_token_id
         self.feature_layer = feature_layer
 
@@ -741,15 +737,14 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = config.vision_config.feature_layer
-        self.hd_transform_order = config.vision_config.hd_transform_order
         self.crop_size = config.vision_config.crop_size
         self.image_dim_out = config.vision_config.hidden_size
 
-        N_patches = config.vision_config.image_size // config.vision_config.patch_size
-        if N_patches % 2 != 0:
+        n_patches = config.vision_config.image_size // config.vision_config.patch_size
+        if n_patches % 2 != 0:
             self.img_processor_padding = nn.ReflectionPad2d((0, 1, 0, 1))
-            N_patches += 1
-        self.num_img_tokens = (N_patches // 2) ** 2
+            n_patches += 1
+        self.num_img_tokens = (n_patches // 2) ** 2
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.img_processor = Phi4MultimodalVisionModel._from_config(config.vision_config)
@@ -847,10 +842,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             sub_img = torch.cat([sub_img, temporary_extensor], dim=2).reshape(1, -1, self.image_dim_out)
 
             # Merge global and sub
-            if self.hd_transform_order == "glb_sub":
-                output_imgs.append(torch.cat([global_img, self.global_img_feature_extensor, sub_img], dim=1))
-            elif self.hd_transform_order == "sub_glb":
-                output_imgs.append(torch.cat([sub_img, self.global_img_feature_extensor, global_img], dim=1))
+            output_imgs.append(torch.cat([sub_img, self.global_img_feature_extensor, global_img], dim=1))
 
         img_set_tensor = []
         for output_img in output_imgs:
