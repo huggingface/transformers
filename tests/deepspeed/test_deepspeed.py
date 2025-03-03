@@ -1095,6 +1095,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_basic_distributed(self, stage, dtype):
         self.run_and_check(stage=stage, dtype=dtype, distributed=True)
 
+    @require_torch_fp16
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
@@ -1176,7 +1177,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         fp32 = True if dtype == "fp32" else False
         self.run_and_check(
             stage=ZERO3,
-            dtype=FP16,
+            dtype=dtype,
             model_name=T5_TINY,
             distributed=True,
             do_train=False,
