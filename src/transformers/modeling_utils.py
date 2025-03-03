@@ -771,7 +771,7 @@ def _load_state_dict_into_meta_model(
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     device_mesh=None,
     shard_file=None,
-    weights_only=True
+    weights_only=True,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -802,11 +802,12 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
     else:
         map_location = "cpu"
-        if (device_map is not None
+        if (
+            device_map is not None
             and hf_quantizer is not None
             and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
             and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-            ):
+        ):
             map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
         bin_state_dict = load_state_dict(shard_file, map_location=map_location, weights_only=weights_only)
 
@@ -4233,7 +4234,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0], map_location="meta", weights_only=weights_only)
+                                one_state_dict = load_state_dict(
+                                    resolved_archive_file[0], map_location="meta", weights_only=weights_only
+                                )
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -4937,7 +4940,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
                     resolved_archive_file=resolved_archive_file,
-                    weights_only=weights_only
+                    weights_only=weights_only,
                 )
             else:
                 # We need to read the state dict as it is meta otherwise
@@ -5029,7 +5032,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             unexpected_keys=unexpected_keys,
                             device_mesh=device_mesh,
                             shard_file=shard_file,
-                            weights_only=weights_only
+                            weights_only=weights_only,
                         )
                         error_msgs += new_error_msgs
                 else:
