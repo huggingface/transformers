@@ -406,10 +406,11 @@ class GenerationMixin:
                 or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif is_torch_hpu_available() and input_ids.shape[1] != cache_position.shape[0]:
-                input_ids = input_ids.cpu()[:, cache_position.cpu()].to(input_ids.device)  # segfaults otherwise
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
+                if is_torch_hpu_available():
+                    input_ids = input_ids.index_select(1, cache_position)
+                else:
+                    input_ids = input_ids[:, cache_position]
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
