@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AyaVisionConfig"
 
-
+# copied from transformers.models.Llava.modeling_llava.LlavaCausalLMOutputWithPast
 @dataclass
 class AyaVisionCausalLMOutputWithPast(ModelOutput):
     """
