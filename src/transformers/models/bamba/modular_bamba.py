@@ -972,16 +972,24 @@ class BambaModel(BambaPreTrainedModel):
         seq_idx: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        padding_free_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx)
-        padding_free_all_provided = all(x is not None for x in padding_free_kwargs)
-        padding_free_none_provided = all(x is None for x in padding_free_kwargs)
-        if not (padding_free_all_provided or padding_free_none_provided) or (
-            padding_free_all_provided and position_ids is None
-        ):
+        # Padding-free args correctness checks: seq_idx and position_ids must always be provided
+        # for padding-free. FlashAttentionKwargs can optionally be provided, along with position_ids
+        # and seq_idx.
+        flash_attn_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
+        flash_attn_kwargs_all_provided = all(x is not None for x in flash_attn_kwargs)
+        flash_attn_kwargs_none_provided = all(x is None for x in flash_attn_kwargs)
+        if not (flash_attn_kwargs_all_provided or flash_attn_kwargs_none_provided):
             raise ValueError(
-                "Either all of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, "
-                "seq_idx) must be None, or they must all be provided along with position_ids."
+                "Either all of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)"
+                " must be None, or they must all be provided."
             )
+        if flash_attn_kwargs_all_provided and (position_ids is None or seq_idx is None):
+            raise ValueError(
+                "If (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k) are provided,"
+                " then position_ids and seq_idx must also be provided."
+            )
+        if seq_idx is not None and position_ids is None:
+            raise ValueError("If seq_idx is provided, position_ids must also be provided.")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
