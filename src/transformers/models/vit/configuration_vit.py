@@ -68,10 +68,12 @@ class ViTConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         encoder_stride (`int`, *optional*, defaults to 16):
            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
-	pooler_output_size (`int`, *optional*, defaults to None):
-	   Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
-	pooler_act (`str` or `function`, defaults to "tanh"):
-	   The activation function to be used by the pooler. If string, keys of ACT2FN are supported for Flax and Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are supported for Tensorflow.
+        pooler_output_size (`int`, *optional*, defaults to None):
+           Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        pooler_act (`str` or `function`, defaults to "tanh"):
+           The activation function to be used by the pooler. If string, keys of ACT2FN are supported for Flax and
+           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
+           supported for Tensorflow.
 
     Example:
 
@@ -106,8 +108,8 @@ class ViTConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         encoder_stride=16,
-	pooler_output_size=None,
-	pooler_act="tanh",
+        pooler_output_size=None,
+        pooler_act="tanh",
         **kwargs,
     ):
         super().__init__(**kwargs)
