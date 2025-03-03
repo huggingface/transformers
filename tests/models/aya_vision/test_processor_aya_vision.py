@@ -51,7 +51,7 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained("Cohere-hf/aya-vision-early-ckpt-hf", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("CohereForAI/aya-vision-8b", padding_side="left")
         processor_kwargs = self.prepare_processor_dict()
         processor = AyaVisionProcessor.from_pretrained(
             "Cohere-hf/aya-vision-early-ckpt-hf",
