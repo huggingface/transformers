@@ -68,6 +68,10 @@ class ViTConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         encoder_stride (`int`, *optional*, defaults to 16):
            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+	pooler_output_size (`int`, *optional*, defaults to None):
+	   Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+	pooler_act (`str` or `function`, defaults to "tanh"):
+	   The activation function to be used by the pooler. If string, `"relu"`, `"tanh"`, `"none"`, and `"identity"` are supported.
 
     Example:
 

@@ -418,7 +418,10 @@ class FlaxViTPooler(nn.Module):
             ),
             dtype=self.dtype,
         )
-	self.act = {'tanh': nn.tanh, 'relu': nn.relu, 'identity': lambda x: x, 'none': lambda x: x}[config.pooler_act]
+        if isinstance(config.pooler_act, str):
+		self.act = {'tanh': nn.tanh, 'relu': nn.relu, 'identity': lambda x: x, 'none': lambda x: x}[config.pooler_act]
+	else:
+		self.act = config.pooler_act
 
     def __call__(self, hidden_states):
         cls_hidden_state = hidden_states[:, 0]
