@@ -1,4 +1,4 @@
-# Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,12 +34,8 @@ from transformers.utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 # Special tokens
-_COMPATIBLE_IMAGE_SPECIAL_TOKEN_PATTERN = r"<\|image_\d+\|>"  # For backward compatibility
-_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN = r"<\|audio_\d+\|>"  # For backward compatibility
-_IMAGE_SPECIAL_TOKEN = "<|endoftext10|>"
-_AUDIO_SPECIAL_TOKEN = "<|endoftext11|>"
-_IMAGE_SPECIAL_TOKEN_ID = 200010  # '<|endoftext10|>', or we can better name it (in `tokenizer_config.json`)
-_AUDIO_SPECIAL_TOKEN_ID = 200011  # '<|endoftext11|>'
+COMPATIBLE_IMAGE_TOKEN_PATTERN = r"<\|image_\d+\|>"
+COMPATIBLE_AUDIO_TOKEN_PATTERN = r"<\|audio_\d+\|>"
 
 
 AudioInput = Tuple[Union[np.ndarray, torch.Tensor], int]
@@ -141,46 +137,33 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         return inputs
 
-    @property
-    def special_image_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
-
-    def get_special_image_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
-
     def _convert_images_audios_text_to_inputs(
         self, images, audios, text, padding=False, truncation=None, max_length=None, return_tensors=None
     ):
-        # prepare image id to image input ids
-        if len(images) > 0:
-            input_image_embeds = images["input_image_embeds"]
-            image_sizes = images["image_sizes"]
-            image_attention_mask = images["image_attention_mask"]
-            num_img_tokens = images["num_img_tokens"]
-        else:
-            input_image_embeds = torch.tensor([])
-            image_sizes = torch.tensor([])
-            image_attention_mask = torch.tensor([])
-            num_img_tokens = []
+        image_inputs = {}
+        audio_inputs = {}
+        num_img_tokens = []
+        audio_embed_sizes = torch.tensor([])
 
-        # prepare audio id to audio input ids
+        # image inputs
+        if len(images) > 0:
+            image_inputs_args = ["input_image_embeds", "image_sizes", "image_attention_mask"]
+            image_inputs = {k: v for k, v in images.items() if k in image_inputs_args}
+            num_img_tokens = images["num_img_tokens"]
+
+        # Audio inputs
+        audio_inputs = {}
         if len(audios) > 0:
-            input_audio_embeds = audios["input_audio_embeds"]
+            audio_inputs_args = ["input_audio_embeds", "audio_embed_sizes", "audio_attention_mask"]
+            audio_inputs = {k: v for k, v in audios.items() if k in audio_inputs_args}
             audio_embed_sizes = audios["audio_embed_sizes"]
-            audio_attention_mask = audios.get("audio_attention_mask", None)
-        else:
-            input_audio_embeds = torch.tensor([])
-            audio_embed_sizes = torch.tensor([])
-            audio_attention_mask = None
 
         # Replace certain special tokens for compatibility
-        # Ref: https://stackoverflow.com/questions/11475885/python-replace-regex
         if isinstance(text, str):
             text = [text]
-        assert isinstance(text, list)
-        processed_text = [re.sub(_COMPATIBLE_IMAGE_SPECIAL_TOKEN_PATTERN, _IMAGE_SPECIAL_TOKEN, t) for t in text]
+        processed_text = [re.sub(COMPATIBLE_IMAGE_TOKEN_PATTERN, self.tokenizer.image_token, t) for t in text]
         processed_text = [
-            re.sub(_COMPATIBLE_AUDIO_SPECIAL_TOKEN_PATTERN, _AUDIO_SPECIAL_TOKEN, t) for t in processed_text
+            re.sub(COMPATIBLE_AUDIO_TOKEN_PATTERN, self.tokenizer.audio_token, t) for t in processed_text
         ]
 
         input_ids_list = [self.tokenizer(t).input_ids for t in processed_text]
@@ -193,10 +176,10 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             i = 0
             while i < len(input_ids):
                 token_id = input_ids[i]
-                if token_id == _AUDIO_SPECIAL_TOKEN_ID:
+                if token_id == self.tokenizer.audio_token_id:
                     token_count = next(audio_embed_size_iter)
                     audio_cnt += 1
-                elif token_id == _IMAGE_SPECIAL_TOKEN_ID:
+                elif token_id == self.tokenizer.image_token_id:
                     token_count = next(image_token_count_iter)
                     img_cnt += 1
                 else:
@@ -233,13 +216,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         # prepare batch feature
         data = {
             "input_ids": input_ids,
-            "input_image_embeds": input_image_embeds,
-            "image_sizes": image_sizes,
-            "image_attention_mask": image_attention_mask,
-            "input_audio_embeds": input_audio_embeds,
-            "audio_embed_sizes": audio_embed_sizes,
-            "audio_attention_mask": audio_attention_mask,
             "attention_mask": attention_mask,
+            **image_inputs,
+            **audio_inputs,
         }
 
         return BatchFeature(data=data)
