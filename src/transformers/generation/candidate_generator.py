@@ -800,12 +800,12 @@ class AssistantVocabTranslatorCache:
             assistant_dict = weakref.WeakKeyDictionary()
             cls._cache[target_tokenizer] = assistant_dict
 
-            mapping = assistant_dict.get(assistant_tokenizer)
-            if mapping is None:
-                mapping = AssistantToTargetTranslator(
-                    target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size
-                )
-                assistant_dict[assistant_tokenizer] = mapping
+        mapping = assistant_dict.get(assistant_tokenizer)
+        if mapping is None:
+            mapping = AssistantToTargetTranslator(
+                target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size
+            )
+            assistant_dict[assistant_tokenizer] = mapping
 
         return mapping
 
