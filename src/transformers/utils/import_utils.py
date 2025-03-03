@@ -544,9 +544,9 @@ def is_torch_fp16_available_on_device(device):
 
     if is_torch_hpu_available():
         if is_habana_gaudi1():
-            return True
-        else:
             return False
+        else:
+            return True
 
     import torch
 
