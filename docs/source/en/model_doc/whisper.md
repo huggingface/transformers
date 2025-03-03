@@ -27,6 +27,9 @@ The abstract from the paper is the following:
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://github.com/openai/whisper).
 
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
+
 ## Quick usage
 
 You can run Whisper in less than 4 lines of code and transcribe in less than a minute!
