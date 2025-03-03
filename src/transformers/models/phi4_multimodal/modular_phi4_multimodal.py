@@ -812,7 +812,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
             sub_img = img_features[idx, 1:]
             sub_img = sub_img[:area_ratio]
             sub_img = (
-                sub_img.reshape(height_ratio, width_ratio, base_feat_size, base_feat_size, -1)
+                sub_img.reshape(height_ratio, width_ratio, base_feat_size, base_feat_size, self.image_dim_out)
                 .transpose(1, 2)
                 .reshape(1, height_ratio * base_feat_size, width_ratio * base_feat_size, self.image_dim_out)
                 .contiguous()
