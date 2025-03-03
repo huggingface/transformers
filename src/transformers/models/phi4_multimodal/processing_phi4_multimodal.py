@@ -26,9 +26,9 @@ from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import (
     ImageInput,
 )
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from transformers.utils import TensorType, logging
+from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.tokenization_utils_base import TextInput
+from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -71,10 +71,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         text: Union[TextInput, List[TextInput]],
         images: Optional[ImageInput] = None,
         audios: Optional[AudioInputs] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forards the `text`
@@ -123,100 +120,53 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             - **audio_embed_sizes** -- List of integers specifying the size of each audio in `input_audio_embeds`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
         """
+
+        return_tensors = kwargs.get("return_tensors", None)
+
         image_inputs = self.image_processor(images, return_tensors=return_tensors) if images is not None else {}
         audio_inputs = self.audio_processor(audios, return_tensors=return_tensors) if audios is not None else {}
-        inputs = self._convert_images_audios_text_to_inputs(
-            image_inputs,
-            audio_inputs,
-            text,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            return_tensors=return_tensors,
-        )
 
-        return inputs
-
-    def _convert_images_audios_text_to_inputs(
-        self, images, audios, text, padding=False, truncation=None, max_length=None, return_tensors=None
-    ):
-        image_inputs = {}
-        audio_inputs = {}
-        num_img_tokens = []
-        audio_embed_sizes = torch.tensor([])
-
-        # image inputs
-        if len(images) > 0:
-            image_inputs_args = ["input_image_embeds", "image_sizes", "image_attention_mask"]
-            image_inputs = {k: v for k, v in images.items() if k in image_inputs_args}
-            num_img_tokens = images["num_img_tokens"]
-
-        # Audio inputs
-        audio_inputs = {}
-        if len(audios) > 0:
-            audio_inputs_args = ["input_audio_embeds", "audio_embed_sizes", "audio_attention_mask"]
-            audio_inputs = {k: v for k, v in audios.items() if k in audio_inputs_args}
-            audio_embed_sizes = audios["audio_embed_sizes"]
+        # We pop here for images as we don't need it later
+        num_img_tokens = image_inputs.pop("num_img_tokens", [])
+        audio_embed_sizes = audio_inputs.get("audio_embed_sizes", [])
 
         # Replace certain special tokens for compatibility
         if isinstance(text, str):
             text = [text]
-        processed_text = [re.sub(COMPATIBLE_IMAGE_TOKEN_PATTERN, self.tokenizer.image_token, t) for t in text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        image_token = self.tokenizer.image_token
+        audio_token = self.tokenizer.audio_token
+        processed_text = [re.sub(COMPATIBLE_IMAGE_TOKEN_PATTERN, image_token, t) for t in text]
+        processed_text = [re.sub(COMPATIBLE_AUDIO_TOKEN_PATTERN, audio_token, t) for t in processed_text]
+
+        # Check that the number of special tokens is sound
+        concatenated_prompt = "".join(processed_text)
+        if concatenated_prompt.count(self.tokenizer.image_token) != len(num_img_tokens):
+            raise ValueError(
+                "You should add as much image tokens `<|image_i|>` in your prompt as you pass `images` to the processor"
+            )
+        if concatenated_prompt.count(self.tokenizer.audio_token) != len(audio_embed_sizes):
+            raise ValueError(
+                "You should add as much audio tokens `<|audio_i|>` in your prompt as you pass `audios` to the processor"
+            )
+
+        # Add appropriate number of image/audio tokens
+        image_count_iter = iter(num_img_tokens)
+        audio_count_iter = iter(audio_embed_sizes)
         processed_text = [
-            re.sub(COMPATIBLE_AUDIO_TOKEN_PATTERN, self.tokenizer.audio_token, t) for t in processed_text
+            re.sub(re.escape(image_token), lambda _: image_token * next(image_count_iter), t) for t in processed_text
+        ]
+        processed_text = [
+            re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text
         ]
 
-        input_ids_list = [self.tokenizer(t).input_ids for t in processed_text]
-
-        img_cnt, audio_cnt = 0, 0  # only needed for later assertion
-        image_token_count_iter = iter(num_img_tokens)
-        audio_embed_size_iter = iter(audio_embed_sizes.tolist())
-        new_input_ids_list = []
-        for input_ids in input_ids_list:
-            i = 0
-            while i < len(input_ids):
-                token_id = input_ids[i]
-                if token_id == self.tokenizer.audio_token_id:
-                    token_count = next(audio_embed_size_iter)
-                    audio_cnt += 1
-                elif token_id == self.tokenizer.image_token_id:
-                    token_count = next(image_token_count_iter)
-                    img_cnt += 1
-                else:
-                    i += 1
-                    continue
-                tokens = [token_id] * token_count
-                input_ids = input_ids[:i] + tokens + input_ids[i + 1 :]
-                i += token_count
-            input_ids = torch.tensor(input_ids, dtype=torch.long)
-            new_input_ids_list.append(input_ids)
-        lengths = torch.tensor([len(input_ids) for input_ids in new_input_ids_list])
-        max_len = lengths.max()
-        input_ids = input_ids.new_full((len(new_input_ids_list), max_len), self.tokenizer.pad_token_id)
-        # batched inference requires left padding
-        for i in range(len(new_input_ids_list)):
-            input_ids[i, max_len - len(new_input_ids_list[i]) :] = new_input_ids_list[i]
-
-        # If the below assertion fails, it might be that input pure-text
-        # messages contain image/audio special tokens literally
-        # (<|endoftext10|>, <|endoftext11|>).
-        assert img_cnt == len(num_img_tokens), (
-            f"Number of image tokens in prompt_token_ids ({img_cnt}) "
-            f"does not match number of images ({len(num_img_tokens)})"
-        )
-        assert audio_cnt == len(audio_embed_sizes), (
-            f"Number of audio tokens in prompt_token_ids ({audio_cnt}) "
-            f"does not match number of audios ({len(audio_embed_sizes)})"
-        )
-
-        # prepare attention mask
-        seq_range = torch.arange(max_len - 1, -1, -1)
-        attention_mask = seq_range.unsqueeze(0) < lengths.unsqueeze(1)
+        text_inputs = self.tokenizer(processed_text, **kwargs)
 
         # prepare batch feature
         data = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+            **text_inputs,
             **image_inputs,
             **audio_inputs,
         }
