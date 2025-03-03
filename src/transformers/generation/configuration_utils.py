@@ -379,8 +379,8 @@ class GenerationConfig(PushToHubMixin):
             If using a static cache, this controls how `generate` will `compile` the forward pass for performance
             gains.
 
-        disable_compile (`bool`, *optional*): Whether to disable the compilation of the forward pass when using 'statis' cache
-            implementation.
+        disable_compile (`bool`, *optional*): Whether to disable the compilation of the forward pass when using 'static' cache
+            implementation. Will default to `False` with the model is not quantized.
 
         > Wild card
 
@@ -485,7 +485,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Performances
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
-        self.disable_compile = kwargs.pop("disable_compile", False)
+        self.disable_compile = kwargs.pop("disable_compile", None)
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
