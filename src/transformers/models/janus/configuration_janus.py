@@ -91,12 +91,12 @@ class JanusVisionConfig(PretrainedConfig):
 
 class JanusVQVAEConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ChameleonVQModel`]. It is used to instantiate a
-    `ChameleonVQModel` according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`JanusVQModel`]. It is used to instantiate a
+    `JanusVQModel` according to the specified arguments, defining the model architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a
     configuration with the defaults will yield a similar configuration to the VQModel of the
-    [meta/chameleon-7B](https://huggingface.co/meta/chameleon-7B).
+    [yaswanthgali/Janus-Pro-1B-HF](https://huggingface.co/yaswanthgali/Janus-Pro-1B-HF).
 
     Args:
         embed_dim (`int`, *optional*, defaults to 256):
@@ -177,9 +177,10 @@ class JanusConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusModel`]. It is used to instantiate an
     Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Janus-9B.
+    with the defaults will yield a similar configuration to that of the Janus-1B or Janus-7B models.
 
-    e.g. [janus-hf/janus-9b](https://huggingface.co/janus-hf/janus-9b)
+    e.g. [yaswanthgali/Janus-Pro-1B-HF](https://huggingface.co/yaswanthgali/Janus-Pro-1B-HF) or
+    [hugosilva664/Janus-Pro-7B-HF](https://huggingface.co/hugosilva664/Janus-Pro-7B-HF)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -191,7 +192,7 @@ class JanusConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_index (`int`, *optional*, defaults to 100581):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
@@ -210,18 +211,21 @@ class JanusConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import JanusForConditionalGeneration, JanusConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import JanusForConditionalGeneration, JanusConfig, JanusVisionConfig, JanusVQVAEConfig, LlamaConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a Janus vision config
+    >>> vision_config = JanusVisionConfig()
 
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a Janus janus-1.5-7b style configuration
-    >>> configuration = JanusConfig(vision_config, text_config)
+    >>> # Initializing a VQ config
+    >>> vq_config = JanusVQVAEConfig()
 
-    >>> # Initializing a model from the janus-1.5-7b style configuration
+    >>> # Initializing a Janus Pro 1B style configuration
+    >>> configuration = JanusConfig(vision_config=vision_config, text_config=text_config, vq_config=vq_config)
+
+    >>> # Initializing a model from the Janus Pro 1B style configuration
     >>> model = JanusForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -236,8 +240,6 @@ class JanusConfig(PretrainedConfig):
     }
 
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "llama")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
@@ -289,7 +291,9 @@ class JanusConfig(PretrainedConfig):
 
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        self.image_token_index = 100581
+        # The default is only the index for the 1B model, 7B uses a different one
+        self.image_token_index = kwargs.get("image_token_index", 100581)
+        super().__init__(**kwargs)
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]

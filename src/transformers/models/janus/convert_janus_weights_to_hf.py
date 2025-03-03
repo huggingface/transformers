@@ -40,58 +40,44 @@ from transformers import (
 from transformers.models.janus.image_processing_janus import JanusImageProcessor
 from transformers.models.janus.processing_janus import JanusProcessor
 
-
-# It is done as a list to guarantee order of application
-MAPPINGS = (
-    (r"(.+)", r"model.\1"),
-    (
-        r"(?<!gen_)vision_model",
-        (
-            ("vision_model.vision_tower.blocks", "vision_model.encoder.layers"),
-            ("vision_model.vision_tower.pos_embed", "vision_model.embeddings.position_embeddings.weight"),
-            ("vision_model.vision_tower.patch_embed.proj", "vision_model.embeddings.patch_embeddings.projection"),
-            ("vision_model.vision_tower.norm", "vision_model.post_layernorm"),
-            ("vision_model.vision_tower.attn_pool", "vision_model.head"),
-            (r"(?<=\.)proj(?=\.|$)", "projection_layer"),
-            (r"(?<=\.)norm(?=\.|$)", "layer_norm"),
-            (r"(?<=\.)norm1(?=\.|$)", "layer_norm1"),
-            (r"(?<=\.)norm2(?=\.|$)", "layer_norm2"),
-        ),
-    ),
-    (
-        "gen_vision_model",
-        (
-            ("gen_vision_model", "vqmodel"),
-            ("decoder.conv_blocks", "decoder.up"),
-            ("encoder.conv_blocks", "encoder.down"),
-            (".res.", ".block."),
-            ("mid.0", "mid.block_1"),
-            ("mid.1", "mid.attn_1"),
-            ("mid.2", "mid.block_2"),
-        ),
-    ),
-    (
-        "aligner",
-        (
-            ("aligner.layers.0", "aligner.fc1"),
-            ("aligner.layers.2", "aligner.hidden_layers.0"),
-        ),
-    ),
-    ("gen_head.output_mlp_projector", "gen_head.proj_out"),
-    (
-        "language_model",
-        (("language_model.model", "language_model"), ("model.language_model.lm_head.weight", "lm_head.weight")),
-    ),
-)
-
+# Mappings
+MAPPINGS = {
+    # Vision model
+    r"(?<!gen_)vision_model.vision_tower.blocks": "model.vision_model.encoder.layers",
+    r"(?<!gen_)vision_model.vision_tower.pos_embed": "model.vision_model.embeddings.position_embeddings.weight",
+    r"(?<!gen_)vision_model.vision_tower.patch_embed.proj": "model.vision_model.embeddings.patch_embeddings.projection",
+    r"(?<!gen_)vision_model.vision_tower.norm": "model.vision_model.post_layernorm",
+    r"(?<!gen_)vision_model.vision_tower.attn_pool": "model.vision_model.head",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)proj(?=\.|\s|$)": r"\g<pre>projection_layer",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm(?=\.|\s|$)": r"\g<pre>layer_norm",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm1(?=\.|\s|$)": r"\g<pre>layer_norm1",
+    r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm2(?=\.|\s|$)": r"\g<pre>layer_norm2",
+    # VQ Model
+    r"gen_vision_model": "model.vqmodel",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)decoder\.conv_blocks(?=\.|\s|$)": r"\g<pre>decoder.up",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)encoder\.conv_blocks(?=\.|\s|$)": r"\g<pre>encoder.down",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)res(?=\.|\s|$)": r"\g<pre>block",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)mid\.0(?=\.|\s|$)": r"\g<pre>mid.block_1",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)mid\.1(?=\.|\s|$)": r"\g<pre>mid.attn_1",
+    r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)mid\.2(?=\.|\s|$)": r"\g<pre>mid.block_2",
+    r"((gen_)?aligner)\.layers\.0": r"model.\1.fc1",
+    r"((gen_)?aligner)\.layers\.2": r"model.\1.hidden_layers.0",
+    "gen_head.output_mlp_projector": "model.gen_head.proj_out",
+    r"(\s|^)gen_embed": r"\1model.gen_embed",
+    r"(\s|^)gen_head": r"\1model.gen_head",
+    r"\b(gen_vision_model|model\.vqmodel)\.quantize\.codebook_used": None,
+    # Language model
+    r"(\s|^)language_model\.model": r"\1model.language_model",
+    r"\b(model\.language_model|(?<!model\.)language_model)\.lm_head\.weight": "lm_head.weight",
+}
 
 CHAT_TEMPLATE = (
-    "{%set seps=['\n\n','<\uff5cend▁of▁sentence\uff5c>']%}"
+    "{%set seps=['\n\n','<\uff5cend\u2581of\u2581sentence\uff5c>']%}"
     "{%set i=0%}"
     "{%for message in messages%}"
-    "{%if message['role']=='user'%}"
+    "{%if message['role']|lower=='user'%}"
     "<|User|>: "
-    "{%elif message['role']=='assistant'%}"
+    "{%elif message['role']|lower=='assistant'%}"
     "<|Assistant|>:{%if not (loop.last and not add_generation_prompt and message['content'][0]['type']=='text' and message['content'][0]['text']=='')%} {%endif%}"
     "{%else%}"
     "{{message['role'].capitalize()}}: "
@@ -113,7 +99,7 @@ CHAT_TEMPLATE = (
     "{%endif%}"
     "{%endfor%}"
     "{%if not loop.last or add_generation_prompt%}"
-    "{%if message['role']=='user'%}"
+    "{%if message['role']|lower=='user'%}"
     "{{seps[0]}}"
     "{%else%}"
     "{{seps[1]}}"
@@ -124,27 +110,26 @@ CHAT_TEMPLATE = (
 )
 
 
-def convert_key(key, mappings=MAPPINGS):
-    for pattern, replacement in mappings:
-        if isinstance(replacement, str):
-            # it is a simple replacement
-            key = re.sub(pattern, replacement, key)
+def convert_old_keys_to_new_keys(state_dict):
+    keys_as_text = "\n".join(state_dict.keys())
+    new_keys_as_text = keys_as_text
+    for old, repl in MAPPINGS.items():
+        if repl is None:
+            new_keys_as_text = re.sub(old, "", new_keys_as_text)
         else:
-            # you have to match the patter to access a new set of replacements
-            if re.search(pattern, key):
-                key = convert_key(key, replacement)
-    return key
+            new_keys_as_text = re.sub(old, repl, new_keys_as_text)
+    output_dict = dict(zip(keys_as_text.split("\n"), new_keys_as_text.split("\n")))
+    return output_dict
 
 
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
+    conversion_dict = convert_old_keys_to_new_keys(state_dict)
     converted_state_dict = {}
-    for key, value in state_dict.items():
-        new_key = convert_key(key)
-        converted_state_dict[new_key] = value
+    for old_key, new_key in conversion_dict.items():
+        if new_key:
+            converted_state_dict[new_key] = state_dict[old_key]
 
-    # Key not present in HF implementation
-    del converted_state_dict["model.vqmodel.quantize.codebook_used"]
     # Embeddings will not have initial dimension
     converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"] = converted_state_dict[
         "model.vision_model.embeddings.position_embeddings.weight"
@@ -249,6 +234,20 @@ def convert_model(
     input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
 
     # Load configuration files
+    required_files = [
+        "config.json",
+        "preprocessor_config.json",
+        "special_tokens_map.json",
+        "tokenizer_config.json"
+    ]
+
+    missing_files = [f for f in required_files if not os.path.exists(os.path.join(input_path, f))]
+    if missing_files:
+        raise ValueError(
+            f"The following required configuration files are missing from {input_path}: {', '.join(missing_files)}. "
+            "Please ensure you have downloaded all necessary model files."
+        )
+
     with open(os.path.join(input_path, "config.json"), "r") as f:
         config_data = json.load(f)
     with open(os.path.join(input_path, "preprocessor_config.json"), "r") as f:
@@ -359,10 +358,8 @@ def convert_model(
         text_config=text_config,
         vision_config=vision_config,
         vq_config=vq_config,
+        image_token_index=tokenizer.vocab.get("<image_placeholder>"),
     )
-
-    # Fetch the image token index based on image placeholder token.
-    config.image_token_index = processor.tokenizer.vocab.get("<image_placeholder>")
 
     # Save the config
     if output_dir:
@@ -378,7 +375,7 @@ def convert_model(
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
     model.generation_config.pad_token_id = tokenizer.vocab.get(
-        "<｜▁pad▁｜>"
+        "<\uff5c\u2581pad\u2581\uff5c>"
     )  # If fixed for all janus variants then hardcode it.
 
     # Load and convert state dict
@@ -408,7 +405,7 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        # TODO: warning about weights been not tied is raised here
+        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
         JanusForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 

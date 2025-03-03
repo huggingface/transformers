@@ -28,7 +28,7 @@ if is_vision_available():
     pass
 
 # This will be changed to HUB location once the final converted model is uploaded there
-TMP_LOCATION = "yaswanthgali/Janus-Pro-1B-HF"
+HUB_LOCATION = "yaswanthgali/Janus-Pro-1B-HF"
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -37,7 +37,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         # Similar to Qwen2VLProcessorTest. Tests are done with 1B processor (7B tokenizer is different)
-        processor = self.processor_class.from_pretrained(TMP_LOCATION)
+        processor = self.processor_class.from_pretrained(HUB_LOCATION)
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -65,6 +65,42 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             [
                 {
                     "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                        {"type": "image"},
+                    ],
+                },
+            ]
+        ]
+
+        correct_prompt = ["<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:"]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertEqual(formatted_prompt, correct_prompt)
+
+        # Single image message with capitalization
+        messages = [
+            [
+                {
+                    "role": "User",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                        {"type": "image"},
+                    ],
+                },
+            ]
+        ]
+
+        correct_prompt = ["<|User|>: What is shown in this image?\n<image_placeholder>\n\n<|Assistant|>:"]
+
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertEqual(formatted_prompt, correct_prompt)
+
+        # Single image message with uppercase
+        messages = [
+            [
+                {
+                    "role": "USER",
                     "content": [
                         {"type": "text", "text": "What is shown in this image?"},
                         {"type": "image"},

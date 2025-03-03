@@ -15,9 +15,19 @@
 """Testing suite for the PyTorch Janus model."""
 
 import unittest
+import tempfile
+from functools import reduce
+
+from transformers.models.auto import get_values
 
 import numpy as np
 import requests
+
+from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES
+
+
+def new_set(self, key, value):
+    raise AttributeError(f"Cannot modify immutable object: {key}")
 
 from transformers import (
     AutoProcessor,
@@ -27,7 +37,7 @@ from transformers import (
     JanusVQVAE,
     JanusVQVAEConfig,
     is_torch_available,
-    is_vision_available,
+    is_vision_available, enable_full_determinism,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -245,6 +255,109 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_sdpa_can_dispatch_composite_models(self):
+        # Copied from SiglipModelTesterMixin
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            # SigLip has one shared cls attr for all models, so we assign both submodels heer
+            vision_attn = language_attn = "sdpa" if model._supports_sdpa else "eager"
+
+            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "language_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
+                self.assertTrue(model_sdpa.language_model.config._attn_implementation == language_attn)
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+            has_sdpa = False
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    has_sdpa = True
+                    break
+            if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                raise ValueError("The SDPA model should have SDPA attention layers")
+
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+        """
+        We skip some parameters when checking for gradient checkpointing:
+        - VQ model, as its training is not supported
+        - JanusVisionAttentionPoolLatent, which is the layer responsible for generating sentence-level representations
+        that are matched with images on Siglip, as the forward pass of our models---which is what is used to check 
+        gradients in this test---does not include the forward pass on this layer.
+        """
+        skip_patterns = ["vision_model.head",
+                         "vqmodel",
+                         "gen_embed",
+                         "gen_aligner",
+                         "gen_head"]
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                if (
+                    model_class.__name__
+                    in [
+                        *get_values(MODEL_MAPPING_NAMES),
+                        *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                    ]
+                    or not model_class.supports_gradient_checkpointing
+                ):
+                    # TODO (ydshieh): use `skipTest` once pytest-dev/pytest-subtests/pull/169 is merged
+                    # self.skipTest(reason=f"`supports_gradient_checkpointing` is False for {model_class.__name__}.")
+                    continue
+
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                config.use_cache = False
+                config.return_dict = True
+                model = model_class(config)
+
+                model.to(torch_device)
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.train()
+
+                # unfreeze additional layers
+                for p in model.parameters():
+                    p.requires_grad_(True)
+
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                loss = model(**inputs).loss
+                loss.backward()
+                optimizer.step()
+
+                if self.test_all_params_have_gradient:
+                    for k, v in model.named_parameters():
+                        if v.requires_grad and not reduce(lambda t, s: t | (s in k), skip_patterns, False):
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                        else:
+                            pass
+
 
 class JanusVQModelTester:
     def __init__(
@@ -349,22 +462,21 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = ""
-        # Later remove this func and repplce with hub URL
+        # Later remove this func and replace with hub URL, for now we use a symbolic link to the folder
+        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_model_text_generation(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        # Let's make sure we test the preprocessing to replace what is used
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
+        model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
         )
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
@@ -376,7 +488,7 @@ class JanusIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_text_generation_batched(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
@@ -407,7 +519,7 @@ class JanusIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_read_token  # BNB required if we load in 4 bit. Modify acordingly
     def test_model_text_generation_with_multi_image(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
@@ -428,10 +540,10 @@ class JanusIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_generate_images(self):
-        model = JanusForConditionalGeneration.from_pretrained(self.model_id)
+        model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(
             self.model_id,
-            generation_mode="image",
+            generation_mode="image"
         )
 
         inputs = processor(
