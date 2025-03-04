@@ -17,12 +17,18 @@ Processor class for Phi4Multimodal
 """
 
 import math
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import torch
-import torchvision
+from torchvision.transforms import functional as F
 
-from ...image_processing_utils_fast import BatchFeature, BaseImageProcessorFast, convert_to_rgb
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    BatchFeature,
+    DefaultFastImageProcessorInitKwargs,
+    Unpack,
+    convert_to_rgb,
+)
 from ...image_utils import ImageInput, make_list_of_images, valid_images
 from ...utils import TensorType, logging
 
@@ -30,22 +36,29 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
+class Phi4MultimodalFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    image_size: Optional[int]
+    patch_size: Optional[int]
+    dynamic_hd: Optional[int]
+
+
 class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     r"""
     Constructs a Phi4Multimodal image processor.
     """
 
+    image_size = 448
+    patch_size = 14
+    dynamic_hd = 36
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    valid_init_kwargs = Phi4MultimodalFastImageProcessorInitKwargs
     model_input_names = ["input_image_embeds", "image_sizes", "image_attention_mask"]
 
-    def __init__(
-        self,
-        dynamic_hd,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
-        self.dynamic_hd = dynamic_hd
 
-    def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
+    def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height):
         best_ratio_diff = float("inf")
         best_ratio = (1, 1)
         area = width * height
@@ -56,11 +69,14 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
                 best_ratio_diff = ratio_diff
                 best_ratio = ratio
             elif ratio_diff == best_ratio_diff:
-                if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
+                if area > 0.5 * self.image_size * self.image_size * ratio[0] * ratio[1]:
                     best_ratio = ratio
         return best_ratio
 
-    def dynamic_preprocess(self, image, min_num=1, max_num=12, image_size=384, mask_size=27, use_thumbnail=True):
+    def dynamic_preprocess(self, image, max_num=36, min_num=1):
+        image_size = self.image_size
+        patch_size = self.patch_size
+        mask_size = image_size // patch_size
         orig_width, orig_height = image.size
 
         w_crop_num = math.ceil(orig_width / float(image_size))
@@ -79,9 +95,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
             # find the closest aspect ratio to the target
-            target_aspect_ratio = self.find_closest_aspect_ratio(
-                aspect_ratio, target_ratios, orig_width, orig_height, image_size
-            )
+            target_aspect_ratio = self.find_closest_aspect_ratio(aspect_ratio, target_ratios, orig_width, orig_height)
 
             # calculate the target width and height
             target_width = image_size * target_aspect_ratio[0]
@@ -104,23 +118,16 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             padding_height = 0
 
         attention_mask = torch.ones((int(mask_size * target_aspect_ratio[1]), int(mask_size * target_aspect_ratio[0])))
-        if padding_width >= 14:
-            attention_mask[:, -math.floor(padding_width / 14) :] = 0
-        if padding_height >= 14:
-            attention_mask[-math.floor(padding_height / 14) :, :] = 0
-        assert attention_mask.sum() > 0
+        if padding_width >= patch_size:
+            attention_mask[:, -math.floor(padding_width / patch_size) :] = 0
+        if padding_height >= patch_size:
+            attention_mask[-math.floor(padding_height / patch_size) :, :] = 0
 
         if min(new_size[1], target_height) < 10 or min(new_size[0], target_width) < 10:
             raise ValueError(f"the aspect ratio is very extreme {new_size}")
 
-        image = torchvision.transforms.functional.resize(
-            image,
-            [new_size[1], new_size[0]],
-        )
-
-        resized_img = torchvision.transforms.functional.pad(
-            image, [0, 0, padding_width, padding_height], fill=[255, 255, 255]
-        )
+        image = F.resize(image, [new_size[1], new_size[0]])
+        resized_img = F.pad(image, [0, 0, padding_width, padding_height], fill=[255, 255, 255])
 
         return resized_img, attention_mask
 
@@ -144,6 +151,8 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
@@ -151,6 +160,10 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -159,6 +172,9 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
         """
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+
         images = make_list_of_images(images)
         if not valid_images(images):
             raise ValueError(
@@ -167,27 +183,18 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             )
         images = [convert_to_rgb(image) for image in images]
 
-        # Dynamic HD
-        base_resolution = 448
-        # cover 384 and 448 resolution
-        mask_resolution = base_resolution // 14
-        imgs_and_masks = [
-            self.dynamic_preprocess(
-                image, max_num=self.dynamic_hd, image_size=base_resolution, mask_size=mask_resolution
-            ) for image in images
-        ]
+        image_size = self.image_size
+        patch_size = self.patch_size
+        mask_size = image_size // patch_size
+        imgs_and_masks = [self.dynamic_preprocess(image, max_num=self.dynamic_hd) for image in images]
         images, image_attention_masks = [x[0] for x in imgs_and_masks], [x[1] for x in imgs_and_masks]
-        
-        transforms = torchvision.transforms.Compose([
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ])
 
-        hd_images = [transforms(image) for image in images]
+        images = [F.to_tensor(image) for image in images]
+        hd_images = [F.normalize(image, image_mean, image_std) for image in images]
         global_image = [
             torch.nn.functional.interpolate(
                 image.unsqueeze(0).float(),
-                size=(base_resolution, base_resolution),
+                size=(image_size, image_size),
                 mode="bicubic",
             ).to(image.dtype)
             for image in hd_images
@@ -195,33 +202,29 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
 
         shapes = [[image.size(1), image.size(2)] for image in hd_images]
         mask_shapes = [[mask.size(0), mask.size(1)] for mask in image_attention_masks]
-        global_attention_mask = [torch.ones((1, mask_resolution, mask_resolution)) for _ in hd_images]
+        global_attention_mask = [torch.ones((1, mask_size, mask_size)) for _ in hd_images]
 
         hd_images_reshape = []
         for im, (h, w) in zip(hd_images, shapes):
-            im = im.reshape(1, 3, h // base_resolution, base_resolution, w // base_resolution, base_resolution)
+            im = im.reshape(1, 3, h // image_size, image_size, w // image_size, image_size)
             im = im.permute(0, 2, 4, 1, 3, 5)
-            im = im.reshape(-1, 3, base_resolution, base_resolution)
+            im = im.reshape(-1, 3, image_size, image_size)
             hd_images_reshape.append(im.contiguous())
 
         attention_masks_reshape = []
         for mask, (h, w) in zip(image_attention_masks, mask_shapes):
-            mask = mask.reshape(1, h // mask_resolution, mask_resolution, w // mask_resolution, mask_resolution)
-            mask = mask.permute(0, 1, 3, 2, 4)
-            mask = mask.reshape(-1, mask_resolution, mask_resolution)
+            mask = mask.reshape(h // mask_size, mask_size, w // mask_size, mask_size)
+            mask = mask.transpose(1, 2)
+            mask = mask.reshape(-1, mask_size, mask_size)
             attention_masks_reshape.append(mask.contiguous())
 
         downsample_attention_masks = []
         for mask, (h, w) in zip(attention_masks_reshape, mask_shapes):
             mask = mask[:, 0::2, 0::2]
             mask = mask.reshape(
-                1,
-                h // mask_resolution,
-                w // mask_resolution,
-                mask_resolution // 2 + mask_resolution % 2,
-                mask_resolution // 2 + mask_resolution % 2,
+                h // mask_size, w // mask_size, mask_size // 2 + mask_size % 2, mask_size // 2 + mask_size % 2
             )
-            mask = mask.permute(0, 1, 3, 2, 4)
+            mask = mask.transpose(1, 2)
             mask = mask.reshape(mask.size(1) * mask.size(2), mask.size(3) * mask.size(4))
             downsample_attention_masks.append(mask)
 
