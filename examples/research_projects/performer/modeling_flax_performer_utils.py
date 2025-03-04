@@ -252,7 +252,7 @@ def make_fast_generalized_attention(
     unidirectional=False,
     lax_scan_unroll=1,
 ):
-    """Construct a fast generalized attention menthod."""
+    """Construct a fast generalized attention method."""
     logging.info("Fast generalized attention.: %s features and renormalize=%s", nb_features, renormalize_attention)
     if features_type == "ortho":
         matrix_creator = functools.partial(GaussianOrthogonalRandomMatrix, nb_features, qkv_dim, scaling=False)
