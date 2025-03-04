@@ -566,7 +566,6 @@ _import_structure = {
         "JanusConfig",
         "JanusVQVAEConfig",
         "JanusVisionConfig",
-        "JanusImageProcessor",
         "JanusProcessor",
     ],
     "models.llava_next": [
@@ -2781,6 +2780,7 @@ else:
         [
             "JanusModel",
             "JanusVQVAE",
+            "JanusVisionModel",
             "JanusForConditionalGeneration",
             "JanusPreTrainedModel",
         ]
@@ -6472,6 +6472,7 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
+        from .models.janus import JanusImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -7652,7 +7653,13 @@ if TYPE_CHECKING:
             JambaModel,
             JambaPreTrainedModel,
         )
-        from .models.janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel, JanusVQVAE
+        from .models.janus import (
+            JanusForConditionalGeneration,
+            JanusModel,
+            JanusPreTrainedModel,
+            JanusVisionModel,
+            JanusVQVAE,
+        )
         from .models.jetmoe import (
             JetMoeForCausalLM,
             JetMoeForSequenceClassification,

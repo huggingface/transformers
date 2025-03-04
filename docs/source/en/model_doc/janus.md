@@ -197,6 +197,11 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] JanusImageProcessor
 
+## JanusVisionModel
+
+[[autodoc]] JanusVisionModel
+    - forward
+
 ## JanusVQVAE
 
 [[autodoc]] JanusVQVAE

@@ -55,12 +55,14 @@ class JanusProcessor(ProcessorMixin):
     [`~JanusProcessor.__call__`] and [`~JanusProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`JanusImageProcessor`], *optional*):
+        image_processor ([`JanusImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
+        tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        use_default_system_prompt (`str`, *optional*, defaults to `True`):
+            Use default system prompt for Text Generation.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -75,7 +77,6 @@ class JanusProcessor(ProcessorMixin):
     """
     tokenizer_class = "LlamaTokenizerFast"
 
-    # ToDo: Its not getting used when loading via from_pretrained method.
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")

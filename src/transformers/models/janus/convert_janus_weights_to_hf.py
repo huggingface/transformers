@@ -40,6 +40,7 @@ from transformers import (
 from transformers.models.janus.image_processing_janus import JanusImageProcessor
 from transformers.models.janus.processing_janus import JanusProcessor
 
+
 # Mappings
 MAPPINGS = {
     # Vision model
@@ -234,12 +235,7 @@ def convert_model(
     input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
 
     # Load configuration files
-    required_files = [
-        "config.json",
-        "preprocessor_config.json",
-        "special_tokens_map.json",
-        "tokenizer_config.json"
-    ]
+    required_files = ["config.json", "preprocessor_config.json", "special_tokens_map.json", "tokenizer_config.json"]
 
     missing_files = [f for f in required_files if not os.path.exists(os.path.join(input_path, f))]
     if missing_files:
@@ -332,14 +328,13 @@ def convert_model(
 
     # Create vision config
     vision_config_kwargs = {}
-    for key in ["image_size", "select_feature", "select_layer"]:
-        if key in config_data["vision_config"]["params"]:
-            vision_config_kwargs[key] = config_data["vision_config"]["params"][key]
+    if "image_size" in config_data["vision_config"]["params"]:
+        vision_config_kwargs["image_size"] = config_data["vision_config"]["params"]["image_size"]
 
     # Add aligner params if present
     if "aligner_config" in config_data and "params" in config_data["aligner_config"]:
         if "n_embed" in config_data["aligner_config"]["params"]:
-            vision_config_kwargs["aligner_projection_size"] = config_data["aligner_config"]["params"]["n_embed"]
+            vision_config_kwargs["projection_dim"] = config_data["aligner_config"]["params"]["n_embed"]
         if "depth" in config_data["aligner_config"]["params"]:
             vision_config_kwargs["depth"] = config_data["aligner_config"]["params"]["depth"]
 
@@ -348,9 +343,9 @@ def convert_model(
     vq_config = JanusVQVAEConfig(
         embed_dim=config_data["gen_vision_config"]["params"]["n_embed"],
         num_embeddings=config_data["gen_vision_config"]["params"]["image_token_size"],
-        aligner_projection_size=config_data["gen_aligner_config"]["params"]["n_embed"],
+        projection_dim=config_data["gen_aligner_config"]["params"]["n_embed"],
         depth=config_data["gen_aligner_config"]["params"]["depth"],
-        image_token_embed_size=config_data["gen_head_config"]["params"]["image_token_embed"],
+        image_token_embed_dim=config_data["gen_head_config"]["params"]["image_token_embed"],
     )
 
     # Create the main config

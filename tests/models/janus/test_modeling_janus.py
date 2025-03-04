@@ -14,20 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Janus model."""
 
-import unittest
 import tempfile
+import unittest
 from functools import reduce
-
-from transformers.models.auto import get_values
 
 import numpy as np
 import requests
-
-from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES
-
-
-def new_set(self, key, value):
-    raise AttributeError(f"Cannot modify immutable object: {key}")
 
 from transformers import (
     AutoProcessor,
@@ -37,12 +29,11 @@ from transformers import (
     JanusVQVAE,
     JanusVQVAEConfig,
     is_torch_available,
-    is_vision_available, enable_full_determinism,
+    is_vision_available,
 )
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
-    cleanup,
-    require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -110,7 +101,6 @@ class JanusVisionText2TextModelTester:
             "initializer_range": 0.02,
             "vision_feature_select_strategy": "default",
             "vision_feature_layer": -1,
-            "aligner_projection_size": 32,  # Same as text model hidden size
         },
         use_cache=False,
         vq_num_embeds=12,
@@ -153,8 +143,8 @@ class JanusVisionText2TextModelTester:
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
             "initializer_range": self.initializer_range,
-            "aligner_projection_size": 10,
-            "image_token_embed_size": 32,  # Same as text model hidden size
+            "projection_dim": 10,
+            "image_token_embed_dim": 32,  # Same as text model hidden size
         }
 
     def get_config(self):
@@ -308,14 +298,10 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
         We skip some parameters when checking for gradient checkpointing:
         - VQ model, as its training is not supported
         - JanusVisionAttentionPoolLatent, which is the layer responsible for generating sentence-level representations
-        that are matched with images on Siglip, as the forward pass of our models---which is what is used to check 
+        that are matched with images on Siglip, as the forward pass of our models---which is what is used to check
         gradients in this test---does not include the forward pass on this layer.
         """
-        skip_patterns = ["vision_model.head",
-                         "vqmodel",
-                         "gen_embed",
-                         "gen_aligner",
-                         "gen_head"]
+        skip_patterns = ["vision_model.head", "vqmodel", "gen_embed", "gen_aligner", "gen_head"]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
@@ -463,8 +449,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
         # Later remove this func and replace with hub URL, for now we use a symbolic link to the folder
-        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
-
+        self.model_id = "/Users/espm5508/personal/transformers/tmp/hub_code_out2"
 
     @slow
     def test_model_text_generation(self):
@@ -516,8 +501,6 @@ class JanusIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
-    @require_bitsandbytes
-    @require_read_token  # BNB required if we load in 4 bit. Modify acordingly
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -541,10 +524,7 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
-        processor = AutoProcessor.from_pretrained(
-            self.model_id,
-            generation_mode="image"
-        )
+        processor = AutoProcessor.from_pretrained(self.model_id, generation_mode="image")
 
         inputs = processor(
             text=["a portrait of young girl. masterpiece, film grained, best quality."],
@@ -570,5 +550,3 @@ class JanusIntegrationTest(unittest.TestCase):
 
         self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
         self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
-
-        # Add a check to compare og pixel values with generated ones

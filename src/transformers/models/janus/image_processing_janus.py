@@ -83,6 +83,9 @@ class JanusImageProcessor(BaseImageProcessor):
         size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        min_size (`int`, *optional*, defaults to 14):
+            The minimum allowed size for the resized image. Ensures that neither the height nor width
+            falls below this value after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.

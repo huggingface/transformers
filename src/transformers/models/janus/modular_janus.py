@@ -75,9 +75,10 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersDropPath,
     Dinov2WithRegistersLayerScale,
 )
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer, SiglipVisionModel
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionModel, SiglipVisionTransformer
 from ..vit.modeling_vit import ViTPatchEmbeddings
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
+
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -131,10 +132,11 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
-        std = (self.config.vision_config.initializer_range
-               if hasattr(self.config, "vision_config")
-               else self.config.initializer_range
-               )
+        std = (
+            self.config.vision_config.initializer_range
+            if hasattr(self.config, "vision_config")
+            else self.config.initializer_range
+        )
         if isinstance(module, JanusVQVAE):
             module.apply(module._init_weights)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -146,9 +148,6 @@ class JanusPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-
-class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
-    pass
 
 @dataclass
 class JanusVQVAEOutput(ModelOutput):
@@ -738,13 +737,14 @@ class JanusVisionModel(SiglipVisionModel):
 
         self.post_init()
 
+
 class JanusVisionAlignerMLP(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
 
-        self.fc1 = nn.Linear(config.hidden_size, config.aligner_projection_size)
+        self.fc1 = nn.Linear(config.hidden_size, config.projection_dim)
         self.hidden_layers = nn.ModuleList(
-            [nn.Linear(config.aligner_projection_size, config.aligner_projection_size) for _ in range(1, config.depth)]
+            [nn.Linear(config.projection_dim, config.projection_dim) for _ in range(1, config.depth)]
         )
         self.activation_fn = ACT2FN[config.hidden_act]
 
@@ -947,6 +947,7 @@ class JanusVQVAEDecoder(nn.Module):
 
 class JanusVQVAE(ChameleonVQVAE):
     """Vision Transformer-based VQ-VAE model for encoding and decoding pixel values."""
+
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",
@@ -1008,13 +1009,12 @@ class JanusVQVAE(ChameleonVQVAE):
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
-
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
 
-        self.fc1 = nn.Linear(config.embed_dim, config.aligner_projection_size)
+        self.fc1 = nn.Linear(config.embed_dim, config.projection_dim)
         self.hidden_layers = nn.ModuleList(
-            [nn.Linear(config.aligner_projection_size, config.aligner_projection_size) for _ in range(1, config.depth)]
+            [nn.Linear(config.projection_dim, config.projection_dim) for _ in range(1, config.num_hidden_layers)]
         )
         self.activation_fn = ACT2FN[config.hidden_act]
 
@@ -1031,9 +1031,9 @@ class JanusVQVAEHead(nn.Module):
 
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
-        self.proj_out = nn.Linear(config.image_token_embed_size, config.aligner_projection_size)
+        self.proj_out = nn.Linear(config.image_token_embed_dim, config.projection_dim)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.vision_head = nn.Linear(config.aligner_projection_size, config.num_embeddings)
+        self.vision_head = nn.Linear(config.projection_dim, config.num_embeddings)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.tensor:
         hidden_states = self.proj_out(hidden_states)
@@ -1151,21 +1151,20 @@ class JanusModel(JanusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            pixel_values: torch.FloatTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            logits_to_keep: Union[int, torch.Tensor] = 0,
-            **kwargs,
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1510,7 +1509,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         batch_size, seq_len = input_ids.shape
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
-        
+
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
 
         input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id  # Set Unconditional logits
@@ -1612,6 +1611,43 @@ def expand2square(pil_img, background_color):
 
 
 class JanusImageProcessor(BlipImageProcessor):
+    r"""
+    Constructs a JANUS image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
+            `do_resize` parameter in the `preprocess` method.
+        size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
+            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
+            method.
+        min_size (`int`, *optional*, defaults to 14):
+            The minimum allowed size for the resized image. Ensures that neither the height nor width
+            falls below this value after resizing.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
+            overridden by the `resample` parameter in the `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
+            overridden by the `rescale_factor` parameter in the `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
+            overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
+    """
+
     def __init__(
         self,
         do_resize: bool = True,
@@ -1823,4 +1859,5 @@ __all__ = [
     "JanusForConditionalGeneration",
     "JanusModel",
     "JanusVQVAE",
+    "JanusVisionModel",
 ]
