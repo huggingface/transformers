@@ -49,8 +49,7 @@ from ...utils import (
 from ...utils.backbone_utils import load_backbone
 from .configuration_dino_detr import DinoDetrConfig
 
-import torch
-import torch.nn.functional as F
+from torch.nn.init import constant_, xavier_uniform_
 
 logger = logging.get_logger(__name__)
 
@@ -237,15 +236,15 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         self.im2col_step = 64
 
         self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
+        self.num_feature_levels = config.num_feature_levels
         self.num_heads = num_heads
         self.n_points = n_points
 
         self.sampling_offsets = nn.Linear(
-            config.d_model, num_heads * self.n_levels * n_points * 2
+            config.d_model, num_heads * self.num_feature_levels * n_points * 2
         )
         self.attention_weights = nn.Linear(
-            config.d_model, num_heads * self.n_levels * n_points
+            config.d_model, num_heads * self.num_feature_levels * n_points
         )
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
@@ -290,15 +289,27 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
             batch_size, sequence_length, self.num_heads, self.d_model // self.num_heads
         )
         sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size, num_queries, self.num_heads, self.n_levels, self.n_points, 2
+            batch_size,
+            num_queries,
+            self.num_heads,
+            self.num_feature_levels,
+            self.n_points,
+            2,
         )
         attention_weights = self.attention_weights(hidden_states).view(
-            batch_size, num_queries, self.num_heads, self.n_levels * self.n_points
+            batch_size,
+            num_queries,
+            self.num_heads,
+            self.num_feature_levels * self.n_points,
         )
         attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.num_heads, self.n_levels, self.n_points
+            batch_size,
+            num_queries,
+            self.num_heads,
+            self.num_feature_levels,
+            self.n_points,
         )
-        # batch_size, num_queries, num_heads, n_levels, n_points, 2
+        # batch_size, num_queries, num_heads, num_feature_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
             offset_normalizer = torch.stack(
@@ -349,6 +360,28 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         output = self.output_proj(output)
 
         return output, attention_weights
+
+    def _reset_parameters(self):
+        constant_(self.sampling_offsets.weight.data, 0.0)
+        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (
+            2.0 * math.pi / self.num_heads
+        )
+        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+        grid_init = (
+            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+            .view(self.num_heads, 1, 1, 2)
+            .repeat(1, self.num_feature_levels, self.n_points, 1)
+        )
+        for i in range(self.n_points):
+            grid_init[:, :, i, :] *= i + 1
+        with torch.no_grad():
+            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+        constant_(self.attention_weights.weight.data, 0.0)
+        constant_(self.attention_weights.bias.data, 0.0)
+        xavier_uniform_(self.value_proj.weight.data)
+        constant_(self.value_proj.bias.data, 0.0)
+        xavier_uniform_(self.output_proj.weight.data)
+        constant_(self.output_proj.bias.data, 0.0)
 
 
 @dataclass
@@ -722,6 +755,9 @@ class DinoDetrConvModel(nn.Module):
         super().__init__()
         self.conv_encoder = conv_encoder
         self.position_embedding = position_embedding
+        return_interm_indices = [1, 2, 3]  # [[0,1,2,3], [1,2,3], [3]]
+        num_channels_all = [256, 512, 1024, 2048]
+        self.num_channels = num_channels_all[4 - len(return_interm_indices) :]
 
     def forward(self, pixel_values, pixel_mask):
         # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
@@ -1484,7 +1520,7 @@ class DinoDetrDecoderLayer(nn.Module):
         d_ffn=1024,
         dropout=0.1,
         activation="relu",
-        n_levels=4,
+        num_feature_levels=4,
         num_heads=8,
         n_points=4,
         use_deformable_box_attn=False,
@@ -2700,7 +2736,7 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
                 .view(module.num_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
+                .repeat(1, module.num_feature_levels, module.n_points, 1)
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
