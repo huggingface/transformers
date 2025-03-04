@@ -524,15 +524,15 @@ str_to_torch_dtype = {
     "F16": torch.float16,
     "BF16": torch.bfloat16,
     "I32": torch.int32,
-    "U32": torch.uint32,
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
-    "U64": torch.uint64,
 }
 
-if is_torch_greater_or_equal("2.4.0"):
+if is_torch_greater_or_equal("2.3.0"):
     str_to_torch_dtype["U16"] = torch.uint16
+    str_to_torch_dtype["U32"] = torch.uint32
+    str_to_torch_dtype["U64"] = torch.uint64
 
 
 def load_state_dict(
