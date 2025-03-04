@@ -26,6 +26,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BackboneOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -65,7 +66,6 @@ class KeypointMatchingOutput(ModelOutput):
             num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: Optional[torch.FloatTensor] = None
     matches: Optional[torch.FloatTensor] = None
     matching_scores: Optional[torch.FloatTensor] = None
     keypoints: Optional[torch.FloatTensor] = None
@@ -211,7 +211,7 @@ class EfficientLoFTRepVGG(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Tuple[torch.Tensor, List[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[List[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         outputs = []
         all_hidden_states = () if output_hidden_states else None
         for stage in self.stages:
@@ -223,11 +223,7 @@ class EfficientLoFTRepVGG(nn.Module):
 
         # Exclude first stage in outputs
         outputs = outputs[1:]
-        # Last stage outputs are coarse outputs
-        coarse_features = outputs[-1]
-        # Rest is residual features used in EfficientLoFTRFineFusionLayer
-        residual_features = outputs[:-1]
-        return coarse_features, residual_features, all_hidden_states
+        return outputs, all_hidden_states
 
 
 class EfficientLoFTRAggregationLayer(nn.Module):
@@ -650,30 +646,21 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         residual_states: List[torch.Tensor],
-        output_hidden_states: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
-        all_hidden_states = () if output_hidden_states else None
+    ) -> torch.Tensor:
         hidden_states = self.out_conv(hidden_states)
         hidden_states = nn.functional.interpolate(
             hidden_states, scale_factor=2.0, mode="bilinear", align_corners=False
         )
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         for i, layer in enumerate(self.out_conv_layers):
             hidden_states = layer(hidden_states, residual_states[i])
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return hidden_states, all_hidden_states
+        return hidden_states
 
     def forward(
         self,
         coarse_features: torch.Tensor,
         residual_features: List[torch.Tensor],
-        output_hidden_states: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         For each image pair, compute the fine features of pixels.
         In both images, compute a patch of fine features center cropped around each coarse pixel.
@@ -686,10 +673,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         residual_features = list(reversed(residual_features))
 
         # 1. Fine feature extraction
-        pyramid_outputs = self.forward_pyramid(
-            coarse_features, residual_features, output_hidden_states=output_hidden_states
-        )
-        fine_features = pyramid_outputs[0]
+        fine_features = self.forward_pyramid(coarse_features, residual_features)
         _, fine_embed_dim, fine_height, fine_width = fine_features.shape
 
         fine_features = fine_features.reshape(batch_size, 2, fine_embed_dim, fine_height, fine_width)
@@ -711,7 +695,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         fine_features_1 = fine_features_1.reshape(batch_size, -1, (self.fine_kernel_size + 2) ** 2, seq_len)
         fine_features_1 = fine_features_1.permute(0, 3, 2, 1)
 
-        return fine_features_0, fine_features_1, pyramid_outputs[1]
+        return fine_features_0, fine_features_1
 
 
 class EfficientLoFTRPreTrainedModel(PreTrainedModel):
@@ -754,6 +738,133 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
 
         """
         return pixel_values[:, 0, :, :][:, None, :, :]
+
+
+EFFICIENTLOFTR_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`EfficientLoFTRConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    """
+
+EFFICIENTLOFTR_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SuperGlueImageProcessor`]. See
+            [`SuperGlueImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors. See `attentions` under returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "EfficientLoFTR model taking images as inputs and outputting the matching of them.",
+    EFFICIENTLOFTR_START_DOCSTRING,
+)
+class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
+    def __init__(self, config: EfficientLoFTRConfig):
+        super().__init__(config)
+
+        self.config = config
+        self.backbone = EfficientLoFTRepVGG(config)
+        self.local_feature_transformer = EfficientLoFTRLocalFeatureTransformer(config)
+
+        self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
+
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(EFFICIENTLOFTR_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, "BackboneOutput"]:
+        """
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
+        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
+        >>> image2 = Image.open(requests.get(url, stream=True).raw)
+        >>> images = [image1, image2]
+
+        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficient_loftr")
+        >>> model = AutoModel.from_pretrained("stevenbucaille/efficient_loftr")
+
+        >>> with torch.no_grad():
+        >>>     inputs = processor(images, return_tensors="pt")
+        >>>     outputs = model(**inputs)
+        ```"""
+        if labels is not None:
+            raise ValueError("SuperGlue is not trainable, no labels should be provided.")
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
+            raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
+
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        batch_size, _, channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
+        pixel_values = self.extract_one_channel_pixel_values(pixel_values)
+
+        # 1. Local Feature CNN
+        backbone_outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states)
+        features = backbone_outputs[0]
+        # Last stage outputs are coarse outputs
+        coarse_features = features[-1]
+        # Rest is residual features used in EfficientLoFTRFineFusionLayer
+        residual_features = features[:-1]
+        coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
+
+        # 2. Coarse-level LoFTR module
+        position_embeddings = self.rotary_emb(coarse_features)
+        coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
+        local_feature_transformer_outputs = self.local_feature_transformer(
+            coarse_features, position_embeddings=position_embeddings, output_attentions=output_attentions
+        )
+        coarse_features = local_feature_transformer_outputs[0]
+
+        features = (coarse_features,) + tuple(residual_features)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + backbone_outputs[1]
+
+        if output_attentions:
+            all_attentions = all_attentions + local_feature_transformer_outputs[1]
+
+        if not return_dict:
+            return tuple(v for v in [features, all_hidden_states, all_attentions] if v is not None)
+
+        return BackboneOutput(
+            feature_maps=features,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 def create_meshgrid(
@@ -887,32 +998,6 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
     return tensor
 
 
-EFFICIENTLOFTR_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`EfficientLoFTRConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-    """
-
-EFFICIENTLOFTR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SuperGlueImageProcessor`]. See
-            [`SuperGlueImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors. See `attentions` under returned tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @add_start_docstrings(
     "EfficientLoFTR model taking images as inputs and outputting the matching of them.",
     EFFICIENTLOFTR_START_DOCSTRING,
@@ -936,11 +1021,8 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        self.backbone = EfficientLoFTRepVGG(config)
-        self.local_feature_transformer = EfficientLoFTRLocalFeatureTransformer(config)
+        self.model = EfficientLoFTRModel(config)
         self.refinement_layer = EfficientLoFTRFineFusionLayer(config)
-
-        self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
         self.post_init()
 
@@ -1288,7 +1370,6 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         >>>     inputs = processor(images, return_tensors="pt")
         >>>     outputs = model(**inputs)
         ```"""
-        loss = None
         if labels is not None:
             raise ValueError("SuperGlue is not trainable, no labels should be provided.")
 
@@ -1298,44 +1379,28 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
-            raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
-
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        batch_size, _, channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
-        pixel_values = self.extract_one_channel_pixel_values(pixel_values)
-
-        # 1. Local Feature CNN
-        backbone_outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states)
-        coarse_features, residual_features = backbone_outputs[:2]
-        coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
-
-        # 2. Coarse-level LoFTR module
-        position_embeddings = self.rotary_emb(coarse_features)
-        coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
-        local_feature_transformer_outputs = self.local_feature_transformer(
-            coarse_features, position_embeddings=position_embeddings, output_attentions=output_attentions
+        # 1. Extract coarse and residual features
+        model_outputs = self.model(
+            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
-        coarse_features = local_feature_transformer_outputs[0]
+        features = model_outputs[0]
 
-        # 3. Compute coarse-level matching
+        # 2. Compute coarse-level matching
+        coarse_features = features[0]
+        coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
+        batch_size, _, channels, height, width = pixel_values.shape
         coarse_scale = height / coarse_height
         coarse_matched_keypoints, coarse_matching_scores, batch_indices, matched_indices = self._coarse_matching(
             coarse_features, coarse_scale
         )
 
-        # 4. Fine-level refinement
-        refinement_layer_outputs = self.refinement_layer(
-            coarse_features, residual_features, output_hidden_states=output_hidden_states
-        )
-        fine_features_0, fine_features_1 = refinement_layer_outputs[:2]
+        # 3. Fine-level refinement
+        residual_features = features[1:]
+        fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
         fine_features_0 = fine_features_0[batch_indices, matched_indices[0]]
         fine_features_1 = fine_features_1[batch_indices, matched_indices[1]]
 
-        # 5. Computer fine-level matching
+        # 4. Computer fine-level matching
         fine_height = torch_int(coarse_height * coarse_scale)
         fine_scale = height / fine_height
         matching_keypoints = self._fine_matching(
@@ -1374,28 +1439,17 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             mask = torch.ones_like(keypoints)
             matches = torch.stack([matched_indices, matched_indices], dim=0).unsqueeze(0)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + backbone_outputs[2] + refinement_layer_outputs[2]
-
-        if output_attentions:
-            all_attentions = all_attentions + local_feature_transformer_outputs[1]
-
         if not return_dict:
-            return tuple(
-                v
-                for v in [loss, matches, matching_scores, keypoints, mask, all_hidden_states, all_attentions]
-                if v is not None
-            )
+            return (matches, matching_scores, keypoints, mask) + model_outputs[1:]
 
         return KeypointMatchingOutput(
-            loss=loss,
             matches=matches,
             matching_scores=matching_scores,
             keypoints=keypoints,
             mask=mask,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
         )
 
 
-__all__ = ["EfficientLoFTRPreTrainedModel", "EfficientLoFTRForKeypointMatching"]
+__all__ = ["EfficientLoFTRPreTrainedModel", "EfficientLoFTRModel", "EfficientLoFTRForKeypointMatching"]

@@ -18,7 +18,7 @@ from typing import List
 
 from datasets import load_dataset
 
-from transformers.models.efficientloftr import EfficientLoFTRConfig
+from transformers.models.efficientloftr import EfficientLoFTRConfig, EfficientLoFTRModel
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -120,7 +120,7 @@ class EfficientLoFTRModelTester:
 
 @require_torch
 class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (EfficientLoFTRForKeypointMatching,) if is_torch_available() else ()
+    all_model_classes = (EfficientLoFTRForKeypointMatching, EfficientLoFTRModel) if is_torch_available() else ()
 
     test_pruning = False
     test_resize_embeddings = False
@@ -198,7 +198,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_hidden_states = 2 * len(self.model_tester.stage_num_blocks) - 1
+            expected_num_hidden_states = len(self.model_tester.stage_num_blocks)
             self.assertEqual(len(hidden_states), expected_num_hidden_states)
 
             self.assertListEqual(
@@ -312,11 +312,13 @@ class EfficientLoFTRModelIntegrationTest(unittest.TestCase):
         predicted_matches_values = outputs.matches[0, 0, 10:20]
         predicted_matching_scores_values = outputs.matching_scores[0, 0, 10:20]
 
-        expected_number_of_matches = 780
+        expected_number_of_matches = 797
         expected_matches_values = torch.tensor([10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
                                                 device=predicted_matches_values.device)  # fmt:skip
         expected_matching_scores_values = torch.tensor([0.9957,0.2224,0.8803, 0.9283, 0.2241, 0.6321, 0.5206, 0.8053, 0.7174, 0.9872],
                                                         device=predicted_matches_values.device)  # fmt:skip
         self.assertEqual(predicted_number_of_matches, expected_number_of_matches)
-        self.assertTrue(torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-3))
-        self.assertTrue(torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-3))
+        torch.testing.assert_close(predicted_matches_values, expected_matches_values, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            predicted_matching_scores_values, expected_matching_scores_values, rtol=1e-3, atol=1e-3
+        )

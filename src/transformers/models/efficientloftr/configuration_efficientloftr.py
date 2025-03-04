@@ -81,7 +81,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
                     The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
                     'llama3', '2d'], with 'default' being the original RoPE implementation.
                 `dim` (`int`): The dimension of the RoPE embeddings.
-        fine_matching_slicedim (`int`, *optional*, defaults to 8):
+        fine_matching_slice_dim (`int`, *optional*, defaults to 8):
             The size of the slice used to divide the fine features for the first and second fine matching stages.
         fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
             The temperature to apply to the fine similarity matrix

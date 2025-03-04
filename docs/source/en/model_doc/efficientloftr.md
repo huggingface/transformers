@@ -91,6 +91,12 @@ The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 
 [[autodoc]] EfficientLoFTRConfig
 
+## EfficientLoFTRModel
+
+[[autodoc]] EfficientLoFTRModel
+
+- forward
+
 ## EfficientLoFTRForKeypointMatching
 
 [[autodoc]] EfficientLoFTRForKeypointMatching
