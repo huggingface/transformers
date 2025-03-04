@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -52,14 +52,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Number of attention layers in the LocalFeatureTransformer
         num_attention_heads (`int`, *optional*, defaults to 8):
             The number of heads in the GNN layers.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
-            `num_attention_heads`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -100,10 +92,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
         ```python
         >>> from transformers import EfficientLoFTRConfig, EfficientLoFTRForKeypointMatching
 
-        >>> # Initializing a SuperGlue superglue style configuration
+        >>> # Initializing a EfficientLoFTR configuration
         >>> configuration = EfficientLoFTRConfig()
 
-        >>> # Initializing a model from the superglue style configuration
+        >>> # Initializing a model from the EfficientLoFTR configuration
         >>> model = EfficientLoFTRForKeypointMatching(configuration)
 
         >>> # Accessing the model configuration
@@ -115,16 +107,15 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        stage_block_dims: List[int] = None,
-        stage_num_blocks: List[int] = None,
-        stage_hidden_expansion: List[float] = None,
-        stage_stride: List[int] = None,
+        stage_block_dims: Optional[List[int]] = None,
+        stage_num_blocks: Optional[List[int]] = None,
+        stage_hidden_expansion: Optional[List[float]] = None,
+        stage_stride: Optional[List[int]] = None,
         hidden_size: int = 256,
         activation_function: str = "relu",
-        aggregation_sizes: List[int] = None,
+        aggregation_sizes: Optional[List[int]] = None,
         num_attention_layers: int = 4,
         num_attention_heads: int = 8,
-        num_key_value_heads: int = None,
         attention_dropout: float = 0.0,
         attention_bias: bool = False,
         mlp_activation_function: str = "leaky_relu",
@@ -135,8 +126,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
         rope_theta: float = 10000.0,
-        rope_scaling: Dict = None,
-        fine_matching_slicedim: int = 8,
+        rope_scaling: Optional[Dict] = None,
+        fine_matching_slice_dim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
         initializer_range: float = 0.02,
         **kwargs,
@@ -148,8 +139,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         if self.hidden_size != self.stage_block_dims[-1]:
             raise ValueError(
-                f"`hidden_size` = {self.hidden_size} should be equal to "
-                f"the last value in `stage_block_dims` = {self.stage_block_dims}"
+                f"hidden_size should be equal to the last value in stage_block_dims. hidden_size = {self.hidden_size}, stage_blck_dims = {self.stage_block_dims}"
             )
 
         self.activation_function = activation_function
@@ -165,14 +155,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.coarse_matching_border_removal = coarse_matching_border_removal
         self.fine_kernel_size = fine_kernel_size
         self.batch_norm_eps = batch_norm_eps
-        self.fine_matching_slicedim = fine_matching_slicedim
+        self.fine_matching_slice_dim = fine_matching_slice_dim
         self.fine_matching_regress_temperature = fine_matching_regress_temperature
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_heads = num_attention_heads
 
         self.rope_theta = rope_theta
         self.rope_scaling = (
