@@ -4999,6 +4999,38 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@require_optuna
+class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
+    def test_hyperparameter_search(self):
+        def hp_space(trial):
+            return {}
+
+        def model_init(trial):
+            if trial is not None:
+                a = trial.suggest_int("a", -4, 4)
+                b = trial.suggest_int("b", -4, 4)
+            else:
+                a = 0
+                b = 0
+            config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                disable_tqdm=True,
+                model_init=model_init,
+                fp16_full_eval=True,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize",
+                hp_space=hp_space,
+                n_trials=2,
+            )
+
+
+@require_torch
 @require_ray
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
     def setUp(self):

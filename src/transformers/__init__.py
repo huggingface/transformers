@@ -783,6 +783,12 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.siglip2": [
+        "Siglip2Config",
+        "Siglip2Processor",
+        "Siglip2TextConfig",
+        "Siglip2VisionConfig",
+    ],
     "models.smolvlm": ["SmolVLMConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
@@ -1297,6 +1303,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.siglip2"].append("Siglip2ImageProcessor")
     _import_structure["models.smolvlm"].extend(["SmolVLMImageProcessor"])
     _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
@@ -1331,6 +1338,7 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -1338,6 +1346,7 @@ else:
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
+    _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
@@ -3573,6 +3582,15 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.siglip2"].extend(
+        [
+            "Siglip2ForImageClassification",
+            "Siglip2Model",
+            "Siglip2PreTrainedModel",
+            "Siglip2TextModel",
+            "Siglip2VisionModel",
         ]
     )
     _import_structure["models.smolvlm"].extend(
@@ -5964,6 +5982,12 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.siglip2 import (
+        Siglip2Config,
+        Siglip2Processor,
+        Siglip2TextConfig,
+        Siglip2VisionConfig,
+    )
     from .models.smolvlm import SmolVLMConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
@@ -6494,6 +6518,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.siglip2 import Siglip2ImageProcessor
         from .models.smolvlm import SmolVLMImageProcessor
         from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
@@ -6524,6 +6549,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -6531,6 +6557,7 @@ if TYPE_CHECKING:
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.siglip import SiglipImageProcessorFast
+        from .models.siglip2 import Siglip2ImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     try:
@@ -8310,6 +8337,13 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.siglip2 import (
+            Siglip2ForImageClassification,
+            Siglip2Model,
+            Siglip2PreTrainedModel,
+            Siglip2TextModel,
+            Siglip2VisionModel,
         )
         from .models.smolvlm import (
             SmolVLMForConditionalGeneration,
