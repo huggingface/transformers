@@ -18,10 +18,22 @@
 from collections import OrderedDict
 from typing import Mapping
 
+from huggingface_hub.utils import strict_dataclass, validated_field
+
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
+from ...validators import (
+    activation_function_key,
+    choice_str,
+    positive_float,
+    positive_int,
+    probability,
+    strictly_positive_int,
+    vocabulary_token,
+)
 
 
+@strict_dataclass
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
@@ -103,51 +115,47 @@ class AlbertConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
+    vocab_size: int = validated_field(strictly_positive_int, default=30000)
+    embedding_size: int = validated_field(strictly_positive_int, default=128)
+    hidden_size: int = validated_field(strictly_positive_int, default=4096)
+    num_hidden_layers: int = validated_field(strictly_positive_int, default=12)
+    num_hidden_groups: int = validated_field(strictly_positive_int, default=1)
+    num_attention_heads: int = validated_field(positive_int, default=64)
+    intermediate_size: int = validated_field(strictly_positive_int, default=16384)
+    inner_group_num: int = validated_field(positive_int, default=1)
+    hidden_act: str = validated_field(activation_function_key, default="gelu_new")
+    hidden_dropout_prob: float = validated_field(probability, default=0)
+    attention_probs_dropout_prob: float = validated_field(probability, default=0)
+    max_position_embeddings: int = validated_field(positive_int, default=512)
+    type_vocab_size: int = validated_field(strictly_positive_int, default=2)
+    initializer_range: float = validated_field(positive_float, default=0.02)
+    layer_norm_eps: float = validated_field(positive_float, default=1e-12)
+    classifier_dropout_prob: float = validated_field(probability, default=0.1)
+    position_embedding_type: str = validated_field(
+        choice_str, choices=["absolute", "relative_key", "relative_key_query"], default="absolute"
+    )
+    pad_token_id: int = validated_field(vocabulary_token, vocab_size=vocab_size, default=0)
+    bos_token_id: int = validated_field(vocabulary_token, vocab_size=vocab_size, default=2)
+    eos_token_id: int = validated_field(vocabulary_token, vocab_size=vocab_size, default=3)
+
+    # Not part of __init__
     model_type = "albert"
 
-    def __init__(
-        self,
-        vocab_size=30000,
-        embedding_size=128,
-        hidden_size=4096,
-        num_hidden_layers=12,
-        num_hidden_groups=1,
-        num_attention_heads=64,
-        intermediate_size=16384,
-        inner_group_num=1,
-        hidden_act="gelu_new",
-        hidden_dropout_prob=0,
-        attention_probs_dropout_prob=0,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        classifier_dropout_prob=0.1,
-        position_embedding_type="absolute",
-        pad_token_id=0,
-        bos_token_id=2,
-        eos_token_id=3,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(
+            pad_token_id=self.pad_token_id, bos_token_id=self.bos_token_id, eos_token_id=self.eos_token_id, **kwargs
+        )
 
-        self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_hidden_groups = num_hidden_groups
-        self.num_attention_heads = num_attention_heads
-        self.inner_group_num = inner_group_num
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.position_embedding_type = position_embedding_type
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self):
+        """Ensures the configuration is valid."""
+        if self.hidden_size % self.num_attention_heads != 0 and not hasattr(self, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads}"
+            )
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
