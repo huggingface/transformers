@@ -452,7 +452,6 @@ class JanusIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_text_generation(self):
-        # Let's make sure we test the preprocessing to replace what is used
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -490,7 +489,6 @@ class JanusIntegrationTest(unittest.TestCase):
             model.device, torch.float16
         )
 
-        # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
             'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
@@ -514,7 +512,6 @@ class JanusIntegrationTest(unittest.TestCase):
 
         inputs = processor(images=[image_1, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
-        # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
