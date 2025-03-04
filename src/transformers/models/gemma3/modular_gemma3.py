@@ -90,12 +90,6 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [
 
 GEMMA3_INPUTS_DOCSTRING = ""
 
-# Gemma 3 supports the following image input paradigms for any given prompt:
-#
-#   * No image      --> None
-#   * Single-image  --> PIL.Image.Image
-#   * Multi-image   --> Sequence[PIL.Image.Image]
-#   * Batch         --> Sequence[Sequence[PIL.Image.Image]]
 BatchedImageInput = Sequence[PIL.Image.Image]
 BatchedMultiImageInput = Sequence[BatchedImageInput]
 Gemma3ProcessorImageInput = Union[
@@ -254,7 +248,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self,
         # Config parameters found in all implementations, name differences noted
         vocab_size: int = 262_144,  # num_embed in FLAX
-        mm_vocab_size: int = 128,
         mm_tokens_per_image: int = 256,
         mm_soft_token_id: int = -1,
         hidden_size: int = 2304,  # embed_dim in FLAX
@@ -296,7 +289,6 @@ class Gemma3TextConfig(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
-        self.mm_vocab_size = mm_vocab_size
         self.mm_tokens_per_image = mm_tokens_per_image
         self.mm_soft_token_id = mm_soft_token_id
         self.max_position_embeddings = max_position_embeddings
@@ -604,7 +596,6 @@ class Gemma3Processor(ProcessorMixin):
 
         return batched_input
 
-
     def _process_images(
         self, images: Gemma3ProcessorImageInput, **kwargs: Unpack[Gemma3ImagesKwargs]
     ) -> BatchedPanAndScannedImage:
@@ -686,6 +677,30 @@ class Gemma3Processor(ProcessorMixin):
         return batch_flattened
 
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
 class Gemma3RMSNorm(GemmaRMSNorm):
     pass
 
@@ -706,6 +721,34 @@ class Gemma3MLP(GemmaMLP):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
         self.act_fn = ACT2FN[config.hidden_activation]
+
+
+def create_sliding_window_mask(
+    position_ids: torch.LongTensor,
+    cache_position: int,
+    cache_len: int,
+    sliding_window_size: int,
+) -> torch.Tensor:
+    """Creates mask for sliding window attention."""
+    total_tokens = cache_position + position_ids.shape[1]  # cached + processing tokens
+
+    def _reconstruct_rotated_cache_positions():
+        cache_positions = torch.arange(cache_len) + total_tokens - cache_len
+        rotated_cache_positions = torch.zeros_like(cache_positions)
+        rotated_cache_positions[cache_positions % cache_len] = cache_positions
+        return rotated_cache_positions
+
+    # Reconstruct position_ids for cached kv.
+    if total_tokens <= cache_len:
+        cache_positions = torch.arange(cache_len)
+    else:
+        cache_positions = _reconstruct_rotated_cache_positions()
+
+    cache_positions = cache_positions.unsqueeze(0).unsqueeze(0)  # [1, 1, cache_len]
+    position_ids = position_ids.unsqueeze(-1)  # [B, seq_len, 1]
+    sliding_mask = cache_positions > position_ids - sliding_window_size
+    sliding_mask *= cache_positions < position_ids + sliding_window_size
+    return sliding_mask.unsqueeze(1)
 
 
 def eager_attention_forward(
@@ -792,8 +835,10 @@ class Gemma3Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]],
         attention_mask: Optional[torch.Tensor],
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        last_cache_position: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -811,11 +856,26 @@ class Gemma3Attention(nn.Module):
             query_states, key_states, cos, sin
         )
 
+        if (
+            self.is_sliding
+            and self.sliding_window is not None
+            and attention_mask is not None
+            and position_ids is not None
+        ):
+            sliding_mask = create_sliding_window_mask(
+                position_ids=position_ids,
+                cache_position=last_cache_position,
+                cache_len=attention_mask.shape[-1],
+                sliding_window_size=self.sliding_window,
+            )
+            attention_mask *= sliding_mask
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
                 "sin": sin,
                 "cos": cos,
+                # Why is this a torch.LongTensor? Feels like last_cache_position should be in here somehow?
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
@@ -904,35 +964,6 @@ class Gemma3DecoderLayer(nn.Module):
     ) -> tuple[
         torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]
     ]:
-        if (
-            self.is_sliding and attention_mask is not None
-        ):  # efficient SDPA and no padding
-            # In prefill, we may be larger than sliding window
-            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
-            # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
-            # thus we must slice from the right (at most `effective_seq_len` elements)
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask[:, -effective_seq_len:]
-            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
-            # from the left, with an offset if we are beyond the sliding window
-            else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
-                sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool),
-                    diagonal=-self.sliding_window,
-                )
-                attention_mask = torch.where(
-                    sliding_window_mask, min_dtype, attention_mask
-                )
-                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
-                offset = last_cache_position - effective_seq_len
-                # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
-                attention_mask = attention_mask[
-                    :, :, :, offset : offset + effective_seq_len
-                ]
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -947,6 +978,7 @@ class Gemma3DecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            last_cache_position=last_cache_position,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -1059,7 +1091,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         self.config = config
 
         self.embed_tokens = nn.Embedding(
-            config.vocab_size + config.mm_vocab_size,
+            config.vocab_size,
             config.hidden_size,
             padding_idx=config.pad_token_id,
         )
@@ -1362,7 +1394,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
         self.config = config
-        self.vocab_size = config.vocab_size + config.mm_vocab_size
+        self.vocab_size = config.vocab_size
         self.model = Gemma3Model(config)
         self.lm_head = nn.Linear(config.hidden_size, self.vocab_size, bias=False)
         self.post_init()

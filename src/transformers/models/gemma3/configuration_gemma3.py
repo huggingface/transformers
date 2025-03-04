@@ -175,7 +175,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self,
         # Config parameters found in all implementations, name differences noted
         vocab_size: int = 262_144,  # num_embed in FLAX
-        mm_vocab_size: int = 128,
         mm_tokens_per_image: int = 256,
         mm_soft_token_id: int = -1,
         hidden_size: int = 2304,  # embed_dim in FLAX
@@ -215,7 +214,6 @@ class Gemma3TextConfig(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
-        self.mm_vocab_size = mm_vocab_size
         self.mm_tokens_per_image = mm_tokens_per_image
         self.mm_soft_token_id = mm_soft_token_id
         self.max_position_embeddings = max_position_embeddings

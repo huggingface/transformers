@@ -89,12 +89,6 @@ NEWLINE_TOKEN = "\n"
 PAN_AND_SCAN_PREFIX = "Here is the original image"
 PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
 
-# Gemma 3 supports the following image input paradigms for any given prompt:
-#
-#   * No image      --> None
-#   * Single-image  --> PIL.Image.Image
-#   * Multi-image   --> Sequence[PIL.Image.Image]
-#   * Batch         --> Sequence[Sequence[PIL.Image.Image]]
 BatchedImageInput = Sequence[PIL.Image.Image]
 BatchedMultiImageInput = Sequence[BatchedImageInput]
 Gemma3ProcessorImageInput = Union[PIL.Image.Image, BatchedImageInput, BatchedMultiImageInput]
@@ -332,6 +326,29 @@ class Gemma3Processor(ProcessorMixin):
             batch_flattened.append(prompt_flattened)
 
         return batch_flattened
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["Gemma3Processor"]

@@ -1,30 +1,16 @@
 r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
-python3 -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
+python -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
     --variant='gemma3_4b' \
-    --tokenizer_path="$HOME/gemma3/tokenizer.model" \
-    --checkpoint_path="$HOME/gemma3/gemma3_4B_pt_orbax/" \
-    --output_path="$HOME/gemma3/gemma3_4B_pt_safetensors/" \
+    --tokenizer_path="$HOME/gemma3/tokenizer/gemma3_cleaned_262144_v2.spiece.model" \
+    --checkpoint_path="$HOME/gemma3/gemma3_4b_pt_orbax/" \
+    --output_path="$HOME/gemma3/gemma3_4b_pt_safetensors/" \
     --precision='bfloat16'
-
-This requires Transformers v4.38+. It was written in a way that it can be run as
-a regular non-Google3 script. So you can either `blaze run` it, or `python3` it.
-
-NOTE: The internal HF implementation does not currently support writing
-SafeTensors to CNS or saving tokenizers with sentencepiece vocab files loaded
-from CNS. If running with blaze, use local paths for both sentencepiece_path and
-output_path.
-See b/390224023
-
-Table stakes:
-- FP32
-- BF16
-- INT8
-- INT4
 """
 
 from collections.abc import Iterator, Sequence
 import dataclasses
+import math
 from typing import Any
 
 from absl import app
@@ -146,7 +132,7 @@ _VARIANTS = {
             rope_global_base_freq=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=5376 // 32,   # hidden_size // num_attention_heads
+            query_pre_attn_scalar=1 / math.sqrt(5376 // 32),   # 1 / sqrt(hidden_size // num_attention_heads)
         ),
         vision_config=Gemma3VisionConfig(),
     ),
@@ -332,11 +318,8 @@ def convert_transformer_weights(
                 "language_model.lm_head.weight",
             ]
             converted_weights = [weights, weights]
-        elif _TEXT_ONLY.value or prop == "mm_output_embedding":
+        elif _TEXT_ONLY.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
             return zip([], [])
-        elif prop == "mm_input_embedding_extra":
-            converted_paths = ["mm_input_embedding_extra.weight"]
-            converted_weights = [weights]
         else:
             raise ValueError(f"Upexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
@@ -477,24 +460,6 @@ def convert(
 
                 update_tree(path, weights)
 
-    if not _TEXT_ONLY.value:
-        extra_embs = hf_tree.pop("mm_input_embedding_extra.weight").float()
-        soft_emb_norm = hf_tree["mm_soft_emb_norm.weight"].float()
-        soft_emb_proj = hf_tree["mm_input_projection.weight"].float()
-        lm_embs = hf_tree["language_model.model.embed_tokens.weight"].float()
-
-        extra_embs_expanded = extra_embs.unsqueeze(0)
-        extra_embs_norm = extra_embs_expanded * torch.rsqrt(
-            extra_embs_expanded.pow(2).mean(-1, keepdim=True) + config.text_config.rms_norm_eps
-        )
-        extra_embs_norm = extra_embs_norm * (1.0 + soft_emb_norm)
-        extra_embs_proj = torch.einsum('btm,md->btd', extra_embs_norm, soft_emb_proj)
-        extra_embs_proj = extra_embs_proj.squeeze()
-        embs = torch.cat([lm_embs, extra_embs_proj], dim=0)
-
-        hf_tree["language_model.model.embed_tokens.weight"] = embs
-        hf_tree["language_model.lm_head.weight"] = embs.clone()
-
     return ConversionResult(state_tree=hf_tree, config=config)
 
 
@@ -504,6 +469,7 @@ def main(*args):
     variant = _VARIANT.value
     dtype = getattr(torch, PRECISION.value)
     config = _VARIANTS[variant]
+    output_path = OUTPUT_PATH.value
 
     if variant == _VARIANT_GEMMA_3_1B:
         flags.FLAGS.set_default(_TEXT_ONLY.name, True)
@@ -511,14 +477,11 @@ def main(*args):
     tokenizer = GemmaTokenizerFast(TOKENIZER_PATH.value)
 
     if _TEXT_ONLY.value:
-        config.text_config.mm_vocab_size = 0
         config.vision_config = None
-        output_path = f"{OUTPUT_PATH.value}_textonly"
         tokenizer.save_pretrained(output_path)
         logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
         del tokenizer
     else:
-        output_path = OUTPUT_PATH.value
         processor = Gemma3Processor(
             image_processor=SiglipImageProcessor(image_seq_length=1024),
             tokenizer=tokenizer
