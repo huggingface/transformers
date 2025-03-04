@@ -98,7 +98,7 @@ Our evaluation script enables two modes of evaluation (controlled by the `eval_m
 
 The evaluation script expects paths to two files:
 - `evaluation_set` - a path to a file specifying the evaluation dataset, a single input per line.
-- `gold_data_path` - a path to a file contaning ground truth answers for datapoints from the `evaluation_set`, a single output per line. Check below for expected formats of the gold data files.
+- `gold_data_path` - a path to a file containing ground truth answers for datapoints from the `evaluation_set`, a single output per line. Check below for expected formats of the gold data files.
 
 
 ## Retrieval evaluation
