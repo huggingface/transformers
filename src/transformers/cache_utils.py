@@ -1117,7 +1117,6 @@ class StaticCache(Cache):
         )
 
         self.dtype = dtype
-        self.device = torch.device(device) if device is not None else torch.device("meta")
         self.num_key_value_heads = (
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
@@ -1128,11 +1127,12 @@ class StaticCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
+        device = torch.device(device) if device is not None else torch.device("meta")
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[idx]
             else:
-                layer_device = self.device
+                layer_device = device
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
             # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
@@ -1629,7 +1629,7 @@ class HybridCache(Cache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
-        self.device = torch.device(device) if device is not None else torch.device("meta")
+
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
         self.is_sliding = torch.tensor(
             [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
@@ -1643,11 +1643,12 @@ class HybridCache(Cache):
             min(config.sliding_window, max_cache_len),
             self.head_dim,
         )
+        device = torch.device(device) if device is not None else torch.device("meta")
         for i in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[i]
             else:
-                layer_device = self.device
+                layer_device = device
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
             cache_shape = global_cache_shape if not self.is_sliding[i] else sliding_cache_shape
@@ -1834,23 +1835,23 @@ class MambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.device = torch.device(device) if device is not None else torch.device("meta")
 
         self.conv_states: List[torch.Tensor] = []
         self.ssm_states: List[torch.Tensor] = []
+        device = torch.device(device) if device is not None else torch.device("meta")
         for _ in range(config.num_hidden_layers):
             conv_state: torch.Tensor = torch.zeros(
                 self.max_batch_size,
                 self.intermediate_size,
                 self.conv_kernel_size,
-                device=self.device,
+                device=device,
                 dtype=dtype,
             )
             ssm_state: torch.Tensor = torch.zeros(
                 self.max_batch_size,
                 self.intermediate_size,
                 self.ssm_state_size,
-                device=self.device,
+                device=device,
                 dtype=dtype,
             )
 
