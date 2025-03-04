@@ -19,10 +19,12 @@
 # limitations under the License.
 """LLaMA model configuration"""
 
+from dataclasses import dataclass
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
+@dataclass
 class LlamaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
@@ -156,10 +158,11 @@ class LlamaConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    vocab_size: int = 32000
 
     def __init__(
         self,
-        vocab_size=32000,
+        # vocab_size=32000,
         hidden_size=4096,
         intermediate_size=11008,
         num_hidden_layers=32,
@@ -183,7 +186,7 @@ class LlamaConfig(PretrainedConfig):
         head_dim=None,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
+        # self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
