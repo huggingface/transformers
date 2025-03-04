@@ -7048,6 +7048,7 @@ if TYPE_CHECKING:
             DFineForObjectDetection,
             DFineModel,
             DFinePreTrainedModel,
+            DFineResNetBackbone,
         )
         from .models.dab_detr import (
             DabDetrForObjectDetection,
