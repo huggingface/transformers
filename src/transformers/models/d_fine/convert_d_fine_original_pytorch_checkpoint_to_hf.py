@@ -79,6 +79,7 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
         config.backbone_config.stage_numb_of_layers = [4, 4, 4, 4]
         config.decoder_layers = 4
+        config.decoder_n_points = [3, 6, 3]
         config.encoder_in_channels = [384, 768, 1536]
         config.backbone_config.use_learnable_affine_block = True
         config.depth_mult = 0.67
@@ -97,6 +98,7 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.backbone_config.stage_numb_of_layers = [6, 6, 6, 6]
         config.encoder_ffn_dim = 1024
         config.encoder_in_channels = [512, 1024, 2048]
+        config.decoder_n_points = [3, 6, 3]
         if model_name == "dfine_l_obj365":
             config.num_labels = 366
     else:
@@ -113,6 +115,7 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.decoder_layers = 3
         config.hidden_expansion = 0.5
         config.depth_mult = 0.34
+        config.decoder_n_points = [3, 6, 3]
         config.encoder_in_channels = [256, 512, 1024]
         config.backbone_config.use_learnable_affine_block = True
         if model_name == "dfine_s_obj365":
@@ -354,17 +357,14 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     # load default config
     config = get_d_fine_config(model_name)
     state_dict = load_original_state_dict(repo_id, model_name)
+    state_dict.pop("decoder.valid_mask", None)
+    state_dict.pop("decoder.anchors", None)
     model = DFineForObjectDetection(config)
     logger.info(f"Converting model {model_name}...")
 
-    # rename keys
-    state_dict.pop("decoder.decoder.up", None)
-    state_dict.pop("decoder.decoder.reg_scale", None)
     state_dict = convert_old_keys_to_new_keys(state_dict)
-
-    if not config.anchor_image_size:
-        state_dict.pop("model.decoder.valid_mask", None)
-        state_dict.pop("model.decoder.anchors", None)
+    state_dict.pop("decoder.model.decoder.up", None)
+    state_dict.pop("decoder.model.decoder.reg_scale", None)
 
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
@@ -409,16 +409,16 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     if model_name == "dfine_x_coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.84472, -4.72931, -4.59713],
-                [-4.55426, -4.61722, -4.62792],
-                [-4.39344, -4.60641, -4.13995],
+                [-4.844723, -4.7293096, -4.5971327],
+                [-4.554266, -4.61723, -4.627926],
+                [-4.3934402, -4.6064143, -4.139952],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.256524, 0.54776, 0.476448],
-                [0.76900, 0.41423, 0.46148],
-                [0.16880, 0.19923, 0.21118],
+                [0.2565248, 0.5477609, 0.47644863],
+                [0.7690029, 0.41423926, 0.46148556],
+                [0.1688096, 0.19923759, 0.21118002],
             ]
         )
     elif model_name == "dfine_x_obj2coco":
@@ -454,16 +454,16 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_m_coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.560220, -4.85852, -4.17702],
-                [-4.316123, -5.05847, -3.67138],
-                [-4.746527, -6.84849, -3.16082],
+                [-4.5187078, -4.71708, -4.117749],
+                [-4.513984, -4.937715, -3.829125],
+                [-4.830042, -6.931682, -3.1740026],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.254904, 0.546769, 0.475268],
-                [0.765929, 0.412381, 0.465382],
-                [0.168203, 0.199216, 0.212074],
+                [0.25851426, 0.5489963, 0.4757598],
+                [0.769683, 0.41411665, 0.45988125],
+                [0.16866133, 0.19921188, 0.21207744],
             ]
         )
     elif model_name == "dfine_m_obj2coco":
@@ -499,16 +499,16 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_l_coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.163772, -5.08069, -4.358980],
-                [-3.941459, -4.85244, -4.142285],
-                [-4.292777, -6.10656, -4.974356],
+                [-4.068779, -5.169955, -4.339212],
+                [-3.9461594, -5.0279613, -4.0161457],
+                [-4.218292, -6.196324, -5.175245],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.2549637, 0.549357, 0.478588],
-                [0.7679444, 0.415660, 0.460468],
-                [0.1684390, 0.198810, 0.213304],
+                [0.2564867, 0.5489948, 0.4748876],
+                [0.7693534, 0.4138953, 0.4598034],
+                [0.16875696, 0.19875404, 0.21196914],
             ]
         )
     elif model_name == "dfine_l_obj365":
@@ -544,16 +544,16 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_s_coco":
         expected_slice_logits = torch.tensor(
             [
-                [-3.319429, -4.463451, -5.628054],
-                [-4.910080, -9.160397, -5.950480],
-                [-4.046249, -4.022937, -6.300149],
+                [-3.8097816, -4.7724586, -5.994499],
+                [-5.2974715, -9.499067, -6.1653666],
+                [-5.3502765, -3.9530406, -6.3630295],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.765489, 0.415563, 0.46872],
-                [0.168150, 0.198066, 0.21442],
-                [0.258652, 0.547807, 0.47930],
+                [0.7677696, 0.41479152, 0.46441072],
+                [0.16912134, 0.19869131, 0.2123824],
+                [0.2581653, 0.54818195, 0.47512347],
             ]
         )
     elif model_name == "dfine_s_obj2coco":
@@ -589,8 +589,8 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     else:
         raise ValueError(f"Unknown d_fine_name: {model_name}")
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-3)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-4)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)

@@ -78,7 +78,7 @@ class DFineResNetModelTester:
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
         self.out_indices = out_indices
-    
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -95,15 +95,15 @@ class DFineResNetModelTester:
             num_channels=self.num_channels,
             embeddings_size=self.embeddings_size,
             hidden_sizes=self.hidden_sizes,
-            stage_in_channels = self.stage_in_channels,
-            stage_mid_channels = self.stage_mid_channels,
-            stage_out_channels = self.stage_out_channels,
-            stage_num_blocks = self.stage_num_blocks,
-            stage_downsample = self.stage_downsample,
-            stage_light_block = self.stage_light_block,
-            stage_kernel_size = self.stage_kernel_size,
-            stage_numb_of_layers = self.stage_numb_of_layers,
-            stem_channels = self.stem_channels,
+            stage_in_channels=self.stage_in_channels,
+            stage_mid_channels=self.stage_mid_channels,
+            stage_out_channels=self.stage_out_channels,
+            stage_num_blocks=self.stage_num_blocks,
+            stage_downsample=self.stage_downsample,
+            stage_light_block=self.stage_light_block,
+            stage_kernel_size=self.stage_kernel_size,
+            stage_numb_of_layers=self.stage_numb_of_layers,
+            stem_channels=self.stem_channels,
             depths=self.depths,
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
