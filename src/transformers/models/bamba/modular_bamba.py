@@ -660,7 +660,7 @@ class BambaMixer(nn.Module):
         cu_seq_lens = [0, 3, 5, 6, ...] # cumulative seq lens across seqs
         seq_idx = [0, 0, 0, 1, 1, 2, 3, ...] # idx the sequences directly
 
-        `seq_idx` is only supported on the fast CUDA path, currently.
+        `seq_idx` is currently only supported for the fast CUDA path.
         """
         batch_size, seq_len, _ = hidden_states.shape
         use_precomputed_states = (
