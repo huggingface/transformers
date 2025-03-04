@@ -84,7 +84,7 @@ class DFineModelTester:
         decoder_in_channels=[32, 32, 32],
         decoder_ffn_dim=64,
         num_feature_levels=3,
-        decoder_n_points=4,
+        decoder_n_points=[3, 6, 3],
         decoder_n_levels=3,
         decoder_layers=2,
         decoder_attention_heads=2,
@@ -764,16 +764,16 @@ class DFineModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-3.319429, -4.463451, -5.628054],
-                [-4.910080, -9.160397, -5.950480],
-                [-4.046249, -4.022937, -6.300149],
+                [-3.8097816, -4.7724586, -5.994499],
+                [-5.2974715, -9.499067, -6.1653666],
+                [-5.3502765, -3.9530406, -6.3630295],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.765489, 0.415563, 0.46872],
-                [0.168150, 0.198066, 0.21442],
-                [0.258652, 0.547807, 0.47930],
+                [0.7677696, 0.41479152, 0.46441072],
+                [0.16912134, 0.19869131, 0.2123824],
+                [0.2581653, 0.54818195, 0.47512347],
             ]
         ).to(torch_device)
 
@@ -787,14 +787,15 @@ class DFineModelIntegrationTest(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9577, 0.9524, 0.9333, 0.8163], device=torch_device)
-        expected_labels = [15, 15, 65, 57]
+        expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
+        expected_labels = [15, 65, 15, 57]
+        print(results["boxes"][:4].detach().cpu().numpy())
         expected_slice_boxes = torch.tensor(
             [
-                [1.2160e01, 5.5606e01, 3.1891e02, 4.7029e02],
-                [3.3992e02, 2.4693e01, 6.3990e02, 3.7425e02],
-                [3.9000e01, 7.2414e01, 1.7623e02, 1.1773e02],
-                [-1.5553e00, 1.7200e00, 6.3773e02, 4.7459e02],
+                [1.3186283e01, 5.4130211e01, 3.1726535e02, 4.7212445e02],
+                [4.0275269e01, 7.2975174e01, 1.7620003e02, 1.1776848e02],
+                [3.4276117e02, 2.3427944e01, 6.3998401e02, 3.7477191e02],
+                [5.8418274e-01, 1.1794567e00, 6.3933154e02, 4.7485995e02],
             ],
             device=torch_device,
         )

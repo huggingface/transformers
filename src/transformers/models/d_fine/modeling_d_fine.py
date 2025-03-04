@@ -398,26 +398,23 @@ class DFineDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        residual = hidden_states
-
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states_2, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
         hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        second_residual = hidden_states
+        residual = hidden_states
 
         # Cross-Attention
         cross_attn_weights = None
         hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
-        hidden_states, cross_attn_weights = self.encoder_attn(
+        hidden_states_2, cross_attn_weights = self.encoder_attn(
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             reference_points=reference_points,
@@ -425,16 +422,15 @@ class DFineDecoderLayer(nn.Module):
             spatial_shapes_list=spatial_shapes_list,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.gateway(second_residual, hidden_states)
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = self.gateway(residual, hidden_states_2)
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states_2 = self.activation_fn(self.fc1(hidden_states))
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.activation_dropout, training=self.training)
+        hidden_states_2 = self.fc2(hidden_states_2)
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
         hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
 
         outputs = (hidden_states,)
@@ -2015,11 +2011,10 @@ class DFineCSPRepLayer(nn.Module):
             self.conv3 = nn.Identity()
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        device = hidden_state.device
         hidden_state_1 = self.conv1(hidden_state)
         for bottleneck in self.bottlenecks:
-            hidden_state_1 = bottleneck(hidden_state_1).to(device)
-        hidden_state_2 = self.conv2(hidden_state).to(device)
+            hidden_state_1 = bottleneck(hidden_state_1)
+        hidden_state_2 = self.conv2(hidden_state)
         hidden_state_3 = self.conv3(hidden_state_1 + hidden_state_2)
         return hidden_state_3
 
