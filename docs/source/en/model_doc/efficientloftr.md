@@ -53,8 +53,8 @@ image2 = Image.open(requests.get(url_image2, stream=True).raw)
 
 images = [image1, image2]
 
-processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
-model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
+processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficientloftr")
+model = AutoModel.from_pretrained("stevenbucaille/efficientloftr")
 
 inputs = processor(images, return_tensors="pt")
 with torch.no_grad():
@@ -85,7 +85,7 @@ processor.plot_keypoint_matching(images, outputs)
 ![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/01ZYaLB1NL5XdA8u7yCo4.png)
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
-The original code can be found [here](https://github.com/magicleap/SuperGluePretrainedNetwork).
+The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 
 ## EfficientLoFTRConfig
 
