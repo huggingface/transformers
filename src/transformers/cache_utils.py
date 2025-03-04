@@ -534,7 +534,8 @@ if is_torch_greater_or_equal_than_2_6:
         dynamic_cache: DynamicCache,
     ):
         """Flattens DynamicCache into flat list of tensors for `torch.export.export` to consume"""
-        assert isinstance(dynamic_cache, DynamicCache)
+        if not isinstance(dynamic_cache, DynamicCache):
+            raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
         # NOTE it seems _seen_tokens is deprecated, so probably doesn't need tracking
         dictionary = {
