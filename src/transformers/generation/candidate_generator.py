@@ -628,16 +628,12 @@ class PruneReindexingLMHead(nn.Module):
         super().__init__()
         self.token_ids = token_ids
         self.filter_value = filter_value
-        #self.original_lm_head = original_lm_head
         self.original_vocab_size = original_lm_head.out_features
         self.pruned_lm_head = prune_linear_layer(original_lm_head, torch.tensor(self.token_ids)).to(original_lm_head.weight.dtype)
-
+        print(f'{original_lm_head=}')
+        print(f'{self.pruned_lm_head=}')
+        
     def forward(self, hidden_states):
-        #ol = self.original_lm_head(hidden_states)
-        # Ensure hidden_states and pruned_lm_head weights have the same dtype
-        #hidden_states = hidden_states.to(self.pruned_lm_head.weight.dtype)
-        # Get logits from the pruned LM head
-        print(self.pruned_lm_head)
         pruned_logits = self.pruned_lm_head(hidden_states)
         # Map logits back to the original vocabulary
         original_logits = torch.full(
@@ -677,8 +673,8 @@ class AssistantToTargetTranslator:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
-        target_vocab_size: Optional[int] = None, # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
-        prune = True
+        target_vocab_size: Optional[int],
+        assistant_prune_LM_head: Optional[bool] = False
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -689,20 +685,21 @@ class AssistantToTargetTranslator:
         )
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: Optional[LogitsProcessorList] = None
-        if not(prune) and len(self._suppress_input_ids) > 0:
-            # len(self._suppress_input_ids) = 0 if the assistant vocab is a subset of the target vocab
-            self.logits_processors = LogitsProcessorList(
-                [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
-            )
-        assistant_overlap_token_ids = list(self.target_to_assistant_input_ids.values())
-        # prune LM head
-        if prune and (len(assistant_overlap_token_ids) < len(self._assistant_tokenizer)):
-            print('prune LM head') 
-            original_lm_head = assistant_model.get_output_embeddings()
-            pruned_lm_head = PruneReindexingLMHead(
-                original_lm_head, assistant_overlap_token_ids, self.FILTER_VALUE
-            )
-            assistant_model.set_output_embeddings(pruned_lm_head)
+        if len(self._suppress_input_ids) > 0:
+            # the assistant vocab is not a subset of the target vocab
+            if assistant_prune_LM_head:
+
+                assistant_overlap_token_ids = list(self.target_to_assistant_input_ids.values()) 
+                original_lm_head = assistant_model.get_output_embeddings()
+                pruned_lm_head = PruneReindexingLMHead(
+                    original_lm_head, assistant_overlap_token_ids, self.FILTER_VALUE
+                )
+                assistant_model.set_output_embeddings(pruned_lm_head)
+            else:
+                self.logits_processors = LogitsProcessorList(
+                    [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
+                )
+        
 
     def _get_assistant_to_target_input_ids(self):
         target_vocab = self._target_tokenizer.get_vocab()
@@ -794,6 +791,7 @@ class AssistantVocabTranslatorCache:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int] = None,
+        assistant_prune_LM_head = False
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
         if assistant_dict is None:
@@ -803,7 +801,7 @@ class AssistantVocabTranslatorCache:
         mapping = assistant_dict.get(assistant_tokenizer)
         if mapping is None:
             mapping = AssistantToTargetTranslator(
-                target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size
+                target_tokenizer, assistant_tokenizer, assistant_model, target_vocab_size, assistant_prune_LM_head
             )
             assistant_dict[assistant_tokenizer] = mapping
 
