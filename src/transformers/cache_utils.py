@@ -1859,8 +1859,7 @@ class OffloadedStaticCache(StaticCache):
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`Union[str, torch.device]`):
-            The device on which the cache should be initialized. Should be the same as the
-            layer device.
+            The device on which the cache should be initialized. Should be the same as the layer device.
         dtype (`torch.dtype`, *optional*):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
