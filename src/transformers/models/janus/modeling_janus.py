@@ -5,7 +5,7 @@
 #                          modular_janus.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 Google AI and The HuggingFace Team. All rights reserved.
+# Copyright 2024 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -257,7 +257,6 @@ class JanusVisionEmbeddings(nn.Module):
             self.cls_token = nn.Parameter(torch.rand(1, 1, config.hidden_size))
             self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
 
-        # Currently using hidden_drop_rate instead of positional_dropout_rate, is it necessary?
         self.dropout = nn.Dropout(config.hidden_dropout_rate)
         self.patch_embeddings = JanusVisionPatchEmbeddings(config)
         self.num_patches = self.patch_embeddings.num_patches

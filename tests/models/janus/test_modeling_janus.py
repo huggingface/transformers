@@ -448,8 +448,7 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 class JanusIntegrationTest(unittest.TestCase):
     def setUp(self):
-        # Later remove this func and replace with hub URL, for now we use a symbolic link to the folder
-        self.model_id = "/Users/espm5508/personal/transformers/tmp/hub_code_out2"
+        self.model_id = "yaswanthgali/Janus-Pro-1B-HF"
 
     @slow
     def test_model_text_generation(self):
