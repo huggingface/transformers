@@ -32,7 +32,8 @@ def get_file_owners(file_path, codeowners_lines):
         # Split into pattern and owners
         parts = line.split()
         pattern = parts[0]
-        owners = parts[1:]  # Can be empty, e.g. for dummy files with explicitly no owner!
+        # Can be empty, e.g. for dummy files with explicitly no owner!
+        owners = [owner.removeprefix("@") for owner in parts[1:]]
 
         # Check if file matches pattern
         if fnmatch(file_path, pattern):
@@ -70,11 +71,11 @@ def main():
         for owner in owners:
             locs_per_owner[owner] += file.changes
 
-    # Assign the top 2 based on locs changed as reviewers
-    top_owners = locs_per_owner.most_common(3)
+    # Assign the top 2 based on locs changed as reviewers, but skip the owner if present
+    locs_per_owner.pop(pr_author, None)
+    top_owners = locs_per_owner.most_common(2)
     print("Top owners", top_owners)
-    top_owners = [owner[0].removeprefix("@") for owner in top_owners]
-    top_owners = [owner for owner in top_owners if owner != pr_author][:2]  # Max 2, and never ping the author
+    top_owners = [owner[0] for owner in top_owners]
     try:
         pr.create_review_request(top_owners)
     except github.GithubException as e:
