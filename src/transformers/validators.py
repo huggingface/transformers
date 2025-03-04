@@ -18,6 +18,7 @@ describe the constraints of your dataclass fields, for a best user experience (e
 """
 
 from typing import Iterable
+
 from .activations import ACT2CLS
 
 
@@ -40,7 +41,6 @@ def vocabulary_token(value: int, vocab_size: int):
     """Ensures that `value` is a valid vocabulary token index."""
     if not 0 <= value < vocab_size:
         raise ValueError(f"Value must be a token in the vocabulary, got {value}. (vocabulary size = {vocab_size})")
-
 
 
 # Float validators

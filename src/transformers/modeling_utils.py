@@ -2025,6 +2025,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "`PretrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
+        if hasattr(config, "validate"):  # e.g. in @strict_dataclass
+            config.validate()
         if not getattr(config, "_attn_implementation_autoset", False):
             # config usually has a `torch_dtype` but we need the next line for the `no_super_init` tests
             dtype = config.torch_dtype if hasattr(config, "torch_dtype") else torch.get_default_dtype()

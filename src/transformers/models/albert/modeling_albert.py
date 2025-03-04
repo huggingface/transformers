@@ -892,7 +892,6 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
     def __init__(self, config):
-        config.validate()
         super().__init__(config)
 
         self.albert = AlbertModel(config, add_pooling_layer=False)
