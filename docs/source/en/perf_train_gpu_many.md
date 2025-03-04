@@ -33,7 +33,7 @@ Use the [Model Memory Calculator](https://huggingface.co/spaces/hf-accelerate/mo
 
 ## Data parallelism
 
-Data parallelism evenly distributes data across multiple GPUs. Each GPU holds a copy of the model and concurrently proccesses their portion of the data. At the end, the results from each GPU are synchronized and combined.
+Data parallelism evenly distributes data across multiple GPUs. Each GPU holds a copy of the model and concurrently processes their portion of the data. At the end, the results from each GPU are synchronized and combined.
 
 Data parallelism significantly reduces training time by processing data in parallel, and it is scalable to the number of GPUs available. However, synchronizing results from each GPU can add overhead.
 
