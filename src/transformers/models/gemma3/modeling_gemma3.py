@@ -714,6 +714,8 @@ GEMMA3_INPUTS_DOCSTRING = ""
 
 
 class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
+    base_model_prefix = "language_model"
+
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
         self.config = config
