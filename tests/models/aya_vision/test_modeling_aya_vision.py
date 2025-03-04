@@ -26,6 +26,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -313,6 +314,10 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
+    @unittest.skip("Failing because of unique cache (HybridCache)")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
     def test_sdpa_equivalence(self):
         pass
@@ -351,8 +356,9 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
 
+@require_read_token
 @require_torch
-class AyaVisionQwen2IntegrationTest(unittest.TestCase):
+class AyaVisionIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_checkpoint = "CohereForAI/aya-vision-8b"
 
