@@ -41,10 +41,10 @@ Project page: [https://zju3dv.github.io/efficientloftr/](https://zju3dv.github.i
 
 Here is a quick example of using the model. 
 ```python
-from transformers import AutoImageProcessor, AutoModel
 import torch
-from PIL import Image
 import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModel
 
 url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 image1 = Image.open(requests.get(url_image1, stream=True).raw)

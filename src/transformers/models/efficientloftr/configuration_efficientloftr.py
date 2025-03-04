@@ -148,7 +148,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         if self.hidden_size != self.stage_block_dims[-1]:
             raise ValueError(
-                f"hidden_size should be equal to the last value in stage_block_dims. hidden_size = {self.hidden_size}, stage_blck_dims = {self.stage_block_dims}"
+                f"`hidden_size` = {self.hidden_size} should be equal to "
+                f"the last value in `stage_block_dims` = {self.stage_block_dims}"
             )
 
         self.activation_function = activation_function
