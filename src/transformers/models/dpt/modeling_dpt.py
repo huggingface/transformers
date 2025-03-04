@@ -325,8 +325,8 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPTViT
-class DPTViTSelfAttention(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPT
+class DPTSelfAttention(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -411,7 +411,7 @@ class DPTViTSelfOutput(nn.Module):
 class DPTViTAttention(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
-        self.attention = DPTViTSelfAttention(config)
+        self.attention = DPTSelfAttention(config)
         self.output = DPTViTSelfOutput(config)
         self.pruned_heads = set()
 
