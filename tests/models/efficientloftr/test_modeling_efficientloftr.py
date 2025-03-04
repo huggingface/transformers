@@ -317,7 +317,6 @@ class EfficientLoFTRModelIntegrationTest(unittest.TestCase):
                                                 device=predicted_matches_values.device)  # fmt:skip
         expected_matching_scores_values = torch.tensor([0.9957,0.2224,0.8803, 0.9283, 0.2241, 0.6321, 0.5206, 0.8053, 0.7174, 0.9872],
                                                         device=predicted_matches_values.device)  # fmt:skip
-
-        self.assertTrue(predicted_number_of_matches == expected_number_of_matches)
+        self.assertEqual(predicted_number_of_matches, expected_number_of_matches)
         self.assertTrue(torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-3))
         self.assertTrue(torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-3))
