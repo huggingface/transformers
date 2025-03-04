@@ -1222,29 +1222,27 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
                 second dimension.
 
         """
-        num_matches, fine_window_size, _ = fine_features_0.shape
-
+        num_matches, fine_window_size, fine_embed_dim = fine_features_0.shape
+        fine_matching_slice_dim = self.config.fine_matching_slice_dim
         if num_matches == 0:
-            fine_confidence = torch.empty(0, fine_window_size, fine_window_size, device=fine_features_0.device)
-            return coarse_matched_keypoints, fine_confidence, fine_confidence
+            return coarse_matched_keypoints
 
-        fine_kernel_size = int(math.sqrt(fine_window_size))
+        fine_kernel_size = torch_int(fine_window_size**0.5)
 
-        first_stage_fine_features_0 = fine_features_0[..., : -self.config.fine_matching_slicedim]
-        first_stage_fine_features_1 = fine_features_1[..., : -self.config.fine_matching_slicedim]
-        first_stage_fine_features_0 = first_stage_fine_features_0 / first_stage_fine_features_0.shape[-1] ** 0.5
-        first_stage_fine_features_1 = first_stage_fine_features_1 / first_stage_fine_features_1.shape[-1] ** 0.5
-        first_stage_fine_confidence = first_stage_fine_features_0 @ first_stage_fine_features_1.transpose(-1, -2)
-        first_stage_fine_confidence = nn.functional.softmax(first_stage_fine_confidence, 1) * nn.functional.softmax(
-            first_stage_fine_confidence, 2
-        )
-        first_stage_fine_confidence = first_stage_fine_confidence.reshape(
+        split_fine_features_0 = torch.split(fine_features_0, fine_embed_dim - fine_matching_slice_dim, -1)
+        split_fine_features_1 = torch.split(fine_features_1, fine_embed_dim - fine_matching_slice_dim, -1)
+
+        fine_features_0 = split_fine_features_0[0]
+        fine_features_1 = split_fine_features_1[0]
+        fine_features_0 = fine_features_0 / fine_features_0.shape[-1] ** 0.5
+        fine_features_1 = fine_features_1 / fine_features_1.shape[-1] ** 0.5
+        fine_confidence = fine_features_0 @ fine_features_1.transpose(-1, -2)
+        fine_confidence = nn.functional.softmax(fine_confidence, 1) * nn.functional.softmax(fine_confidence, 2)
+        fine_confidence = fine_confidence.reshape(
             num_matches, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2
         )
-        first_stage_fine_confidence = first_stage_fine_confidence[..., 1:-1, 1:-1]
-        first_stage_fine_confidence = first_stage_fine_confidence.reshape(
-            num_matches, fine_window_size, fine_window_size
-        )
+        fine_confidence = fine_confidence[..., 1:-1, 1:-1]
+        first_stage_fine_confidence = fine_confidence.reshape(num_matches, fine_window_size, fine_window_size)
 
         fine_indices, fine_matches = self._get_first_stage_fine_matching(
             first_stage_fine_confidence,
@@ -1253,10 +1251,11 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             fine_scale,
         )
 
-        second_stage_fine_features_0 = fine_features_0[..., -self.config.fine_matching_slicedim :]
-        second_stage_fine_features_1 = fine_features_1[..., -self.config.fine_matching_slicedim :]
-        second_stage_fine_features_1 = second_stage_fine_features_1 / self.config.fine_matching_slicedim**0.5
-        second_stage_fine_confidence = second_stage_fine_features_0 @ second_stage_fine_features_1.transpose(-1, -2)
+        fine_features_0 = split_fine_features_0[1]
+        fine_features_1 = split_fine_features_1[1]
+
+        fine_features_1 = fine_features_1 / fine_matching_slice_dim**0.5
+        second_stage_fine_confidence = fine_features_0 @ fine_features_1.transpose(-1, -2)
 
         fine_coordinates = self._get_second_stage_fine_matching(
             fine_indices,
