@@ -22,19 +22,15 @@ from typing import Optional, Union
 import torch
 import torchvision
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
-from transformers.image_utils import (
-    ImageInput,
-    make_list_of_images,
-    valid_images,
-)
-from transformers.utils import TensorType, logging
+from ...image_processing_utils_fast import BatchFeature, BaseImageProcessorFast, convert_to_rgb
+from ...image_utils import ImageInput, make_list_of_images, valid_images
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalImageProcessor(BaseImageProcessor):
+class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     r"""
     Constructs a Phi4Multimodal image processor.
     """
@@ -164,44 +160,40 @@ class Phi4MultimodalImageProcessor(BaseImageProcessor):
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
         """
         images = make_list_of_images(images)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        # Basic settings.
-        img_processor = torchvision.transforms.Compose(
-            [
-                torchvision.transforms.ToTensor(),
-                torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-            ]
-        )
-        dyhd_base_resolution = 448
+        images = [convert_to_rgb(image) for image in images]
 
         # Dynamic HD
-        base_resolution = dyhd_base_resolution
-        images = [image.convert("RGB") for image in images]
+        base_resolution = 448
         # cover 384 and 448 resolution
         mask_resolution = base_resolution // 14
-        elems, image_attention_masks = [], []
-        for im in images:
-            elem, attention_mask = self.dynamic_preprocess(
-                im, max_num=self.dynamic_hd, image_size=base_resolution, mask_size=mask_resolution
-            )
-            elems.append(elem)
-            image_attention_masks.append(attention_mask)
-        hd_images = [img_processor(im) for im in elems]
+        imgs_and_masks = [
+            self.dynamic_preprocess(
+                image, max_num=self.dynamic_hd, image_size=base_resolution, mask_size=mask_resolution
+            ) for image in images
+        ]
+        images, image_attention_masks = [x[0] for x in imgs_and_masks], [x[1] for x in imgs_and_masks]
+        
+        transforms = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+
+        hd_images = [transforms(image) for image in images]
         global_image = [
             torch.nn.functional.interpolate(
-                im.unsqueeze(0).float(),
+                image.unsqueeze(0).float(),
                 size=(base_resolution, base_resolution),
                 mode="bicubic",
-            ).to(im.dtype)
-            for im in hd_images
+            ).to(image.dtype)
+            for image in hd_images
         ]
-        shapes = [[im.size(1), im.size(2)] for im in hd_images]
+
+        shapes = [[image.size(1), image.size(2)] for image in hd_images]
         mask_shapes = [[mask.size(0), mask.size(1)] for mask in image_attention_masks]
         global_attention_mask = [torch.ones((1, mask_resolution, mask_resolution)) for _ in hd_images]
 
@@ -265,4 +257,4 @@ class Phi4MultimodalImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["Phi4MultimodalImageProcessor"]
+__all__ = ["Phi4MultimodalImageProcessorFast"]

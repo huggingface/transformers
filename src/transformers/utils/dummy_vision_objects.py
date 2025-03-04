@@ -562,7 +562,7 @@ class PerceiverImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class Phi4MultimodalImageProcessor(metaclass=DummyObject):
+class Phi4MultimodalImageProcessorFast(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

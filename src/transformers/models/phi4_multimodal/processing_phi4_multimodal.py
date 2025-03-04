@@ -22,35 +22,33 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from transformers.image_processing_utils import BatchFeature
-from transformers.image_utils import (
-    ImageInput,
-)
-from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from transformers.tokenization_utils_base import TextInput
-from transformers.utils import logging
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+AudioInput = Tuple[Union[np.ndarray, torch.Tensor], int]
+AudioInputs = List[AudioInput]
+
 
 # Special tokens
 COMPATIBLE_IMAGE_TOKEN_PATTERN = r"<\|image_\d+\|>"
 COMPATIBLE_AUDIO_TOKEN_PATTERN = r"<\|audio_\d+\|>"
 
 
-AudioInput = Tuple[Union[np.ndarray, torch.Tensor], int]
-AudioInputs = List[AudioInput]
-
-
 class Phi4MultimodalProcessor(ProcessorMixin):
     r"""
     Constructs a Phi4Multimodal processor which raps an image processor, a audio processor, and a GPT tokenizer into a single processor.
 
-    [`Phi4MultimodalProcessor`] offers all the functionalities of [`Phi4MultimodalImageProcessor`] and [`GPT2Tokenizer`]. See the
+    [`Phi4MultimodalProcessor`] offers all the functionalities of [`Phi4MultimodalImageProcessorFast`] and [`GPT2Tokenizer`]. See the
     [`~Phi4MultimodalProcessor.__call__`] and [`~Phi4MultimodalProcessor.decode`] for more information.
 
     Args:
-        image_processor (`Phi4MultimodalImageProcessor`):
+        image_processor (`Phi4MultimodalImageProcessorFast`):
             The image processor to use for images.
         audio_processor (`Phi4MultimodalFeatureExtractor`):
             The audio processor to use for audio inputs.
@@ -60,7 +58,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "audio_processor", "tokenizer"]
     tokenizer_class = "GPT2TokenizerFast"
-    image_processor_class = "Phi4MultimodalImageProcessor"
+    image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
     valid_kwargs = ["chat_template"]
 
@@ -78,7 +76,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forards the `text`
         and `kwargs` arguments to GPT2Tokenizer's [`~GPT2Tokenizer.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        Phi4MultimodalImageProcessor's [`~Phi4MultimodalImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        Phi4MultimodalImageProcessorFast's [`~Phi4MultimodalImageProcessorFast.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
         Args:

@@ -1289,7 +1289,6 @@ else:
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
-    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
         ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
@@ -1348,6 +1347,7 @@ else:
     _import_structure["models.clip"].append("CLIPImageProcessorFast")
     _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
@@ -6558,7 +6558,6 @@ if TYPE_CHECKING:
         from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
-        from .models.phi4_multimodal import Phi4MultimodalImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
@@ -6609,6 +6608,7 @@ if TYPE_CHECKING:
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
+        from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
