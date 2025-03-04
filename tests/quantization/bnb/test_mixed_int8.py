@@ -968,12 +968,12 @@ class MixedInt8LlamaTest(MixedInt8Test):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
-# @require_bitsandbytes
-# @require_accelerate
-# @require_torch
-# @require_torch_gpu_if_bnb_not_multi_backend_enabled
-# @slow
-# @apply_skip_if_not_implemented
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
+@slow
+@apply_skip_if_not_implemented
 class Bnb8bitCompile(unittest.TestCase):
     model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
     input_text = "Hello my name is"
