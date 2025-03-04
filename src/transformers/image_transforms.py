@@ -30,6 +30,7 @@ from .image_utils import (
 from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
 from .utils.import_utils import (
     is_flax_available,
+    is_numba_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -50,6 +51,125 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
+if is_numba_available():
+    from numba import jit, prange
+
+    @jit("void(uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    def _fast_rescale_normalize_kernel_last_to_first(vid_in: np.ndarray, vid_out: np.ndarray, pixel_map: np.ndarray):
+        """
+        An in-place numba accelerated fn: do rescale, normalize and transpose image from channel-last to channel-first together.
+        This operation is in-place on image_out array for best performance.
+
+        Args:
+            image_in (`numpy.ndarray`):
+                The uint8 image. Image should have (frames, height, width, num_channels) format.
+            image_out (`numpy.ndarray`):
+                The float32 array to store processed image. Image should have (frames, num_channels, height, width) format.
+            pixel_map (`numpy.ndarray`):
+                The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
+        """
+        B, H, W, C = vid_in.shape
+        for bs in range(B):
+            for i in prange(H):
+                for j in range(W):
+                    for dim in range(C):
+                        vid_out[bs, dim, i, j] = pixel_map[dim, vid_in[bs, i, j, dim]]
+
+    @jit("void(uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    def _fast_rescale_normalize_kernel_first_to_last(vid_in: np.ndarray, vid_out: np.ndarray, pixel_map: np.ndarray):
+        """
+        An in-place numba accelerated fn: do rescale, normalize and transpose image from channel-first to channel-last together.
+        This operation is in-place on image_out array for best performance.
+
+        Args:
+            image_in (`numpy.ndarray`):
+                The uint8 image. Image should have (frames, num_channels, height, width) format.
+            image_out (`numpy.ndarray`):
+                The float32 array to store processed image. Image should have (frames, height, width, num_channels) format.
+            pixel_map (`numpy.ndarray`):
+                The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
+        """
+        B, C, H, W = vid_in.shape
+        for bs in range(B):
+            for i in prange(H):
+                for j in range(W):
+                    for dim in range(C):
+                        vid_out[bs, i, j, dim] = pixel_map[dim, vid_in[bs, dim, i, j]]
+
+    @jit("void(uint8[:,:,:,:],float32[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
+    def _fast_rescale_normalize_kernel(vid_in: np.ndarray, vid_out: np.ndarray, pixel_map: np.ndarray):
+        """
+        An in-place numba accelerated fn: do rescale, normalize image together.
+        Use frame-wise parallelism to make sure to parallelize on proper dimension.
+        This operation is in-place on image_out array for best performance.
+
+        Args:
+            image_in (`numpy.ndarray`):
+                The image to have its channel dimension set.
+            image_out (`numpy.ndarray`):
+                The float32 array to store processed image. Image should have same channel format as input image.
+            pixel_map (`numpy.ndarray`):
+                The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
+        """
+        B, D1, D2, D3 = vid_in.shape
+        for bs in prange(B):
+            for dim in range(D1):
+                for i in range(D2):
+                    for j in range(D3):
+                        vid_out[bs, dim, i, j] = pixel_map[dim, vid_in[bs, dim, i, j]]
+
+    def fast_rescale_normalize_transpose(
+        image: np.ndarray,
+        pixel_map: np.ndarray,
+        target_channel_dim: Union[ChannelDimension, str],
+        input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
+        dtype: np.dtype = np.float32,
+    ) -> np.ndarray:
+        """
+        Apply numba jit accelerated function to do rescale, normalize and convert image to target format together.
+
+        Args:
+            image (`numpy.ndarray`):
+                The image to have its channel dimension set.
+            pixel_map (`numpy.ndarray`):
+                The pre-computed values for each uint8 pixel in the image. Should have shape (num_channels, 256).
+            target_channel_dim (`ChannelDimension`):
+                The channel dimension format to use.
+            input_channel_dim (`ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred from the input image.
+            dtype (`np.dtype`, *optional*, defaults to `np.float32`):
+                The dtype of the output image. Only `np.float32` is supported currently.
+
+        Return:
+            `np.ndarray`: The image with the channel dimension set to `target_channel_dim`.
+        """
+        assert dtype == np.float32, "Fuse kernel for rescale and normalization only support float32"
+        if not isinstance(image, np.ndarray):
+            raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
+
+        if input_channel_dim is None:
+            input_channel_dim = infer_channel_dimension_format(image)
+
+        target_channel_dim = ChannelDimension(target_channel_dim)
+        # Use normal rescal_normalize kernel if channel aligned,
+        # otherwise use fuse kernel with transpose
+        if input_channel_dim == target_channel_dim:
+            fuse_ops = _fast_rescale_normalize_kernel
+            image_out = np.empty_like(image, dtype=dtype)
+        elif target_channel_dim == ChannelDimension.FIRST:
+            B, H, W, C = image.shape
+            image_out = np.empty((B, C, H, W), dtype=dtype)
+            fuse_ops = _fast_rescale_normalize_kernel_last_to_first
+        elif target_channel_dim == ChannelDimension.LAST:
+            B, C, H, W = image.shape
+            image_out = np.empty((B, H, W, C), dtype=dtype)
+            fuse_ops = _fast_rescale_normalize_kernel_first_to_last
+        else:
+            raise ValueError("Unsupported target channel dimension format: {}".format(target_channel_dim))
+
+        fuse_ops(image, image_out, pixel_map)
+        return image_out
 
 
 def to_channel_dimension_format(
