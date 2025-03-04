@@ -7,7 +7,7 @@ docs/ @stevhliu
 /docker/ @ydshieh @ArthurZucker
 
 # More high-level globs catch cases when specific rules later don't apply
-/src/transformers/models/*/*processing* @molbap @yonigozlan @qubvel
+/src/transformers/models/*/processing* @molbap @yonigozlan @qubvel
 /src/transformers/models/*/image_processing* @qubvel
 /src/transformers/models/*/image_processing_*_fast* @yonigozlan
 
