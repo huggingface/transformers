@@ -119,9 +119,9 @@ class DPTConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        pooler_output_size (`int`, *optional*, defaults to None):
+        pooler_output_size (`int`, *optional*):
            Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
-        pooler_act (`str`, defaults to "tanh"):
+        pooler_act (`str`, defaults to "tanh", *optional*, defaults to `"tanh"`):
            The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
            Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
            supported for Tensorflow.

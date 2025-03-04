@@ -56,9 +56,9 @@ class IJepaConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        pooler_output_size (`int`, *optional*, defaults to None):
+        pooler_output_size (`int`, *optional*):
            Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
-        pooler_act (`str`, defaults to "tanh"):
+        pooler_act (`str`, defaults to "tanh", *optional*, defaults to `"tanh"`):
            The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
            Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
            supported for Tensorflow.
