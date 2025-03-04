@@ -1,10 +1,11 @@
-from typing import List, Optional, Tuple, Union, Unpack
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
+from ...processing_utils import Unpack
 from ..clip.image_processing_clip import CLIPImageProcessor
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import KwargsForCausalLM, Qwen2Attention, Qwen2DecoderLayer, Qwen2ForCausalLM, Qwen2Model
@@ -74,6 +75,7 @@ class Eve2ImageProcessor(CLIPImageProcessor):
 
 class Eve2DivideAndConquerModule(nn.Module):
     def __init__(self, module: nn.Module, **kwargs):
+        super().__init__()
         self.visual_module = module(**kwargs)
         self.textual_module = module(**kwargs)
 
