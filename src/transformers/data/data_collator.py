@@ -2015,10 +2015,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if self.return_seq_idx:
             ret.update({"seq_idx": []})
         if self.return_flash_attn_kwargs:
-            ret.update({"cu_seq_lens_k": [0]})
-            ret.update({"cu_seq_lens_q": [0]})
-            max_len_k = 0
-            max_len_q = 0
+            ret.update({"cu_seq_lens_k": [0], "cu_seq_lens_q": [0], "max_length_k": 0, "max_length_q": 0})
         for seq_idx, sample in enumerate(features):
             input_ids = sample["input_ids"]
             ret["input_ids"] += input_ids
@@ -2034,9 +2031,6 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 len_input_ids = len(input_ids)
                 ret["cu_seq_lens_q"].append(ret["cu_seq_lens_q"][-1] + len_input_ids)
                 ret["cu_seq_lens_k"].append(ret["cu_seq_lens_q"][-1] + len_input_ids)
-                max_len_k = max(max_len_k, len_input_ids)
-                max_len_q = max(max_len_k, len_input_ids)
-        if self.return_flash_attn_kwargs:
-            ret["max_len_k"] = max_len_k
-            ret["max_len_q"] = max_len_q
+                ret["max_length_q"] = max(ret["max_length_q"], len_input_ids)
+                ret["max_length_k"] = max(ret["max_length_k"], len_input_ids)
         return default_data_collator([ret], return_tensors)
