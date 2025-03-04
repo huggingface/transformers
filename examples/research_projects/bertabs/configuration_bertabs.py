@@ -37,7 +37,7 @@ class BertAbsConfig(PretrainedConfig):
         max_pos: int
             The maximum sequence length that this model will be used with.
         enc_layer: int
-            The numner of hidden layers in the Transformer encoder.
+            The number of hidden layers in the Transformer encoder.
         enc_hidden_size: int
             The size of the encoder's layers.
         enc_heads: int
@@ -49,7 +49,7 @@ class BertAbsConfig(PretrainedConfig):
             embeddings, layers, pooler and also the attention probabilities in
             the encoder.
         dec_layer: int
-            The numner of hidden layers in the decoder.
+            The number of hidden layers in the decoder.
         dec_hidden_size: int
             The size of the decoder's layers.
         dec_heads: int

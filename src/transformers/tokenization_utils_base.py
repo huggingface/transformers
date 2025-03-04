@@ -1184,7 +1184,7 @@ class SpecialTokensMixin:
         """
         Adds new special tokens to the "SPECIAL_TOKENS_ATTRIBUTES" list which will be part
         of "self.special_tokens" and saved as a special token in tokenizer's config.
-        This allows us to dynamically add new model-type specific tokens after initilizing the tokenizer.
+        This allows us to dynamically add new model-type specific tokens after initializing the tokenizer.
         For example: if the model tokenizers is multimodal, we can support special image or audio tokens.
         """
         self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
@@ -1199,7 +1199,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to add special tokens when encoding the sequences. This will use the underlying
                 `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
-                automatically added to the input ids. This is usefull if you want to add `bos` or `eos` tokens
+                automatically added to the input ids. This is useful if you want to add `bos` or `eos` tokens
                 automatically.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
@@ -2012,7 +2012,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
-        unresolved_files = []
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
@@ -2040,12 +2039,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
-
-        if len(unresolved_files) > 0:
-            logger.info(
-                f"Can't load following files from cache: {unresolved_files} and cannot check if these "
-                "files are necessary for the tokenizer to operate."
-            )
 
         # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
@@ -2481,7 +2474,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # no typefields, this way old fast and slow can load it
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save=True)
 
-        # Process added tokens seperatly: allows previous versions to ignore it!
+        # Process added tokens separately: allows previous versions to ignore it!
         added_tokens = {}
         for key, value in self.added_tokens_decoder.items():
             added_tokens[key] = value.__getstate__()
