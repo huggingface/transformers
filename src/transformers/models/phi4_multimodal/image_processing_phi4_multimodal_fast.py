@@ -225,7 +225,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
                 h // mask_size, w // mask_size, mask_size // 2 + mask_size % 2, mask_size // 2 + mask_size % 2
             )
             mask = mask.transpose(1, 2)
-            mask = mask.reshape(mask.size(1) * mask.size(2), mask.size(3) * mask.size(4))
+            mask = mask.reshape(mask.size(0) * mask.size(1), mask.size(2) * mask.size(3))
             downsample_attention_masks.append(mask)
 
         num_img_tokens = [
