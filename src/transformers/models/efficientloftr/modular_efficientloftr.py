@@ -623,7 +623,7 @@ class EfficientLoFTRAttention(LlamaAttention):
 
 
 class EfficientLoFTRMLP(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig) -> None:
+    def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.fc1 = nn.Linear(2 * hidden_size, 2 * hidden_size, bias=False)
