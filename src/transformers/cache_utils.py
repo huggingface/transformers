@@ -1090,7 +1090,6 @@ class StaticCache(Cache):
     is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
-    @deprecate_kwarg("layer_device_map", version="4.52.0")
     def __init__(
         self,
         config: PretrainedConfig,
@@ -1127,7 +1126,7 @@ class StaticCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
         cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        device = torch.device(device) if device is not None else torch.device("meta")
+        device = torch.device(device)
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[idx]
@@ -1169,10 +1168,6 @@ class StaticCache(Cache):
         """
 
         cache_position = cache_kwargs.get("cache_position")
-        if self.key_cache[layer_idx].device.type == "meta":
-            self.key_cache[layer_idx] = torch.zeros_like(self.key_cache[layer_idx], device=key_states.device)
-            self.value_cache[layer_idx] = torch.zeros_like(self.value_cache[layer_idx], device=value_states.device)
-
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
         key_states = key_states.to(k_out.dtype)
@@ -1210,10 +1205,9 @@ class StaticCache(Cache):
     def reset(self):
         """Resets the cache values while preserving the objects"""
         for layer_idx in range(len(self.key_cache)):
-            if self.key_cache[layer_idx].device.type != "meta":
-                # In-place ops prevent breaking the static address
-                self.key_cache[layer_idx].zero_()
-                self.value_cache[layer_idx].zero_()
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
 
     @property
     def batch_size(self):
