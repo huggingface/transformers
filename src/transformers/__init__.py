@@ -530,6 +530,12 @@ _import_structure = {
         "InstructBlipVideoVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
+    "models.janus": [
+        "JanusConfig",
+        "JanusProcessor",
+        "JanusVisionConfig",
+        "JanusVQVAEConfig",
+    ],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
         "Kosmos2Config",
@@ -561,12 +567,6 @@ _import_structure = {
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
-    ],
-    "models.janus": [
-        "JanusConfig",
-        "JanusVQVAEConfig",
-        "JanusVisionConfig",
-        "JanusProcessor",
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -2691,6 +2691,15 @@ else:
             "JambaPreTrainedModel",
         ]
     )
+    _import_structure["models.janus"].extend(
+        [
+            "JanusForConditionalGeneration",
+            "JanusModel",
+            "JanusPreTrainedModel",
+            "JanusVisionModel",
+            "JanusVQVAE",
+        ]
+    )
     _import_structure["models.jetmoe"].extend(
         [
             "JetMoeForCausalLM",
@@ -2774,15 +2783,6 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.janus"].extend(
-        [
-            "JanusModel",
-            "JanusVQVAE",
-            "JanusVisionModel",
-            "JanusForConditionalGeneration",
-            "JanusPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
