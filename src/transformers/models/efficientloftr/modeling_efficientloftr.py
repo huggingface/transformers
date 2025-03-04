@@ -252,11 +252,10 @@ class EfficientLoFTRAggregationLayer(nn.Module):
             else nn.Identity()
         )
 
-        self.kv_aggregation = (
-            torch.nn.MaxPool2d(kernel_size=aggregation_sizes[1], stride=aggregation_sizes[1])
-            if aggregation_sizes[1] != 1
-            else nn.Identity()
-        )
+        if aggregation_sizes[1] != 1
+            self.kv_aggregation = torch.nn.MaxPool2d(kernel_size=aggregation_sizes[1], stride=aggregation_sizes[1])
+        else:
+            self.kv_aggregation = nn.Identity()
 
         self.norm = nn.LayerNorm(hidden_size)
 
@@ -661,7 +660,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         for i, layer in enumerate(self.out_conv_layers):
-            hidden_states = self.out_conv_layers[i](hidden_states, residual_states[i])
+            hidden_states = layer(hidden_states, residual_states[i])
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -881,14 +880,8 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
     if border_margin <= 0:
         return tensor
 
-    tensor[:, :border_margin] = value
-    tensor[:, :, :border_margin] = value
-    tensor[:, :, :, :border_margin] = value
-    tensor[:, :, :, :, :border_margin] = value
-    tensor[:, -border_margin:] = value
-    tensor[:, :, -border_margin:] = value
-    tensor[:, :, :, -border_margin:] = value
-    tensor[:, :, :, :, -border_margin:] = value
+    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
+    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
     return tensor
 
 
