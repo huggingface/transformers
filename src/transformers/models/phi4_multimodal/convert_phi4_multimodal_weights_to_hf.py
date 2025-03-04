@@ -179,9 +179,9 @@ def extract_adapters_data(input_dir: str, output_dir: str):
         for k, v in original_state_dict.items():
             if "lora" in k:
                 if "speech" in k:
-                    speech_lora[k] = v
+                    speech_lora[k.replace("speech.", "")] = v
                 elif "vision" in k:
-                    vision_lora[k] = v
+                    vision_lora[k.replace("vision.", "")] = v
 
     # Create and save the lora configs
     speech_lora_config = LoraConfig(
