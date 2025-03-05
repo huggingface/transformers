@@ -1030,8 +1030,6 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
-      title: Time series models
-    - isExpanded: false
     - title: Graph models
       sections:
       - local: model_doc/graphormer
