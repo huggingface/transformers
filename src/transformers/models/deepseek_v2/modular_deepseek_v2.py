@@ -156,7 +156,12 @@ class DeepseekV2Config(LlamaConfig):
             seq_aux=True,
             topk_group=None,
             topk_method="greedy",
-            v_head_dim=128, 
+            v_head_dim=128,
+            num_experts_per_tok=None,
+            scoring_func ='softmax',
+            norm_topk_prob=False,
+            moe_intermediate_size=1407,
+            ep_size=1, 
             **super_kwargs):
         super().__init__(**super_kwargs)
 
@@ -175,6 +180,11 @@ class DeepseekV2Config(LlamaConfig):
         self.topk_group = topk_group
         self.topk_method = topk_method
         self.v_head_dim = v_head_dim
+        self.num_experts_per_tok = num_experts_per_tok
+        self.scoring_func = scoring_func
+        self.norm_topk_prob = norm_topk_prob
+        self.moe_intermediate_size = moe_intermediate_size
+        self.ep_size = ep_size
 
 
 def yarn_get_mscale(scale=1, mscale=1):
@@ -360,7 +370,12 @@ class DeepseekV2MoE(nn.Module):
 
 
 class DeepseekV2MLP(LlamaMLP):
-    pass
+    def __init__(self, config:DeepseekV2Config, hidden_size=None, intermediate_size=None):
+        super().__init__(config)
+        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.intermediate_size = (
+            config.intermediate_size if intermediate_size is None else intermediate_size
+        )
 
 
 class DeepseekV2RMSNorm(LlamaRMSNorm):
@@ -370,9 +385,6 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
-
-class DeepseekV2FlashAttention2(Qwen2MoeFlashAttention2):
-    pass
 
 
 class DeepseekV2Attention(nn.Module):
@@ -404,13 +416,18 @@ class DeepseekV2Attention(nn.Module):
 
         self.is_causal = True
 
-        self.q_a_proj = nn.Linear(
-            self.hidden_size, config.q_lora_rank, bias=config.attention_bias
-        )
-        self.q_a_layernorm = DeepseekV2RMSNorm(config.q_lora_rank)
-        self.q_b_proj = nn.Linear(
-            config.q_lora_rank, self.num_heads * self.q_head_dim, bias=False
-        )
+        if self.q_lora_rank is None:
+            self.q_proj = nn.Linear(
+                self.hidden_size, self.num_heads * self.q_head_dim, bias=False
+            )
+        else:
+            self.q_a_proj = nn.Linear(
+                self.hidden_size, config.q_lora_rank, bias=config.attention_bias
+            )
+            self.q_a_layernorm = DeepseekV2RMSNorm(config.q_lora_rank)
+            self.q_b_proj = nn.Linear(
+                config.q_lora_rank, self.num_heads * self.q_head_dim, bias=False
+            )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -447,15 +464,23 @@ class DeepseekV2Attention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
         bsz, q_len, _ = hidden_states.size()
 
-        q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        if self.q_lora_rank is None:
+            q = self.q_proj(hidden_states)
+        else:
+            q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q = q.view(bsz, q_len, self.num_heads, self.q_head_dim).transpose(1, 2)
         q_nope, q_pe = torch.split(
             q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
@@ -484,7 +509,7 @@ class DeepseekV2Attention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = position_embeddings
 
         q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids)
 
@@ -545,6 +570,9 @@ class DeepseekV2Attention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+class DeepseekV2FlashAttention2(Qwen2MoeFlashAttention2):
+    pass
+
 ATTENTION_CLASSES = {
     "eager": DeepseekV2Attention,
     "flash_attention_2": DeepseekV2FlashAttention2,
@@ -576,6 +604,7 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
+    _supports_sdpa = False
     pass
 
 
@@ -596,7 +625,7 @@ class DeepseekV2Model(LlamaModel):
         )
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = LlamaRotaryEmbedding(config=config)
+        self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -611,4 +640,5 @@ __all__ = [
     "DeepseekV2PreTrainedModel",
     "DeepseekV2Model",
     "DeepseekV2ForCausalLM",
+    "DeepseekV2Config",
 ]
