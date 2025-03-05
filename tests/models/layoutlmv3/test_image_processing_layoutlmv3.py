@@ -28,7 +28,7 @@ if is_pytesseract_available():
     from transformers import LayoutLMv3ImageProcessor
 
 
-class LayoutLMv3ImageProcessingTester(unittest.TestCase):
+class LayoutLMv3ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -41,7 +41,6 @@ class LayoutLMv3ImageProcessingTester(unittest.TestCase):
         size=None,
         apply_ocr=True,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size

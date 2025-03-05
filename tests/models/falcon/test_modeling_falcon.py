@@ -290,7 +290,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (FalconForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FalconModel,
@@ -446,7 +445,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
@@ -592,12 +591,12 @@ class FalconLanguageGenerationTest(unittest.TestCase):
 
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
 
-        unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
+        unpadded_inputs = tokenizer([test_text], return_tensors="pt").to(f"{torch_device}:0")
         unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
         unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
 
         dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
-        padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
+        padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to(f"{torch_device}:0")
         padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
         padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
 
@@ -628,4 +627,4 @@ class FalconLanguageGenerationTest(unittest.TestCase):
             falcon_output_eager = falcon(input_ids, output_attentions=True)[0]
             falcon_output_sdpa = falcon(input_ids)[0]
 
-        self.assertTrue(torch.allclose(falcon_output_eager, falcon_output_sdpa, atol=1e-3))
+        torch.testing.assert_close(falcon_output_eager, falcon_output_sdpa, rtol=1e-3, atol=1e-3)

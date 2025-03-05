@@ -21,7 +21,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_optimum_quanto,
     require_read_token,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -123,7 +123,7 @@ class QuantoTestIntegration(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_optimum_quanto
 @require_accelerate
 class QuantoQuantizationTest(unittest.TestCase):
@@ -180,11 +180,11 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         self.check_inference_correctness(self.quantized_model, "cpu")
 
-    def test_generate_quality_cuda(self):
+    def test_generate_quality_accelerator(self):
         """
-        Simple test to check the quality of the model on cuda by comparing the generated tokens with the expected tokens
+        Simple test to check the quality of the model on accelerators by comparing the generated tokens with the expected tokens
         """
-        self.check_inference_correctness(self.quantized_model, "cuda")
+        self.check_inference_correctness(self.quantized_model, torch_device)
 
     def test_quantized_model_layers(self):
         from optimum.quanto import QBitsTensor, QModuleMixin, QTensor
@@ -214,7 +214,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             )
             self.quantized_model.to(0)
         self.assertEqual(
-            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, "cuda"
+            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, torch_device
         )
 
     def test_serialization_bin(self):
@@ -268,7 +268,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         quantize(model.transformer, weights=w_mapping[self.weights])
         freeze(model.transformer)
         self.check_same_model(model, self.quantized_model)
-        self.check_inference_correctness(model, device="cuda")
+        self.check_inference_correctness(model, device=torch_device)
 
     @unittest.skip
     def test_load_from_quanto_saved(self):
@@ -429,7 +429,7 @@ class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializa
     weights = "int4"
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class QuantoQuantizationActivationTest(unittest.TestCase):
     def test_quantize_activation(self):
         quantization_config = QuantoConfig(
@@ -442,7 +442,7 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
 
 
 @require_optimum_quanto
-@require_torch_gpu
+@require_torch_accelerator
 class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
     @require_read_token

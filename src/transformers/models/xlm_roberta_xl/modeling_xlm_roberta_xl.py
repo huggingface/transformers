@@ -1026,6 +1026,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1092,11 +1093,12 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_function(
+                prediction_scores,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1119,6 +1121,13 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
+        # Create missing `position_ids` on the fly
+        position_ids = None
+        if model_kwargs.get("position_ids") is None:
+            position_ids = create_position_ids_from_input_ids(
+                input_ids, padding_idx=self.config.pad_token_id
+            )  # placed in kwargs for further processing (see below)
+
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -1131,8 +1140,15 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
+            if position_ids is not None:
+                position_ids = position_ids[:, remove_prefix_length:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+        }
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
@@ -1675,3 +1691,15 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "XLMRobertaXLForCausalLM",
+    "XLMRobertaXLForMaskedLM",
+    "XLMRobertaXLForMultipleChoice",
+    "XLMRobertaXLForQuestionAnswering",
+    "XLMRobertaXLForSequenceClassification",
+    "XLMRobertaXLForTokenClassification",
+    "XLMRobertaXLModel",
+    "XLMRobertaXLPreTrainedModel",
+]

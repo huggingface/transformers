@@ -34,12 +34,22 @@ def sdpa_attention_forward(
     if attention_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
+    # SDPA with memory-efficient backend is bugged with non-contiguous inputs and custom attn_mask for some torch versions
+    # Reference: https://github.com/pytorch/pytorch/issues/112577.
     query = query.contiguous()
     key = key.contiguous()
     value = value.contiguous()
 
+    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+    # Note that it is important to check first for the shape, otherwise compile will fail with `argument 'is_causal' must be bool, not SymBool`
     if is_causal is None:
-        is_causal = causal_mask is None and query.shape[2] > 1
+        is_causal = query.shape[2] > 1 and causal_mask is None
+
+    # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
+    # We convert it to a bool for the SDPA kernel that only accepts bools.
+    if torch.jit.is_tracing() and isinstance(is_causal, torch.Tensor):
+        is_causal = is_causal.item()
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,

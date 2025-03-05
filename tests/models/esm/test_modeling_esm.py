@@ -195,7 +195,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": EsmModel,
@@ -317,7 +316,7 @@ class EsmModelIntegrationTest(TestCasePlus):
             expected_slice = torch.tensor(
                 [[[8.9215, -10.5898, -6.4671], [-6.3967, -13.9114, -1.1212], [-7.7812, -13.9516, -3.7406]]]
             )
-            self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+            torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_no_head(self):
         with torch.no_grad():
@@ -330,19 +329,19 @@ class EsmModelIntegrationTest(TestCasePlus):
             expected_slice = torch.tensor(
                 [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
             )
-            self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+            torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @require_bitsandbytes
     def test_inference_bitsandbytes(self):
         model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
 
-        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works
         with torch.no_grad():
             _ = model(input_ids)[0]
 
         model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
 
-        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works
         _ = model(input_ids)[0]

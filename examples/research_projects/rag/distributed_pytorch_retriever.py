@@ -70,7 +70,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             logger.info("dist not initialized / main")
             self.index.init_index()
 
-        # all processes wait untill the retriever is initialized by the main process
+        # all processes wait until the retriever is initialized by the main process
         if dist.is_initialized():
             torch.distributed.barrier(group=self.process_group)
 
