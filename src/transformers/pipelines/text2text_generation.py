@@ -114,12 +114,6 @@ class Text2TextGenerationPipeline(Pipeline):
 
         return preprocess_params, forward_params, postprocess_params
 
-    def check_inputs(self, input_length: int, min_length: int, max_length: int):
-        """
-        Checks whether there might be something wrong with given input with regard to the model.
-        """
-        return True
-
     def _parse_and_tokenize(self, *args, truncation):
         prefix = self.prefix if self.prefix is not None else ""
         if isinstance(args[0], list):
@@ -188,12 +182,6 @@ class Text2TextGenerationPipeline(Pipeline):
             in_b, input_length = model_inputs["input_ids"].shape
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
-
-        self.check_inputs(
-            input_length,
-            generate_kwargs.get("min_length", self.generation_config.min_length),
-            generate_kwargs.get("max_length", self.generation_config.max_length),
-        )
 
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
@@ -279,20 +267,6 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         """
         return super().__call__(*args, **kwargs)
 
-    def check_inputs(self, input_length: int, min_length: int, max_length: int) -> bool:
-        """
-        Checks whether there might be something wrong with given input with regard to the model.
-        """
-        if max_length < min_length:
-            logger.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
-
-        if input_length < max_length:
-            logger.warning(
-                f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
-                "a summarization task, where outputs shorter than the input are typically wanted, you might "
-                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
-            )
-
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TranslationPipeline(Text2TextGenerationPipeline):
@@ -316,14 +290,6 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     # Used in the return key of the pipeline.
     return_name = "translation"
-
-    def check_inputs(self, input_length: int, min_length: int, max_length: int):
-        if input_length > 0.9 * max_length:
-            logger.warning(
-                f"Your input_length: {input_length} is bigger than 0.9 * max_length: {max_length}. You might consider "
-                "increasing your max_length manually, e.g. translator('...', max_length=400)"
-            )
-        return True
 
     def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
