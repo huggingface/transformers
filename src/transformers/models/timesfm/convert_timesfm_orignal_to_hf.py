@@ -117,8 +117,24 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
 
             try:
                 old_attr = get_nested_attr(original_model, old_key)  # Get tensor from original model
-                new_attr = get_nested_attr(timesfm_model, new_key)  # Get corresponding attribute in new model
-                new_attr.data.copy_(old_attr.data)  # Copy data
+                if "qkv_proj" in old_key:
+                    q_proj, k_proj, v_proj = (
+                        old_attr[:tfm.hparams.model_dims, ...],
+                        old_attr[tfm.hparams.model_dims : tfm.hparams.model_dims * 2, ...],
+                        old_attr[tfm.hparams.model_dims * 2 :, ...],
+                    )
+                    q_key = new_key.replace("qkv_proj", "q")
+                    q_attr = get_nested_attr(timesfm_model, q_key)
+                    q_attr.data.copy_(q_proj.data)  # Copy data
+                    k_key = new_key.replace("qkv_proj", "k")
+                    k_attr = get_nested_attr(timesfm_model, k_key)
+                    k_attr.data.copy_(k_proj.data)  # Copy data
+                    v_key = new_key.replace("qkv_proj", "v")
+                    v_attr = get_nested_attr(timesfm_model, v_key)
+                    v_attr.data.copy_(v_proj.data)  # Copy data
+                else:
+                    new_attr = get_nested_attr(timesfm_model, new_key)  # Get corresponding attribute in new model
+                    new_attr.data.copy_(old_attr.data)  # Copy data
             except AttributeError:
                 print(f"Skipping {old_key} (not found in original model).")
 

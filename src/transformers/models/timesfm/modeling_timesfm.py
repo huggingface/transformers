@@ -208,22 +208,16 @@ class TimesFmAttention(nn.Module):
         self.layer_idx = layer_idx
 
         self.num_heads = config.num_heads
-        self.num_kv_heads = config.num_heads
-
-        assert self.num_heads % self.num_kv_heads == 0
-        self.num_queries_per_kv = self.num_heads // self.num_kv_heads
-
         self.hidden_size = config.model_dim
         self.head_dim = config.head_dim
 
         self.q_size = self.num_heads * self.head_dim
-        self.kv_size = self.num_kv_heads * self.head_dim
+        self.kv_size = self.num_heads * self.head_dim
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
-        self.qkv_proj = nn.Linear(
-            self.hidden_size,
-            (self.num_heads + 2 * self.num_kv_heads) * self.head_dim,
-        )
+        self.q = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
+        self.k = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
+        self.v = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
 
     def _scale_query(self, query: torch.Tensor) -> torch.Tensor:
@@ -238,17 +232,15 @@ class TimesFmAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        hidden_states_shape = hidden_states.shape
-        assert len(hidden_states_shape) == 3
+        batch_size, input_len, _ = hidden_states.shape
 
-        batch_size, input_len, _ = hidden_states_shape
-
-        qkv = self.qkv_proj(hidden_states)
-        xq, xk, xv = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        xq = self.q(hidden_states)
+        xk = self.k(hidden_states)
+        xv = self.v(hidden_states)
 
         xq = xq.view(batch_size, -1, self.num_heads, self.head_dim)
-        xk = xk.view(batch_size, -1, self.num_kv_heads, self.head_dim)
-        xv = xv.view(batch_size, -1, self.num_kv_heads, self.head_dim)
+        xk = xk.view(batch_size, -1, self.num_heads, self.head_dim)
+        xv = xv.view(batch_size, -1, self.num_heads, self.head_dim)
         xq = self._scale_query(xq)
 
         # Write new kv cache.
@@ -260,11 +252,6 @@ class TimesFmAttention(nn.Module):
         else:
             key = xk
             value = xv
-
-        if self.num_kv_heads != self.num_heads:
-            # [batch_size, max_seq_len, n_local_heads, head_dim]
-            key = torch.repeat_interleave(key, self.num_queries_per_kv, dim=2)
-            value = torch.repeat_interleave(value, self.num_queries_per_kv, dim=2)
 
         # [batch_size, n_local_heads, input_len, head_dim]
         q = xq.transpose(1, 2)
@@ -313,18 +300,16 @@ class TimesFmSdpaAttention(TimesFmAttention):
                 output_attentions=output_attentions,
             )
 
-        hidden_states_shape = hidden_states.shape
-        batch_size, seq_length, _ = hidden_states_shape
+        batch_size, seq_length, _ = hidden_states.shape
 
         # Project to queries, keys, values
-        qkv = self.qkv_proj(hidden_states)
-        xq, xk, xv = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        xq = self.q(hidden_states)
+        xk = self.k(hidden_states)
+        xv = self.v(hidden_states)
 
-        # Reshape: [batch_size, seq_length, num_heads * head_dim] -> [batch_size, seq_length, num_heads, head_dim]
-        xq = xq.view(batch_size, seq_length, self.num_heads, self.head_dim)
-        xk = xk.view(batch_size, seq_length, self.num_kv_heads, self.head_dim)
-        xv = xv.view(batch_size, seq_length, self.num_kv_heads, self.head_dim)
-
+        xq = xq.view(batch_size, -1, self.num_heads, self.head_dim)
+        xk = xk.view(batch_size, -1, self.num_heads, self.head_dim)
+        xv = xv.view(batch_size, -1, self.num_heads, self.head_dim)
         # Scale query exactly as in original
         xq = self._scale_query(xq)
 
@@ -336,11 +321,6 @@ class TimesFmSdpaAttention(TimesFmAttention):
         else:
             key = xk
             value = xv
-
-        # Handle grouped attention
-        if self.num_queries_per_kv > 1:
-            key = torch.repeat_interleave(key, self.num_queries_per_kv, dim=2)
-            value = torch.repeat_interleave(value, self.num_queries_per_kv, dim=2)
 
         # Transpose for attention: [batch_size, num_heads, seq_length, head_dim]
         query = xq.transpose(1, 2)
@@ -484,9 +464,15 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmAttention):
             # Initialize qkv projection
-            module.qkv_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.qkv_proj.bias is not None:
-                nn.init.zeros_(module.qkv_proj.bias)
+            module.q.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            module.k.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            module.v.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            if module.q.bias is not None:
+                nn.init.zeros_(module.q.bias)
+            if module.k.bias is not None:
+                nn.init.zeros_(module.k.bias)
+            if module.v.bias is not None:
+                nn.init.zeros_(module.v.bias)
 
             # Initialize output projection
             module.o_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
