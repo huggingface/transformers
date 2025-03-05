@@ -55,6 +55,7 @@ from .integrations import (
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
+    is_swanlab_available,
     is_tensorboard_available,
     is_wandb_available,
 )
@@ -1096,6 +1097,16 @@ def require_sigopt(test_case):
 
     """
     return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
+
+
+def require_swanlab(test_case):
+    """
+    Decorator marking a test that requires swanlab.
+
+    These tests are skipped when swanlab isn't installed.
+
+    """
+    return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
 
 
 def require_wandb(test_case):
