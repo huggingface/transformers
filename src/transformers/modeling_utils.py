@@ -812,6 +812,8 @@ def _load_state_dict_into_meta_model(
             and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
         ):
             map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+
+    if not shard_file.endswith(".gguf"):
         bin_state_dict = load_state_dict(shard_file, map_location=map_location, weights_only=weights_only)
 
     error_msgs = []
@@ -829,11 +831,12 @@ def _load_state_dict_into_meta_model(
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
-        param = (
-            file_pointer.get_slice(serialized_param_name)
-            if shard_file.endswith(".safetensors")
-            else bin_state_dict[serialized_param_name]
-        )
+        if shard_file.endswith(".safetensors"):
+            param = file_pointer.get_slice(serialized_param_name)
+        elif shard_file.endswith(".gguf"):
+            param = empty_param
+        else:
+            param = bin_state_dict[serialized_param_name]
 
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
@@ -4159,7 +4162,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dummy_model = cls(config)
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
-            resolved_archive_file = None
+            resolved_archive_file = gguf_file
             is_sharded = False
         else:
             resolved_archive_file = None
@@ -4942,7 +4945,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
-                    resolved_archive_file=resolved_archive_file,
+                    shard_file=resolved_archive_file,
                     weights_only=weights_only,
                 )
             else:
