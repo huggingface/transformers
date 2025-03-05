@@ -168,7 +168,7 @@ def create_sliding_window_mask(
     else:
         cache_positions = _reconstruct_rotated_cache_positions()
 
-    cache_positions = cache_positions.unsqueeze(0).unsqueeze(0)  # [1, 1, cache_len]
+    cache_positions = cache_positions.unsqueeze(0).unsqueeze(0).to(position_ids.device)  # [1, 1, cache_len]
     position_ids = position_ids.unsqueeze(-1)  # [B, seq_len, 1]
     sliding_mask = cache_positions > position_ids - sliding_window_size
     sliding_mask *= cache_positions < position_ids + sliding_window_size
