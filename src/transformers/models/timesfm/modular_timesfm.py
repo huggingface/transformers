@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -393,61 +393,6 @@ class TimesFmDecoderLayer(nn.Module):
         return scores, hidden_states
 
 
-class TimesFmStackedDecoder(nn.Module):
-    """Stacked transformer layer."""
-
-    def __init__(self, config: TimesFmConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)])
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        paddings: torch.Tensor,
-        past_key_values: Optional[List[Cache]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-    ) -> BaseModelOutputWithPast:
-        # Convert paddings to attention mask and combine with causal mask
-        attention_mask = _prepare_4d_attention_mask(
-            attention_mask=paddings,
-            sequence_length=hidden_states.shape[1],
-            dtype=hidden_states.dtype,
-            device=hidden_states.device,
-            is_causal=True,
-        )
-
-        all_attentions = []
-        all_hidden_states = []
-        current_past_key_values = [] if past_key_values is None else past_key_values
-
-        for i in range(len(self.layers)):
-            layer = self.layers[i]
-            past_key_value = current_past_key_values[i] if i < len(current_past_key_values) else None
-            scores, hidden_states = layer(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                paddings=paddings,
-                past_key_value=past_key_value,
-                cache_position=cache_position,
-                output_attentions=output_attentions,
-            )
-            if output_attentions:
-                all_attentions.append(scores)
-            if output_hidden_states:
-                all_hidden_states.append(hidden_states)
-            if past_key_values is None:
-                current_past_key_values.append(past_key_value)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=current_past_key_values if current_past_key_values else None,
-            attentions=all_attentions if output_attentions else None,
-            hidden_states=all_hidden_states if output_hidden_states else None,
-        )
-
-
 def timesfm_get_large_negative_number(dtype: torch.dtype) -> torch.Tensor:
     """Returns a large negative value for the given dtype."""
     if dtype.is_floating_point:
@@ -757,7 +702,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
             hidden_dims=config.intermediate_size,
         )
         self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.model_dim)
-        self.stacked_transformer = TimesFmStackedDecoder(config=config)
+        self.layers = nn.ModuleList([TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)])
         if self.config.use_positional_embedding:
             self.position_emb = TimesFmPositionalEmbedding(config=config)
 
@@ -829,6 +774,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
         """
         input_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -842,34 +789,55 @@ class TimesFmModel(TimesFmPreTrainedModel):
         f_emb = self.freq_emb(freq)  # B x 1 x D
         model_input += f_emb
 
-        transformer_output = self.stacked_transformer(
-            model_input,
-            patched_padding,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+        # Convert paddings to attention mask and combine with causal mask
+        hidden_states = model_input
+        attention_mask = _prepare_4d_attention_mask(
+            attention_mask=patched_padding,
+            sequence_length=hidden_states.shape[1],
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
+            is_causal=True,
         )
+
+        all_attentions = []
+        all_hidden_states = []
+
+        for layer in self.layers[: self.config.num_layers]:
+            scores, hidden_states = layer(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                paddings=patched_padding,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                output_attentions=output_attentions,
+            )
+            if output_attentions:
+                all_attentions.append(scores)
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
+
         if output_hidden_states:
-            all_hidden_states = [model_input] + transformer_output.hidden_states
+            all_hidden_states = [model_input] + all_hidden_states
         else:
             all_hidden_states = None
 
         if return_dict:
             return TimesFmOutput(
-                last_hidden_state=transformer_output.last_hidden_state,
+                last_hidden_state=hidden_states,
                 hidden_states=all_hidden_states,
-                attentions=transformer_output.attentions if output_attentions else None,
+                attentions=all_attentions if output_attentions else None,
                 loc=stats[0],
                 scale=stats[1],
-                past_key_values=transformer_output.past_key_values,
+                past_key_values=past_key_values,
             )
         else:
             return (
-                transformer_output.last_hidden_state,
+                hidden_states,
                 all_hidden_states,
-                transformer_output.attentions,
+                all_attentions if output_attentions else None,
                 stats[0],
                 stats[1],
-                transformer_output.past_key_values,
+                past_key_values,
             )
 
 

@@ -87,18 +87,18 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
     }
 
     TRANSFORMER_LAYER_MAPPING = {
-        "stacked_transformer.layers[{i}].self_attn.qkv_proj.weight": "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.weight",
-        "stacked_transformer.layers[{i}].self_attn.qkv_proj.bias": "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.bias",
-        "stacked_transformer.layers[{i}].self_attn.o_proj.weight": "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.weight",
-        "stacked_transformer.layers[{i}].self_attn.o_proj.bias": "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.bias",
-        "stacked_transformer.layers[{i}].self_attn.scaling": "decoder.stacked_transformer.layers[{i}].self_attn.scaling",
-        "stacked_transformer.layers[{i}].mlp.gate_proj.weight": "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.weight",
-        "stacked_transformer.layers[{i}].mlp.gate_proj.bias": "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.bias",
-        "stacked_transformer.layers[{i}].mlp.down_proj.weight": "decoder.stacked_transformer.layers[{i}].mlp.down_proj.weight",
-        "stacked_transformer.layers[{i}].mlp.down_proj.bias": "decoder.stacked_transformer.layers[{i}].mlp.down_proj.bias",
-        "stacked_transformer.layers[{i}].mlp.layer_norm.weight": "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.weight",
-        "stacked_transformer.layers[{i}].mlp.layer_norm.bias": "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.bias",
-        "stacked_transformer.layers[{i}].input_layernorm.weight": "decoder.stacked_transformer.layers[{i}].input_layernorm.weight",
+        "stacked_transformer.layers[{i}].self_attn.qkv_proj.weight": "decoder.layers[{i}].self_attn.qkv_proj.weight",
+        "stacked_transformer.layers[{i}].self_attn.qkv_proj.bias": "decoder.layers[{i}].self_attn.qkv_proj.bias",
+        "stacked_transformer.layers[{i}].self_attn.o_proj.weight": "decoder.layers[{i}].self_attn.o_proj.weight",
+        "stacked_transformer.layers[{i}].self_attn.o_proj.bias": "decoder.layers[{i}].self_attn.o_proj.bias",
+        "stacked_transformer.layers[{i}].self_attn.scaling": "decoder.layers[{i}].self_attn.scaling",
+        "stacked_transformer.layers[{i}].mlp.gate_proj.weight": "decoder.layers[{i}].mlp.gate_proj.weight",
+        "stacked_transformer.layers[{i}].mlp.gate_proj.bias": "decoder.layers[{i}].mlp.gate_proj.bias",
+        "stacked_transformer.layers[{i}].mlp.down_proj.weight": "decoder.layers[{i}].mlp.down_proj.weight",
+        "stacked_transformer.layers[{i}].mlp.down_proj.bias": "decoder.layers[{i}].mlp.down_proj.bias",
+        "stacked_transformer.layers[{i}].mlp.layer_norm.weight": "decoder.layers[{i}].mlp.layer_norm.weight",
+        "stacked_transformer.layers[{i}].mlp.layer_norm.bias": "decoder.layers[{i}].mlp.layer_norm.bias",
+        "stacked_transformer.layers[{i}].input_layernorm.weight": "decoder.layers[{i}].input_layernorm.weight",
     }
 
     for old_key, new_key in MODEL_LAYER_MAPPING.items():
@@ -109,7 +109,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
         except AttributeError:
             print(f"Skipping {old_key} (not found in original model).")
 
-    num_layers = len(timesfm_model.decoder.stacked_transformer.layers)
+    num_layers = len(timesfm_model.decoder.layers)
     for i in range(num_layers):
         for old_template, new_template in TRANSFORMER_LAYER_MAPPING.items():
             old_key = old_template.format(i=i)
