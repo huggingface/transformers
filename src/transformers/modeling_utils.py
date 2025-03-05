@@ -54,6 +54,7 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.tensor_parallel import shard_and_distribute_module
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -522,17 +523,18 @@ str_to_torch_dtype = {
     "U8": torch.uint8,
     "I8": torch.int8,
     "I16": torch.int16,
-    "U16": torch.uint16,
     "F16": torch.float16,
     "BF16": torch.bfloat16,
     "I32": torch.int32,
-    "U32": torch.uint32,
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
-    "U64": torch.uint64,
 }
 
+if is_torch_greater_or_equal("2.3.0"):
+    str_to_torch_dtype["U16"] = torch.uint16
+    str_to_torch_dtype["U32"] = torch.uint32
+    str_to_torch_dtype["U64"] = torch.uint64
 
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
@@ -753,6 +755,32 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
+def fix_tensor_type_and_device(model, param_name, param, dtype=None, keep_in_fp32_modules=None) -> Union[str, torch.dtype]:
+    # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
+    # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
+    # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+
+    old_param = model
+    pre, last = param_name.rsplit(".", 1)
+    old_param = model.get_submodule(pre)
+    if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+        old_param = None
+
+    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+    # in int/uint/bool and not cast them.
+    param_casting_dtype = None
+    is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
+    if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(fixed_param_name):
+            param_casting_dtype = torch.float32
+        elif dtype is not None:
+            param_casting_dtype = dtype
+        elif old_param is not None:
+            param_casting_dtype = old_param.dtype
+        
+    return old_param is not None and old_param.is_contiguous(), param_casting_dtype
+
 
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
@@ -791,11 +819,13 @@ def _load_state_dict_into_meta_model(
     if device_map is not None:
         device_map_regex = "|".join(sorted(device_map.keys(), reverse=True))
 
-    # we need this later to initialize tensor parallelism
     if device_mesh is not None:
-        full_tp_plan = model.config.base_model_tp_plan
+        full_tp_plan = model.config.base_model_tp_plan or {}
+        for sub in model.config.sub_configs:
+            full_tp_plan.update(getattr(model.config, sub).base_model_tp_plan)
         for submodule in model.modules():
-            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
+            if plan:=getattr(submodule, "_tp_plan", None): 
+                full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     file_pointer = None
     bin_state_dict = None
@@ -816,7 +846,6 @@ def _load_state_dict_into_meta_model(
 
     is_quantized = hf_quantizer is not None
 
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
     for serialized_param_name, empty_param in state_dict.items():
         # serialized_param_name is the raw, serialized name
@@ -833,81 +862,18 @@ def _load_state_dict_into_meta_model(
             else bin_state_dict[serialized_param_name]
         )
 
-        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-        # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-
-        old_param = model
-        splits = fixed_param_name.split(".")
-        for split in splits:
-            # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
-            old_param = getattr(old_param, split, None)
-            if old_param is None:
-                break
-
-        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-            old_param = None
-
-        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-        # in int/uint/bool and not cast them.
-        param_casting_dtype = None
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-        if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-            if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(fixed_param_name):
-                param_casting_dtype = torch.float32
-            elif dtype is not None:
-                param_casting_dtype = dtype
-            elif old_param is not None:
-                param_casting_dtype = old_param.dtype
+        to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
+            model, param_name=fixed_param_name, param=empty_param, dtype=dtype, keep_in_fp32_modules=keep_in_fp32_modules
+        )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            module_to_tp, param_type = get_module_from_name(model, fixed_param_name)
-            current_module_plan = None
-            full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
-            if plan := re.search(full_tp_plan_, fixed_param_name):
-                match = re.sub("[0-9]+", "*", plan[0])
-                current_module_plan = full_tp_plan[match]
-
-            if current_module_plan is not None:
-                tp_layer = translate_to_torch_parallel_style(current_module_plan)
-                rank = tensor_device
-                row, col = empty_param.shape
-                if "rowwise" == current_module_plan:
-                    param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
-                    shard = Shard(1)
-                    tp_layer.desired_input_layouts = (Shard(-1),)
-                elif "colwise" == current_module_plan:
-                    param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
-                    shard = Shard(0)
-                else:
-                    param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
-                    shard = Shard(0)
-                if param_casting_dtype is not None:
-                    param = param.to(param_casting_dtype)
-                if old_param.is_contiguous():
-                    param = param.contiguous()
-                local_parameter = DTensor.from_local(
-                    param,
-                    device_mesh=device_mesh,
-                    placements=[shard] * device_mesh.ndim,
-                )
-                if isinstance(module_to_tp.weight, nn.Parameter):
-                    local_parameter = torch.nn.Parameter(local_parameter)
-                module_to_tp.weight = local_parameter
-                input_fn = partial(tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts)
-                output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
-                distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
-            else:
-                param = param[:]
-                if old_param is not None and old_param.is_contiguous():
-                    param = param.contiguous()
-                module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
-
+            param = shard_and_distribute_module(module_to_tp, current_module_plan, param, param_type, rank)
+            module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
         else:
             param = param[:]
             if param_casting_dtype is not None:
                 param = param.to(param_casting_dtype)
-            if old_param is not None and old_param.is_contiguous():
+            if to_contiguous:
                 param = param.contiguous()
 
             if device_map is None:
@@ -964,6 +930,7 @@ def _load_state_dict_into_meta_model(
                         val_kwargs["requires_grad"] = False
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
+
     if file_pointer is not None:
         file_pointer.__exit__(None, None, None)
 
