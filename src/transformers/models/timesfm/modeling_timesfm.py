@@ -194,9 +194,10 @@ class TimesFmPositionalEmbedding(nn.Module):
 class TimesFmAttention(nn.Module):
     """Implements the attention used in TimesFM. One key difference is that there is _per_dim_scaling of the query."""
 
-    def __init__(self, config: TimesFmConfig):
+    def __init__(self, config: TimesFmConfig, layer_idx: int):
         super().__init__()
         self.attention_dropout = config.attention_dropout
+        self.layer_idx = layer_idx
 
         self.num_heads = config.num_heads
         self.num_kv_heads = config.num_heads
@@ -245,7 +246,7 @@ class TimesFmAttention(nn.Module):
         # Write new kv cache.
         # [batch_size, input_len, n_local_kv_heads, head_dim]
         if past_key_value is not None and cache_position is not None:
-            past_key_value.update(xk, xv, cache_position)
+            past_key_value.update(xk, xv, self.layer_idx, cache_position)
             key = past_key_value.key_states
             value = past_key_value.value_states
         else:
@@ -321,7 +322,7 @@ class TimesFmSdpaAttention(TimesFmAttention):
 
         # Handle KV cache
         if past_key_value is not None and cache_position is not None:
-            past_key_value.update(xk, xv, cache_position)
+            past_key_value.update(xk, xv, self.layer_idx, cache_position)
             key = past_key_value.key_states
             value = past_key_value.value_states
         else:
@@ -371,14 +372,14 @@ TIMESFM_ATTENTION_CLASSES = {
 class TimesFmDecoderLayer(nn.Module):
     """Transformer layer."""
 
-    def __init__(self, config: TimesFmConfig):
+    def __init__(self, config: TimesFmConfig, layer_idx: int):
         super().__init__()
 
         if config._attn_implementation not in TIMESFM_ATTENTION_CLASSES:
             raise ValueError(f"Unknown attention implementation: {config._attn_implementation}")
         attention_class = TIMESFM_ATTENTION_CLASSES[config._attn_implementation]
 
-        self.self_attn = attention_class(config)
+        self.self_attn = attention_class(config, layer_idx=layer_idx)
         self.mlp = TimesFmMLP(config)
         self.input_layernorm = TimesFmRMSNorm(config)
 
@@ -414,7 +415,7 @@ class TimesFmStackedDecoder(nn.Module):
 
     def __init__(self, config: TimesFmConfig):
         super().__init__()
-        self.layers = nn.ModuleList([TimesFmDecoderLayer(config) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)])
 
     def forward(
         self,
