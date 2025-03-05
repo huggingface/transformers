@@ -313,5 +313,5 @@ from . import (
     yoso,
     zamba,
     zamba2,
-    zoedepth
+    zoedepth,
 )
