@@ -1,5 +1,5 @@
-from ..qwen2.configuration_qwen2 import Qwen2Config
 from ...utils import logging
+from ..qwen2.configuration_qwen2 import Qwen2Config
 
 logger = logging.get_logger(__name__)
 

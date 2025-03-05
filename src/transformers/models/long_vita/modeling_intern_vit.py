@@ -7,8 +7,8 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from einops import rearrange
 from timm.models.layers import DropPath
+from einops import rearrange
 from torch import nn
 
 from ...activations import ACT2FN
@@ -21,10 +21,10 @@ from ...utils import logging
 
 try:
     from .flash_attention import FlashAttention
-    has_flash_attn = True
-except:
+    HAS_FLASH_ATTN = True
+except ImportError:
     print('FlashAttention is not installed.')
-    has_flash_attn = False
+    HAS_FLASH_ATTN = False
 
 
 logger = logging.get_logger(__name__)
@@ -116,8 +116,8 @@ class InternAttention(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.use_flash_attn = config.use_flash_attn and has_flash_attn
-        if config.use_flash_attn and not has_flash_attn:
+        self.use_flash_attn = config.use_flash_attn and HAS_FLASH_ATTN
+        if config.use_flash_attn and not HAS_FLASH_ATTN:
             print('Warning: Flash Attention is not available, use_flash_attn is set to False.')
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:

@@ -51,7 +51,7 @@ def pixel_shuffle_v2(x, scale_stride=2):
     w += pl
 
     x = x.reshape(n, w // scale_stride, scale_stride, h // scale_stride, scale_stride, c)
-    x = x.permute(0, 1, 3, 2, 4, 5) 
+    x = x.permute(0, 1, 3, 2, 4, 5)
     x = x.flatten(3)
     x = x.reshape(n, -1, scale_stride * scale_stride * c)
     return x

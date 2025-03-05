@@ -11,14 +11,12 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .modeling_intern_vit import InternVisionModel
 from ...processing_utils import Unpack
 from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2ForCausalLM
 from .resampler_projector import ResamplerProjector
 from ...utils import (
     LossKwargs,
-    add_start_docstrings,
     logging,
     replace_return_docstrings,
 )
