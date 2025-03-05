@@ -542,6 +542,12 @@ def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
 
+    if is_torch_hpu_available():
+        if is_habana_gaudi1():
+            return False
+        else:
+            return True
+
     import torch
 
     try:
@@ -572,6 +578,9 @@ def is_torch_bf16_available_on_device(device):
 
     if device == "cuda":
         return is_torch_bf16_gpu_available()
+
+    if device == "hpu":
+        return True
 
     try:
         x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
@@ -771,6 +780,33 @@ def is_torch_musa_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+@lru_cache
+def is_torch_hpu_available():
+    "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
+    if (
+        not _torch_available
+        or importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
+        return False
+
+    import habana_frameworks.torch  # noqa: F401
+    import torch
+
+    return hasattr(torch, "hpu") and torch.hpu.is_available()
+
+
+@lru_cache
+def is_habana_gaudi1():
+    if is_torch_hpu_available():
+        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+            return True
+
+    return False
 
 
 def is_torchdynamo_available():

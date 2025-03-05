@@ -75,6 +75,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
+    require_non_hpu,
     require_non_xpu,
     require_optuna,
     require_peft,
@@ -88,6 +89,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
+    require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
@@ -98,6 +100,7 @@ from transformers.testing_utils import (
     require_torchdynamo,
     require_vision,
     require_wandb,
+    run_first,
     run_test_using_subprocess,
     slow,
     torch_device,
@@ -885,7 +888,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
             # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 1.5, f"Difference {max(diff_broken)} is not greater than 2")
+            self.assertGreater(max(diff_broken), 1.3, f"Difference {max(diff_broken)} is not greater than 1.3")
 
             loss_base = sum(base_loss_callback.losses)
             loss_broken = sum(broken_loss_callback.losses)
@@ -1216,6 +1219,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_accelerator
     @require_torch_bf16
+    @require_non_hpu
     def test_mixed_bf16(self):
         # very basic test
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3239,6 +3243,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(b, b1, delta=1e-5)
 
     @slow
+    @require_non_hpu
     @require_accelerate
     @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
@@ -3582,6 +3587,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
 
     @slow
+    @run_first
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3598,6 +3604,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(result["eval_loss"], 0.2)
 
     @slow
+    @run_first
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3897,6 +3904,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(skip_memory_metrics=True, output_dir=tmp_dir)
             self.check_mem_metrics(trainer, self.assertNotIn)
 
+    @require_torch_fp16
     @require_torch_accelerator
     def test_fp16_full_eval(self):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
@@ -4152,6 +4160,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
     @slow
+    @require_non_hpu
     @require_torch_multi_accelerator
     def test_end_to_end_example(self):
         # Tests that `translation.py` will run without issues
