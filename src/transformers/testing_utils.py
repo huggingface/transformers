@@ -34,11 +34,11 @@ import time
 import unittest
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import MISSING, fields
-from functools import wraps
+from dataclasses import MISSING, dataclass, fields
+from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -2937,3 +2937,108 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+
+
+@dataclass(frozen=True)
+class Properties:
+    """
+    Holds device properties used to find expected results.
+    """
+
+    type: str | None = None
+    cap_major: int | None = None
+    cap_minor: int | None = None
+
+    @staticmethod
+    def default():
+        return Properties()
+
+    def cmp(self, other) -> int:
+        """
+        Returns score indicating how similar two instances of `Properties` are.
+        If the compared device types are "cuda" and "hip" they get half marks as they are similar, but not equal.
+        """
+        score = 0
+        if self.type == other.type:
+            score += 100
+        elif (self.type == "cuda" and other.type == "rocm") or (self.type == "rocm" and other.type == "cuda"):
+            score += 50
+
+        if self.cap_major == other.cap_major and self.cap_major is not None:
+            score += 25
+
+            # Minor versions are only better if major already matches
+            if self.cap_minor == other.cap_minor and self.cap_minor is not None:
+                score += 10
+
+        if self == Properties.default():
+            score += 1
+
+        return score
+
+
+@dataclass(frozen=True)
+class Expectation:
+    properties: Properties
+    result: Any
+
+    @staticmethod
+    def default(result: Any):
+        return Expectation(Properties.default(), result)
+
+
+class Expectations:
+    _inner: list[Expectation]
+    _default: Expectation | None
+
+    def __init__(self, *args: Expectation):
+        self._inner = list(args)
+        unique_properties = {e.properties for e in self._inner}
+        if len(unique_properties) != len(self._inner):
+            raise ValueError("Expectation properties must be unique")
+
+        self._default = None
+        default_properties = Properties.default()
+        for expectation in self._inner:
+            if expectation.properties == default_properties:
+                self._default = expectation
+                break
+
+    def get(self) -> Expectation:
+        """
+        Find best matching expectation based on environment device properties.
+        """
+        properties = self._get_device_properties()
+        return self.find_expectation(properties)
+
+    def find_expectation(self, properties: Properties) -> Expectation:
+        """
+        Find best matching expectation based on provided device properties.
+        """
+        result = sorted(self._inner, key=lambda x: -x.properties.cmp(properties))
+        best = result[0]
+        print(best.properties.cmp(properties))
+        print(self._default)
+        if best.properties.cmp(properties) == 0 and self._default is not None:
+            return self._default
+
+        return best
+
+    @cache
+    def _get_device_properties(self) -> Properties:
+        """
+        Get environment device properties.
+        """
+        if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+            import torch
+
+            major, minor = torch.cuda.get_device_capability()
+            if IS_ROCM_SYSTEM:
+                return Properties("rocm", major, minor)
+            else:
+                return Properties("cuda", major, minor)
+        else:
+            return Properties(torch_device)
+
+    def __repr__(self):
+        return f"{self._inner}"
