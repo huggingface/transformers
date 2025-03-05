@@ -126,7 +126,7 @@ def divide_to_patches(
     return patches
 
 
-class DefaultFastImageProcessorInitKwargs(TypedDict, total=False):
+class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[Dict[str, int]]
     default_to_square: Optional[bool]
@@ -139,9 +139,6 @@ class DefaultFastImageProcessorInitKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_convert_rgb: Optional[bool]
-
-
-class DefaultFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorInitKwargs):
     return_tensors: Optional[Union[str, TensorType]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -185,8 +182,20 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
-            Whether to convert the image to RGB."""
+        do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+            Whether to convert the image to RGB.
+        return_tensors (`str` or `TensorType`, *optional*, defaults to `self.return_tensors`):
+            Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
+        data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.data_format`):
+            Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
+        input_data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.input_data_format`):
+            The channel dimension format for the input image. If unset, the channel dimension format is inferred
+            from the input image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        device (`torch.device`, *optional*, defaults to `self.device`):
+            The device to process the images on. If unset, the device is inferred from the input images."""
 
 BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
     Preprocess an image or batch of images.
@@ -219,20 +228,17 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
             `True`.
         do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
             Whether to convert the image to RGB.
-        return_tensors (`str` or `TensorType`, *optional*):
+        return_tensors (`str` or `TensorType`, *optional*, defaults to `self.return_tensors`):
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-            The channel dimension format for the output image. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            - Unset: Use the channel dimension format of the input image.
-        input_data_format (`ChannelDimension` or `str`, *optional*):
+        data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.data_format`):
+            Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
+        input_data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.input_data_format`):
             The channel dimension format for the input image. If unset, the channel dimension format is inferred
             from the input image. Can be one of:
             - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
             - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        device (`torch.device`, *optional*):
+        device (`torch.device`, *optional*, defaults to `self.device`):
             The device to process the images on. If unset, the device is inferred from the input images."""
 
 
@@ -253,13 +259,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
     rescale_factor = 1 / 255
     do_normalize = None
     do_convert_rgb = None
+    return_tensors = None
+    data_format = ChannelDimension.FIRST
+    input_data_format = None
+    device = None
     model_input_names = ["pixel_values"]
-    valid_init_kwargs = DefaultFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = DefaultFastImageProcessorPreprocessKwargs
+    valid_kwargs = DefaultFastImageProcessorKwargs
 
     def __init__(
         self,
-        **kwargs: Unpack[DefaultFastImageProcessorInitKwargs],
+        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
     ) -> None:
         super().__init__(**kwargs)
         size = kwargs.pop("size", self.size)
@@ -270,7 +279,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
         crop_size = kwargs.pop("crop_size", self.crop_size)
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-        for key in self.valid_init_kwargs.__annotations__.keys():
+        for key in self.valid_kwargs.__annotations__.keys():
             kwarg = kwargs.pop(key, None)
             if kwarg is not None:
                 setattr(self, key, kwarg)
@@ -553,14 +562,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[DefaultFastImageProcessorPreprocessKwargs],
+        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
     ) -> BatchFeature:
-        validate_kwargs(
-            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
-        )
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_preprocess_kwargs.__annotations__:
+        for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input images
