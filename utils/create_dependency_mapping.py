@@ -1,5 +1,43 @@
 import ast
+import os
 from collections import defaultdict
+
+
+FILE_TYPE_PREFIXES = (
+    "modular_",
+    "modeling_",
+    "configuration_",
+    "tokenization_",
+    "processing_",
+    "image_processing_",
+    "feature_extractor_",
+)
+
+
+def get_model_name_from_filename(filename: str) -> str:
+    """From a filename pointing to a model file of any type, extract the model name."""
+    # If it contains the extension, remove it
+    modified_filename = filename[:-3] if filename.endswith(".py") else filename
+    # If it's a full path, extract last part
+    modified_filename = os.path.basename(modified_filename)
+    # It may also appear as a pathname, but in Python import form (i.e. with `.` instead of `/` to separate)
+    modified_filename = modified_filename.split(".")[-1]
+
+    file_prefix = None
+    for prefix in FILE_TYPE_PREFIXES:
+        if modified_filename.startswith(prefix):
+            file_prefix = prefix
+            break
+
+    if file_prefix is None:
+        raise ValueError(f"It looks like `{filename}` is not a Transformers model file!")
+
+    model_name = modified_filename.replace(file_prefix, "", 1)
+    # This filetype may have the "_fast" suffix as well
+    if file_prefix == "image_processing_" and model_name.endswith("_fast"):
+        model_name = model_name[:-5]
+
+    return model_name
 
 
 # Function to perform topological sorting
@@ -11,7 +49,7 @@ def topological_sort(dependencies: dict):
     name_mapping = {}
     for node, deps in dependencies.items():
         node_name = node.rsplit("modular_", 1)[1].replace(".py", "")
-        dep_names = {dep.split(".")[-2] for dep in deps}
+        dep_names = {get_model_name_from_filename(dep) for dep in deps}
         dependencies = {dep for dep in dep_names if dep in nodes and dep != node_name}
         graph[node_name] = dependencies
         name_mapping[node_name] = node
