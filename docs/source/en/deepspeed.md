@@ -840,7 +840,7 @@ Unless you have a lot of free CPU memory, fp32 weights shouldn't be saved during
 <hfoptions id="save">
 <hfoption id="offline">
 
-DeepSpeed provies a [zero_to_fp32.py](https://github.com/microsoft/DeepSpeed/blob/91829476a8fd4d0d9268c03c1d56795d20a51c12/deepspeed/utils/zero_to_fp32.py#L14) script at the top-level checkpoint folder for extracting weights at any point. This is a standalone script and you don't need a config file or [`Trainer`].
+DeepSpeed provides a [zero_to_fp32.py](https://github.com/microsoft/DeepSpeed/blob/91829476a8fd4d0d9268c03c1d56795d20a51c12/deepspeed/utils/zero_to_fp32.py#L14) script at the top-level checkpoint folder for extracting weights at any point. This is a standalone script and you don't need a config file or [`Trainer`].
 
 For example, if your checkpoint folder looks like the one shown below, then you can run the following command to create and consolidate the fp32 weights from multiple GPUs into a single `pytorch_model.bin` file. The script automatically discovers the subfolder `global_step1` which contains the checkpoint.
 
@@ -942,7 +942,7 @@ import deepspeed
 ds_config = {...}
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-# randomly intialize model weights
+# randomly initialize model weights
 config = AutoConfig.from_pretrained("openai-community/gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)

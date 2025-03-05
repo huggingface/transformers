@@ -47,7 +47,7 @@ Keywords: LLMs, Large Language Models, Agents, Chains
 
 ## [LlamaIndex](https://github.com/run-llama/llama_index)
 
-[LlamaIndex](https://github.com/run-llama/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retreival mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
+[LlamaIndex](https://github.com/run-llama/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retrieval mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
 
 Keywords: LLMs, Large Language Models, Data Retrieval, Indices, Knowledge Augmentation 
 
