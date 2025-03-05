@@ -391,7 +391,7 @@ class TimesFmDecoderLayer(nn.Module):
 
         self.self_attn = attention_class(config, layer_idx=layer_idx)
         self.mlp = TimesFmMLP(config)
-        self.input_layernorm = TimesFmRMSNorm(config)
+        self.input_layernorm = TimesFmRMSNorm(config.model_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
