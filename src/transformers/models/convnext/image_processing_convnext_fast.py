@@ -18,11 +18,10 @@ from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorInitKwargs,
     DefaultFastImageProcessorPreprocessKwargs,
+    customize_docstrings,
     group_images_by_shape,
     reorder_images,
 )
@@ -37,7 +36,6 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -62,11 +60,16 @@ class ConvNextFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPrepro
     crop_pct: Optional[float]
 
 
-@add_start_docstrings(
+@customize_docstrings(
     r"Constructs a fast ConvNeXT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
-        crop_pct (`float`, *optional*):
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
+                Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
+                resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
+                be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
+                `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
+                be overriden by `size` in the `preprocess` method.
+        crop_pct (`float`, *optional*, defaults to `224/256`):
             Percentage of the image to crop. Only has an effect if size < 384. Can be
             overridden by `crop_pct` in the`preprocess` method.
     """,
@@ -87,14 +90,6 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        crop_pct (`float`, *optional*):
-            Percentage of the image to crop. Only has an effect if size < 384. Can be
-            overridden by `crop_pct` in the`preprocess` method.
-        """,
-    )
     def preprocess(
         self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorPreprocessKwargs]
     ) -> BatchFeature:
