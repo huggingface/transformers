@@ -15,12 +15,15 @@
 """Testing suite for the PyTorch Bamba model."""
 
 import inspect
+import tempfile
 import unittest
 
 import pytest
+from pytest import mark
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.testing_utils import (
+    require_flash_attn,
     require_torch,
     require_torch_gpu,
     slow,
@@ -36,10 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BambaForCausalLM,
-        BambaModel,
-    )
+    from transformers import BambaForCausalLM, BambaModel
     from transformers.models.bamba.modeling_bamba import (
         HybridMambaAttentionDynamicCache,
     )
@@ -476,6 +476,188 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        """
+        Overwrite the ModelTesterMixin version of this test to account for the need to provide
+        seq_idx.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                        low_cpu_mem_usage=True,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    k: v[dummy_attention_mask.bool()].unsqueeze(0)
+                    for k, v in inputs_dict.items()
+                    if not k == "attention_mask"
+                }
+                # add position_ids
+                padfree_inputs_dict["position_ids"] = (
+                    torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                    .long()
+                    .unsqueeze(0)
+                    .to(torch_device)
+                )
+                padfree_inputs_dict["seq_idx"] = torch.cat(
+                    [
+                        torch.full((m.sum(),), idx, dtype=torch.int32, device=m.device)
+                        for idx, m in enumerate(dummy_attention_mask)
+                    ]
+                )[None]
+
+                res_padded = model(**inputs_dict)
+                res_padfree = model(**padfree_inputs_dict)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
+                # acceptable numerical instability
+                tol = torch.finfo(torch.float16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_padding_free_logits(self):
+        r"""
+        Verify that the logits agree when using an attention mask or padding-free kwargs.
+        """
+        torch.manual_seed(42)
+        decoder_only_classes = []
+        for model_class in self.all_generative_model_classes:
+            config, _, _, _ = self.model_tester.prepare_config_and_inputs()
+            if config.is_encoder_decoder:
+                continue
+            else:
+                decoder_only_classes.append(model_class)
+        if len(decoder_only_classes) == 0:
+            self.skipTest(reason="No decoder-only architecture available for this model.")
+
+        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
+        #   added support for it yet. We skip these models for now.
+        has_encoder_attributes = any(
+            attr_name
+            for attr_name in config.to_dict().keys()
+            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+        )
+        if has_encoder_attributes:
+            self.skipTest(
+                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
+            )
+
+        for model_class in decoder_only_classes:
+            config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
+            # Padding-free requires training = True and attn_implementation="flash_attention_2"
+            model = (
+                model_class._from_config(config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16)
+                .to(torch_device)
+                .train()
+            )
+
+            non_padding_free_inputs = {"input_ids": input_ids, "attention_mask": input_mask}
+            logits_attn_mask = model(**non_padding_free_inputs).logits
+
+            # Build up padding-free tensors
+            padding_free_input_ids = torch.cat(
+                [batch[mask.bool()] for batch, mask in zip(input_ids, input_mask)], dim=-1
+            )[None]
+            position_ids_list = [
+                torch.arange(mask.sum(), device=mask.device, dtype=torch.int32) for mask in input_mask
+            ]
+            position_ids = torch.cat(position_ids_list, dim=-1)[None]
+            seq_lens = torch.cat(
+                [torch.tensor([t.numel()], device=input_mask.device, dtype=torch.int32) for t in position_ids_list],
+                dim=-1,
+            )
+            cu_seq_lens = torch.cat(
+                [
+                    torch.tensor([0], device=input_mask.device, dtype=torch.int32),
+                    seq_lens.cumsum(dim=-1, dtype=torch.int32),
+                ],
+                dim=-1,
+            )
+            position_ids = torch.cat(position_ids_list, dim=-1)[None]
+            seq_idx = torch.cat(
+                [
+                    torch.full(p.shape, idx, device=p.device, dtype=torch.int32)
+                    for idx, p in enumerate(position_ids_list)
+                ],
+                dim=-1,
+            )[None]
+
+            # There are two viable code paths:
+            # 1) Provide position_ids and seq_idx only.
+            # 2) Provide FlashAttentionKwargs in addition to the above. This is more torch.compile
+            # friendly. See https://github.com/huggingface/transformers/pull/33932
+            padding_free_kwargs = {
+                "input_ids": padding_free_input_ids,
+                "position_ids": position_ids,
+                "seq_idx": seq_idx,
+            }
+            logits_pad_free = model(**padding_free_kwargs).logits
+            padding_free_kwargs.update(
+                {
+                    "cu_seq_lens_q": cu_seq_lens,
+                    "cu_seq_lens_k": cu_seq_lens,
+                    "max_length_q": seq_lens.max(),
+                    "max_length_k": seq_lens.max(),
+                }
+            )
+            logits_pad_free_all_kwargs = model(**padding_free_kwargs).logits
+
+            logits_attn_mask_flat = torch.cat(
+                [batch[mask.bool()] for batch, mask in zip(logits_attn_mask, input_mask)], dim=0
+            )[None]
+
+            torch.testing.assert_close(logits_pad_free, logits_attn_mask_flat)
+            torch.testing.assert_close(logits_pad_free_all_kwargs, logits_attn_mask_flat)
 
 
 @slow
