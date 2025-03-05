@@ -2945,9 +2945,9 @@ class Properties:
     Holds device properties used to find expected results.
     """
 
-    type: str | None = None
-    cap_major: int | None = None
-    cap_minor: int | None = None
+    type: Union[str, None] = None
+    cap_major: Union[int, None] = None
+    cap_minor: Union[int, None] = None
 
     @staticmethod
     def default():
@@ -2989,7 +2989,7 @@ class Expectation:
 
 class Expectations:
     _inner: list[Expectation]
-    _default: Expectation | None
+    _default: Union[Expectation, None]
 
     def __init__(self, *args: Expectation):
         self._inner = list(args)
