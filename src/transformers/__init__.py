@@ -444,6 +444,7 @@ _import_structure = {
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
+    "models.evolla": ["EvollaConfig"],
     "models.falcon": ["FalconConfig"],
     "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
@@ -1256,6 +1257,7 @@ else:
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
+    _import_structure["models.evolla"].extend(["EvollaProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
@@ -2347,6 +2349,14 @@ else:
             "EsmPreTrainedModel",
         ]
     )
+    _import_structure["models.evolla"].extend(
+        [
+            "EvollaForProteinText2Text",
+            "EvollaModel",
+            "EvollaPreTrainedModel",
+            "EvollaProcessor",
+        ]
+    )
     _import_structure["models.falcon"].extend(
         [
             "FalconForCausalLM",
@@ -2553,6 +2563,7 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2560,7 +2571,6 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
-
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -4487,7 +4497,6 @@ else:
             "TFIdeficsPreTrainedModel",
         ]
     )
-
     _import_structure["models.layoutlm"].extend(
         [
             "TFLayoutLMForMaskedLM",
@@ -5598,6 +5607,9 @@ if TYPE_CHECKING:
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
+    from .models.evolla import (
+        EvollaConfig,
+    )
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
@@ -6442,6 +6454,7 @@ if TYPE_CHECKING:
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.emu3 import Emu3ImageProcessor
+        from .models.evolla import EvollaProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -7367,6 +7380,12 @@ if TYPE_CHECKING:
             EsmForTokenClassification,
             EsmModel,
             EsmPreTrainedModel,
+        )
+        from .models.evolla import (
+            EvollaForProteinText2Text,
+            EvollaModel,
+            EvollaPreTrainedModel,
+            EvollaProcessor,
         )
         from .models.falcon import (
             FalconForCausalLM,
