@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
     torch_device,
+    CaptureStderr,
 )
 
 
@@ -654,3 +655,21 @@ class CacheIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(
                     actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
                 )
+
+    @require_torch_gpu
+    def test_static_cache_no_cuda_graph_skips(self):
+        """
+        Tests generating with static cache and compilation doesn't skip cuda graphs. Regression test for #36543.
+
+        (? We set `fullgraph=True`, which according to torch docs means it should raise an exception. Instead,
+        messages are being thrown to stderr?)
+        """
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["foo bar"], return_tensors="pt").to(torch_device)
+
+        # on `main`, prior to #36543, this would send stderr messages about cuda graphs being skipped.
+        with CaptureStderr() as cap:
+            model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
+        self.assertEqual(cap.err, "")
