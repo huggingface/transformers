@@ -1971,15 +1971,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        # with torch.device(input_ids.device):
-        #     max_cache_len = model_kwargs["past_key_values"].max_cache_len
-        #     # shape (12,1,1,616)
-        #     non_padding_mask = torch.cat([input_ids != 100002,
-        #                                   torch.ones((input_ids.shape[0], max_cache_len - input_ids.shape[-1]),
-        #                                              dtype=torch.bool)], dim=-1).repeat(2, 1)[:, None, None, :]
-        #     position_mask = (torch.arange(max_cache_len) < model_kwargs["cache_position"].item())
-        #     attention_mask = (non_padding_mask & position_mask)
-        attention_mask = None
+        padding_idxs = None
+        min_dtype = None
         for i in tqdm(range(num_image_tokens)):
             # Fix me: What to do with attention mask when expanding and repeating input ids.
             # Should we also modify the attention mask if passed?
@@ -1990,11 +1983,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 past_key_values=model_kwargs["past_key_values"],
                 cache_position=model_kwargs["cache_position"]
             )
-            padding_idxs = torch.zeros_like(attention_mask, dtype=bool)
-            padding_idxs[..., :input_ids.shape[-1]] |= (input_ids == 100002).repeat(2, 1)[:, None, None, :]
-            min_dtype = torch.finfo(attention_mask.dtype).min
+            if padding_idxs is None:
+                padding_idxs = torch.zeros((attention_mask.shape[0], 1, 1, attention_mask.shape[3]),
+                                           device=attention_mask.device, dtype=bool)
+                padding_idxs[..., :input_ids.shape[-1]] |= (input_ids == 100002).repeat(2, 1)[:, None, None, :]
+                min_dtype = torch.finfo(attention_mask.dtype).min
             attention_mask = attention_mask.clone()
-            attention_mask[padding_idxs] = min_dtype
+            attention_mask[padding_idxs.expand_as(attention_mask)] = min_dtype
 
             outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
