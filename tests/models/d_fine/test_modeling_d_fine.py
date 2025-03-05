@@ -789,7 +789,6 @@ class DFineModelIntegrationTest(unittest.TestCase):
         )[0]
         expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
         expected_labels = [15, 65, 15, 57]
-        print(results["boxes"][:4].detach().cpu().numpy())
         expected_slice_boxes = torch.tensor(
             [
                 [1.3186283e01, 5.4130211e01, 3.1726535e02, 4.7212445e02],
