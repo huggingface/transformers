@@ -178,6 +178,11 @@ class DeepseekV2Config(PretrainedConfig):
         topk_group=None,
         topk_method="greedy",
         v_head_dim=128,
+        num_experts_per_tok=None,
+        scoring_func="softmax",
+        norm_topk_prob=False,
+        moe_intermediate_size=1407,
+        ep_size=1,
         **kwargs,
     ):
         super().__init__(
@@ -231,3 +236,11 @@ class DeepseekV2Config(PretrainedConfig):
         self.topk_group = topk_group
         self.topk_method = topk_method
         self.v_head_dim = v_head_dim
+        self.num_experts_per_tok = num_experts_per_tok
+        self.scoring_func = scoring_func
+        self.norm_topk_prob = norm_topk_prob
+        self.moe_intermediate_size = moe_intermediate_size
+        self.ep_size = ep_size
+
+
+__all__ = ["DeepseekV2Config"]
