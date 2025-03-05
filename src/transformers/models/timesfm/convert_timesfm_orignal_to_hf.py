@@ -71,15 +71,15 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
 
     # mapping of the layers from the original model to the transformer model
     MODEL_LAYER_MAPPING = {
-        "input_ff_layer.hidden_layer[0].weight": "decoder.input_ff_layer.hidden_layer[0].weight",
-        "input_ff_layer.hidden_layer[0].bias": "decoder.input_ff_layer.hidden_layer[0].bias",
+        "input_ff_layer.hidden_layer[0].weight": "decoder.input_ff_layer.input_layer.weight",
+        "input_ff_layer.hidden_layer[0].bias": "decoder.input_ff_layer.input_layer.bias",
         "input_ff_layer.output_layer.weight": "decoder.input_ff_layer.output_layer.weight",
         "input_ff_layer.output_layer.bias": "decoder.input_ff_layer.output_layer.bias",
         "input_ff_layer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
         "input_ff_layer.residual_layer.bias": "decoder.input_ff_layer.residual_layer.bias",
         "freq_emb.weight": "decoder.freq_emb.weight",
-        "horizon_ff_layer.hidden_layer[0].weight": "horizon_ff_layer.hidden_layer[0].weight",
-        "horizon_ff_layer.hidden_layer[0].bias": "horizon_ff_layer.hidden_layer[0].bias",
+        "horizon_ff_layer.hidden_layer[0].weight": "horizon_ff_layer.input_layer.weight",
+        "horizon_ff_layer.hidden_layer[0].bias": "horizon_ff_layer.input_layer.bias",
         "horizon_ff_layer.output_layer.weight": "horizon_ff_layer.output_layer.weight",
         "horizon_ff_layer.output_layer.bias": "horizon_ff_layer.output_layer.bias",
         "horizon_ff_layer.residual_layer.weight": "horizon_ff_layer.residual_layer.weight",
