@@ -1482,11 +1482,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
-        # If current model is a base model, attach `base_model_tp_plan` from config
+        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._tp_plan = self.config.base_model_tp_plan
-        # If current model is a base model, attach `base_model_pp_plan` from config
-        if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan
 
     def dequantize(self):
