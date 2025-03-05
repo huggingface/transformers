@@ -1,58 +1,31 @@
 # coding=utf-8
 
-from typing import Callable, List, Optional, Tuple, Union
-
+from typing import List, Optional, Tuple, Union
 import torch
-from torch import nn
 
-from transformers.activations import ACT2FN
-from transformers.cache_utils import Cache, DynamicCache, StaticCache
-from transformers.generation import GenerationMixin
-from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_outputs import (
+from ...cache_utils import Cache, DynamicCache
+from .configuration_long_vita import LongVITAConfig
+from .configuration_intern_vit import InternVisionConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import (
     BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
+    CausalLMOutputWithPast
 )
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from transformers.modeling_utils import PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import (
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from .modeling_intern_vit import InternVisionModel
+from ...processing_utils import Unpack
+from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2ForCausalLM
+from .resampler_projector import ResamplerProjector
+from ...utils import (
     LossKwargs,
-    add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from .configuration_long_vita import LongVITAConfig
-
 
 logger = logging.get_logger(__name__)
-
-from transformers import Qwen2Model, Qwen2ForCausalLM
-
-# from .visual import VisionTransformer
-from .modeling_intern_vit import InternVisionModel
-from .resampler_projector import ResamplerProjector
-
-from .configuration_intern_vit import InternVisionConfig
-try:
-    from .flash_attention import FlashAttention
-    has_flash_attn = True
-except:
-    print('FlashAttention is not installed.')
-    has_flash_attn = False
-
-
-logger = logging.get_logger(__name__)
-
 
 _CONFIG_FOR_DOC = "LongVITAConfig"
-
 
 class LongVITAModel(Qwen2Model):
     config_class = LongVITAConfig
@@ -63,7 +36,6 @@ class LongVITAModel(Qwen2Model):
     def __init__(self, config: LongVITAConfig):
         super().__init__(config)
 
-        # self.visual = VisionTransformer(**config.visual)
         visual_config = InternVisionConfig(**config.visual)
         self.vision_model = InternVisionModel(visual_config)
         self.vision_projection = ResamplerProjector(config, visual_config)

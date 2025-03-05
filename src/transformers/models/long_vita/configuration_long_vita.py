@@ -1,11 +1,7 @@
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
-from transformers import Qwen2Config
-
+from ..qwen2.configuration_qwen2 import Qwen2Config
+from ...utils import logging
 
 logger = logging.get_logger(__name__)
-
-
 
 class LongVITAConfig(Qwen2Config):
     model_type = "long_vita"

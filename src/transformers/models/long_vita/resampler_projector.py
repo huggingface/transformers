@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
 
-import math
-
-
 
 class ResamplerProjector(nn.Module):
     def __init__(self, config, vision_model_config):
