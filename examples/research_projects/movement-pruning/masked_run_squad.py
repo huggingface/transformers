@@ -32,7 +32,6 @@ from tqdm import tqdm, trange
 
 from transformers import (
     WEIGHTS_NAME,
-    AdamW,
     BertConfig,
     BertForQuestionAnswering,
     BertTokenizer,
@@ -152,7 +151,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
         },
     ]
 
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )

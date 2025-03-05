@@ -36,7 +36,6 @@ from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
-    AdamW,
     LukeConfig,
     LukeForEntitySpanClassification,
     LukeTokenizer,
@@ -569,7 +568,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Use the device given by the `accelerator` object.
     device = accelerator.device

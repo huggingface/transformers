@@ -33,7 +33,6 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from transformers import (
-    AdamW,
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -749,7 +748,7 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader, test_dataloader, infer_dataloader = accelerator.prepare(
