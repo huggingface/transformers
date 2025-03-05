@@ -606,9 +606,9 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmResidualBlock):
             # Initialize hidden layer
-            module.hidden_layer[0].weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.hidden_layer[0].bias is not None:
-                nn.init.zeros_(module.hidden_layer[0].bias)
+            module.input_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            if module.input_layer.bias is not None:
+                nn.init.zeros_(module.input_layer.bias)
 
             # Initialize output layer
             module.output_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)

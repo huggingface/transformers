@@ -113,18 +113,16 @@ class TimesFmResidualBlock(nn.Module):
         self.output_dims = output_dims
 
         # Hidden Layer
-        self.hidden_layer = nn.Sequential(
-            nn.Linear(input_dims, hidden_dims),
-            nn.SiLU(),
-        )
-
+        self.input_layer = nn.Linear(input_dims, hidden_dims)
+        self.activation = nn.SiLU()
         # Output Layer
         self.output_layer = nn.Linear(hidden_dims, output_dims)
         # Residual Layer
         self.residual_layer = nn.Linear(input_dims, output_dims)
 
     def forward(self, x):
-        hidden = self.hidden_layer(x)
+        hidden = self.input_layer(x)
+        hidden = self.activation(hidden)
         output = self.output_layer(hidden)
         residual = self.residual_layer(x)
         return output + residual
@@ -681,9 +679,9 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmResidualBlock):
             # Initialize hidden layer
-            module.hidden_layer[0].weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.hidden_layer[0].bias is not None:
-                nn.init.zeros_(module.hidden_layer[0].bias)
+            module.input_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            if module.input_layer.bias is not None:
+                nn.init.zeros_(module.input_layer.bias)
 
             # Initialize output layer
             module.output_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
