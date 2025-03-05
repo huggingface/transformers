@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, Optional, Union, cast
 
@@ -1092,7 +1092,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        pixel_values: Optional[Sequence[torch.FloatTensor]] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         image_soft_token_mask: Optional[torch.BoolTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
@@ -1161,9 +1161,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         is_training = token_type_ids is not None and labels is not None
 
-        if input_ids is not None and image_soft_token_mask is None:
-            image_soft_token_mask = input_ids == self.config.text_config.mm_soft_token_id
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1179,14 +1176,23 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             position_ids = cache_position.unsqueeze(0) + 1
 
         # Merge text and images
-        if pixel_values is not None and image_soft_token_mask is not None:
+        if pixel_values is not None:
+            if image_soft_token_mask is None:
+                raise ValueError(
+                    "Cannot join vision and language embeddings wihtout an `image_soft_token_mask`. "
+                    "Use Gemma3Processor to create one."
+                )
+
             image_features = self.get_image_features(pixel_values).to(inputs_embeds.device, inputs_embeds.dtype)
 
             image_mask = image_soft_token_mask.unsqueeze(-1)
             image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
-            if inputs_embeds[image_mask].numel() != image_features.numel():
-                raise ValueError("Number of images does not match number of special image tokens in the input text. ")
+            if (emb_nel := inputs_embeds[image_mask].numel()) != (img_nel := image_features.numel()):
+                raise ValueError(
+                    f"Number of image features ({img_nel}) does not match number of special image tokens in the input "
+                    f"text ({emb_nel}). "
+                )
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
@@ -1263,6 +1269,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         pixel_values=None,
+        image_soft_token_mask=None,
         attention_mask=None,
         token_type_ids=None,
         use_cache=True,
@@ -1287,10 +1294,15 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:
             model_inputs["position_ids"] += 1
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
+
+        # If we're in cached decoding stage, pixel values should be None because
+        # input ids do not contain special image tokens anymore. Otherwise we
+        # need pixel values to be passed to model.
+        # NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_soft_token_mask"] = image_soft_token_mask
+
         is_training = token_type_ids is not None and labels is not None
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids

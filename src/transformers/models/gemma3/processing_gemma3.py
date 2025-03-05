@@ -235,8 +235,9 @@ class Gemma3Processor(ProcessorMixin):
             #   supports 896x896 images.
             #
             # So we concat all images across all batches into a single flat list prior to sending it to the
-            # `Gemma3ForConditionalGeneration.vision_model` for ecnoding and use `torch.masked_scatter()` to
-            # sequentially update the text embeddings wth the pooled vision embdeddings.
+            # `Gemma3ForConditionalGeneration.vision_model` for ecnoding and use `torch.masked_scatter()` in that the
+            # `Gemma3ForConditionalGeneration` model class to sequentially update the language model embeddings wth the
+            # pooled vision embdeddings.
             pixel_values = torch.cat(
                 [
                     self.image_processor(prompt_images, **output_kwargs["images_kwargs"])["pixel_values"]
@@ -250,9 +251,14 @@ class Gemma3Processor(ProcessorMixin):
         batched_input = self._process_text(text=text, batched_images=batched_images, **output_kwargs["text_kwargs"])
 
         if pixel_values is not None:
+            input_ids = batched_input["input_ids"].clone()
+            image_soft_token_mask = input_ids == self.image_soft_token_id
+            input_ids[image_soft_token_mask] = self.tokenizer.convert_tokens_to_ids("<pad>")
+
             batched_input.update(
+                input_ids=input_ids,
                 pixel_values=pixel_values,
-                image_soft_token_mask=batched_input["input_ids"] == self.image_soft_token_id,
+                image_soft_token_mask=image_soft_token_mask,
             )
 
         return batched_input
