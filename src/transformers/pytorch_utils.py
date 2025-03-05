@@ -22,7 +22,12 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
+from .utils import (
+    is_torch_greater_or_equal,
+    is_torch_xla_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -31,6 +36,7 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
+is_torch_greater_or_equal_than_2_6 = parsed_torch_version_base >= version.parse("2.6")
 is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse("2.4")
 is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
 is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
@@ -46,10 +52,7 @@ _torch_distributed_available = torch.distributed.is_available()
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import Replicate
-    from torch.distributed.tensor.parallel import (
-        ColwiseParallel,
-        RowwiseParallel,
-    )
+    from torch.distributed.tensor.parallel import ColwiseParallel, RowwiseParallel
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -381,7 +384,8 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
                 # check if the function is already cached, otherwise create it
                 if not hasattr(self, f"_cached_{func.__name__}"):
                     self.__setattr__(
-                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                        f"_cached_{func.__name__}",
+                        lru_cache(*lru_args, **lru_kwargs)(func.__get__(self)),
                     )
                 return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
             else:
