@@ -151,6 +151,7 @@ from . import (
     llava_next_video,
     llava_onevision,
     longformer,
+    long_vita,
     longt5,
     luke,
     lxmert,
@@ -312,5 +313,5 @@ from . import (
     yoso,
     zamba,
     zamba2,
-    zoedepth,
+    zoedepth
 )

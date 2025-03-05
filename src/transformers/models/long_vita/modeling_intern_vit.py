@@ -4,20 +4,19 @@
 # Licensed under The MIT License [see LICENSE for details]
 # --------------------------------------------------------
 from typing import Optional, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from timm.models.layers import DropPath
 from einops import rearrange
+from timm.models.layers import DropPath
 from torch import nn
 
 from ...activations import ACT2FN
-from .configuration_intern_vit import InternVisionConfig
-from ...modeling_outputs import (BaseModelOutput,
-                                           BaseModelOutputWithPooling)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-
+from .configuration_intern_vit import InternVisionConfig
 
 try:
     from .flash_attention import FlashAttention

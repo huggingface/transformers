@@ -1,25 +1,19 @@
 # coding=utf-8
 
 from typing import List, Optional, Tuple, Union
+
 import torch
 
 from ...cache_utils import Cache, DynamicCache
-from .configuration_long_vita import LongVITAConfig
-from .configuration_intern_vit import InternVisionConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast
-)
-from .modeling_intern_vit import InternVisionModel
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
-from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2ForCausalLM
+from ...utils import LossKwargs, logging, replace_return_docstrings
+from ..qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2Model
+from .configuration_intern_vit import InternVisionConfig
+from .configuration_long_vita import LongVITAConfig
+from .modeling_intern_vit import InternVisionModel
 from .resampler_projector import ResamplerProjector
-from ...utils import (
-    LossKwargs,
-    logging,
-    replace_return_docstrings,
-)
 
 logger = logging.get_logger(__name__)
 

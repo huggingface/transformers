@@ -1,16 +1,16 @@
 # https://github.com/Dao-AILab/flash-attention/blob/v0.2.8/flash_attn/flash_attention.py
 
-import torch.nn as nn
 import torch
+import torch.nn as nn
 from einops import rearrange
-
-
 from flash_attn.bert_padding import pad_input, unpad_input
+
 try:  # v1
-    from flash_attn.flash_attn_interface import flash_attn_unpadded_qkvpacked_func
+    from flash_attn.flash_attn_interface import \
+        flash_attn_unpadded_qkvpacked_func
 except ImportError:  # v2
-    from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func as \
-    flash_attn_unpadded_qkvpacked_func
+    from flash_attn.flash_attn_interface import \
+        flash_attn_varlen_qkvpacked_func as flash_attn_unpadded_qkvpacked_func
 
 
 
