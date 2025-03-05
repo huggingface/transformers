@@ -1520,7 +1520,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             # Prepare cache if not provided
             model_kwargs["past_key_values"] = self._get_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
-                # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
+                # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),

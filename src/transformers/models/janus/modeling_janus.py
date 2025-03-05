@@ -1971,19 +1971,43 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
+        # with torch.device(input_ids.device):
+        #     max_cache_len = model_kwargs["past_key_values"].max_cache_len
+        #     # shape (12,1,1,616)
+        #     non_padding_mask = torch.cat([input_ids != 100002,
+        #                                   torch.ones((input_ids.shape[0], max_cache_len - input_ids.shape[-1]),
+        #                                              dtype=torch.bool)], dim=-1).repeat(2, 1)[:, None, None, :]
+        #     position_mask = (torch.arange(max_cache_len) < model_kwargs["cache_position"].item())
+        #     attention_mask = (non_padding_mask & position_mask)
+        attention_mask = None
         for i in tqdm(range(num_image_tokens)):
             # Fix me: What to do with attention mask when expanding and repeating input ids.
             # Should we also modify the attention mask if passed?
+            attention_mask = self.model.language_model._update_causal_mask(
+                attention_mask=None,
+                input_tensor=inputs_embeds,
+                output_attentions=False,
+                past_key_values=model_kwargs["past_key_values"],
+                cache_position=model_kwargs["cache_position"]
+            )
+            padding_idxs = torch.zeros_like(attention_mask, dtype=bool)
+            padding_idxs[..., :input_ids.shape[-1]] |= (input_ids == 100002).repeat(2, 1)[:, None, None, :]
+            min_dtype = torch.finfo(attention_mask.dtype).min
+            attention_mask = attention_mask.clone()
+            attention_mask[padding_idxs] = min_dtype
+
             outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                attention_mask=attention_mask,
                 **model_kwargs,
             )
 
             # Update model_kwargs like cache_position for next generation.
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
+            # attention_mask[model_kwargs["cache_position"].item()] = True
 
             # Generate scores using the generation head. (not using above defined lm head)
             scores = self.model.gen_head(hidden_state)
