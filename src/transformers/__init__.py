@@ -330,6 +330,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
+    "models.d_fine": ["DFineConfig", "DFineResNetConfig"],
     "models.dab_detr": ["DabDetrConfig"],
     "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
@@ -1925,6 +1926,15 @@ else:
             "CvtForImageClassification",
             "CvtModel",
             "CvtPreTrainedModel",
+        ]
+    )
+    _import_structure["models.d_fine"].extend(
+        [
+            "DFineForObjectDetection",
+            "DFineModel",
+            "DFinePreTrainedModel",
+            "DFineResNetBackbone",
+            "DFineResNetPreTrainedModel",
         ]
     )
     _import_structure["models.dab_detr"].extend(
@@ -5465,6 +5475,7 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.d_fine import DFineConfig, DFineResNetConfig
     from .models.dab_detr import (
         DabDetrConfig,
     )
@@ -7032,6 +7043,12 @@ if TYPE_CHECKING:
             CvtForImageClassification,
             CvtModel,
             CvtPreTrainedModel,
+        )
+        from .models.d_fine import (
+            DFineForObjectDetection,
+            DFineModel,
+            DFinePreTrainedModel,
+            DFineResNetBackbone,
         )
         from .models.dab_detr import (
             DabDetrForObjectDetection,
