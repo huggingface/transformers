@@ -256,6 +256,7 @@ class Gemma3VisionConfig(SiglipVisionConfig):
         layer_norm_eps: float = 0.000001,
         vision_use_head: bool = False,
         torch_dtype: str = "bfloat16",
+        pooled_seq_len: int = 256,
         **kwargs,
     ):
         super().__init__(
@@ -273,6 +274,7 @@ class Gemma3VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
+        self.pooled_seq_len = pooled_seq_len
         self.vision_use_head = vision_use_head
 
 

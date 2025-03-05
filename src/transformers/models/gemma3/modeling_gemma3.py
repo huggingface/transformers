@@ -25,6 +25,7 @@ from typing import Literal, Optional, Union, cast
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
@@ -44,7 +45,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma import GemmaPreTrainedModel
 from ..siglip import SiglipVisionModel
-from .configuration_gemma3 import Gemma3Config, Gemma3RotaryEmbeddingConfig, Gemma3TextConfig
+from .configuration_gemma3 import Gemma3Config, Gemma3RotaryEmbeddingConfig, Gemma3TextConfig, Gemma3VisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -69,6 +70,28 @@ class Gemma3RMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+class Gemma3VisionAvgPool2D(nn.Module):
+    def __init__(self, config: Gemma3VisionConfig):
+        super().__init__()
+        self.config = config
+
+    def forward(self, x):
+        """
+        Applies average pooling on (B, channels, width, width)
+        to make it (B, channels, final_width, final_width).
+        """
+        batch_size, seq_len, channels = x.shape
+        width = int(seq_len**0.5)
+        if width * width != seq_len:
+            raise ValueError(f"Sequence length {seq_len} is not a perfect square. Cannot reshape to a square image.")
+        final_width = int(self.config.pooled_seq_len**0.5)
+        kernel_size = width // final_width
+        x = x.transpose(1, 2).reshape(batch_size, channels, width, width)
+        x = F.avg_pool2d(x, kernel_size=kernel_size, stride=kernel_size)
+        x = x.flatten(2).transpose(1, 2)
+        return x
 
 
 class Gemma3MultimodalInputProjection(nn.Module):
@@ -1029,9 +1052,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         )
         self.mm_soft_emb_norm = Gemma3RMSNorm(vision_config.hidden_size, eps=vision_config.layer_norm_eps)
 
-        patches_per_image = vision_config.image_size // vision_config.patch_size
-        avg_pool_k = patches_per_image**2 // text_config.mm_tokens_per_image
-        self.avg_pool = nn.AvgPool1d(kernel_size=avg_pool_k, stride=avg_pool_k)
+        self.avg_pool = Gemma3VisionAvgPool2D(config.vision_config)
         self.vocab_size = text_config.vocab_size
         self.pad_token_id = pad_token_id if (pad_token_id := text_config.pad_token_id) is not None else -1
         self.post_init()
@@ -1076,12 +1097,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         vision_outputs = self.vision_model(pixel_values=pixel_values).last_hidden_state
-        b, n, l = vision_outputs.shape
-        reshaped_vision_outputs = vision_outputs.permute(0, 2, 1)
-        reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
-        reshaped_vision_outputs = reshaped_vision_outputs.view(b, l, n)
-        pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
-        pooled_vision_outputs = pooled_vision_outputs.permute(0, 2, 1)
+        pooled_vision_outputs = self.avg_pool(vision_outputs)
         image_features = self.encode_vision(pooled_vision_outputs)
         return image_features
 
