@@ -224,14 +224,13 @@ class DeiTSelfAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.scaling = self.attention_head_size**-0.5
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.is_causal = False
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -263,7 +262,7 @@ class DeiTSelfAttention(nn.Module):
             head_mask,
             is_causal=self.is_causal,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout.p,
+            dropout=0.0 if not self.training else self.dropout_prob,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
