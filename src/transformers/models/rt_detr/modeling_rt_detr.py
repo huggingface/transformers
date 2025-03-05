@@ -18,7 +18,6 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -35,6 +34,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_ninja_available,
@@ -42,6 +42,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
@@ -135,8 +136,14 @@ class MultiScaleDeformableAttentionFunction(Function):
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
-# TODO: Replace all occurrences of the checkpoint with the final one
 _CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
+_DETECTION_OUTPUT_FOR_DOC = """
+    Detected 'sofa' (0.97) at [0.14, 0.38, 640.13, 476.21]
+    Detected 'cat' (0.96) at [343.38, 24.28, 640.14, 371.5]
+    Detected 'cat' (0.96) at [13.23, 54.18, 318.98, 472.22]
+    Detected 'remote' (0.95) at [40.11, 73.44, 175.96, 118.48]
+    Detected 'remote' (0.92) at [333.73, 76.58, 369.97, 186.99]
+"""
 
 
 @dataclass
@@ -343,10 +350,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     denoising_meta_values: Optional[Dict] = None
 
 
-def _get_clones(partial_module, N):
-    return nn.ModuleList([partial_module() for i in range(N)])
-
-
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.inverse_sigmoid
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
@@ -500,7 +503,7 @@ def get_contrastive_denoising_training_group(
         denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
     )
     # total denoising queries
-    num_denoising_queries = int(max_gt_num * 2 * num_groups_denoising_queries)
+    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
 
     if label_noise_ratio > 0:
         mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
@@ -721,10 +724,9 @@ class RTDetrCSPRepLayer(nn.Module):
             self.conv3 = nn.Identity()
 
     def forward(self, hidden_state):
-        device = hidden_state.device
         hidden_state_1 = self.conv1(hidden_state)
-        hidden_state_1 = self.bottlenecks(hidden_state_1).to(device)
-        hidden_state_2 = self.conv2(hidden_state).to(device)
+        hidden_state_1 = self.bottlenecks(hidden_state_1)
+        hidden_state_2 = self.conv2(hidden_state)
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
@@ -1129,7 +1131,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     config_class = RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
-    _no_split_modules = [r"RTDetrConvEncoder", r"RTDetrEncoderLayer", r"RTDetrDecoderLayer"]
+    _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
 
     def _init_weights(self, module):
         """Initalize the weights"""
@@ -1280,43 +1282,57 @@ class RTDetrHybridEncoder(nn.Module):
         self.eval_size = config.eval_size
         self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
-        activation_function = config.activation_function
+        self.num_fpn_stages = len(self.in_channels) - 1
+        self.num_pan_stages = len(self.in_channels) - 1
+        activation = config.activation_function
 
         # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
-        # top-down fpn
+        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in self.encode_proj_layers])
+
+        # top-down FPN
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1, 0, -1):
-            self.lateral_convs.append(
-                RTDetrConvNormLayer(
-                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1, activation=activation_function
-                )
+        for _ in range(self.num_fpn_stages):
+            lateral_conv = RTDetrConvNormLayer(
+                config,
+                in_channels=self.encoder_hidden_dim,
+                out_channels=self.encoder_hidden_dim,
+                kernel_size=1,
+                stride=1,
+                activation=activation,
             )
-            self.fpn_blocks.append(RTDetrCSPRepLayer(config))
+            fpn_block = RTDetrCSPRepLayer(config)
+            self.lateral_convs.append(lateral_conv)
+            self.fpn_blocks.append(fpn_block)
 
-        # bottom-up pan
+        # bottom-up PAN
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(
-                RTDetrConvNormLayer(
-                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2, activation=activation_function
-                )
+        for _ in range(self.num_pan_stages):
+            downsample_conv = RTDetrConvNormLayer(
+                config,
+                in_channels=self.encoder_hidden_dim,
+                out_channels=self.encoder_hidden_dim,
+                kernel_size=3,
+                stride=2,
+                activation=activation,
             )
-            self.pan_blocks.append(RTDetrCSPRepLayer(config))
+            pan_block = RTDetrCSPRepLayer(config)
+            self.downsample_convs.append(downsample_conv)
+            self.pan_blocks.append(pan_block)
 
     @staticmethod
     def build_2d_sincos_position_embedding(
         width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
     ):
-        grid_w = torch.arange(int(width), dtype=dtype, device=device)
-        grid_h = torch.arange(int(height), dtype=dtype, device=device)
+        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
+        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
         grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+
         pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
+        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
         omega = 1.0 / (temperature**omega)
 
         out_w = grid_w.flatten()[..., None] @ omega[None]
@@ -1327,11 +1343,6 @@ class RTDetrHybridEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
-        valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1340,19 +1351,6 @@ class RTDetrHybridEncoder(nn.Module):
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1372,34 +1370,43 @@ class RTDetrHybridEncoder(nn.Module):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        # encoder
+
+        # Step 1: Apply transformer encoder
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
                 if output_hidden_states:
                     encoder_states = encoder_states + (hidden_states[enc_ind],)
-                height, width = hidden_states[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, height*width, channel]
-                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
+
+                # 1. flatten [batch, channel, height, width] to [batch, height * width, channel]
+                hidden_state = hidden_states[enc_ind]
+                height, width = hidden_state.shape[2:]
+                hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
+
+                # build position embeddings
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
                         width,
                         height,
                         self.encoder_hidden_dim,
                         self.positional_encoding_temperature,
-                        device=src_flatten.device,
-                        dtype=src_flatten.dtype,
+                        device=hidden_state.device,
+                        dtype=hidden_state.dtype,
                     )
                 else:
                     pos_embed = None
 
+                # 2. Apply transformer encoder layer
                 layer_outputs = self.encoder[i](
-                    src_flatten,
+                    hidden_state,
                     pos_embed=pos_embed,
                     output_attentions=output_attentions,
                 )
-                hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
-                )
+                hidden_state = layer_outputs[0]
+
+                # 3. Reshape back to [batch, height, width, channel]
+                hidden_state = hidden_state.permute(0, 2, 1)
+                hidden_state = hidden_state.reshape(-1, self.encoder_hidden_dim, height, width)
+                hidden_states[enc_ind] = hidden_state.contiguous()
 
                 if output_attentions:
                     all_attentions = all_attentions + (layer_outputs[1],)
@@ -1407,30 +1414,37 @@ class RTDetrHybridEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states[enc_ind],)
 
-        # broadcasting and fusion
+        # Step 2: Apply FPN (conv part)
         fpn_feature_maps = [hidden_states[-1]]
-        for idx in range(len(self.in_channels) - 1, 0, -1):
-            feat_high = fpn_feature_maps[0]
-            feat_low = hidden_states[idx - 1]
-            feat_high = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_high)
-            fpn_feature_maps[0] = feat_high
-            upsample_feat = F.interpolate(feat_high, scale_factor=2.0, mode="nearest")
-            fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
-            fpn_feature_maps.insert(0, fps_map)
+        for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
+            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            top_fpn_feature_map = fpn_feature_maps[-1]
+            # apply lateral block
+            top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
+            fpn_feature_maps[-1] = top_fpn_feature_map
+            # apply fpn block
+            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
+            fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
+            new_fpn_feature_map = fpn_block(fused_feature_map)
+            fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_states = [fpn_feature_maps[0]]
-        for idx in range(len(self.in_channels) - 1):
-            feat_low = fpn_states[-1]
-            feat_high = fpn_feature_maps[idx + 1]
-            downsample_feat = self.downsample_convs[idx](feat_low)
-            hidden_states = self.pan_blocks[idx](
-                torch.concat([downsample_feat, feat_high.to(downsample_feat.device)], dim=1)
-            )
-            fpn_states.append(hidden_states)
+        fpn_feature_maps = fpn_feature_maps[::-1]
+
+        # Step 3: Apply PAN (conv part)
+        pan_feature_maps = [fpn_feature_maps[0]]
+        for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
+            top_pan_feature_map = pan_feature_maps[-1]
+            fpn_feature_map = fpn_feature_maps[idx + 1]
+            downsampled_feature_map = downsample_conv(top_pan_feature_map)
+            fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
+            new_pan_feature_map = pan_block(fused_feature_map)
+            pan_feature_maps.append(new_pan_feature_map)
 
         if not return_dict:
-            return tuple(v for v in [fpn_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
+            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 class RTDetrDecoder(RTDetrPreTrainedModel):
@@ -1511,8 +1525,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
-
-        reference_points = F.sigmoid(reference_points)
 
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L252
         for idx, decoder_layer in enumerate(self.layers):
@@ -1624,73 +1636,67 @@ class RTDetrMLPPredictionHead(nn.Module):
 class RTDetrModel(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
+        self.learn_initial_query = config.learn_initial_query
 
         # Create backbone
         self.backbone = RTDetrConvEncoder(config)
-        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
         num_backbone_outs = len(intermediate_channel_sizes)
-        encoder_input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = intermediate_channel_sizes[_]
-            encoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.encoder_hidden_dim),
-                )
-            )
-        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
+        self.encoder_input_proj = nn.ModuleList()
+        for idx in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[idx]
+            conv = nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.encoder_hidden_dim)
+            self.encoder_input_proj.append(nn.Sequential(conv, batchnorm))
 
         # Create encoder
         self.encoder = RTDetrHybridEncoder(config)
 
-        # denoising part
+        # De-noising part
         if config.num_denoising > 0:
             self.denoising_class_embed = nn.Embedding(
                 config.num_labels + 1, config.d_model, padding_idx=config.num_labels
             )
 
-        # decoder embedding
-        if config.learn_initial_query:
+        # Decoder embedding
+        if self.learn_initial_query:
             self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
 
-        # encoder head
+        # Encoder head
         self.enc_output = nn.Sequential(
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = RTDetrMLPPredictionHead(
+            config, config.d_model, config.d_model, output_dim=4, num_layers=3
+        )
 
-        # init encoder output anchors and valid_mask
+        # Init encoder output anchors and valid_mask
         if config.anchor_image_size:
             self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
 
         # Create decoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
-        decoder_input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = config.decoder_in_channels[_]
-            decoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-        for _ in range(config.num_feature_levels - num_backbone_outs):
-            decoder_input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-            in_channels = config.d_model
-        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+        self.decoder_input_proj = nn.ModuleList()
 
-        # decoder
+        for idx in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[idx]
+            conv = nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.d_model, eps=config.batch_norm_eps)
+            self.decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            conv = nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.d_model, eps=config.batch_norm_eps)
+            self.decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+            in_channels = config.d_model
+
+        # Decoder
         self.decoder = RTDetrDecoder(config)
 
         self.post_init()
@@ -1710,27 +1716,35 @@ class RTDetrModel(RTDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+    def generate_anchors(
+        self,
+        spatial_shapes: Optional[Tuple[Tuple[int, int], ...]] = None,
+        grid_size: float = 0.05,
+        device: str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ):
         if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+            height, width = self.config.anchor_image_size
+            spatial_shapes = tuple(
+                [(int(height / stride), int(width / stride)) for stride in self.config.feat_strides]
+            )
+
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
-            grid_y, grid_x = torch.meshgrid(
-                torch.arange(end=height, dtype=dtype, device=device),
-                torch.arange(end=width, dtype=dtype, device=device),
-                indexing="ij",
-            )
-            grid_xy = torch.stack([grid_x, grid_y], -1)
-            valid_wh = torch.tensor([width, height], device=device).to(dtype)
-            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
-            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
-            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+            # Generate normalized grid coordinates from the center of the first pixel
+            # to the center of the last pixel (e.g. 0.5 / width, 1 - 0.5 / width)
+            grid_x = torch.linspace(0.5 / width, 1 - 0.5 / width, width, device=device, dtype=dtype)
+            grid_y = torch.linspace(0.5 / height, 1 - 0.5 / height, height, device=device, dtype=dtype)
+            grid_y, grid_x = torch.meshgrid(grid_y, grid_x, indexing="ij")
+            grid_xy = torch.stack([grid_x, grid_y], dim=-1)
+
+            grid_wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            level_anchors = torch.concat([grid_xy, grid_wh], dim=-1).reshape(height * width, 4)
+            anchors.append(level_anchors)
+        anchors = torch.concat(anchors).unsqueeze(0)
+
         # define the valid range for anchor coordinates
         eps = 1e-2
-        anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
@@ -1787,53 +1801,41 @@ class RTDetrModel(RTDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-        features = self.backbone(pixel_values, pixel_mask)
+        # Stage 1: Convolutional backbone
+        backbone_outputs = self.backbone(pixel_values, pixel_mask)
 
-        proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
+        # Stage 2: Hybrid encoder (transformer -> FPN -> PAN)
+        projected_feature_maps = [
+            proj(feature_map) for proj, (feature_map, mask) in zip(self.encoder_input_proj, backbone_outputs)
+        ]
+        encoder_outputs = self.encoder(
+            projected_feature_maps,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                proj_feats,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if output_hidden_states else None,
-                attentions=encoder_outputs[2]
-                if len(encoder_outputs) > 2
-                else encoder_outputs[1]
-                if output_attentions
-                else None,
-            )
+        feature_maps = encoder_outputs[0]
+        last_encoder_feature_map = feature_maps[-1]
 
-        # Equivalent to def _get_encoder_input
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
-        sources = []
-        for level, source in enumerate(encoder_outputs[0]):
-            sources.append(self.decoder_input_proj[level](source))
+        # Apply projection to each feature map
+        feature_maps = [proj(feature_map) for proj, feature_map in zip(self.decoder_input_proj, feature_maps)]
+        for i in range(len(feature_maps), self.config.num_feature_levels):
+            feature_maps.append(self.decoder_input_proj[i](last_encoder_feature_map))
 
-        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
-        if self.config.num_feature_levels > len(sources):
-            _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
-            for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
+        # Flatten decoder inputs
+        hidden_states = [feature_map.flatten(2).transpose(1, 2) for feature_map in feature_maps]
+        hidden_states = torch.cat(hidden_states, dim=1)
 
-        # Prepare encoder inputs (by flattening)
-        source_flatten = []
-        spatial_shapes_list = []
-        for level, source in enumerate(sources):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes_list.append(spatial_shape)
-            source = source.flatten(2).transpose(1, 2)
-            source_flatten.append(source)
-        source_flatten = torch.cat(source_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
+        # Prepare spatial shapes, we have to keep both: the list and the tensor
+        # for torch.compile fullgraph=True and ONNX dynamic export
+        spatial_shapes_list = [(feat.shape[-2], feat.shape[-1]) for feat in feature_maps]
+        spatial_shapes = torch.empty((len(feature_maps), 2), device=device, dtype=torch.long)
+        for level, source in enumerate(feature_maps):
+            height, width = source.shape[-2:]
+            spatial_shapes[level, 0] = height
+            spatial_shapes[level, 1] = width
+
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
@@ -1855,9 +1857,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
         else:
             denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
 
-        batch_size = len(source_flatten)
-        device = source_flatten.device
-        dtype = source_flatten.dtype
+        batch_size = len(hidden_states)
+        device = hidden_states.device
+        dtype = hidden_states.dtype
 
         # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
@@ -1867,49 +1869,43 @@ class RTDetrModel(RTDetrPreTrainedModel):
             anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
         else:
             anchors, valid_mask = self.anchors, self.valid_mask
-
-        anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
+            anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
-        memory = valid_mask.to(source_flatten.dtype) * source_flatten
+        masked_hidden_states = hidden_states * valid_mask.to(hidden_states.dtype)
+        proj_hidden_states = self.enc_output(masked_hidden_states)
 
-        output_memory = self.enc_output(memory)
+        class_logits = self.enc_score_head(proj_hidden_states)
+        bboxes_logits = self.enc_bbox_head(proj_hidden_states) + anchors
 
-        enc_outputs_class = self.enc_score_head(output_memory)
-        enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
+        # gather encoder logits and boxes based on top K confident logits
+        _, topk_ind = torch.topk(class_logits.max(-1).values, self.config.num_queries, dim=1)
+        topk_ind = topk_ind.unsqueeze(-1)
 
-        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
-
-        reference_points_unact = enc_outputs_coord_logits.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
-        )
-
-        enc_topk_bboxes = F.sigmoid(reference_points_unact)
+        topk_logits = class_logits.gather(dim=1, index=topk_ind.repeat(1, 1, class_logits.shape[-1]))
+        topk_bboxes_logits = bboxes_logits.gather(dim=1, index=topk_ind.repeat(1, 1, bboxes_logits.shape[-1]))
         if denoising_bbox_unact is not None:
-            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
-
-        enc_topk_logits = enc_outputs_class.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
-        )
+            topk_bboxes_logits = torch.concat([denoising_bbox_unact, topk_bboxes_logits], 1)
 
         # extract region features
-        if self.config.learn_initial_query:
+        if self.learn_initial_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
-            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = proj_hidden_states.gather(dim=1, index=topk_ind.repeat(1, 1, proj_hidden_states.shape[-1]))
             target = target.detach()
 
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
 
-        init_reference_points = reference_points_unact.detach()
+        topk_bboxes = F.sigmoid(topk_bboxes_logits)
+        init_reference_points = topk_bboxes_logits.detach()
 
         # decoder
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            encoder_hidden_states=source_flatten,
+            encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            reference_points=init_reference_points,
+            reference_points=topk_bboxes,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
@@ -1920,9 +1916,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(
-                value
-                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
-                if value is not None
+                value for value in [topk_logits, topk_bboxes, class_logits, bboxes_logits] if value is not None
             )
             dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
             tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
@@ -1941,10 +1935,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             init_reference_points=init_reference_points,
-            enc_topk_logits=enc_topk_logits,
-            enc_topk_bboxes=enc_topk_bboxes,
-            enc_outputs_class=enc_outputs_class,
-            enc_outputs_coord_logits=enc_outputs_coord_logits,
+            enc_topk_logits=topk_logits,
+            enc_topk_bboxes=topk_bboxes,
+            enc_outputs_class=class_logits,
+            enc_outputs_coord_logits=bboxes_logits,
             denoising_meta_values=denoising_meta_values,
         )
 
@@ -1969,17 +1963,15 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.model = RTDetrModel(config)
 
         # Detection heads on top
-        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
-
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
-        if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-        else:
-            self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
+        self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
+        self.bbox_embed = nn.ModuleList(
+            [
+                RTDetrMLPPredictionHead(config, config.d_model, config.d_model, output_dim=4, num_layers=3)
+                for _ in range(num_pred)
+            ]
+        )
 
         # hack implementation for iterative bounding box refinement
         self.model.decoder.class_embed = self.class_embed
@@ -1988,15 +1980,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
-
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=RTDetrObjectDetectionOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_DETECTION_OUTPUT_FOR_DOC,
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2017,59 +2007,11 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import RTDetrImageProcessor, RTDetrForObjectDetection
-        >>> from PIL import Image
-        >>> import requests
-        >>> import torch
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
-        >>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
-
-        >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
-        >>> # forward pass
-        >>> outputs = model(**inputs)
-
-        >>> logits = outputs.logits
-        >>> list(logits.shape)
-        [1, 300, 80]
-
-        >>> boxes = outputs.pred_boxes
-        >>> list(boxes.shape)
-        [1, 300, 4]
-
-        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-        ...     0
-        ... ]
-
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(
-        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...         f"{round(score.item(), 3)} at location {box}"
-        ...     )
-        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
-        Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
-        Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
-        Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
-        Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
-        ```"""
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
