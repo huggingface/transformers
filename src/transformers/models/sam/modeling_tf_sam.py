@@ -1652,4 +1652,4 @@ class TFSamModel(TFSamPreTrainedModel):
                 self.mask_decoder.build(None)
 
 
-__all__ = ["TFSamModel", "TFSamPreTrainedModel"]
+__all__ = ["TFSamVisionEncoder", "TFSamModel", "TFSamPreTrainedModel"]

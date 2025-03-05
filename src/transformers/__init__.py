@@ -3503,6 +3503,7 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+            "SamVisionEncoder",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -4671,6 +4672,7 @@ else:
         [
             "TFSamModel",
             "TFSamPreTrainedModel",
+            "TFSamVisionEncoder",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -8270,6 +8272,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+            SamVisionEncoder,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
@@ -9209,6 +9212,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             TFSamModel,
             TFSamPreTrainedModel,
+            TFSamVisionEncoder,
         )
         from .models.segformer import (
             TFSegformerDecodeHead,
