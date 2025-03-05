@@ -147,7 +147,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(outputs, [])
 
-        # We can optionnally pass directly the words and bounding boxes
+        # We can optionally pass directly the words and bounding boxes
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []
@@ -183,7 +183,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(outputs, [])
 
-        # We can optionnally pass directly the words and bounding boxes
+        # We can optionally pass directly the words and bounding boxes
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         words = []
         boxes = []

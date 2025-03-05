@@ -392,7 +392,7 @@ class ImageProcessingTestMixin:
                 image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
                 encoding = image_processor(image_inputs, return_tensors="pt")
-                # for layoutLM compatiblity
+                # for layoutLM compatibility
                 self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
                 self.assertEqual(encoding.pixel_values.dtype, torch.float32)
 

@@ -54,7 +54,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutLMv3Tokenizer
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     test_rust_tokenizer = True
-    # determined by the tokenization algortihm and the way it's decoded by the fast tokenizers
+    # determined by the tokenization algorithm and the way it's decoded by the fast tokenizers
     space_between_special_tokens = False
     test_seq2seq = False
     from_pretrained_kwargs = {"cls_token": "<s>"}

@@ -251,7 +251,7 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertTrue(model.generation_config.num_beams == 1)
 
         # Under the hood: we now store a generation config in the pipeline. This generation config stores the
-        # task-specific paremeters.
+        # task-specific parameters.
         self.assertTrue(pipe.generation_config.num_beams == 4)
 
         # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
