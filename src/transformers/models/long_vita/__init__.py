@@ -13,16 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .configuration_long_vita import *
-    from .modeling_long_vita import *
-else:
-    import sys
-
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
 
+if TYPE_CHECKING:
+    from .configuration_long_vita import *
+    from .modeling_long_vita import *
+else:
+    import sys
+    
     _file = globals()["__file__"]
     sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
