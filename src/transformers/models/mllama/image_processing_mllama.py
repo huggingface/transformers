@@ -715,7 +715,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                 # convert images to channels first format for faster processing
                 # LAST is slower for `pad` and not supported by `split_to_tiles`
                 data_format = ChannelDimension.FIRST
-                image = to_channel_dimension_format(image, data_format, input_channel_dim=image_input_data_format)
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
                 # do_resize=False is not supported, validated
                 image, aspect_ratio = self.resize(
