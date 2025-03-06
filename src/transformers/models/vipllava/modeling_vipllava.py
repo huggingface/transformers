@@ -287,7 +287,12 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=[vision_feature_layers] if isinstance(vision_feature_layers, int) else vision_feature_layers)
+        image_outputs = self.vision_tower(
+            pixel_values,
+            output_hidden_states=[vision_feature_layers]
+            if isinstance(vision_feature_layers, int)
+            else vision_feature_layers,
+        )
 
         # If multiple feature layers are provided (which is usually the case)
         # then the image features are concatenated after the CLS is removed.

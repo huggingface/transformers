@@ -79,27 +79,31 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
     return normed_tensor
 
 
-def prepare_hidden_states_indices(output_hidden_states: Union[bool, List[int]], num_hidden_layers: int) -> Dict[int, int]:
+def prepare_hidden_states_indices(
+    output_hidden_states: Union[bool, List[int]], num_hidden_layers: int
+) -> Dict[int, int]:
     if not output_hidden_states:
         return {}
     elif output_hidden_states is True:
-        return {order_idx: index for order_idx, index in enumerate(range(num_hidden_layers + 1))}
+        return dict(enumerate(range(num_hidden_layers + 1)))
     elif isinstance(output_hidden_states, (list, tuple)):
         if (
             any(index > num_hidden_layers for index in output_hidden_states)
-            or any(
-                num_hidden_layers + index + 1 < 0 if index < 0 else False
-                for index in output_hidden_states
-            )
+            or any(num_hidden_layers + index + 1 < 0 if index < 0 else False for index in output_hidden_states)
             or any(
                 num_hidden_layers + index + 1 > num_hidden_layers if index < 0 else False
                 for index in output_hidden_states
             )
         ):
             raise ValueError("output_hidden_states index is out of range.")
-        return {order_idx: num_hidden_layers + index + 1 if index < 0 else index for order_idx, index in enumerate(output_hidden_states)}
+        return {
+            order_idx: num_hidden_layers + index + 1 if index < 0 else index
+            for order_idx, index in enumerate(output_hidden_states)
+        }
     else:
-        raise ValueError(f"Expected output_hidden_states to be `bool` or `list`/`tuple` of `int`, got {output_hidden_states=}")
+        raise ValueError(
+            f"Expected output_hidden_states to be `bool` or `list`/`tuple` of `int`, got {output_hidden_states=}"
+        )
 
 
 @dataclass
@@ -903,8 +907,10 @@ class CLIPEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        output_hidden_states_position_to_index = prepare_hidden_states_indices(output_hidden_states, num_hidden_layers=self.config.num_hidden_layers)
-        
+        output_hidden_states_position_to_index = prepare_hidden_states_indices(
+            output_hidden_states, num_hidden_layers=self.config.num_hidden_layers
+        )
+
         encoder_states = {}
         all_attentions = () if output_attentions else None
 
@@ -937,10 +943,14 @@ class CLIPEncoder(nn.Module):
             encoder_states[self.config.num_hidden_layers] = hidden_states
 
         # `None` when there are no `encoder_states` so it's not returned in `not return_dict` path.
-        encoder_states = tuple(
-            encoder_states[output_hidden_states_position_to_index[k]]
-            for k in output_hidden_states_position_to_index.keys()
-        ) if encoder_states else None
+        encoder_states = (
+            tuple(
+                encoder_states[output_hidden_states_position_to_index[k]]
+                for k in output_hidden_states_position_to_index.keys()
+            )
+            if encoder_states
+            else None
+        )
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(

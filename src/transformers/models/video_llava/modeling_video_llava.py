@@ -304,7 +304,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
-        image_outputs = self.image_tower(pixel_values_images, output_hidden_states=[vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer)
+        image_outputs = self.image_tower(
+            pixel_values_images,
+            output_hidden_states=[vision_feature_layer]
+            if isinstance(vision_feature_layer, int)
+            else vision_feature_layer,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -345,7 +350,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        video_outputs = self.video_tower(pixel_values, output_hidden_states=[vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer)
+        video_outputs = self.video_tower(
+            pixel_values,
+            output_hidden_states=[vision_feature_layer]
+            if isinstance(vision_feature_layer, int)
+            else vision_feature_layer,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
