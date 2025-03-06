@@ -139,8 +139,6 @@ class Gemma3TextConfig(PretrainedConfig):
             The scaling factor used on the attention scores, not that
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
             attention. This is the size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh soft-capping
-            on the logits.z
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh soft-capping
             on the attention scorexs.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -182,7 +180,6 @@ class Gemma3TextConfig(PretrainedConfig):
         num_key_value_heads: int = 4,  # num_kv_heads in FLAX
         head_dim: int = 256,
         sliding_window: int = 4096,  # sliding_window_size in FLAX
-        final_logit_softcapping: float = 30.0,
         query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
         rope_global_base_freq: float = 1_000_000.0,
@@ -237,7 +234,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
-        self.final_logit_softcapping = final_logit_softcapping
         self.cache_implementation = cache_implementation
 
 

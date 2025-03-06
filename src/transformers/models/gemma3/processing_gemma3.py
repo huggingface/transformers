@@ -171,11 +171,6 @@ class Gemma3Processor(ProcessorMixin):
         num_mm_soft_tokens_per_image: int = 256,
         **kwargs,
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         try:
             self.image_seq_length = getattr(image_processor, "image_seq_length")
         except AttributeError as e:
@@ -206,8 +201,12 @@ class Gemma3Processor(ProcessorMixin):
         self,
         images: Optional[Gemma3ProcessorImageInput] = None,
         text: Optional[TextInputTypes] = None,
+        videos: Optional[Any] = None,
+        audio: Optional[Any] = none,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
+        del videos, audio  # Unsupported modalities for Gemma 3
+
         if text is None and images is None:
             raise ValueError("Provide at least one of `text` or `images`.")
 

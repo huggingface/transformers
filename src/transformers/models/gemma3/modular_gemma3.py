@@ -214,8 +214,6 @@ class Gemma3TextConfig(PretrainedConfig):
             The scaling factor used on the attention scores, not that
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
             attention. This is the size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh soft-capping
-            on the logits.z
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh soft-capping
             on the attention scorexs.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -257,7 +255,6 @@ class Gemma3TextConfig(PretrainedConfig):
         num_key_value_heads: int = 4,  # num_kv_heads in FLAX
         head_dim: int = 256,
         sliding_window: int = 4096,  # sliding_window_size in FLAX
-        final_logit_softcapping: float = 30.0,
         query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
         rope_global_base_freq: float = 1_000_000.0,
@@ -312,7 +309,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
-        self.final_logit_softcapping = final_logit_softcapping
         self.cache_implementation = cache_implementation
 
 
@@ -505,11 +501,6 @@ class Gemma3Processor(ProcessorMixin):
         num_mm_soft_tokens_per_image: int = 256,
         **kwargs,
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         try:
             self.image_seq_length = getattr(image_processor, "image_seq_length")
         except AttributeError as e:
@@ -547,8 +538,12 @@ class Gemma3Processor(ProcessorMixin):
         self,
         images: Optional[Gemma3ProcessorImageInput] = None,
         text: Optional[TextInputTypes] = None,
+        videos: Optional[Any] = None,
+        audio: Optional[Any] = none,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
+        del videos, audio   # Unsupported modalities for Gemma 3
+
         if text is None and images is None:
             raise ValueError("Provide at least one of `text` or `images`.")
 
@@ -1547,10 +1542,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             else logits_to_keep
         )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -1912,16 +1903,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        # mask out pad-token-ids in labels for BC
-        if labels is not None and self.pad_token_id in labels:
-            logger.warning_once(
-                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. "
-                "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
-            )
-            labels = torch.where(
-                input_ids == self.pad_token_id, self.config.ignore_index, labels
-            )
-
         causal_mask = self._update_causal_mask(
             attention_mask,
             token_type_ids,
@@ -2014,10 +1995,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             token_type_ids=token_type_ids,
             **kwargs,
         )
-
-        # position_ids in Paligemma are 1-indexed
-        if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
 
         # If we're in cached decoding stage, pixel values should be None because
         # input ids do not contain special image tokens anymore. Otherwise we

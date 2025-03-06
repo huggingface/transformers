@@ -871,10 +871,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -1211,14 +1207,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        # mask out pad-token-ids in labels for BC
-        if labels is not None and self.pad_token_id in labels:
-            logger.warning_once(
-                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. "
-                "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
-            )
-            labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
-
         causal_mask = self._update_causal_mask(
             attention_mask,
             token_type_ids,
@@ -1305,10 +1293,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             token_type_ids=token_type_ids,
             **kwargs,
         )
-
-        # position_ids in Paligemma are 1-indexed
-        if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
 
         # If we're in cached decoding stage, pixel values should be None because
         # input ids do not contain special image tokens anymore. Otherwise we
