@@ -493,6 +493,7 @@ class Cohere2Model(Gemma2Model):
                 max_batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
+                device=self.device,
             )
 
         if cache_position is None:

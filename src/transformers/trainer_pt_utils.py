@@ -1231,8 +1231,8 @@ class AcceleratorConfig:
             all workers.
         use_seedable_sampler (`bool`, *optional*, defaults to `True`):
             Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
@@ -1284,8 +1284,8 @@ class AcceleratorConfig:
         default=True,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
