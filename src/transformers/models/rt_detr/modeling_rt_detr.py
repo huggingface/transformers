@@ -1440,9 +1440,11 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = RTDetrMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.query_pos_head = RTDetrMLPPredictionHead(
+            input_dim=4, hidden_dim=2 * config.d_model, output_dim=config.d_model, num_layers=2
+        )
 
-        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
+        # hack implementation for iterative bounding box refinement and two-stage RT-DETR
         self.bbox_embed = None
         self.class_embed = None
 
@@ -1602,15 +1604,18 @@ class RTDetrMLPPredictionHead(nn.Module):
 
     """
 
-    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
         super().__init__()
         self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        input_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
+        output_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
+        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = layer(x)
+            if i < self.num_layers - 1:
+                x = nn.functional.relu(x)
         return x
 
 
@@ -1659,7 +1664,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
         self.enc_bbox_head = RTDetrMLPPredictionHead(
-            config, config.d_model, config.d_model, output_dim=4, num_layers=3
+            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
         # Init encoder output anchors and valid_mask
@@ -1952,7 +1957,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
-                RTDetrMLPPredictionHead(config, config.d_model, config.d_model, output_dim=4, num_layers=3)
+                RTDetrMLPPredictionHead(
+                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                )
                 for _ in range(num_pred)
             ]
         )
