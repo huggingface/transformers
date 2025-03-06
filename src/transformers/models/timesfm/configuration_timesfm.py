@@ -34,24 +34,24 @@ class TimesFmConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        patch_len (`int`, *optional*, defaults to 32):
+        patch_length (`int`, *optional*, defaults to 32):
             The length of one patch in the input sequence.
-        context_len (`int`, *optional*, defaults to 512):
+        context_length (`int`, *optional*, defaults to 512):
             The length of the input context.
-        horizon_len (`int`, *optional*, defaults to 128):
+        horizon_length (`int`, *optional*, defaults to 128):
             The length of the prediction horizon.
         freq_size (`int`, *optional*, defaults to 3):
             The number of frequency embeddings.
-        num_layers (`int`, *optional*, defaults to 50):
+        num_hidden_layers (`int`, *optional*, defaults to 50):
             Number of Transformer layers.
-        model_dim (`int`, *optional*, defaults to 1280):
+        hidden_size (`int`, *optional*, defaults to 1280):
             Size of the hidden layers in the feed-forward networks.
         intermediate_size (`int`, *optional*, defaults to 1280):
             Dimension of the MLP representations.
         head_dim (`int`, *optional*, defaults to 80):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_heads * head_dim`.
-        num_heads (`int`, *optional*, defaults to 16):
+            be defined as `num_attention_heads * head_dim`.
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         tolerance (`float`, *optional*, defaults to 1e-06):
             The tolerance for the quantile loss.
@@ -77,24 +77,19 @@ class TimesFmConfig(PretrainedConfig):
 
     model_type = "timesfm"
     keys_to_ignore_at_inference = []
-    attribute_map = {
-        "hidden_size": "model_dim",
-        "num_attention_heads": "num_heads",
-        "num_hidden_layers": "num_layers",
-    }
     is_encoder_decoder = False
 
     def __init__(
         self,
-        patch_len: int = 32,
-        context_len: int = 512,
-        horizon_len: int = 128,
+        patch_length: int = 32,
+        context_length: int = 512,
+        horizon_length: int = 128,
         freq_size: int = 3,
-        num_layers: int = 50,
-        model_dim: int = 1280,
+        num_hidden_layers: int = 50,
+        hidden_size: int = 1280,
         intermediate_size: int = 1280,
         head_dim: int = 80,
-        num_heads: int = 16,
+        num_attention_heads: int = 16,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -106,17 +101,17 @@ class TimesFmConfig(PretrainedConfig):
         max_timescale: int = 10_000,
         **kwargs,
     ):
-        self.patch_len = patch_len
-        self.context_len = context_len
-        self.horizon_len = horizon_len
+        self.patch_length = patch_length
+        self.context_length = context_length
+        self.horizon_length = horizon_length
         self.quantiles = quantiles
         self.pad_val = pad_val
         self.freq_size = freq_size
-        self.model_dim = model_dim
+        self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.head_dim = head_dim
-        self.num_layers = num_layers
-        self.num_heads = num_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.attention_dropout = attention_dropout

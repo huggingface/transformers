@@ -42,12 +42,12 @@ class TimesFmModelTester:
     def __init__(
         self,
         parent,
-        patch_len: int = 32,
-        context_len: int = 512,
-        horizon_len: int = 128,
+        patch_length: int = 32,
+        context_length: int = 512,
+        horizon_length: int = 128,
         freq_size: int = 3,
-        num_layers: int = 1,
-        model_dim: int = 16,
+        num_hidden_layers: int = 1,
+        hidden_size: int = 16,
         intermediate_size: int = 32,
         head_dim: int = 8,
         num_heads: int = 2,
@@ -61,16 +61,16 @@ class TimesFmModelTester:
         batch_size: int = 3,
     ):
         self.parent = parent
-        self.patch_len = patch_len
-        self.context_len = context_len
-        self.horizon_len = horizon_len
+        self.patch_length = patch_length
+        self.context_length = context_length
+        self.horizon_length = horizon_length
         self.quantiles = quantiles
         self.pad_val = pad_val
         self.freq_size = freq_size
-        self.model_dim = model_dim
+        self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.head_dim = head_dim
-        self.num_hidden_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_heads
         self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
@@ -80,25 +80,25 @@ class TimesFmModelTester:
         self.batch_size = batch_size
 
         # The size of test input
-        self.seq_length = context_len // patch_len
-        self.hidden_size = model_dim
+        self.seq_length = context_length // patch_length
+        self.hidden_size = hidden_size
 
     def get_large_model_config(self):
         return TimesFmConfig.from_pretrained("google/timesfm-1.0-200m-pytorch")
 
     def get_config(self):
         return TimesFmConfig(
-            patch_len=self.patch_len,
-            context_len=self.context_len,
-            horizon_len=self.horizon_len,
+            patch_length=self.patch_length,
+            context_length=self.context_length,
+            horizon_length=self.horizon_length,
             quantiles=self.quantiles,
             pad_val=self.pad_val,
             freq_size=self.freq_size,
-            model_dim=self.model_dim,
+            hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
             head_dim=self.head_dim,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
             tolerance=self.tolerance,
             rms_norm_eps=self.rms_norm_eps,
             use_positional_embedding=self.use_positional_embedding,

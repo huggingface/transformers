@@ -89,7 +89,7 @@ class TimesFmMLP(nn.Module):
 
     def __init__(self, config: TimesFmConfig):
         super().__init__()
-        hidden_size = config.model_dim
+        hidden_size = config.hidden_size
         intermediate_size = config.intermediate_size
 
         self.gate_proj = nn.Linear(hidden_size, intermediate_size)
@@ -142,7 +142,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         super().__init__()
         self.min_timescale = config.min_timescale
         self.max_timescale = config.max_timescale
-        self.embedding_dims = config.model_dim
+        self.embedding_dims = config.hidden_size
 
     def forward(self, seq_length=None, position=None):
         """Generates a Tensor of sinusoids with different frequencies.
@@ -187,8 +187,8 @@ class TimesFmAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.layer_idx = layer_idx
 
-        self.num_heads = config.num_heads
-        self.hidden_size = config.model_dim
+        self.num_heads = config.num_attention_heads
+        self.hidden_size = config.hidden_size
         self.head_dim = config.head_dim
         self.num_key_value_groups = 1
 
@@ -260,7 +260,7 @@ class TimesFmDecoderLayer(nn.Module):
 
         self.self_attn = TimesFmAttention(config, layer_idx=layer_idx)
         self.mlp = TimesFmMLP(config)
-        self.input_layernorm = TimesFmRMSNorm(config.model_dim, eps=config.rms_norm_eps)
+        self.input_layernorm = TimesFmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -600,12 +600,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         self.config = config
         self.input_ff_layer = TimesFmResidualBlock(
-            input_dims=2 * config.patch_len,
-            output_dims=config.model_dim,
+            input_dims=2 * config.patch_length,
+            output_dims=config.hidden_size,
             hidden_dims=config.intermediate_size,
         )
-        self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.model_dim)
-        self.layers = nn.ModuleList([TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)])
+        self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.hidden_size)
+        self.layers = nn.ModuleList([TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         if self.config.use_positional_embedding:
             self.position_emb = TimesFmPositionalEmbedding(config=config)
 
@@ -638,8 +638,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
         """Preprocess input for stacked transformer."""
         # Reshape into patches (using view for efficiency)
         bsize = input_ts.shape[0]
-        patched_inputs = input_ts.view(bsize, -1, self.config.patch_len)
-        patched_pads = input_padding.view(bsize, -1, self.config.patch_len)
+        patched_inputs = input_ts.view(bsize, -1, self.config.patch_length)
+        patched_pads = input_padding.view(bsize, -1, self.config.patch_length)
 
         patched_inputs = torch.where(
             torch.abs(patched_pads - 1.0) < self.config.tolerance,
@@ -705,7 +705,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         all_attentions = []
         all_hidden_states = []
 
-        for layer in self.layers[: self.config.num_layers]:
+        for layer in self.layers[: self.config.num_hidden_layers]:
             scores, hidden_states = layer(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -751,15 +751,15 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        self.context_len = config.context_len
-        self.horizon_len = config.horizon_len
+        self.context_len = config.context_length
+        self.horizon_len = config.horizon_length
 
         self.decoder = TimesFmModel(config)
 
         # quantile and mean output
         self.horizon_ff_layer = TimesFmResidualBlock(
-            input_dims=config.model_dim,
-            output_dims=config.horizon_len * (1 + len(config.quantiles)),
+            input_dims=config.hidden_size,
+            output_dims=config.horizon_length * (1 + len(config.quantiles)),
             hidden_dims=config.intermediate_size,
         )
 
@@ -819,7 +819,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         # Reshape using view
         b, n, _ = output_ts.shape
-        output_ts = output_ts.view(b, n, self.config.horizon_len, len(self.config.quantiles) + 1)
+        output_ts = output_ts.view(b, n, self.config.horizon_length, len(self.config.quantiles) + 1)
 
         return self._reverse_transform(output_ts, stats)
 
@@ -928,7 +928,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 "Length of paddings must match length of input + horizon_len:"
                 f" {input_padding.shape[1]} != {final_out.shape[1]} + {self.horizon_len}"
             )
-        output_patch_len = self.config.horizon_len
+        output_patch_len = self.config.horizon_length
 
         num_decode_patches = (self.horizon_len + output_patch_len - 1) // output_patch_len
         for step_index in range(num_decode_patches):
@@ -950,7 +950,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             if return_forecast_on_context and step_index == 0:
                 # For the first decodings step, collect the model forecast on the
                 # context except the unavailable first input batch forecast.
-                new_full_ts = fprop_outputs[:, :-1, : self.config.patch_len, :]
+                new_full_ts = fprop_outputs[:, :-1, : self.config.patch_length, :]
                 # We have to use reshape and not view for non-contiguous memory
                 new_full_ts = new_full_ts.reshape(new_full_ts.size(0), -1, new_full_ts.size(3))
 
@@ -966,7 +966,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if return_forecast_on_context:
             # `full_outputs` indexing starts at after the first input patch.
             full_outputs = torch.concatenate(full_outputs, axis=1)[
-                :, : (context_len - self.config.patch_len + self.horizon_len), :
+                :, : (context_len - self.config.patch_length + self.horizon_len), :
             ]
         else:
             # `full_outputs` indexing starts at the forecast horizon.
