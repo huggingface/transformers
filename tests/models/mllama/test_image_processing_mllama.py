@@ -34,7 +34,7 @@ if is_torch_available():
     import torch
 
 
-class MllamaImageProcessingTester(unittest.TestCase):
+class MllamaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -55,7 +55,6 @@ class MllamaImageProcessingTester(unittest.TestCase):
         do_pad=True,
         max_image_tiles=4,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 224, "width": 224}
         self.parent = parent
         self.batch_size = batch_size

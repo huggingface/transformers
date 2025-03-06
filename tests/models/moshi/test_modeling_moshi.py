@@ -152,9 +152,6 @@ class MoshiDecoderTester:
 @require_torch
 class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (
-        (MoshiForCausalLM,) if is_torch_available() else ()
-    )  # we don't want to run all the generation tests, only a specific subset
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
@@ -244,7 +241,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             else:
                 old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
                 new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             if not is_deepspeed_zero3_enabled():
@@ -344,7 +341,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             else:
                 old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
                 new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_cpu_offload(self):
@@ -356,6 +353,10 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple input modalities.")
+    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @is_flaky(max_attempts=5, description="flaky on some models.")
@@ -524,7 +525,6 @@ class MoshiTester:
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
     test_headmasking = False
     test_resize_embeddings = False
@@ -560,7 +560,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, input_ids, attention_mask, inputs_dict
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate()
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
 
         # Make sure we only return `input_ids`.
         # Note that audio_codes will still be generated internally, so the ability to test audio codes is still there.
@@ -571,74 +571,11 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         return config, filtered_inputs_dict
 
-    def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
+        super()._check_generate_outputs(
+            output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length if idx == 0 else 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        super()._check_outputs(output, input_ids, config, use_cache=True, num_return_sequences=num_return_sequences)
-
-    def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
-        )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = 1
-            src_len = min_length + idx
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -655,57 +592,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @pytest.mark.generate
-    def test_generate_from_inputs_embeds_decoder_only(self):
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, _, inputs_dict = self._get_input_ids_and_config()
-
-            model = model_class(config).to(torch_device).eval()
-
-            # Traditional way of generating text
-            outputs_from_ids = model.generate(
-                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True, **inputs_dict
-            )
-            self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
-
-            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-            outputs_from_embeds = model.generate(
-                input_ids,
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-                **inputs_dict,
-            )
-
-            # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
-            # same, but the logits will almost surely be different)
-            random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(
-                input_ids,
-                inputs_embeds=random_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-                **inputs_dict,
-            )
-            for i in range(len(outputs_from_rand_embeds.scores)):
-                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
-
-            # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
-            outputs_from_embeds_wo_ids = model.generate(
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-                **inputs_dict,
-            )
-            self.assertListEqual(
-                outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids.sequences.tolist(),
-            )
-
     @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
     def test_generate_continue_from_past_key_values(self):
         pass
@@ -720,6 +606,18 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip("Moshi doesn't support contrastive generation yet.")
     def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(
+        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+    )
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(
+        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+    )
+    def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
@@ -782,7 +680,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @require_torch_sdpa
     @slow
@@ -859,8 +757,8 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                     depth_decoder_do_sample=False,
                 )
 
-                self.assertTrue(torch.allclose(res_eager.sequences, res_sdpa.sequences))
-                self.assertTrue(torch.allclose(res_eager.audio_sequences, res_sdpa.audio_sequences))
+                torch.testing.assert_close(res_eager.sequences, res_sdpa.sequences)
+                torch.testing.assert_close(res_eager.audio_sequences, res_sdpa.audio_sequences)
 
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
@@ -873,6 +771,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             output_ids_generate = model.generate(
                 do_sample=False, max_new_tokens=self.max_new_tokens, remove_invalid_values=True
             )
+            print(output_ids_generate)
             self.assertIsNotNone(output_ids_generate)
 
     @unittest.skip(reason="The audio encoder has no gradients.")
@@ -966,6 +865,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple modalities")
+    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @is_flaky(max_attempts=5, description="flaky on some models.")

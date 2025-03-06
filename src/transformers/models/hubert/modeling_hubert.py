@@ -260,7 +260,6 @@ class HubertGroupNormConvLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
 class HubertPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -272,32 +271,37 @@ class HubertPositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = weight_norm(self.conv, name="weight", dim=2)
-            if hasattr(self.conv, "parametrizations"):
-                weight_g = self.conv.parametrizations.weight.original0
-                weight_v = self.conv.parametrizations.weight.original1
-            else:
-                weight_g = self.conv.weight_g
-                weight_v = self.conv.weight_v
-            deepspeed.zero.register_external_parameter(self, weight_v)
-            deepspeed.zero.register_external_parameter(self, weight_g)
+        self.batch_norm = None
+        if config.conv_pos_batch_norm:
+            self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
-            self.conv = weight_norm(self.conv, name="weight", dim=2)
+            weight_norm = nn.utils.weight_norm
+            if hasattr(nn.utils.parametrizations, "weight_norm"):
+                weight_norm = nn.utils.parametrizations.weight_norm
+
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                    self.conv = weight_norm(self.conv, name="weight", dim=2)
+                if hasattr(self.conv, "parametrizations"):
+                    weight_g = self.conv.parametrizations.weight.original0
+                    weight_v = self.conv.parametrizations.weight.original1
+                else:
+                    weight_g = self.conv.weight_g
+                    weight_v = self.conv.weight_v
+                deepspeed.zero.register_external_parameter(self, weight_v)
+                deepspeed.zero.register_external_parameter(self, weight_g)
+            else:
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.transpose(1, 2)
-
+        if self.batch_norm is not None:
+            hidden_states = self.batch_norm(hidden_states)
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -559,7 +563,6 @@ class HubertFlashAttention2(HubertAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1626,7 +1629,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1646,3 +1650,6 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["HubertForCTC", "HubertForSequenceClassification", "HubertModel", "HubertPreTrainedModel"]

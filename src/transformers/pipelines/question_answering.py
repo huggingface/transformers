@@ -399,7 +399,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         return super().__call__(examples, **kwargs)
 
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
-        # XXX: This is specal, args_parser will not handle anything generator or dataset like
+        # XXX: This is special, args_parser will not handle anything generator or dataset like
         # For those we expect user to send a simple valid example either directly as a SquadExample or simple dict.
         # So we still need a little sanitation here.
         if isinstance(example, dict):
@@ -540,8 +540,14 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            start_ = output["start"]
-            end_ = output["end"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                start_ = output["start"].to(torch.float32)
+            else:
+                start_ = output["start"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                end_ = output["end"].to(torch.float32)
+            else:
+                end_ = output["end"]
             example = output["example"]
             p_mask = output["p_mask"]
             attention_mask = (

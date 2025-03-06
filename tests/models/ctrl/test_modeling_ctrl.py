@@ -13,11 +13,10 @@
 # limitations under the License.
 
 
-import gc
 import unittest
 
 from transformers import CTRLConfig, is_torch_available
-from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -194,7 +193,6 @@ class CTRLModelTester:
 @require_torch
 class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
-    all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": CTRLModel,
@@ -235,8 +233,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -261,8 +258,7 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_lm_generate_ctrl(self):

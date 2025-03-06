@@ -24,10 +24,14 @@ from typing import List, Optional, Union
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
+
+
+logger = logging.get_logger(__name__)
 
 
 class DonutProcessor(ProcessorMixin):
@@ -85,6 +89,16 @@ class DonutProcessor(ProcessorMixin):
         [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """
         # For backward compatibility
+        legacy = kwargs.pop("legacy", True)
+        if legacy:
+            # With `add_special_tokens=True`, the performance of donut are degraded when working with both images and text.
+            logger.warning_once(
+                "Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. "
+                "In the new behavior, if both images and text are provided, the default value of `add_special_tokens` "
+                "will be changed to `False` when calling the tokenizer if `add_special_tokens` is unset. "
+                "To test the new behavior, set `legacy=False`as a processor call argument."
+            )
+
         if self._in_target_context_manager:
             return self.current_processor(images, text, **kwargs)
 
@@ -100,6 +114,8 @@ class DonutProcessor(ProcessorMixin):
         if images is not None:
             inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         if text is not None:
+            if not legacy and images is not None:
+                output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
@@ -210,3 +226,6 @@ class DonutProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+
+__all__ = ["DonutProcessor"]

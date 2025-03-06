@@ -24,7 +24,7 @@ import numpy as np
 import requests
 
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
-from transformers.testing_utils import is_pt_tf_cross_test, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -162,17 +162,9 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import tensorflow as tf
-
-        seed = 338
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        tf.random.set_seed(seed)
-        return super().test_pt_tf_model_equivalence()
+    @is_flaky(description="The `index` computed with `max()` in `hard_softmax` is not stable.")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -271,13 +263,13 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -469,13 +461,13 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -559,10 +551,21 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = GroupViTModelTester(self)
+        common_properties = ["projection_dim", "projection_intermediate_dim", "logit_scale_init_value"]
+        self.config_tester = ConfigTester(
+            self, config_class=GroupViTConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @is_flaky(description="The `index` computed with `max()` in `hard_softmax` is not stable.")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     @unittest.skip(reason="hidden_states are tested in individual model tests")
     def test_hidden_states_output(self):
@@ -579,22 +582,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # overwritten from parent as this equivalent test needs a specific `seed` and hard to get a good one!
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-5, name="outputs", attributes=None):
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes)
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        import tensorflow as tf
-
-        seed = 163
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        tf.random.set_seed(seed)
-        return super().test_pt_tf_model_equivalence()
 
     # override as the `logit_scale` parameter initilization is different for GROUPVIT
     def test_initialization(self):
@@ -750,4 +737,4 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[13.3523, 6.3629]])
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)

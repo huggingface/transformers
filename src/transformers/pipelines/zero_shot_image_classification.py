@@ -94,6 +94,10 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
                 already formatted.
 
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
+
         Return:
             A list of dictionaries containing one entry per proposed label. Each dictionary contains the
             following keys:
@@ -113,9 +117,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
         if "timeout" in kwargs:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
@@ -144,8 +145,11 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        padding = "max_length" if self.model.config.model_type == "siglip" else True
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=padding, **tokenizer_kwargs)
+        tokenizer_default_kwargs = {"padding": True}
+        if "siglip" in self.model.config.model_type:
+            tokenizer_default_kwargs.update(padding="max_length", max_length=64, truncation=True)
+        tokenizer_default_kwargs.update(tokenizer_kwargs)
+        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, **tokenizer_default_kwargs)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -169,7 +173,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs):
         candidate_labels = model_outputs.pop("candidate_labels")
         logits = model_outputs["logits"][0]
-        if self.framework == "pt" and self.model.config.model_type == "siglip":
+        if self.framework == "pt" and "siglip" in self.model.config.model_type:
             probs = torch.sigmoid(logits).squeeze(-1)
             scores = probs.tolist()
             if not isinstance(scores, list):

@@ -82,7 +82,6 @@ class BlipTextEmbeddings(nn.Module):
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if inputs_embeds is None:
-            input_ids = input_ids.to(self.word_embeddings.weight.device)
             inputs_embeds = self.word_embeddings(input_ids)
 
         embeddings = inputs_embeds
@@ -816,6 +815,12 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         self.bert = BlipTextModel(config, add_pooling_layer=False)
         self.cls = BlipTextOnlyMLMHead(config)
         self.label_smoothing = config.label_smoothing
+
+    def get_input_embeddings(self):
+        return self.bert.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings):
+        self.bert.set_input_embeddings(new_embeddings)
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder

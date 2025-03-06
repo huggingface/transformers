@@ -14,10 +14,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Mllama model."""
 
-import gc
 import unittest
 
+import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -28,14 +29,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.cache_utils import Cache
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
-    is_flaky,
+    cleanup,
     require_bitsandbytes,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -123,10 +124,8 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     """
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
-    all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
-    _torch_compile_test_ckpt = "nltpt/Llama-3.2-11B-Vision"
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -264,7 +263,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     """
 
     all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
@@ -272,7 +271,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -315,35 +319,40 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
         # Mllama has cross attention layers and those have a different shape than normal attention layers
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (output_length - prompt_length))
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
+        use_cache = decoder_past_key_values is not None
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            src_len = min_length + idx
+        for generated_length, iter_attentions in enumerate(attentions):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+            query_length = prompt_length + generated_length
 
             expected_shape = (
-                batch_size * num_beam_groups,
+                batch_size,
                 config.num_attention_heads,
-                tgt_len,
-                src_len,
+                model_input_length,
+                query_length,
             )
 
             expected_shape_cross = (
-                batch_size * num_beam_groups,
+                batch_size,
                 config.num_attention_heads,
-                tgt_len,
+                model_input_length,
                 self.model_tester.image_length,
             )
 
@@ -354,13 +363,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        # A workaround to override parametrized test with flaky decorator
-        super().test_eager_matches_sdpa_inference_1_bfloat16()
-
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
     def test_sdpa_can_compile_dynamic(self):
         pass
@@ -368,6 +370,111 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     @unittest.skip(reason="AssertionError: Items in the second set but not the first: might be a setting issue")
     def test_model_parallelism(self):
         pass
+
+    @parameterized.expand([("offloaded",)])
+    @pytest.mark.generate
+    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
+    def test_offloaded_cache_implementation(self, cache_implementation):
+        pass
+
+    @unittest.skip(
+        reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
+    )
+    def test_contrastive_generate_dict_outputs_use_cache(self, assistant_type):
+        pass
+
+    @unittest.skip(reason="Mllama can't do low memory due to `Cache.crop()`")
+    def test_contrastive_generate_low_memory(self, assistant_type):
+        pass
+
+    @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
+    def test_assisted_decoding_with_num_logits_to_keep(self):
+        pass
+
+    @pytest.mark.generate
+    # overridden because mllama has special cache for self and cross attentions
+    def test_past_key_values_format(self):
+        # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
+        # standard KV cache format is important for a consistent API (and for advanced generation methods).
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config).to(torch_device)
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            text_config = config.get_text_config()
+            num_hidden_layers = (
+                getattr(text_config, "decoder_layers", None)
+                or getattr(text_config, "num_decoder_layers", None)
+                or text_config.num_hidden_layers
+            )
+            num_attention_heads = getattr(text_config, "decoder_attention_heads", text_config.num_attention_heads)
+            embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
+            per_head_embed_dim = embed_dim // num_attention_heads
+
+            # some models have diffent num-head for query vs key/value so we need to assign correct value
+            # BUT only after `per_head_embed_dim` is set
+            num_attention_heads = (
+                text_config.num_key_value_heads
+                if getattr(text_config, "num_key_value_heads", None) is not None
+                else num_attention_heads
+            )
+
+            past_kv = outputs["past_key_values"]
+            self.assertEqual(len(past_kv), num_hidden_layers)
+            batch_size, seq_length = inputs["input_ids"].shape
+            for i in range(num_hidden_layers):
+                self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
+                if i in self.model_tester.text_config["cross_attention_layers"]:
+                    self.assertEqual(
+                        past_kv[i][0].shape,
+                        (batch_size, num_attention_heads, self.model_tester.image_length, per_head_embed_dim),
+                    )
+                    self.assertEqual(
+                        past_kv[i][1].shape,
+                        (batch_size, num_attention_heads, self.model_tester.image_length, per_head_embed_dim),
+                    )
+                else:
+                    self.assertEqual(
+                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    self.assertEqual(
+                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+
+    # overridden because mllama has special cache for self and cross attentions
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, Cache)
+        self.assertListEqual(
+            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
+            [True] * len(decoder_past_key_values),
+        )
+
+        for layer_idx, layer_past_key_values in enumerate(decoder_past_key_values):
+            if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
+                expected_shape = (
+                    batch_size,
+                    config.num_key_value_heads
+                    if hasattr(config, "num_key_value_heads")
+                    else config.num_attention_heads,
+                    self.model_tester.image_length,
+                    config.hidden_size // config.num_attention_heads,
+                )
+            else:
+                # (batch, head, cache_length, head_features)
+                expected_shape = (
+                    batch_size,
+                    config.num_key_value_heads
+                    if hasattr(config, "num_key_value_heads")
+                    else config.num_attention_heads,
+                    cache_length,
+                    config.hidden_size // config.num_attention_heads,
+                )
+            # check shape key, value
+            self.assertListEqual([layer_past_key_values[0].shape], [expected_shape])
+            self.assertListEqual([layer_past_key_values[1].shape], [expected_shape])
 
     def test_generate_text_only_with_cache(self):
         """
@@ -397,8 +504,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_gpu

@@ -817,8 +817,11 @@ class SegGptModel(SegGptPreTrainedModel):
         # and reconstructed together (In-Context Painting).
         if bool_masked_pos is None:
             num_patches = self.embeddings.patch_embeddings.num_patches
-            bool_masked_pos = torch.zeros(num_patches, dtype=torch.bool).to(pixel_values.device)
-            bool_masked_pos[num_patches // 2 :] = 1
+            bool_masked_pos_zeros = torch.zeros(num_patches // 2, dtype=torch.bool, device=pixel_values.device)
+            bool_masked_pos_ones = torch.ones(
+                num_patches - num_patches // 2, dtype=torch.bool, device=pixel_values.device
+            )
+            bool_masked_pos = torch.cat([bool_masked_pos_zeros, bool_masked_pos_ones])
             bool_masked_pos = bool_masked_pos.unsqueeze(0)
 
         embedding_output = self.embeddings(
@@ -962,7 +965,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
 
         >>> inputs = image_processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> result = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[image_input.size[::-1]])[0]
+        >>> result = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(image_input.height, image_input.width)])[0]
         >>> print(list(result.shape))
         [170, 297]
         ```
@@ -975,8 +978,11 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
 
         if bool_masked_pos is None:
             num_patches = self.model.embeddings.patch_embeddings.num_patches
-            bool_masked_pos = torch.zeros(num_patches, dtype=torch.bool).to(pixel_values.device)
-            bool_masked_pos[num_patches // 2 :] = 1
+            bool_masked_pos_zeros = torch.zeros(num_patches // 2, dtype=torch.bool, device=pixel_values.device)
+            bool_masked_pos_ones = torch.ones(
+                num_patches - num_patches // 2, dtype=torch.bool, device=pixel_values.device
+            )
+            bool_masked_pos = torch.cat([bool_masked_pos_zeros, bool_masked_pos_ones])
             bool_masked_pos = bool_masked_pos.unsqueeze(0)
 
         outputs = self.model(
@@ -1020,3 +1026,6 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["SegGptModel", "SegGptPreTrainedModel", "SegGptForImageSegmentation"]

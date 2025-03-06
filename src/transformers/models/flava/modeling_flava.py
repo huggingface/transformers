@@ -438,7 +438,7 @@ class FlavaSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -2102,3 +2102,14 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             mmm_image_logits=mmm_image_logits,
             mmm_text_logits=mmm_text_logits,
         )
+
+
+__all__ = [
+    "FlavaForPreTraining",
+    "FlavaImageCodebook",
+    "FlavaImageModel",
+    "FlavaModel",
+    "FlavaMultimodalModel",
+    "FlavaPreTrainedModel",
+    "FlavaTextModel",
+]

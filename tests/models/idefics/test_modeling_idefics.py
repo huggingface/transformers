@@ -23,7 +23,6 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
-    is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
@@ -44,9 +43,6 @@ if is_torch_available():
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -134,7 +130,7 @@ class IdeficsModelTester:
             num_attention_heads=self.vision_num_attention_heads,
             num_hidden_layers=self.vision_num_hidden_layers,
             intermediate_size=self.vision_intermediate_size,
-        )
+        ).to_dict()
 
         self.perceiver_qk_layer_norms_perceiver = perceiver_qk_layer_norms_perceiver
         self.perceiver_resampler_depth = perceiver_resampler_depth
@@ -316,7 +312,6 @@ class IdeficsModelTester:
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
     @require_torch_sdpa
-    @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
@@ -328,11 +323,16 @@ class IdeficsModelTester:
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
+    # Doesn't run generation tests here -- idefics has a dedicated tester for generation tests below
+    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -348,6 +348,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             )
 
         return inputs_dict
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self):
+        pass
 
     def test_model_outputs_equivalence(self):
         try:
@@ -472,13 +478,13 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -569,11 +575,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        self.has_attentions = False
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "HuggingFaceM4/idefics-9b"
@@ -585,11 +586,9 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
-    all_generative_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
@@ -597,6 +596,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             modality_type_vocab_size=3,
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self, torch_dtype):
+        pass
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
@@ -656,7 +661,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             next_logits_with_padding = model(**model_kwargs, **inputs_dict).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -745,8 +750,67 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             )
             self.assertIsNotNone(output_ids_generate)
 
+    @pytest.mark.generate
+    def test_generate_continue_from_inputs_embeds(self):
+        """Overwrite for IDEFICS: Ensure image attention mask is processed while continuing from `inputs_embeds`."""
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            print(inputs)
+
+            model = model_class(config).to(torch_device).eval()
+
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+            model.generation_config.forced_eos_token_id = None
+            model.generation_config.use_cache = True
+
+            input_ids = inputs.pop("input_ids")
+            input_embeds = model.get_input_embeddings()(input_ids)
+
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "do_sample": False,
+            }
+
+            inputs["inputs_embeds"] = input_embeds
+
+            # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
+            outputs = model.generate(**inputs, max_new_tokens=4, **generation_kwargs)
+            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
+            # inputs may need to be tweaked across `generate` calls (like the attention mask).
+            initial_output = model.generate(**inputs, max_new_tokens=3, **generation_kwargs)
+            inputs["past_key_values"] = initial_output.past_key_values
+
+            new_attention_len = input_ids.shape[1] + initial_output.sequences.shape[-1]
+            continued_embeds = torch.cat([input_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            inputs["inputs_embeds"] = continued_embeds
+
+            if "attention_mask" in inputs:
+                inputs["attention_mask"] = torch.nn.functional.pad(
+                    inputs["attention_mask"],
+                    (0, new_attention_len - inputs["attention_mask"].shape[1]),
+                    mode="constant",
+                    value=1,
+                )
+            if "image_attention_mask" in inputs:
+                inputs["image_attention_mask"] = inputs["image_attention_mask"][..., -1:, :]
+
+            cached_output = model.generate(**inputs, max_new_tokens=1, **generation_kwargs)
+
+            # Verify that the combined outputs match the full generation.
+            combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
+            self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
+            for layer_idx in range(len(cached_output.past_key_values)):
+                for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            outputs.past_key_values[layer_idx][kv_idx],
+                            cached_output.past_key_values[layer_idx][kv_idx],
+                        )
+                    )
+
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
         """
         Overwrite from generation tests because Idefics has only SDPA layers.
@@ -770,14 +834,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_custom_4d_attention_mask(self):
         pass
 
-    @unittest.skip(
-        reason="IDEFICS has specific requirements for working with inputs embeds like passing also the ids and pixels"
-    )
-    def test_generate_from_inputs_embeds_decoder_only(self):
+    @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
+    def test_generate_with_static_cache(self):
         pass
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
-    def test_generate_compile_fullgraph(self):
+    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
@@ -793,13 +855,13 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -808,8 +870,13 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
+    @unittest.skip(
+        "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
+
 @require_torch
 @require_vision
 class IdeficsModelIntegrationTest(TestCasePlus):

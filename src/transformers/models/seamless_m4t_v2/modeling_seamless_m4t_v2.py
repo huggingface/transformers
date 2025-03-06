@@ -421,6 +421,8 @@ def format_speech_generation_kwargs(kwargs):
         elif key.startswith("speech_"):
             key = key[len("speech_") :]
             kwargs_speech[key] = value
+        elif key == "generation_config":
+            kwargs_text[key] = value
         else:
             # If the key is already in a specific config, then it's been set with a
             # submodules specific value and we don't override
@@ -3190,7 +3192,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     "The speech-to-text SeamlessM4Tv2 Model transformer which can be used for S2TT.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
@@ -3471,7 +3473,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
     "The text-to-speech SeamlessM4Tv2 Model transformer which can be used for T2ST.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -3842,7 +3844,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
     "The speech-to-speech SeamlessM4Tv2 Model transformer which can be used for S2ST.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -4227,7 +4229,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
             This will be updated automatically according to the modality passed to the forward and generate passes (`input_ids` for text and `input_features` for audio).
     """,
 )
-class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",
@@ -4705,3 +4707,13 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+
+
+__all__ = [
+    "SeamlessM4Tv2ForTextToSpeech",
+    "SeamlessM4Tv2ForSpeechToSpeech",
+    "SeamlessM4Tv2ForTextToText",
+    "SeamlessM4Tv2ForSpeechToText",
+    "SeamlessM4Tv2Model",
+    "SeamlessM4Tv2PreTrainedModel",
+]

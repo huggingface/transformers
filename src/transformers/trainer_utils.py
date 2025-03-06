@@ -227,6 +227,13 @@ class IntervalStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
+class SaveStrategy(ExplicitEnum):
+    NO = "no"
+    STEPS = "steps"
+    EPOCH = "epoch"
+    BEST = "best"
+
+
 class EvaluationStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
@@ -315,7 +322,7 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
 
 def default_hp_space_sigopt(trial):
     return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
+        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
         {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
         {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
         {

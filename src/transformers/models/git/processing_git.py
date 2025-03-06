@@ -22,10 +22,14 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 
 
 class GitProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
+
+
+logger = logging.get_logger(__name__)
 
 
 class GitProcessor(ProcessorMixin):
@@ -91,6 +95,15 @@ class GitProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        legacy = kwargs.pop("legacy", True)
+        if legacy:
+            logger.warning_once(
+                "Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. "
+                "In the new behavior, if both images and text are provided, the last token (EOS token) "
+                "of the input_ids and attention_mask tensors will be removed. "
+                "To test the new behavior, set `legacy=False`as a processor call argument."
+            )
+
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
@@ -110,6 +123,10 @@ class GitProcessor(ProcessorMixin):
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
             data.update(image_features)
+            if not legacy:
+                data["input_ids"] = data["input_ids"][:, :-1]
+                data["attention_mask"] = data["attention_mask"][:, :-1]
+
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
     def batch_decode(self, *args, **kwargs):
@@ -129,3 +146,6 @@ class GitProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         return ["input_ids", "attention_mask", "pixel_values"]
+
+
+__all__ = ["GitProcessor"]

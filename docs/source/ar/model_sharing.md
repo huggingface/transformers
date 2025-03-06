@@ -28,7 +28,7 @@ picture-in-picture" allowfullscreen></iframe>
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # اسم العلامة، أو اسم الفرع، أو تجزئة الالتزام
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # اسم العلامة، أو اسم الفرع، أو تجزئة الالتزام
 ... )
 ```
 

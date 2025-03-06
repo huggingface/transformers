@@ -52,6 +52,8 @@ class PixtralVisionConfig(PretrainedConfig):
             Dropout probability for the attention layers.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -82,6 +84,7 @@ class PixtralVisionConfig(PretrainedConfig):
         hidden_act="gelu",
         attention_dropout=0.0,
         rope_theta=10000.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -97,3 +100,7 @@ class PixtralVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
+        self.initializer_range = initializer_range
+
+
+__all__ = ["PixtralVisionConfig"]

@@ -441,6 +441,9 @@ INSTRUCTBLIP_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
             Whether to interpolate the pre-trained position encodings.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 """
 
 
@@ -1287,6 +1290,9 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
     config_class = InstructBlipConfig
     main_input_name = "pixel_values"
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
 
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
@@ -1375,6 +1381,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
     ) -> Union[Tuple, InstructBlipForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1471,7 +1478,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             logger.warning_once(
                 "Expanding inputs for image tokens in InstructBLIP should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your InstructBLIP model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
             attention_mask = torch.cat(
@@ -1485,6 +1492,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                use_cache=use_cache,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -1510,6 +1518,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 labels=labels,
+                use_cache=use_cache,
             )
             loss = outputs.loss if return_dict else outputs[0]
             logits = outputs.logits if return_dict else outputs[1]
@@ -1591,11 +1600,12 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         )
 
         if input_ids is None:
-            input_ids = (
-                torch.LongTensor([[self.config.text_config.bos_token_id]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
+            start_tokens = [self.config.text_config.bos_token_id]
+            if getattr(self.config, "image_token_index", None) is not None:
+                start_tokens = [self.config.image_token_index] * self.config.num_query_tokens + start_tokens
+            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+            input_ids = input_ids.repeat(batch_size, 1)
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
@@ -1605,12 +1615,12 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         # otherwise we expand manually by concatenating
         if getattr(self.config, "image_token_index", None) is not None:
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+            inputs_embeds[special_image_mask] = language_model_inputs.flatten().to(inputs_embeds.device)
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in InstructBLIP should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your InstructBLIP model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
             attention_mask = torch.cat(
@@ -1625,27 +1635,18 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 )
                 generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
 
-        outputs = self.language_model.generate(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            **generate_kwargs,
-        )
-
-        # this is a temporary workaround to be consistent with other generation models and
-        # have BOS as the first token, even though under the hood we are calling LM with embeds
+        inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            # the InstructBLIP authors used inconsistent tokenizer/model files during training,
-            # with the tokenizer's bos token being set to </s> which has ID=2,
-            # whereas the model's text config has bos token id = 0
-            bos_token_id = (
-                2
-                if self.config.text_config.architectures[0] == "LLaMAForCausalLM"
-                else self.config.text_config.bos_token_id
-            )
-            bos_tokens = torch.LongTensor([[bos_token_id]]).repeat(batch_size, 1).to(image_embeds.device)
-            if not isinstance(outputs, torch.Tensor):
-                outputs.sequences = torch.cat([bos_tokens, outputs.sequences], dim=-1)
-            else:
-                outputs = torch.cat([bos_tokens, outputs], dim=-1)
+            inputs["input_ids"] = input_ids
+
+        outputs = self.language_model.generate(**inputs, **generate_kwargs)
 
         return outputs
+
+
+__all__ = [
+    "InstructBlipQFormerModel",
+    "InstructBlipPreTrainedModel",
+    "InstructBlipForConditionalGeneration",
+    "InstructBlipVisionModel",
+]
