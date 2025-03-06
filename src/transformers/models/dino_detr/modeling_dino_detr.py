@@ -536,7 +536,7 @@ class DinoDetrObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
+    pred_logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
 
@@ -1594,6 +1594,7 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_key_padding_mask: Optional[Tensor] = None,
         memory_level_start_index: Optional[Tensor] = None,  # num_levels
         memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
         memory_pos: Optional[Tensor] = None,  # pos for memory
         # sa
         self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
@@ -1614,12 +1615,15 @@ class DinoDetrDecoderLayer(nn.Module):
                 tgt = self.norm2(tgt)
             elif self.decoder_sa_type == "ca_content":
                 tgt2, attn_weights = self.self_attn(
-                    self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
-                    tgt_reference_points.transpose(0, 1).contiguous(),
-                    memory.transpose(0, 1),
-                    memory_spatial_shapes,
-                    memory_level_start_index,
-                    memory_key_padding_mask,
+                    hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(
+                        0, 1
+                    ),
+                    reference_point=tgt_reference_points.transpose(0, 1).contiguous(),
+                    encoder_hidden_states=memory.transpose(0, 1),
+                    spatial_shapes=memory_spatial_shapes,
+                    spatial_shapes_list=memory_spatial_shapes_list,
+                    level_start_index=memory_level_start_index,
+                    encoder_attention_mask=memory_key_padding_mask,
                 )
                 tgt2 = tgt2.transpose(0, 1)
                 tgt = tgt + self.dropout2(tgt2)
@@ -1644,6 +1648,7 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_key_padding_mask: Optional[Tensor] = None,
         memory_level_start_index: Optional[Tensor] = None,  # num_levels
         memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
         memory_pos: Optional[Tensor] = None,  # pos for memory
         # sa
         self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
@@ -1660,12 +1665,13 @@ class DinoDetrDecoderLayer(nn.Module):
                     "Unknown key_aware_type: {}".format(self.key_aware_type)
                 )
         tgt2, attn_weights = self.cross_attn(
-            self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
-            tgt_reference_points.transpose(0, 1).contiguous(),
-            memory.transpose(0, 1),
-            memory_spatial_shapes,
-            memory_level_start_index,
-            memory_key_padding_mask,
+            hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
+            reference_points=tgt_reference_points.transpose(0, 1).contiguous(),
+            encoder_hidden_states=memory.transpose(0, 1),
+            spatial_shapes=memory_spatial_shapes,
+            spatial_shapes_list=memory_spatial_shapes_list,
+            level_start_index=memory_level_start_index,
+            encoder_attention_mask=memory_key_padding_mask,
         )
         tgt2 = tgt2.transpose(0, 1)
         tgt = tgt + self.dropout1(tgt2)
@@ -1686,6 +1692,7 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_key_padding_mask: Optional[Tensor] = None,
         memory_level_start_index: Optional[Tensor] = None,  # num_levels
         memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
         memory_pos: Optional[Tensor] = None,  # pos for memory
         # sa
         self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
@@ -1705,6 +1712,7 @@ class DinoDetrDecoderLayer(nn.Module):
                     memory_key_padding_mask,
                     memory_level_start_index,
                     memory_spatial_shapes,
+                    memory_spatial_shapes_list,
                     memory_pos,
                     self_attn_mask,
                     cross_attn_mask,
@@ -1719,7 +1727,7 @@ class DinoDetrDecoderLayer(nn.Module):
                     memory,
                     memory_key_padding_mask,
                     memory_level_start_index,
-                    memory_spatial_shapes,
+                    memory_spatial_shapes_list,
                     memory_pos,
                     self_attn_mask,
                     cross_attn_mask,
@@ -1835,6 +1843,7 @@ class DinoDetrEncoder(nn.Module):
         src: Tensor,
         pos: Tensor,
         spatial_shapes: Tensor,
+        spatial_shapes_list: List,
         level_start_index: Tensor,
         valid_ratios: Tensor,
         key_padding_mask: Tensor,
@@ -1889,12 +1898,13 @@ class DinoDetrEncoder(nn.Module):
             if not dropflag:
                 if self.deformable_encoder:
                     output = layer(
-                        src=output,
-                        pos=pos,
+                        hidden_states=output,
+                        position_embeddings=pos,
                         reference_points=reference_points,
                         spatial_shapes=spatial_shapes,
+                        spatial_shapes_list=spatial_shapes_list,
                         level_start_index=level_start_index,
-                        key_padding_mask=key_padding_mask,
+                        attention_mask=key_padding_mask,
                     )
                 else:
                     output = layer(
@@ -1902,6 +1912,8 @@ class DinoDetrEncoder(nn.Module):
                         pos=pos.transpose(0, 1),
                         key_padding_mask=key_padding_mask,
                     ).transpose(0, 1)
+
+            output = output[0]
 
             if (
                 (layer_id == 0 and self.two_stage_type in ["enceachlayer", "enclayer1"])
@@ -2046,6 +2058,7 @@ class DinoDetrDecoder(nn.Module):
         # for memory
         level_start_index: Optional[Tensor] = None,  # num_levels
         spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
+        spatial_shapes_list: Optional[List] = None,
         valid_ratios: Optional[Tensor] = None,
     ):
         """
@@ -2127,6 +2140,7 @@ class DinoDetrDecoder(nn.Module):
                     memory_key_padding_mask=memory_key_padding_mask,
                     memory_level_start_index=level_start_index,
                     memory_spatial_shapes=spatial_shapes,
+                    memory_spatial_shapes_list=spatial_shapes_list,
                     memory_pos=pos,
                     self_attn_mask=tgt_mask,
                     cross_attn_mask=memory_mask,
@@ -2423,8 +2437,8 @@ class DinoDeformableTransformer(nn.Module):
 
     def get_valid_ratio(self, mask):
         _, H, W = mask.shape
-        valid_H = torch.sum(~mask[:, :, 0], 1)
-        valid_W = torch.sum(~mask[:, 0, :], 1)
+        valid_H = torch.sum(mask[:, :, 0], 1)
+        valid_W = torch.sum(mask[:, 0, :], 1)
         valid_ratio_h = valid_H.float() / H
         valid_ratio_w = valid_W.float() / W
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
@@ -2454,11 +2468,11 @@ class DinoDeformableTransformer(nn.Module):
         src_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
-        spatial_shapes = []
+        spatial_shapes_list = []
         for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
-            spatial_shapes.append(spatial_shape)
+            spatial_shapes_list.append(spatial_shape)
 
             src = src.flatten(2).transpose(1, 2)  # bs, hw, c
             mask = mask.flatten(1)  # bs, hw
@@ -2474,7 +2488,7 @@ class DinoDeformableTransformer(nn.Module):
         mask_flatten = torch.cat(mask_flatten, 1)  # bs, \sum{hxw}
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)  # bs, \sum{hxw}, c
         spatial_shapes = torch.as_tensor(
-            spatial_shapes, dtype=torch.long, device=src_flatten.device
+            spatial_shapes_list, dtype=torch.long, device=src_flatten.device
         )
         level_start_index = torch.cat(
             (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
@@ -2492,6 +2506,7 @@ class DinoDeformableTransformer(nn.Module):
             pos=lvl_pos_embed_flatten,
             level_start_index=level_start_index,
             spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
             key_padding_mask=mask_flatten,
             ref_token_index=enc_topk_proposals,  # bs, nq
@@ -2617,6 +2632,7 @@ class DinoDeformableTransformer(nn.Module):
             refpoints_unsigmoid=refpoint_embed.transpose(0, 1),
             level_start_index=level_start_index,
             spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
             tgt_mask=attn_mask,
         )
@@ -2999,7 +3015,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     @replace_return_docstrings(
         output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC
     )
-    def forward(self, samples: NestedTensor, targets: List = None):
+    def forward(self, pixel_values, pixel_mask, targets: List = None):
         """
         Returns:
 
@@ -3025,14 +3041,11 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         [1, 300, 256]
         """
 
-        if isinstance(samples, (list, torch.Tensor)):
-            samples = nested_tensor_from_tensor_list(samples)
-        features, poss = self.backbone(samples)
+        features, poss = self.backbone(pixel_values, pixel_mask)
 
         srcs = []
         masks = []
-        for l, feat in enumerate(features):
-            src, mask = feat.decompose()
+        for l, (src, mask) in enumerate(features):
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
@@ -3040,19 +3053,19 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             _len_srcs = len(srcs)
             for l in range(_len_srcs, self.num_feature_levels):
                 if l == _len_srcs:
-                    src = self.input_proj[l](features[-1].tensors)
+                    src = self.input_proj[l](features[-1][0])
                 else:
                     src = self.input_proj[l](srcs[-1])
-                m = samples.mask
+                m = pixel_mask
                 mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(
                     torch.bool
                 )[0]
-                pos_l = self.backbone[1](NestedTensor(src, mask)).to(src.dtype)
+                pos_l = self.backbone.position_embedding(src, mask).to(src.dtype)
                 srcs.append(src)
                 masks.append(mask)
                 poss.append(pos_l)
 
-        if self.dn_number > 0 or targets is not None:
+        if self.dn_number > 0 and targets is not None:
             input_query_label, input_query_bbox, attn_mask, dn_meta = prepare_for_cdn(
                 dn_args=(
                     targets,
@@ -3104,7 +3117,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
     @replace_return_docstrings(
         output_type=DinoDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC
     )
-    def forward(self, samples: NestedTensor, targets: List = None):
+    def forward(self, pixel_values, pixel_mask, targets: List = None):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -3146,19 +3159,32 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
 
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device
+
+        if pixel_mask is None:
+            pixel_mask = torch.ones(
+                ((batch_size, height, width)), dtype=torch.long, device=device
+            )
+
         # First, sent images through DETR base model to obtain encoder + decoder outputs
-        hs, reference, hs_enc, ref_enc, init_box_proposal, dn_meta = self.model(
-            samples=samples, targets=targets
+        outs = self.model(
+            pixel_values=pixel_values, pixel_mask=pixel_mask, targets=targets
         )
+        hs = outs.hs
+        reference = outs.reference
+        hs_enc = outs.hs_enc
+        ref_enc = outs.ref_enc
+        init_box_proposal = outs.init_box_proposal
+        dn_meta = outs.dn_meta
 
         # In case num object=0
-        hs[0] += self.label_enc.weight[0, 0] * 0.0
-
+        hs[0] += self.model.label_enc.weight[0, 0] * 0.0
         # deformable-detr-like anchor update
         # reference_before_sigmoid = inverse_sigmoid(reference[:-1]) # n_dec, bs, nq, 4
         outputs_coord_list = []
         for _, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
-            zip(reference[:-1], self.bbox_embed, hs)
+            zip(reference[:-1], self.model.bbox_embed, hs)
         ):
             layer_delta_unsig = layer_bbox_embed(layer_hs)
             layer_outputs_unsig = layer_delta_unsig + inverse_sigmoid(layer_ref_sig)
@@ -3169,26 +3195,26 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         outputs_class = torch.stack(
             [
                 layer_cls_embed(layer_hs)
-                for layer_cls_embed, layer_hs in zip(self.class_embed, hs)
+                for layer_cls_embed, layer_hs in zip(self.model.class_embed, hs)
             ]
         )
-        if self.dn_number > 0 and dn_meta is not None:
+        if self.model.dn_number > 0 and dn_meta is not None:
             outputs_class, outputs_coord_list = dn_post_process(
                 outputs_class,
                 outputs_coord_list,
                 dn_meta,
-                self.aux_loss,
+                self.model.aux_loss,
                 self._set_aux_loss,
             )
         out = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord_list[-1]}
-        if self.aux_loss:
+        if self.model.aux_loss:
             out["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord_list)
 
         # for encoder output
         if hs_enc is not None:
             # prepare intermediate outputs
             interm_coord = ref_enc[-1]
-            interm_class = self.transformer.enc_out_class_embed(hs_enc[-1])
+            interm_class = self.model.transformer.enc_out_class_embed(hs_enc[-1])
             out["interm_outputs"] = {
                 "pred_logits": interm_class,
                 "pred_boxes": interm_coord,
@@ -3249,7 +3275,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         dict_outputs = DinoDetrObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
-            logits=out["logits"],
+            pred_logits=out["pred_logits"],
             pred_boxes=out["pred_boxes"],
             auxiliary_outputs=out["aux_outputs"],
         )
