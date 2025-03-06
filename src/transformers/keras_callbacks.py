@@ -146,7 +146,7 @@ class KerasMetricCallback(keras.callbacks.Callback):
         if batches[0].ndim == 1 or all(batch.shape[1] == batches[0].shape[1] for batch in batches):
             return np.concatenate(batches, axis=0)
 
-        # Whelp, they're not the same length. Let's do some padding
+        # Welp, they're not the same length. Let's do some padding
         max_len = max([batch.shape[1] for batch in batches])
         num_samples = sum([batch.shape[0] for batch in batches])
         output = np.full_like(
