@@ -1394,6 +1394,7 @@ def _get_device_map(
 def _find_missing_and_unexpected_keys(
     cls,
     model: "PreTrainedModel",
+    original_checkpoint_keys: List[str],
     checkpoint_keys: List[str],
     loading_base_model_from_task_state_dict: bool,
     hf_quantizer: Optional[HfQuantizer],
@@ -1412,12 +1413,10 @@ def _find_missing_and_unexpected_keys(
     # Adjust prefix of the keys to make them match loaded keys before removing them
     missing_keys = sorted(set(expected_keys) - set(checkpoint_keys))
     unexpected_keys = set(checkpoint_keys) - set(expected_keys)
-    # If a module has the same name under the base and task specific model, we have to re-add it to unexpected keys (it
-    # means that it is present 2 times in the adjusted loaded keys)
+    # If a module has the same name under the base and task specific model, we have to re-add it to unexpected keys
     if loading_base_model_from_task_state_dict:
-        for key in set(checkpoint_keys):
-            if sum(key == x for x in checkpoint_keys) > 1:
-                unexpected_keys.add(key)
+        task_specific_keys = [k for k in original_checkpoint_keys if not k.startswith(f"{prefix}.")]
+        unexpected_keys.update(task_specific_keys)
 
     # Remove nonpersistent buffers from unexpected keys: they are not in the expected keys (model state dict), but
     # may be in the loaded keys. Note that removing all buffers does the job, as they were part of the expected keys anyway
@@ -4653,9 +4652,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # In this case, we need to add the prefix to the keys, to match them to the expected keys
             if loading_task_model_from_base_state_dict:
                 new_key = ".".join([prefix, new_key])
-            # In this case we need to remove the prefix from the key to match them to the expected keys
+            # In this case we need to remove the prefix from the key to match them to the expected keys, and use
+            # only the keys starting with the prefix
             elif loading_base_model_from_task_state_dict:
-                new_key = new_key[len(_prefix) :] if key.startswith(_prefix) else new_key
+                if not new_key.startswith(_prefix):
+                    _ = state_dict.pop(key, None)
+                    continue
+                else:
+                    new_key = new_key[len(_prefix) :]
 
             state_dict[new_key] = state_dict.pop(key)
 
@@ -4717,18 +4721,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
-            checkpoint_keys = sharded_metadata["all_checkpoint_keys"]
+            original_checkpoint_keys = sharded_metadata["all_checkpoint_keys"]
         elif state_dict is not None:
-            checkpoint_keys = list(state_dict.keys())
+            original_checkpoint_keys = list(state_dict.keys())
         else:
-            checkpoint_keys = list(
+            original_checkpoint_keys = list(
                 load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only).keys()
             )
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
         _prefix = f"{prefix}."
-        has_prefix_module = any(s.startswith(prefix) for s in checkpoint_keys) if len(prefix) > 0 else False
+        has_prefix_module = any(s.startswith(prefix) for s in original_checkpoint_keys) if len(prefix) > 0 else False
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
@@ -4736,7 +4740,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Rename the keys (use dummy values in input dict as a small trick)
         checkpoint_keys = list(
             model._fix_state_dict_keys_on_load(
-                {k: "" for k in checkpoint_keys},
+                {k: "" for k in original_checkpoint_keys},
                 key_mapping,
                 loading_base_model_from_task_state_dict,
                 loading_task_model_from_base_state_dict,
@@ -4764,7 +4768,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
-                key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
+                key[len(_prefix):] in task_specific_expected_keys and key[len(_prefix):] not in base_model_expected_keys for key in checkpoint_keys
             ):
                 raise ValueError(
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
@@ -4773,7 +4777,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            cls, model, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer, device_map
+            cls, model, original_checkpoint_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer, device_map
         )
 
         # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
@@ -4864,7 +4868,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # This is a mapping from key that `model_to_load` expects to serialized key name
         reverse_renaming_mapping = model_to_load._fix_state_dict_keys_on_load(
-            {k: k for k in checkpoint_keys}, key_mapping, loading_base_model_from_task_state_dict
+            {k: k for k in original_checkpoint_keys}, key_mapping, loading_base_model_from_task_state_dict
         )
 
         error_msgs = []
