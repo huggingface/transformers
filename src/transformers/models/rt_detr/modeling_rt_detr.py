@@ -1005,17 +1005,19 @@ class RTDetrMultiheadAttention(nn.Module):
 class RTDetrDecoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
+
+        self.dropout = config.dropout
+        self.activation_dropout = config.activation_dropout
+
         # self-attention
         self.self_attn = RTDetrMultiheadAttention(
             embed_dim=config.d_model,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
-        self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.activation_dropout = config.activation_dropout
-
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+
         # cross-attention
         self.encoder_attn = RTDetrMultiscaleDeformableAttention(
             config,
@@ -1023,6 +1025,7 @@ class RTDetrDecoderLayer(nn.Module):
             n_points=config.decoder_n_points,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
@@ -1061,24 +1064,21 @@ class RTDetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        residual = hidden_states
 
         # Self Attention
+        self_attn_residual = hidden_states
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states = self_attn_residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        second_residual = hidden_states
-
         # Cross-Attention
-        cross_attn_weights = None
+        cross_attn_residual = hidden_states
         hidden_states, cross_attn_weights = self.encoder_attn(
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
@@ -1089,19 +1089,17 @@ class RTDetrDecoderLayer(nn.Module):
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
-
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = second_residual + hidden_states
-
+        hidden_states = cross_attn_residual + hidden_states
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
-        residual = hidden_states
+        fc_residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states = fc_residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
