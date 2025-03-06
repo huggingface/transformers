@@ -332,11 +332,9 @@ def convert_transformer_weights(
 
     if path == _TRANSFORMER_EMBEDDER:
         if prop == "input_embedding":
-            converted_paths = [
-                "language_model.model.embed_tokens.weight",
-                "language_model.lm_head.weight",
-            ]
-            converted_weights = [weights, weights]
+            # Tied to language_model.lm_head.weight, assigned at the end.
+            converted_paths = ["language_model.model.embed_tokens.weight"]
+            converted_weights = [weights]
         elif _TEXT_ONLY.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
             return zip([], [])
         else:
@@ -478,6 +476,11 @@ def convert(
                     path = path[len("language_model."):]
 
                 update_tree(path, weights)
+
+    if config.vision_config is None:
+        hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
+    else:
+        hf_tree["language_model.lm_head.weight"] = hf_tree["language_model.model.embed_tokens.weight"]
 
     return ConversionResult(state_tree=hf_tree, config=config)
 

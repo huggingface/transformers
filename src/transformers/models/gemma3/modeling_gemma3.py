@@ -761,6 +761,9 @@ GEMMA3_INPUTS_DOCSTRING = ""
 
 class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     base_model_prefix = "language_model"
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
