@@ -100,7 +100,7 @@ class NllbMoeConfig(PretrainedConfig):
             experts.
         router_bias (`bool`, *optional*, defaults to `False`):
             Whether or not the classifier of the router should have a bias.
-        moe_token_dropout (`float`, *optional*, defualt ot 0.2):
+        moe_token_dropout (`float`, *optional*, default to 0.2):
             Masking rate for MoE expert output masking (EOM), which is implemented via a Dropout2d on the expert
             outputs.
         output_router_logits (`bool`, *optional*, defaults to `False`):
