@@ -76,19 +76,6 @@ _CONFIG_FOR_DOC = "Gemma3Config"
 
 logger = logging.get_logger(__name__)
 
-IMAGE_TOKEN = "<image>"
-IMAGE_TOKEN_LEN = len(IMAGE_TOKEN)
-START_IMAGE_TOKEN = "<start_of_image>"
-END_IMAGE_TOKEN = "<end_of_image>"
-IMAGE_SOFT_TOKEN = "<image_soft_token>"
-NEWLINE_TOKEN = "\n"
-PAN_AND_SCAN_PREFIX = "Here is the original image"
-PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
-
-EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [
-    f"<seg{i:0>3}>" for i in range(128)
-]
-
 GEMMA3_INPUTS_DOCSTRING = ""
 
 BatchedImageInput = Sequence[PIL.Image.Image]
@@ -610,7 +597,7 @@ class Gemma3Processor(ProcessorMixin):
     ) -> BatchFeature:
         if batched_images and not text:
             text = [
-                " ".join([IMAGE_TOKEN] * len(images))
+                " ".join(["<image>"] * len(images))
                 for images in batched_images
             ]
 
@@ -624,7 +611,7 @@ class Gemma3Processor(ProcessorMixin):
                 )
 
             for prompt, images in zip(text, batched_images):
-                image_indexes = [m.start() for m in re.finditer(IMAGE_TOKEN, prompt)]
+                image_indexes = [m.start() for m in re.finditer("<image>", prompt)]
 
                 if (i_l := len(images)) != (idx_l := len(image_indexes)):
                     raise ValueError(f"Prompt contained {idx_l} image tokens but received {i_l} images.")
@@ -632,15 +619,15 @@ class Gemma3Processor(ProcessorMixin):
                 # Insert additional image tokens for Pan-and-Scan crops
                 for (_, pas_images), idx in reversed(list(zip(images, image_indexes))):
                     if pas_images:
-                        formatted_image_text = " ".join(
-                            [PAN_AND_SCAN_PREFIX, IMAGE_TOKEN, PAN_AND_SCAN_POSTFIX]
-                            + [IMAGE_TOKEN] * len(pas_images)
+                        formatted_image_text = (
+                            "Here is the original image <image> and here are some crops to help you see better " +
+                            " ".join(["<image>"] * len(pas_images))
                         )
-                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_TOKEN_LEN :]
+                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + len("<image>") :]
 
             # Expand placeholder image tokens to the full image token sequence
             text = [
-                prompt.replace(IMAGE_TOKEN, self.full_image_sequence)
+                prompt.replace("<image>", self.full_image_sequence)
                 for prompt in text
             ]
 

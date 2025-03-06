@@ -73,17 +73,12 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
             "do_rescale": True,
             "rescale_factor": 1 / 255,
             "do_normalize": True,
-            "image_mean": None,
-            "image_std": None,
+            "image_mean": (127.5,) * 3,
+            "image_std": (127.5,) * 3,
             "do_convert_rgb": None,
         },
     }
 
-
-IMAGE_TOKEN = "<image>"
-IMAGE_TOKEN_LEN = len(IMAGE_TOKEN)
-PAN_AND_SCAN_PREFIX = "Here is the original image"
-PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
 
 BatchedImageInput = Sequence[PIL.Image.Image]
 BatchedMultiImageInput = Sequence[BatchedImageInput]
@@ -269,7 +264,7 @@ class Gemma3Processor(ProcessorMixin):
         **kwargs: Unpack[Gemma3TextKwargs],
     ) -> BatchFeature:
         if batched_images and not text:
-            text = [" ".join([IMAGE_TOKEN] * len(images)) for images in batched_images]
+            text = [" ".join(["<image>"] * len(images)) for images in batched_images]
 
         if batched_images and text:
             if isinstance(text, str):
@@ -279,7 +274,7 @@ class Gemma3Processor(ProcessorMixin):
                 raise ValueError(f"Received inconsistently sized batches of images ({bi_l}) and text ({t_l}).")
 
             for prompt, images in zip(text, batched_images):
-                image_indexes = [m.start() for m in re.finditer(IMAGE_TOKEN, prompt)]
+                image_indexes = [m.start() for m in re.finditer("<image>", prompt)]
 
                 if (i_l := len(images)) != (idx_l := len(image_indexes)):
                     raise ValueError(f"Prompt contained {idx_l} image tokens but received {i_l} images.")
@@ -287,13 +282,14 @@ class Gemma3Processor(ProcessorMixin):
                 # Insert additional image tokens for Pan-and-Scan crops
                 for (_, pas_images), idx in reversed(list(zip(images, image_indexes))):
                     if pas_images:
-                        formatted_image_text = " ".join(
-                            [PAN_AND_SCAN_PREFIX, IMAGE_TOKEN, PAN_AND_SCAN_POSTFIX] + [IMAGE_TOKEN] * len(pas_images)
+                        formatted_image_text = (
+                            "Here is the original image <image> and here are some crops to help you see better "
+                            + " ".join(["<image>"] * len(pas_images))
                         )
-                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + IMAGE_TOKEN_LEN :]
+                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + len("<image>") :]
 
             # Expand placeholder image tokens to the full image token sequence
-            text = [prompt.replace(IMAGE_TOKEN, self.full_image_sequence) for prompt in text]
+            text = [prompt.replace("<image>", self.full_image_sequence) for prompt in text]
 
         inputs = self.tokenizer(text=text, **kwargs)
         return BatchFeature({**inputs})
