@@ -23,7 +23,7 @@ import itertools
 import math
 import re
 from collections.abc import Sequence
-from typing import Optional, Union, cast
+from typing import Any, Optional, Union, cast
 
 import PIL.Image
 import torch
@@ -202,7 +202,7 @@ class Gemma3Processor(ProcessorMixin):
         images: Optional[Gemma3ProcessorImageInput] = None,
         text: Optional[TextInputTypes] = None,
         videos: Optional[Any] = None,
-        audio: Optional[Any] = none,
+        audio: Optional[Any] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
         del videos, audio  # Unsupported modalities for Gemma 3

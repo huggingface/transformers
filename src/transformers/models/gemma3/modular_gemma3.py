@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import itertools
 import math
 import re
-from typing import Literal, Optional, Union, cast
+from typing import Any, Literal, Optional, Union, cast
 
 import PIL
 import PIL.Image
@@ -539,7 +539,7 @@ class Gemma3Processor(ProcessorMixin):
         images: Optional[Gemma3ProcessorImageInput] = None,
         text: Optional[TextInputTypes] = None,
         videos: Optional[Any] = None,
-        audio: Optional[Any] = none,
+        audio: Optional[Any] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
         del videos, audio   # Unsupported modalities for Gemma 3

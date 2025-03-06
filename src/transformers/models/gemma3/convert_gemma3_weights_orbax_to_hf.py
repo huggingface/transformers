@@ -504,9 +504,12 @@ def main(*args):
         logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
         del tokenizer
     else:
+        image_processor = SiglipImageProcessor(
+            image_seq_length=256, size={"height": 896, "width": 896}
+        )
         processor = Gemma3Processor(
-            image_processor=SiglipImageProcessor(image_seq_length=1024),
-            tokenizer=tokenizer
+            image_processor=image_processor,
+            tokenizer=tokenizer,
         )
         processor.save_pretrained(output_path)
         logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
