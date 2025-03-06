@@ -38,6 +38,19 @@ from . import (
 
 # ==== Internal Constants and Classes ====
 
+_CHAT_TEMPLATE = (
+    "{{ bos_token }}{% set system_message = '' %}{% if messages[0]['role'] == 'system' %}"
+    "{% set system_message = messages[0]['content'] | trim + '\n\n' %}{% set messages = messages[1:] %}"
+    "{% endif %}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
+    "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}"
+    "{% if loop.index0 == 0 and message['role'] == 'user' %}"
+    "{{ '<start_of_turn>' + message['role'] + '\n' + system_message + message['content'] | trim + '<end_of_turn>\n' }}"
+    "{% elif (message['role'] == 'assistant') %}{% set role = 'model' %}"
+    "{{ '<start_of_turn>' + role + '\n' + message['content'] | trim + '<end_of_turn>\n' }}{% else %}"
+    "{{ '<start_of_turn>' + message['role'] + '\n' + message['content'] | trim + '<end_of_turn>\n' }}{% endif %}"
+    "{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>model\n' }}{% endif %}"
+)
+
 _DTYPES = {
     "float32": torch.float32,
     "bfloat16": torch.bfloat16,
@@ -145,6 +158,12 @@ CHECKPOINT_PATH = flags.DEFINE_string(
     default=None,
     help="Path to the Orbax checkpoint.",
     required=True,
+)
+
+INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
+    name="include_chat_template",
+    default=False,
+    help="If true, will save the default chat template with the tokenizer"
 )
 
 OUTPUT_PATH = flags.DEFINE_string(
@@ -475,6 +494,9 @@ def main(*args):
         flags.FLAGS.set_default(_TEXT_ONLY.name, True)
 
     tokenizer = GemmaTokenizerFast(TOKENIZER_PATH.value)
+
+    if INCLUDE_CHAT_TEMPLATE.value:
+        tokenizer.chat_template = _CHAT_TEMPLATE
 
     if _TEXT_ONLY.value:
         config.vision_config = None
