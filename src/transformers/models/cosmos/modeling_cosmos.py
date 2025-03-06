@@ -21,8 +21,8 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional, Tuple, Union
 from dataclasses import dataclass
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -33,7 +33,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -43,6 +43,7 @@ from .configuration_cosmos import CosmosConfig, CosmosTextConfig, CosmosVQVAECon
 
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "CosmosConfig"
+
 
 @dataclass
 class CosmosBaseModelOutputWithPast(BaseModelOutputWithPast):
@@ -420,7 +421,7 @@ class CosmosVQVAEResnetBlock(nn.Module):
         in_channels: int,
         out_channels: Optional[int] = None,
         dropout: Optional[int] = None,
-        mid = False,
+        mid=False,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -1095,6 +1096,7 @@ class CosmosTextRotaryEmbedding(nn.Module):
         spatial_inv_freq = 1.0 / (base**dim_spatial_range)
         dim_temporal_range = torch.arange(0, dim_temporal, 2)[: (dim_temporal // 2)].float().to(device) / dim_temporal
         temporal_inv_freq = 1.0 / (base**dim_temporal_range)
+        print(spatial_inv_freq.shape, temporal_inv_freq.shape)
         return spatial_inv_freq, temporal_inv_freq
 
     def _compute_emb(self):
@@ -1113,6 +1115,7 @@ class CosmosTextRotaryEmbedding(nn.Module):
             dim=-1,
         )
         emb = emb.view(1, 1, -1, emb.shape[-1]).float()
+        print(emb.shape)
 
         if self.config.insert_cross_attn_layers:
             # since we added <bov> token at the beginning of the video for text2world
@@ -1614,7 +1617,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
                 self_attn_past_kv = StaticCache(
                     config=self.config,
                     max_batch_size=1,
-                    max_cache_len=12800,
+                    max_cache_len=12864,
                     dtype=torch.bfloat16,
                 )
                 past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
@@ -1632,17 +1635,15 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
             attention_mask,
             inputs_embeds,
             cache_position,
-            past_key_values.self_attention_cache if isinstance(past_key_values, EncoderDecoderCache) else past_key_values,
+            past_key_values.self_attention_cache
+            if isinstance(past_key_values, EncoderDecoderCache)
+            else past_key_values,
             output_attentions,
         )
         if encoder_attention_mask is not None:
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
 
         hidden_states = inputs_embeds
-        if encoder_hidden_states is not None:
-            encoder_hidden_states = encoder_hidden_states.to(hidden_states.dtype)
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
@@ -1968,6 +1969,16 @@ class CosmosModel(CosmosPreTrainedModel):
             bov_tokens = [[self.config.get_text_config().bos_token_id] * vq_tokens.shape[0]]
             bov_tokens = torch.tensor(bov_tokens, device=vq_tokens.device, dtype=vq_tokens.dtype)
             vq_tokens = torch.cat([bov_tokens, vq_tokens], dim=-1)
+
+        # pad to multiple of 64
+        # if vq_tokens.shape[1] % 64 != 0:
+        #     max_length = ((vq_tokens.shape[1] // 64) * 64) + 64
+        #     pad_length = max_length - vq_tokens.shape[1]
+        #     pad_tokens = torch.ones(
+        #         vq_tokens.shape[0], pad_length, device=vq_tokens.device, dtype=vq_tokens.dtype
+        #     ) * 64002
+        #     vq_tokens = torch.cat([vq_tokens, pad_tokens], dim=-1)
+
         return vq_tokens
 
     @torch.no_grad
@@ -2014,18 +2025,23 @@ class CosmosModel(CosmosPreTrainedModel):
         #         "You have to specify only one of the input_ids, inputs_embeds and pixel values."
         #     )
 
+        if pixel_values is not None:
+            input_ids = self.get_image_tokens(pixel_values)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
         if encoder_hidden_states is None and encoder_input_ids is not None:
-            output = self.prompt_encoder(encoder_input_ids, attention_mask=attention_mask)
+            output = self.prompt_encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask)
             encoder_hidden_states = output.last_hidden_state
+            encoder_hidden_states = encoder_hidden_states.to(inputs_embeds.dtype)
             if encoder_attention_mask is not None:
                 lengths = encoder_attention_mask.sum(dim=1)
                 for batch_id in range(encoder_hidden_states.shape[0]):
                     encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
             torch.save(encoder_hidden_states, "encoder_hidden_states.pt")
+            torch.save(encoder_attention_mask, "encoder_attention_mask.pt")
             encoder_hidden_states = torch.load("/raid/raushan/Cosmos/encoder_hidden_states.pt", weights_only=True)
-
-        if pixel_values is not None:
-            input_ids = self.get_image_tokens(pixel_values)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
@@ -2184,34 +2200,33 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         return output if return_dict else output.to_tuple()
 
     def generate(self, encoder_input_ids=None, pixel_values=None, **kwargs):
-        # Generation from video input only, so we obtain video input ids and pass to generate 
-        if input_ids is None:
-            input_ids = self.model.get_image_tokens(pixel_values)
+        # Generation from video input only, so we obtain video input ids and pass to generate
+        input_ids = self.model.get_image_tokens(pixel_values)
+        if encoder_input_ids is None:
             return super().generate(input_ids, **kwargs)
-        
+
         # Else we are in video2world generation. We need to encode the prompt
-        attention_mask = kwargs.pop("encoder_attention_mask", None)
-        output = self.model.prompt_encoder(encoder_input_ids, attention_mask=encoder_)
-        encoder_hidden_states = output.last_hidden_state
-        if attention_mask is not None:
-            lengths = attention_mask.sum(dim=1)
+        encoder_attention_mask = kwargs.pop("encoder_attention_mask", None)
+        output = self.model.prompt_encoder(encoder_input_ids, attention_mask=encoder_attention_mask)
+        encoder_hidden_states = output.last_hidden_state.to(self.dtype)
+        if encoder_attention_mask is not None:
+            lengths = encoder_attention_mask.sum(dim=1)
             for batch_id in range(encoder_hidden_states.shape[0]):
                 encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
 
-        input_ids = self.model.get_image_tokens(pixel_values)
         self_attn_past_kv = StaticCache(
             config=self.config.get_text_config(),
             max_batch_size=1,
-            max_cache_len=12800,
+            max_cache_len=12864,
             dtype=torch.bfloat16,
         )
-        past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        past_key_values = EncoderDecoderCache(self_attn_past_kv, DynamicCache())
         output = super().generate(
             input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
-            **kwargs
+            **kwargs,
         )
         return output
 

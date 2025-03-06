@@ -469,7 +469,9 @@ class CosmosVideoProcessor(BaseImageProcessor):
                     image = image.clip(0, 255).astype(np.uint8)
 
                 if return_tensors == "np":
-                    image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+                    image = to_channel_dimension_format(
+                        image, ChannelDimension.LAST, input_channel_dim=input_data_format
+                    )
 
                 processed_video.append(image)
             pixel_values.append(processed_video)
