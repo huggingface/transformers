@@ -1747,6 +1747,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Directly inherits `GenerationMixin` -> can generate
         if "GenerationMixin" in str(cls.__bases__):
             return True
+        # Model class overwrites `generate` (e.g. time series models) -> can generate
+        if str(cls.__name__) in str(cls.generate):
+            return True
         # The class inherits from a class that can generate (recursive check) -> can generate
         for base in cls.__bases__:
             if not hasattr(base, "can_generate"):
