@@ -323,6 +323,7 @@ _import_structure = {
         "CosmosConfig",
         "CosmosTextConfig",
         "CosmosVQVAEConfig",
+        "CosmosProcessor",
     ],
     "models.cpm": [],
     "models.cpmant": [
@@ -5465,6 +5466,7 @@ if TYPE_CHECKING:
     )
     from .models.cosmos import (
         CosmosConfig,
+        CosmosProcessor,
         CosmosTextConfig,
         CosmosVQVAEConfig,
     )

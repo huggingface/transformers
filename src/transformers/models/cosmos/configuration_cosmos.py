@@ -249,6 +249,7 @@ class CosmosTextConfig(PretrainedConfig):
         max_position_embeddings: int = 12800,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
+        bos_token_id: int = 64000,
         tie_word_embeddings: bool = False,
         rope_theta: float = 500000.0,
         rope_scaling: Optional = None,
@@ -257,6 +258,7 @@ class CosmosTextConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout: float = 0.1,
         initializer_range: float = 0.02,
+        apply_abs_pos_emb: bool = False,
         cross_attn_hidden_size: int = 1024,
         insert_cross_attn_layers: List[int] = None,
         **kwargs,
@@ -277,6 +279,7 @@ class CosmosTextConfig(PretrainedConfig):
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
+        self.apply_abs_pos_emb = apply_abs_pos_emb
         self.cross_attn_hidden_size = cross_attn_hidden_size
         self.insert_cross_attn_layers = insert_cross_attn_layers or []
         rope_config_validation(self)
@@ -284,6 +287,7 @@ class CosmosTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         super().__init__(
+            bos_token_id=bos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -305,7 +309,7 @@ class CosmosConfig(PretrainedConfig):
             CosmosVQVAEConfig instance containing the configuration for the VQ-VAE model.
         text_config (`Union[Dict, CosmosTextConfig]``, *optional*):
             CosmosTextConfig instance containing the configuration for the language model.
-        prompt_encodr (`Union[Dict, PreTrainedConfig]``, *optional*):
+        prompt_encoder (`Union[Dict, PreTrainedConfig]``, *optional*):
             PreTrainedConfig instance containing the configuration for the prompt encoder. Used only for
             video-text generation models.
         vocabulary_map (`dict`, *optional*):

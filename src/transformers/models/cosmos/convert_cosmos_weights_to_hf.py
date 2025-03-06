@@ -120,14 +120,7 @@ def convert_model(
 ):
     os.makedirs(output_dir, exist_ok=True)
 
-    # TODO: Convert and save processor for text conditioned video generation
-    # extra_special_tokens = extra_special_tokens = {
-    #     "image_token": "<image>",
-    #     "boi_token": "<|image start|>",
-    #     "eoi_token": "<|image end|>",
-    #     "video_token": "<video>",
-    # }
-
+    # Convert and save processor for text conditioned video generation
     video_processor = CosmosVideoProcessor()
     tokenizer = AutoTokenizer.from_pretrained(prompt_encoder_ckpt or "google-t5/t5-11b")
     processor = CosmosProcessor(video_processor=video_processor, tokenizer=tokenizer)
@@ -155,6 +148,7 @@ def convert_model(
 
     config = {"is_video_to_world": "text_and_video" in orig_text_config["input_types"]}
     text_config = {
+        "apply_abs_pos_emb": orig_text_config.get("apply_abs_pos_emb", False),
         "cross_attn_hidden_size": orig_text_config.get("context_dim", None),
         "vocab_size": orig_text_config["vocab_size"],
         "hidden_size": orig_text_config["dim"],
@@ -179,8 +173,7 @@ def convert_model(
         model.generation_config = GenerationConfig(
             do_sample=True,
             top_k=2048,
-            # pad_token_id=processor.tokenizer.pad_token_id,
-            # eos_token_id=processor.tokenizer.eos_token_id,
+            bos_token_id=config.text_config.bos_token_id,
         )
 
     # VideoToWorld model has different sizes for input and output embeddings resize to avoid bugs we had with Mllama
@@ -194,7 +187,7 @@ def convert_model(
         sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
         dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
 
-        # We add 64 new tokens as per orig implementation
+        # We padd to multiple of 64 tokens as per orig implementation
         new_embeddings = torch.stack(tuple((dist.sample() for _ in range(64))), dim=0)
         resized_embeddings = torch.cat([pre_expansion_embeddings, new_embeddings])
         state_dict["lm_head.weight"] = resized_embeddings

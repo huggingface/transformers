@@ -39,7 +39,7 @@ from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -274,7 +274,7 @@ class CosmosVideoProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: ImageInput,
+        videos: VideoInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -293,34 +293,34 @@ class CosmosVideoProcessor(BaseImageProcessor):
     ):
         """
         Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+            videos (`VideoInput`):
+                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
+                Whether to resize the video.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
+                Size of the video after resizing. Shortest edge of the video is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
+                Resampling filter to use if resizing the video. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
+                Whether to center crop the video.
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
+                Whether to rescale the video.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+                Rescale factor to rescale the video by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
+                Whether to normalize the video.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+                Video mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+                Video standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
+                Whether to convert the video to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -329,16 +329,16 @@ class CosmosVideoProcessor(BaseImageProcessor):
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
+                The channel dimension format for the output video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input video.
             input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
                 from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
 
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -356,10 +356,9 @@ class CosmosVideoProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
-        if images is not None:
-            images = make_batched_videos(images)
+        videos = make_batched_videos(videos)
 
-        if images is not None and not valid_images(images):
+        if videos is not None and not valid_images(videos[0]):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -378,9 +377,9 @@ class CosmosVideoProcessor(BaseImageProcessor):
         )
 
         pixel_values = []
-        for image in images:
-            image = self._preprocess(
-                image,
+        for video in videos:
+            video = self._preprocess(
+                video,
                 do_resize=do_resize,
                 size=size,
                 resample=resample,
@@ -396,53 +395,53 @@ class CosmosVideoProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             if do_pad:
-                num_input_frames = image.shape[0]
-                image = np.concatenate(
-                    [image, image[-1:, :, :, :].repeat(NUM_TOTAL_FRAMES - num_input_frames, 0)],
+                num_input_frames = video.shape[0]
+                video = np.concatenate(
+                    [video, video[-1:, :, :, :].repeat(NUM_TOTAL_FRAMES - num_input_frames, 0)],
                     axis=0,
                 )
-            pixel_values.append(image)
+            pixel_values.append(video)
 
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
     def postprocess(
         self,
-        images: ImageInput,
+        videos: VideoInput,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        return_tensors: Union[str, TensorType] = "PIL.Image.Image",
+        return_tensors: Union[str, TensorType] = "np",
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
-        Postprocess an image or batch of images tensor. Postprocess is the reverse process of preprocess.
+        Postprocess an image or batch of videos tensor. Postprocess is the reverse process of preprocess.
         The parameters should be same as in preprocess.
         Args:
-            images (`ImageInput`):
-                Image to postprocess. Expects a single or batch of images with pixel values ranging from -1 to 1.
+            videos (`VideoInput`):
+                Video to postprocess. Expects a single or batch of videos with pixel values ranging from -1 to 1.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
+                Whether to rescale the video.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+                Rescale factor to rescale the video by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
+                Whether to normalize the video.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+                Video mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+                Video standard deviation to use for normalization. Only has an effect if `do_normalize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
+                - Unset: Return a batch of np.ndarray`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
             input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
+                from the input video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
@@ -450,35 +449,32 @@ class CosmosVideoProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
-        if isinstance(images[0], Image.Image):
-            return images if len(images) > 1 else images[0]
-
+        videos = make_batched_videos(videos)
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+            input_data_format = infer_channel_dimension_format(videos[0][0])
 
         pixel_values = []
-        for image in images:
-            image = to_numpy_array(image)
-            if do_normalize:
-                image = self.unnormalize(
-                    image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
-                )
+        for video in videos:
+            processed_video = []
+            for image in video:
+                image = to_numpy_array(image)
+                if do_normalize:
+                    image = self.unnormalize(
+                        image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
+                    )
 
-            if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
-                image = image.clip(0, 255).astype(np.uint8)
+                if do_rescale:
+                    image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                    image = image.clip(0, 255).astype(np.uint8)
 
-            if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
-                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                pixel_values.append(Image.fromarray(image))
-            else:
-                pixel_values.extend(image)
+                if return_tensors == "np":
+                    image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+
+                processed_video.append(image)
+            pixel_values.append(processed_video)
 
         data = {"pixel_values": pixel_values}
-        return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
-
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def unnormalize(

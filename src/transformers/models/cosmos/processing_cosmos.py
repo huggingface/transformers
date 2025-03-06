@@ -30,7 +30,10 @@ logger = logging.get_logger(__name__)
 
 class CosmosProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {},
+        "text_kwargs": {
+            "padding": "max_length",
+            "max_length": 512,
+        },
         "videos_kwargs": {},
     }
 
@@ -109,8 +112,13 @@ class CosmosProcessor(ProcessorMixin):
 
         if text is not None:
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            text_inputs = {f"encoder_{k}": v for k, v in text_inputs.items()}
+
             data.update(text_inputs)
         return BatchFeature(data=data)
+
+    def postprocess(self, videos, **kwargs):
+        return self.video_processor.postprocess(videos)
 
     @property
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
