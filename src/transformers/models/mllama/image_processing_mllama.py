@@ -93,7 +93,7 @@ def get_image_size_fit_to_canvas(
     canvas_height and canvas_width, while ensuring that the image dimensions are not smaller than
     tile_size. If the image is larger than the canvas, the returned size will fit within the canvas.
     If the image already fits within the canvas, the size remains unchanged.
-    The aspect ratio of the original image is preserved.
+    The aspect ratio of the original image is preserved as much as possible.
 
     Args:
         image_height (`int`):
@@ -120,10 +120,12 @@ def get_image_size_fit_to_canvas(
 
     if scale_w < scale_h:
         new_width = target_width
-        new_height = min(math.floor(image_height * scale_w), target_height)
+        # minimum height is 1 to avoid invalid height of 0
+        new_height = min(math.floor(image_height * scale_w) or 1, target_height)
     else:
         new_height = target_height
-        new_width = min(math.floor(image_width * scale_h), target_width)
+        # minimum width is 1 to avoid invalid width of 0
+        new_width = min(math.floor(image_width * scale_h) or 1, target_width)
 
     return new_height, new_width
 
