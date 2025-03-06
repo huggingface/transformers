@@ -709,7 +709,6 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-<<<<<<< HEAD
 def find_submodule_and_param_name(model, long_key, start_prefix=""):
     """
     A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
@@ -733,32 +732,6 @@ def find_submodule_and_param_name(model, long_key, start_prefix=""):
     return submodule, split_key[0]
 
 
-def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
-    """
-    Moves `loaded_state_dict_keys` in model to meta device which frees up the memory taken by those params.
-
-    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
-    `bert.pooler.dense.weight`
-
-    """
-
-    # dematerialize param storage for keys that are going to be replaced by state_dict, by
-    # putting those on the meta device
-    for k in loaded_state_dict_keys:
-        submodule, param_name = find_submodule_and_param_name(model, k, start_prefix)
-        if submodule is not None:
-            # selectively switch to the meta device only those params/buffers that will
-            # be next replaced from state_dict. This a complex way to do p.to_("meta")
-            # since we have no in-place to_ for tensors.
-            new_val = getattr(submodule, param_name)
-            if isinstance(new_val, torch.nn.Parameter):
-                # isinstance returns False for Params on meta device, so switch after the check
-                new_val = torch.nn.Parameter(new_val.to("meta"))
-            else:
-                new_val = new_val.to("meta")
-            setattr(submodule, param_name, new_val)
-
-
 def fix_tensor_type_and_device(
     model, param_name, param, dtype=None, keep_in_fp32_modules=None
 ) -> Union[str, torch.dtype]:
@@ -780,12 +753,15 @@ def fix_tensor_type_and_device(
         param_casting_dtype = None
         is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
         if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+            # First fp32 if part of the exception list
             if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
                 param_casting_dtype = torch.float32
-            elif dtype is not None:
-                param_casting_dtype = dtype
+            # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
             elif old_param is not None:
                 param_casting_dtype = old_param.dtype
+            # Finally default dtype provided (base dtype for models with subconfigs/submodels)
+            elif dtype is not None:
+                param_casting_dtype = dtype
         return old_param is not None and old_param.is_contiguous(), param_casting_dtype
     else:
         return False, None
@@ -793,13 +769,12 @@ def fix_tensor_type_and_device(
     return
 
 
-=======
->>>>>>> 7bddb0d1c9 (squash everything together)
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
     state_dict: Dict,
     expected_keys: List[str],
+    reverse_renaming_mapping: Dict[str, str],
     device_map: Optional[Dict] = None,
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[Dict] = None,
@@ -849,10 +824,12 @@ def _load_state_dict_into_meta_model(
         elif shard_file.endswith(".bin"):
             full_state_dict = bin_state_dict
 
-    for serialized_param_name, empty_param in state_dict.items():
-        # serialized_param_name is the raw, serialized name
-        # fixed_param_name is the model's equivalent
-        fixed_param_name, _ = model.rename_key(serialized_param_name)
+    for fixed_param_name, empty_param in state_dict.items():
+        if fixed_param_name not in expected_keys:
+            continue
+
+        # This is the name of the parameter as it appears on disk file
+        serialized_param_name = reverse_renaming_mapping[fixed_param_name]
 
         if fixed_param_name not in expected_keys:
             continue
@@ -4435,6 +4412,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
                     "tensors"
                 ]
+                # Force it if is not already the case
+                low_cpu_mem_usage = True
 
             # Find the correct dtype based on current state
             config, torch_dtype, dtype_orig = _get_torch_dtype(
@@ -4527,7 +4506,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype=torch_dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
-                gguf_file=gguf_file,
                 device_mesh=device_mesh,
                 key_mapping=key_mapping,
                 weights_only=weights_only,
@@ -4753,7 +4731,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         keep_in_fp32_modules: Optional[List[str]] = None,
-        gguf_file: Optional[str] = None,
         device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
         key_mapping: Optional[Dict[str, str]] = None,
         weights_only: bool = True,
@@ -4907,6 +4884,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expanded_device_map = expand_device_map(device_map, checkpoint_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
+        # This is a mapping from key that `model_to_load` expects to serialized key name
+        reverse_renaming_mapping = model_to_load._fix_state_dict_keys_on_load(
+            {k: k for k in checkpoint_keys}, key_mapping, loading_base_model_from_task_state_dict
+        )
+
         error_msgs = []
         mismatched_keys = []
         # Iterate on all the shards to load the weights
@@ -4915,7 +4897,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if shard_file in disk_only_shard_files:
                 continue
 
-            map_location = "meta" if low_cpu_mem_usage or gguf_file is not None else "cpu"
+            map_location = "meta" if low_cpu_mem_usage else "cpu"
 
             # If shard_file == "", we use the existing state_dict instead of loading it
             if shard_file != "":
@@ -4923,11 +4905,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
 
-            # Modify the keys if needed
-            if map_location != "meta":
-                state_dict = model_to_load._fix_state_dict_keys_on_load(
-                    state_dict, key_mapping, loading_base_model_from_task_state_dict
-                )
+            state_dict = model_to_load._fix_state_dict_keys_on_load(
+                state_dict, key_mapping, loading_base_model_from_task_state_dict
+            )
 
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
@@ -4938,13 +4918,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model.base_model_prefix if loading_base_model_from_task_state_dict else "",
             )
 
-            if low_cpu_mem_usage or gguf_file is not None:
+            if low_cpu_mem_usage:
                 # Skip it with fsdp on ranks other than 0
                 if not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
                     disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                         model_to_load,
                         state_dict,
                         expected_keys,
+                        reverse_renaming_mapping,
                         device_map=device_map,
                         disk_offload_folder=disk_offload_folder,
                         disk_offload_index=disk_offload_index,
