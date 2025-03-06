@@ -229,7 +229,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
 
         # a white 1x1 pixel RGB image
-        image_inputs = [[np.ndarray(shape=(1, 1, 3), dtype=float, buffer=np.array([1.0, 1.0, 1.0]))]]
+        image_inputs = [[np.full(shape=(1, 1, 3), fill_value=1.0, dtype=float)]]
         encoded_images = image_processing(
             image_inputs, return_tensors="pt", input_data_format="channels_last"
         ).pixel_values

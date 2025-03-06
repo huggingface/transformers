@@ -706,10 +706,8 @@ class MllamaImageProcessor(BaseImageProcessor):
             # iterate over images in a batch sample
             for image in images:
                 # default PIL images to channels_last
-                if input_data_format is None and is_vision_available() and isinstance(image, PIL.Image.Image):
-                    image_input_data_format = ChannelDimension.LAST
-                else:
-                    image_input_data_format = input_data_format
+                if input_data_format is None and isinstance(image, PIL.Image.Image):
+                    input_data_format = ChannelDimension.LAST
 
                 # convert to numpy array for processing
                 image = to_numpy_array(image)
