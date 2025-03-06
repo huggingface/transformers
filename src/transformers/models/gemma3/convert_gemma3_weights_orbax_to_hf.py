@@ -505,7 +505,10 @@ def main(*args):
         del tokenizer
     else:
         image_processor = SiglipImageProcessor(
-            image_seq_length=256, size={"height": 896, "width": 896}
+            image_seq_length=256,
+            image_mean=(127.5,) * 3,
+            image_std=(127.5,) * 3,
+            size={"height": 896, "width": 896},
         )
         processor = Gemma3Processor(
             image_processor=image_processor,
