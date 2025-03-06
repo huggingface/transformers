@@ -363,7 +363,7 @@ class ConditionalDetrConvEncoder(nn.Module):
 
         # replace batch norm by frozen batch norm
         replace_batch_norm(backbone)
-        
+
         self.model = backbone
         self.intermediate_channel_sizes = (
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels

@@ -264,7 +264,7 @@ class DabDetrConvEncoder(nn.Module):
 
         self.config = config
         backbone = load_backbone(config)
-        
+
         # replace batch norm by frozen batch norm
         replace_batch_norm(backbone)
 
