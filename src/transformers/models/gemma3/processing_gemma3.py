@@ -231,10 +231,7 @@ class Gemma3Processor(ProcessorMixin):
         batched_input = self._process_text(text=text, batched_images=batched_images, **output_kwargs["text_kwargs"])
 
         if pixel_values is not None:
-            batched_input.update(
-                pixel_values=pixel_values,
-                image_soft_token_mask=batched_input["input_ids"] == self.image_token_id,
-            )
+            batched_input.update(pixel_values=pixel_values)
 
         return batched_input
 

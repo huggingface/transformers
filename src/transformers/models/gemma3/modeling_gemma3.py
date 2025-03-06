@@ -1095,7 +1095,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        image_soft_token_mask: Optional[torch.BoolTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
@@ -1165,8 +1164,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         if inputs_embeds is None:
             if self.config.text_config.image_token_id >= self.get_input_embeddings().num_embeddings:
+                image_token_mask = input_ids == self.config.text_config.image_token_id
                 llm_input_ids = input_ids.clone()
-                llm_input_ids[image_soft_token_mask] = 0
+                llm_input_ids[image_token_mask] = 0
             else:
                 llm_input_ids = input_ids
 
@@ -1185,15 +1185,10 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         # Merge text and images
         if pixel_values is not None:
-            if image_soft_token_mask is None:
-                raise ValueError(
-                    "Cannot join vision and language embeddings wihtout an `image_soft_token_mask`. "
-                    "Use Gemma3Processor to create one."
-                )
-
             image_features = self.get_image_features(pixel_values).to(inputs_embeds.device, inputs_embeds.dtype)
 
-            image_mask = image_soft_token_mask.unsqueeze(-1)
+            image_mask = input_ids == self.config.text_config.image_token_id
+            image_mask = image_mask.unsqueeze(-1)
             image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
             if not is_torchdynamo_compiling() and (emb_s := inputs_embeds[image_mask].numel()) != (
@@ -1271,7 +1266,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         pixel_values=None,
-        image_soft_token_mask=None,
         attention_mask=None,
         token_type_ids=None,
         use_cache=True,
@@ -1299,7 +1293,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_soft_token_mask"] = image_soft_token_mask
 
         is_training = token_type_ids is not None and labels is not None
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
