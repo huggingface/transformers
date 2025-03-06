@@ -2962,7 +2962,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_saved_checkpoints(
                 tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
             )
-    
+
     def test_save_collator_tokenizer_by_default(self):
         set_seed(42)
         import datasets
@@ -2970,29 +2970,27 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(
-            dataset_name, 
-            dataset_config, 
+            dataset_name,
+            dataset_config,
             split="train[:40]"
         )
         new_tokens = ["<|fake_token_1|>", "<|fake_token_2|>"]
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.add_tokens(new_tokens=new_tokens)
-
         def tokenize_function(examples):
             return tokenizer(
-                examples["text"], 
-                max_length=16, 
-                padding="max_length", 
+                examples["text"],
+                max_length=16,
+                padding="max_length",
                 truncation=True
             )
-        
         tokenized_dataset = dataset.map(
-            tokenize_function, 
-            batched=True, 
+            tokenize_function,
+            batched=True,
             remove_columns=dataset.column_names
         )
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer, 
+            tokenizer=tokenizer,
             mlm=False
         )
         model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -3003,7 +3001,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             "learning_rate": 3e-4,
             "disable_tqdm": True,
         }
-
         tmp_dir = tempfile.TemporaryDirectory()
         args = TrainingArguments(tmp_dir, **args_kwargs)
         trainer = Trainer(
