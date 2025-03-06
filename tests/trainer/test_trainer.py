@@ -2974,9 +2974,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             dataset_config,
             split="train[:40]"
         )
-        new_tokens = ["<|fake_token_1|>", "<|fake_token_2|>"]
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        tokenizer.add_tokens(new_tokens=new_tokens)
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         def tokenize_function(examples):
             return tokenizer(
                 examples["text"],
