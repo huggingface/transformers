@@ -628,7 +628,6 @@ class RTDetrEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         """
         Args:
