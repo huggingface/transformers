@@ -342,11 +342,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output,)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs  # a, present, (attentions)
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->DecisionTransformerGPT2
@@ -402,7 +398,7 @@ class DecisionTransformerGPT2Block(nn.Module):
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs = self.attn(
+        attn_output, self_attn_weights = self.attn(
             hidden_states,
             past_key_value=past_key_value,
             cache_position=cache_position,
@@ -411,8 +407,6 @@ class DecisionTransformerGPT2Block(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attn_outputs[1:]
         # residual connection
         hidden_states = attn_output + residual
 
@@ -425,7 +419,7 @@ class DecisionTransformerGPT2Block(nn.Module):
                 )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_outputs = self.crossattention(
+            cross_attn_output, cross_attn_weights = self.crossattention(
                 hidden_states,
                 past_key_value=past_key_value,
                 attention_mask=attention_mask,
@@ -434,10 +428,10 @@ class DecisionTransformerGPT2Block(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
-            attn_output = cross_attn_outputs[0]
+            # attn_output = cross_attn_outputs[0]
             # residual connection
-            hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
+            hidden_states = residual + cross_attn_output
+            # outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
@@ -445,7 +439,13 @@ class DecisionTransformerGPT2Block(nn.Module):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        return (hidden_states,) + outputs  # hidden_states, (attentions, cross_attentions)
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+            if encoder_hidden_states is not None:
+                outputs += (cross_attn_weights,)
+
+        return outputs
 
 
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
