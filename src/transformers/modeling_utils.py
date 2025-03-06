@@ -829,7 +829,6 @@ def _load_state_dict_into_meta_model(
         # fixed_param_name is the model's equivalent
         fixed_param_name, _ = model.rename_key(serialized_param_name)
 
-
         # we need to use serialized_param_name as file pointer is untouched
         param = (
             file_pointer.get_slice(serialized_param_name)
