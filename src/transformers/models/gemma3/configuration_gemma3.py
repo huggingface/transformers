@@ -237,7 +237,7 @@ class Gemma3TextConfig(PretrainedConfig):
 
 
 class Gemma3VisionConfig(SiglipVisionConfig):
-    model_type = "siglip_vision_model"
+    model_type = "gemma3_vision"
 
     def __init__(
         self,

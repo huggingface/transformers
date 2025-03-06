@@ -87,6 +87,7 @@ else:
             ("focalnet", ("BitImageProcessor",)),
             ("fuyu", ("FuyuImageProcessor",)),
             ("gemma3", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
+            ("gemma3_vision", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor",)),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
