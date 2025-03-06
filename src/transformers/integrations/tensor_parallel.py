@@ -14,18 +14,17 @@
 from __future__ import annotations
 
 import inspect
-from functools import lru_cache
-from typing import List, Optional, Union, Tuple, Optional
-from functools import partial
+import re
+from functools import lru_cache, partial
+from typing import List, Optional, Tuple, Union
 
 import torch
 from packaging import version
 from torch import nn
-import re
 from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
-from ..utils import is_torch_greater_or_equal, logging
 
-from ..quantizers.quantizers_utils import get_module_from_name # TODO i dont like this import
+from ..quantizers.quantizers_utils import get_module_from_name  # TODO i dont like this import
+from ..utils import is_torch_greater_or_equal, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -132,14 +131,15 @@ def get_packed_weights(tensor, dim, casting_dtype):
         tensor = slice_[..., tensors_slices]
     return tensor  # .contiguous()
 
+
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if dim == 0:
         size_ = empty_param.shape[0]
-        param = param[rank * (size_  // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
-    elif dim == 1 or dim==-2:
+        param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
+    elif dim == 1 or dim == -2:
         size_ = empty_param.shape[1]
         param = param[:, rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
-    elif dim == 2 or dim==-1:
+    elif dim == 2 or dim == -1:
         size_ = empty_param.shape[2]
         param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
     else:
@@ -202,41 +202,31 @@ def distribute_module(
 
     return module
 
+
 class TensorParallelLayer:
     """
     General tensor parallel layer for transformers.
     """
 
     @staticmethod
-    def _prepare_input_fn(
-        input_layouts, desired_input_layouts, mod, inputs, device_mesh
-    ):
-        ...
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh): ...
 
-    def _partition_linear_fn(self, param_type, module, device_mesh):
-        ...
+    def _partition_linear_fn(self, param_type, module, device_mesh): ...
 
-    def _partition_parameter_fn(self, param_type, module, device_mesh):
-        ...
+    def _partition_parameter_fn(self, param_type, module, device_mesh): ...
 
-    def _partition_embedding_fn(self, param_type, module, device_mesh):
-        ...
+    def _partition_embedding_fn(self, param_type, module, device_mesh): ...
 
     @staticmethod
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        ...
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh): ...
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
             module,
             device_mesh,
             None,
-            partial(
-                self._prepare_input_fn, self.input_layouts, self.desired_input_layouts
-            ),
-            partial(
-                self._prepare_output_fn, self.output_layouts, self.use_local_output
-            ),
+            partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
+            partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
         )
 
 
@@ -289,14 +279,12 @@ class IsolatedParallel(TensorParallelLayer):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
 
-    def partition_tensor(self, name, module, device_mesh):
-        parameter = get_tensor_shard(param, device_mesh,  -2)
-        return nn.Parameter(parameter)
 
 class ColwiseParallel(TensorParallelLayer):
     """
     General tensor parallel layer for transformers.
     """
+
     def __init__(
         self,
         *,
@@ -311,30 +299,24 @@ class ColwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     @staticmethod
-    def _prepare_input_fn(
-        input_layouts, desired_input_layouts, mod, inputs, device_mesh
-    ):
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         # TODO: figure out dynamo support for instance method and switch this to instance method
 
         # annotate module input placements/sharding with input_layouts
         input_tensor = inputs[0]
         if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(
-                input_tensor, device_mesh, input_layouts, run_check=False
-            )
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
 
         # transform the input layouts to the desired layouts of ColwiseParallel
         if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(
-                placements=desired_input_layouts, async_op=True
-            )
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
         return input_tensor
 
     def partition_tensor(self, param, empty_param, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = get_tensor_shard(param, empty_param, device_mesh,  -2)
+        parameter = get_tensor_shard(param, empty_param, device_mesh, -2)
         parameter = DTensor.from_local(param, device_mesh, [Shard(-2)], run_check=False)
         return nn.Parameter(parameter)
 
@@ -345,7 +327,7 @@ class ColwiseParallel(TensorParallelLayer):
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
         # back to local tensor
         return outputs.to_local() if use_local_output else outputs
-    
+
 
 class RowwiseParallel(TensorParallelLayer):
     """
@@ -394,19 +376,13 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     @staticmethod
-    def _prepare_input_fn(
-        input_layouts, desired_input_layouts, mod, inputs, device_mesh
-    ):
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         input_tensor = inputs[0]
         if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(
-                input_tensor, device_mesh, input_layouts, run_check=False
-            )
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
 
         if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(
-                placements=desired_input_layouts, async_op=True
-            )
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
         return input_tensor
 
     def partition_tensor(self, param, empty_param, param_type, device_mesh):
@@ -414,7 +390,7 @@ class RowwiseParallel(TensorParallelLayer):
         # means Rowwise as nn.Linear is input * weight^T + bias, where
         # weight would become Shard(0)
         if param_type != "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh,  -2)
+            parameter = get_tensor_shard(param, empty_param, device_mesh, -2)
             shard = [Shard(-2)]
         else:
             shard = [Replicate()]
@@ -443,21 +419,16 @@ class RowwiseParallel(TensorParallelLayer):
             # rowwise embedding runtime sharding requires input tensor replicated
             self.desired_input_layouts = (Shard(-1),)
         else:
-            raise NotImplementedError(
-                "RowwiseParallel currently only support nn.Linear and nn.Embedding!"
-            )
+            raise NotImplementedError("RowwiseParallel currently only support nn.Linear and nn.Embedding!")
 
         distribute_module(
             module,
             device_mesh,
             None,
-            partial(
-                self._prepare_input_fn, self.input_layouts, self.desired_input_layouts
-            ),
-            partial(
-                self._prepare_output_fn, self.output_layouts, self.use_local_output
-            ),
+            partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
+            partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
         )
+
 
 @lru_cache
 def translate_to_torch_parallel_style(style: str):
@@ -485,13 +456,14 @@ def translate_to_torch_parallel_style(style: str):
         raise ValueError(f"Unsupported parallel style value: {style}")
 
 
-
-def shard_and_distribute_module(model, empty_param, parameter_name, device_mesh, full_tp_plan, param_casting_dtype, is_contiguous):
+def shard_and_distribute_module(
+    model, param, empty_param, parameter_name, device_mesh, full_tp_plan, param_casting_dtype, is_contiguous
+):
     r"""
     Main uses cases:
     - column / rowise parallelism, you just shard all the weights of the layer (weight and bias)
     - packed layers: you slice the weights, then shard like above
-    - custom operation: 
+    - custom operation:
         - you want to add an all-gather at the end of a local layer.
         - you want to have a layer that is isolated from the rest of the world (because torch.DTensor does not work well with `.view` for instance)
 
@@ -506,7 +478,7 @@ def shard_and_distribute_module(model, empty_param, parameter_name, device_mesh,
 
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        param = tp_layer.partition_tensor( param, empty_param, param_type, device_mesh)
+        param = tp_layer.partition_tensor(param, empty_param, param_type, device_mesh)
     else:
         param = param[:]
         if is_contiguous:
@@ -514,6 +486,7 @@ def shard_and_distribute_module(model, empty_param, parameter_name, device_mesh,
 
     module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
+
 
 def add_tensor_parallel_hooks_to_model(model, full_tp_plan, layer_name, device_mesh):
     for module_name in model.named_modules():

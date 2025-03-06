@@ -183,7 +183,7 @@ if is_peft_available():
     from .utils import find_adapter_config_file
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.distributed.tensor import DTensor, Shard
+    pass
 
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 
@@ -536,6 +536,7 @@ if is_torch_greater_or_equal("2.3.0"):
     str_to_torch_dtype["U32"] = torch.uint32
     str_to_torch_dtype["U64"] = torch.uint64
 
+
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
@@ -755,7 +756,10 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
-def fix_tensor_type_and_device(model, param_name, param, dtype=None, keep_in_fp32_modules=None) -> Union[str, torch.dtype]:
+
+def fix_tensor_type_and_device(
+    model, param_name, param, dtype=None, keep_in_fp32_modules=None
+) -> Union[str, torch.dtype]:
     # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
     # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
     # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
@@ -772,13 +776,13 @@ def fix_tensor_type_and_device(model, param_name, param, dtype=None, keep_in_fp3
     param_casting_dtype = None
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
     if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(fixed_param_name):
+        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
             param_casting_dtype = torch.float32
         elif dtype is not None:
             param_casting_dtype = dtype
         elif old_param is not None:
             param_casting_dtype = old_param.dtype
-        
+
     return old_param is not None and old_param.is_contiguous(), param_casting_dtype
 
 
@@ -824,8 +828,8 @@ def _load_state_dict_into_meta_model(
         for sub in model.config.sub_configs:
             full_tp_plan.update(getattr(model.config, sub).base_model_tp_plan)
         for submodule in model.modules():
-            if plan:=getattr(submodule, "_tp_plan", None): 
-                full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
+            if plan := getattr(submodule, "_tp_plan", None):
+                full_tp_plan.update(plan)
 
     file_pointer = None
     bin_state_dict = None
@@ -846,7 +850,6 @@ def _load_state_dict_into_meta_model(
 
     is_quantized = hf_quantizer is not None
 
-
     for serialized_param_name, empty_param in state_dict.items():
         # serialized_param_name is the raw, serialized name
         # fixed_param_name is the model's equivalent
@@ -864,11 +867,24 @@ def _load_state_dict_into_meta_model(
             param = bin_state_dict[serialized_param_name]
 
         to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
-            model, param_name=fixed_param_name, param=empty_param, dtype=dtype, keep_in_fp32_modules=keep_in_fp32_modules
+            model,
+            param_name=fixed_param_name,
+            param=empty_param,
+            dtype=dtype,
+            keep_in_fp32_modules=keep_in_fp32_modules,
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            shard_and_distribute_module(model, empty_param, fixed_param_name, device_mesh, full_tp_plan, param_casting_dtype, to_contiguous)
+            shard_and_distribute_module(
+                model,
+                param,
+                empty_param,
+                fixed_param_name,
+                device_mesh,
+                full_tp_plan,
+                param_casting_dtype,
+                to_contiguous,
+            )
         else:
             param = param[:]
             if param_casting_dtype is not None:
