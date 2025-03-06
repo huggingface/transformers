@@ -423,8 +423,8 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
             "do_rescale": True,
             "rescale_factor": 1 / 255,
             "do_normalize": True,
-            "image_mean": None,
-            "image_std": None,
+            "image_mean": (127.5,) * 3,
+            "image_std": (127.5,) * 3,
             "do_convert_rgb": None,
         },
     }
