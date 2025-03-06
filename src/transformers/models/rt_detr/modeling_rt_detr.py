@@ -707,8 +707,8 @@ class RTDetrRepVggBlock(nn.Module):
 
         activation = config.activation_function
         hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
-        self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
-        self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
+        self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
