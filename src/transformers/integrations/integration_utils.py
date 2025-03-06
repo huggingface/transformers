@@ -1218,7 +1218,7 @@ class MLflowCallback(TrainerCallback):
             Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
             run.
         - **MLFLOW_RUN_ID** (`str`, *optional*):
-            Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint. When
+            Allow to reattach to an existing run which can be useful when resuming training from a checkpoint. When
             `MLFLOW_RUN_ID` environment variable is set, `start_run` attempts to resume a run with the specified run ID
             and other parameters are ignored.
         - **MLFLOW_FLATTEN_PARAMS** (`str`, *optional*, defaults to `False`):
