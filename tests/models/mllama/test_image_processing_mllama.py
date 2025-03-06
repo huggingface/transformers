@@ -240,10 +240,10 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
 
-        image_inputs = [[Image.new("RGB", (100, 1))]]
+        image_inputs = [[Image.new("RGB", (1, 1))], [Image.new("RGB", (100, 1))]]
         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+        self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
 
     def test_call_pytorch(self):
         # Initialize image_processing
