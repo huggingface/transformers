@@ -2962,6 +2962,59 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_saved_checkpoints(
                 tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
             )
+    
+    def test_save_collator_tokenizer_by_default(self):
+        set_seed(42)
+        import datasets
+        model_name = "nickypro/tinyllama-15M"
+        dataset_name = "wikitext"
+        dataset_config = "wikitext-2-raw-v1"
+        dataset = datasets.load_dataset(
+            dataset_name, 
+            dataset_config, 
+            split="train[:40]"
+        )
+        new_tokens = ["<|fake_token_1|>", "<|fake_token_2|>"]
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer.add_tokens(new_tokens=new_tokens)
+
+        def tokenize_function(examples):
+            return tokenizer(
+                examples["text"], 
+                max_length=16, 
+                padding="max_length", 
+                truncation=True
+            )
+        
+        tokenized_dataset = dataset.map(
+            tokenize_function, 
+            batched=True, 
+            remove_columns=dataset.column_names
+        )
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, 
+            mlm=False
+        )
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        args_kwargs = {
+            "report_to": "none",
+            "logging_steps": 1,
+            "max_steps": 5,
+            "learning_rate": 3e-4,
+            "disable_tqdm": True,
+        }
+
+        tmp_dir = tempfile.TemporaryDirectory()
+        args = TrainingArguments(tmp_dir, **args_kwargs)
+        trainer = Trainer(
+            model,
+            args,
+            train_dataset=tokenized_dataset,
+            data_collator=data_collator
+        )
+        trainer.train()
+        loaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+        assert(len(loaded_tokenizer) == len(tokenizer))
 
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
