@@ -18,7 +18,7 @@ Attention is at the core of every transformer architecture. The title of the gro
 
 At a high level, attention is an ingenious mechanism through which the model learns to focus on the most relevant parts of the input data when making predictions or generating inputs. Here, we provide a brief introduction on the workings of the most popular attention mechanisms.
 
-## Query, Key and Value
+## Query, Key, and Value
 
 Imagine you are particularly interested in learning about the Big Bang — this is your query, $Q$; your focus. You walk into a library, and each book has a detailed index that summarizes its content — this is the key, $K$. The value, $V$, is the actual information you extract from the books; paragraphs, or whole chapters. First, you compare the match between your query and key. This comparison provides you with attention scores, i.e., which books are the most relevant. Finally, to accomplish your task, you gather information from various different books that may have some similarity with your query — for example, cosmology, biology, and even some religious texts.
 
