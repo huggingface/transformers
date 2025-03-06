@@ -108,10 +108,10 @@ length.
 ##### Axial positional encodings
 
 [Reformer](model_doc/reformer) uses axial positional encodings: in traditional transformer models, the positional encoding
-$E$ is a matrix of size $(l)$ by $(d)$, where $l$ is the sequence length and $d$ is the dimension of the
+$E$ is a matrix of size $l$ by $d$, where $l$ is the sequence length and $d$ is the dimension of the
 hidden state. If you have very long texts, this matrix can be huge and take way too much space on the GPU. To alleviate
 that, axial positional encodings consist of factorizing that big matrix $E$ into two smaller matrices $E_1$ and $E_2$, with
-dimensions $(l_1 \times d_1)$ and $(l_2 \times d_2)$, such that $l_1 \times l_2 = l$ and
+dimensions $l_1 \times d_1$ and $l_2 \times d_2$, such that $l_1 \times l_2 = l$ and
 $d_1 + d_2 = d$ (with the product for the lengths, this ends up being way smaller). The embedding for time
 step $j$ in $E$ is obtained by concatenating the embeddings for timestep $j\mod l_1$ in $E_1$ and $j // l_1$
 in $E_2$.
