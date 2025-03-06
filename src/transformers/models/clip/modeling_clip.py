@@ -99,7 +99,7 @@ def prepare_hidden_states_indices(output_hidden_states: Union[bool, List[int]], 
             raise ValueError("output_hidden_states index is out of range.")
         return {order_idx: num_hidden_layers + index + 1 if index < 0 else index for order_idx, index in enumerate(output_hidden_states)}
     else:
-        return {}
+        raise ValueError(f"Expected output_hidden_states to be `bool` or `list`/`tuple` of `int`, got {output_hidden_states=}")
 
 
 @dataclass
@@ -903,14 +903,14 @@ class CLIPEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        output_hidden_states_indices = prepare_hidden_states_indices(output_hidden_states, num_hidden_layers=self.config.num_hidden_layers)
+        output_hidden_states_position_to_index = prepare_hidden_states_indices(output_hidden_states, num_hidden_layers=self.config.num_hidden_layers)
         
         encoder_states = {}
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
-            if idx in output_hidden_states_indices.values():
+            if idx in output_hidden_states_position_to_index.values():
                 encoder_states[idx] = hidden_states
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -933,12 +933,13 @@ class CLIPEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        if self.config.num_hidden_layers in output_hidden_states_indices.values():
+        if self.config.num_hidden_layers in output_hidden_states_position_to_index.values():
             encoder_states[self.config.num_hidden_layers] = hidden_states
 
+        # `None` when there are no `encoder_states` so it's not returned in `not return_dict` path.
         encoder_states = tuple(
-            encoder_states[output_hidden_states_indices[k]]
-            for k in output_hidden_states_indices.keys()
+            encoder_states[output_hidden_states_position_to_index[k]]
+            for k in output_hidden_states_position_to_index.keys()
         ) if encoder_states else None
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
