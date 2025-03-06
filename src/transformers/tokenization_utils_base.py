@@ -1985,15 +1985,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "tokenizer_file": FULL_TOKENIZER_FILE,
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
+
+                # This block looks for any extra chat template files
+                extra_template_files = []
                 if is_local:
                     template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                    breakpoint()
                     if template_dir.is_dir():
                         for template_file in template_dir.glob("*.jinja"):
-                            template_name = template_file.name.removesuffix(".jinja")
-                            additional_files_names[f"{template_name}_template"] = (
-                                f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                            )
+                            extra_template_files.append(f"{CHAT_TEMPLATE_DIR}/{template_file.name}")
                 else:
                     try:
                         for template_file in list_repo_tree(
@@ -2005,10 +2004,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             print(template_file)
                             if not template_file.endswith(".jinja"):
                                 continue
-                            template_name = template_file.split("/")[-1].removesuffix(".jinja")
-                            additional_files_names[f"{template_name}_template"] = template_file  # This might be wrong!
+                            breakpoint()
+                            print()  # Next line is wrong, fix it
+                            extra_template_files.append(template_file)
                     except EntryNotFoundError:
                         pass  # No template dir means no template files
+                if extra_template_files:
+                    additional_files_names["additional_chat_template_files"] = extra_template_files
+
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
@@ -2157,11 +2160,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             config_tokenizer_class = None
             init_kwargs = init_configuration
 
-        # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
+        # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
+        chat_templates = {}
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         if chat_template_file is not None:
             with open(chat_template_file) as chat_template_handle:
-                init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
+                chat_templates["default"] = chat_template_handle.read()
+        extra_chat_template_files = resolved_vocab_files.pop("additional_chat_template_files", [])
+        for extra_chat_template_file in extra_chat_template_files:
+            template_name = extra_chat_template_file.split('/')[-1].removesuffix(".jinja")
+            with open(extra_chat_template_file) as chat_template_handle:
+                chat_templates[template_name] = chat_template_handle.read()
+        if len(chat_templates) == 1 and "default" in chat_templates:
+            init_kwargs["chat_template"] = chat_templates["default"]
+        elif chat_templates:
+            init_kwargs["chat_template"] = chat_templates
 
         if not _is_local:
             if "auto_map" in init_kwargs:
