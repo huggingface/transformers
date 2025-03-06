@@ -935,20 +935,25 @@ class RTDetrMultiheadAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.scaling = self.head_dim**-0.5
+
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _reshape_for_multihead_attention(self, tensor: torch.Tensor):
+        """Reshape tensor (batch_size, seq_length, embed_dim) to (batch_size, num_heads, seq_length, head_dim)"""
+        batch_size, seq_length, _ = tensor.shape
+        tensor = tensor.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        tensor = tensor.transpose(1, 2).contiguous()
+        return tensor
 
     def forward(
         self,
@@ -956,78 +961,45 @@ class RTDetrMultiheadAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size, seq_length, embed_dim = hidden_states.shape
+        query_states, key_states, value_states = hidden_states, hidden_states, hidden_states
 
-        batch_size, target_len, embed_dim = hidden_states.size()
-        # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states_original = hidden_states
-            hidden_states = hidden_states + position_embeddings
+            query_states = query_states + position_embeddings
+            key_states = query_states  # avoid recomputing, they are the same
 
-        # get queries, keys and values
-        query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
+        # Apply projection and scaling
+        query_states = self.q_proj(query_states) * self.scaling
+        key_states = self.k_proj(key_states)
+        value_states = self.v_proj(value_states)
 
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        # (batch_size, seq_length, embed_dim) -> (batch_size, num_heads, seq_length, head_dim)
+        query_states = self._reshape_for_multihead_attention(query_states)
+        key_states = self._reshape_for_multihead_attention(key_states)
+        value_states = self._reshape_for_multihead_attention(value_states)
 
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
+        # Compute attention weights
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
         if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
+            attention_mask = attention_mask.expand(batch_size, self.num_heads, seq_length, seq_length)
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
 
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+        # Reshape back to original shape
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
 
 
 class RTDetrDecoderLayer(nn.Module):
