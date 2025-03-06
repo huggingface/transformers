@@ -415,8 +415,10 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
         super().__init__()
 
         backbone = load_backbone(config)
-        with torch.no_grad():
-            replace_batch_norm(backbone)
+
+        # replace batch norm by frozen batch norm
+        replace_batch_norm(backbone)
+
         self.model = backbone
         self.intermediate_channel_sizes = self.model.channels
 

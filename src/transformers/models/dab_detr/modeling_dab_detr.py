@@ -264,10 +264,10 @@ class DabDetrConvEncoder(nn.Module):
 
         self.config = config
         backbone = load_backbone(config)
-
+        
         # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
+        replace_batch_norm(backbone)
+
         self.model = backbone
         self.intermediate_channel_sizes = self.model.channels
 
