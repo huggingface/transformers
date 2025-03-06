@@ -268,6 +268,9 @@ class Gemma3TextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
+        boi_token_id: int = 255_999,
+        eoi_token_id: int = 256_000,
+        image_token_id: int = 262_144,
         tie_word_embeddings: bool = True,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
@@ -286,6 +289,10 @@ class Gemma3TextConfig(PretrainedConfig):
             torch_dtype=torch_dtype,
             **kwargs,
         )
+
+        self.boi_token_id = boi_token_id
+        self.eoi_token_id = eoi_token_id
+        self.image_token_id = image_token_id
         self.vocab_size = vocab_size
         self.mm_tokens_per_image = mm_tokens_per_image
         self.mm_soft_token_id = mm_soft_token_id
@@ -515,17 +522,16 @@ class Gemma3Processor(ProcessorMixin):
 
         start_image_token = AddedToken(START_IMAGE_TOKEN, normalized=False, special=True)   # Should be ID=255_999
         end_image_token = AddedToken(END_IMAGE_TOKEN, normalized=False, special=True)       # Should be ID=262_144
-        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-        image_soft_token = AddedToken(IMAGE_SOFT_TOKEN, normalized=False, special=True)
+        image_token = AddedToken(IMAGE_SOFT_TOKEN, normalized=False, special=True)
 
         tokens_to_add = {
             "additional_special_tokens": [
-                start_image_token, end_image_token, image_token, image_soft_token
+                start_image_token, end_image_token, image_token
             ]
         }
         tokenizer.add_special_tokens(tokens_to_add)
 
-        self.image_soft_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
         self.full_image_sequence = "".join(
             [NEWLINE_TOKEN, NEWLINE_TOKEN, START_IMAGE_TOKEN]
             + [IMAGE_SOFT_TOKEN] * num_mm_soft_tokens_per_image
@@ -587,14 +593,9 @@ class Gemma3Processor(ProcessorMixin):
         )
 
         if pixel_values is not None:
-            input_ids = batched_input["input_ids"].clone()
-            image_soft_token_mask = input_ids == self.image_soft_token_id
-            input_ids[image_soft_token_mask] = self.tokenizer.convert_tokens_to_ids("<pad>")
-
             batched_input.update(
-                input_ids=input_ids,
                 pixel_values=pixel_values,
-                image_soft_token_mask=image_soft_token_mask,
+                image_soft_token_mask=batched_input["input_ids"] == self.image_token_id,
             )
 
         return batched_input
@@ -1868,7 +1869,13 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            if self.config.text_config.image_token_id >= self.get_input_embeddings().num_embeddings:
+                llm_input_ids = input_ids.clone()
+                llm_input_ids[image_soft_token_mask] = 0
+            else:
+                llm_input_ids = input_ids
+
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
             past_seen_tokens = (

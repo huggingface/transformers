@@ -193,6 +193,9 @@ class Gemma3TextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
+        boi_token_id: int = 255_999,
+        eoi_token_id: int = 256_000,
+        image_token_id: int = 262_144,
         tie_word_embeddings: bool = True,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
@@ -211,6 +214,10 @@ class Gemma3TextConfig(PretrainedConfig):
             torch_dtype=torch_dtype,
             **kwargs,
         )
+
+        self.boi_token_id = boi_token_id
+        self.eoi_token_id = eoi_token_id
+        self.image_token_id = image_token_id
         self.vocab_size = vocab_size
         self.mm_tokens_per_image = mm_tokens_per_image
         self.mm_soft_token_id = mm_soft_token_id

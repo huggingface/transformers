@@ -1169,7 +1169,13 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            if self.config.text_config.image_token_id >= self.get_input_embeddings().num_embeddings:
+                llm_input_ids = input_ids.clone()
+                llm_input_ids[image_soft_token_mask] = 0
+            else:
+                llm_input_ids = input_ids
+
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

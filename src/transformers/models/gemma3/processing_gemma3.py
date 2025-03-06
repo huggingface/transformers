@@ -183,15 +183,12 @@ class Gemma3Processor(ProcessorMixin):
 
         start_image_token = AddedToken(START_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=255_999
         end_image_token = AddedToken(END_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=262_144
-        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-        image_soft_token = AddedToken(IMAGE_SOFT_TOKEN, normalized=False, special=True)
+        image_token = AddedToken(IMAGE_SOFT_TOKEN, normalized=False, special=True)
 
-        tokens_to_add = {
-            "additional_special_tokens": [start_image_token, end_image_token, image_token, image_soft_token]
-        }
+        tokens_to_add = {"additional_special_tokens": [start_image_token, end_image_token, image_token]}
         tokenizer.add_special_tokens(tokens_to_add)
 
-        self.image_soft_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
         self.full_image_sequence = "".join(
             [NEWLINE_TOKEN, NEWLINE_TOKEN, START_IMAGE_TOKEN]
             + [IMAGE_SOFT_TOKEN] * num_mm_soft_tokens_per_image
@@ -251,14 +248,9 @@ class Gemma3Processor(ProcessorMixin):
         batched_input = self._process_text(text=text, batched_images=batched_images, **output_kwargs["text_kwargs"])
 
         if pixel_values is not None:
-            input_ids = batched_input["input_ids"].clone()
-            image_soft_token_mask = input_ids == self.image_soft_token_id
-            input_ids[image_soft_token_mask] = self.tokenizer.convert_tokens_to_ids("<pad>")
-
             batched_input.update(
-                input_ids=input_ids,
                 pixel_values=pixel_values,
-                image_soft_token_mask=image_soft_token_mask,
+                image_soft_token_mask=batched_input["input_ids"] == self.image_token_id,
             )
 
         return batched_input
