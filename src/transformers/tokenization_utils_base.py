@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optiona
 
 import numpy as np
 from huggingface_hub import list_repo_tree
+from huggingface_hub.errors import EntryNotFoundError  # Should this be refactored into a util instead?
 from packaging import version
 
 from . import __version__
@@ -1985,19 +1986,29 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
                 if is_local:
-                    template_dir = Path(pretrained_model_name_or_path, "templates")
+                    template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                    breakpoint()
                     if template_dir.is_dir():
                         for template_file in template_dir.glob("*.jinja"):
                             template_name = template_file.name.removesuffix(".jinja")
-                            additional_files_names[f"{template_name}_template"] = f"templates/{template_file.name}"
+                            additional_files_names[f"{template_name}_template"] = (
+                                f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                            )
                 else:
-                    for template_file in list_repo_tree(
-                        pretrained_model_name_or_path, path_in_repo="templates", recursive=False
-                    ):
-                        if not template_file.endswith(".jinja"):
-                            continue
-                        template_name = template_file.split("/")[-1].removesuffix(".jinja")
-                        additional_files_names[f"{template_name}_template"] = template_file  # This might be wrong!
+                    try:
+                        for template_file in list_repo_tree(
+                            pretrained_model_name_or_path,
+                            path_in_repo=CHAT_TEMPLATE_DIR,
+                            recursive=False,
+                            revision=revision,
+                        ):
+                            print(template_file)
+                            if not template_file.endswith(".jinja"):
+                                continue
+                            template_name = template_file.split("/")[-1].removesuffix(".jinja")
+                            additional_files_names[f"{template_name}_template"] = template_file  # This might be wrong!
+                    except EntryNotFoundError:
+                        pass  # No template dir means no template files
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
