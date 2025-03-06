@@ -821,7 +821,7 @@ def _load_state_dict_into_meta_model(
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
     for serialized_param_name, empty_param in state_dict.items():
         # we shouldn't rename the key (add/remove prefix) before checking its value in expected keys but it's fine for legacy params
-        serialized_param_name = model._fix_state_dict_key_on_load(serialized_param_name)
+        serialized_param_name, _ = model._fix_state_dict_key_on_load(serialized_param_name)
         if serialized_param_name not in expected_keys:
             continue
         # serialized_param_name is the raw, serialized name
