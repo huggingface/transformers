@@ -3000,7 +3000,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             "learning_rate": 3e-4,
             "disable_tqdm": True,
         }
-        tmp_dir = tempfile.TemporaryDirectory()
+        tmp_dir = self.get_auto_remove_tmp_dir()
         args = TrainingArguments(tmp_dir, **args_kwargs)
         trainer = Trainer(
             model,
