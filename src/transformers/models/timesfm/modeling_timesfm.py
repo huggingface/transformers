@@ -215,9 +215,9 @@ class TimesFmAttention(nn.Module):
         self.kv_size = self.num_heads * self.head_dim
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
-        self.q = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
-        self.k = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
-        self.v = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
 
     def _scale_query(self, query: torch.Tensor) -> torch.Tensor:
@@ -234,9 +234,9 @@ class TimesFmAttention(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, input_len, _ = hidden_states.shape
 
-        xq = self.q(hidden_states)
-        xk = self.k(hidden_states)
-        xv = self.v(hidden_states)
+        xq = self.q_proj(hidden_states)
+        xk = self.k_proj(hidden_states)
+        xv = self.v_proj(hidden_states)
 
         xq = xq.view(batch_size, -1, self.num_heads, self.head_dim)
         xk = xk.view(batch_size, -1, self.num_heads, self.head_dim)
@@ -303,9 +303,9 @@ class TimesFmSdpaAttention(TimesFmAttention):
         batch_size, seq_length, _ = hidden_states.shape
 
         # Project to queries, keys, values
-        xq = self.q(hidden_states)
-        xk = self.k(hidden_states)
-        xv = self.v(hidden_states)
+        xq = self.q_proj(hidden_states)
+        xk = self.k_proj(hidden_states)
+        xv = self.v_proj(hidden_states)
 
         xq = xq.view(batch_size, -1, self.num_heads, self.head_dim)
         xk = xk.view(batch_size, -1, self.num_heads, self.head_dim)
@@ -464,15 +464,15 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmAttention):
             # Initialize qkv projection
-            module.q.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            module.k.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            module.v.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.q.bias is not None:
-                nn.init.zeros_(module.q.bias)
-            if module.k.bias is not None:
-                nn.init.zeros_(module.k.bias)
-            if module.v.bias is not None:
-                nn.init.zeros_(module.v.bias)
+            module.q_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            module.k_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            module.v_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
+            if module.q_proj.bias is not None:
+                nn.init.zeros_(module.q_proj.bias)
+            if module.k_proj.bias is not None:
+                nn.init.zeros_(module.k_proj.bias)
+            if module.v_proj.bias is not None:
+                nn.init.zeros_(module.v_proj.bias)
 
             # Initialize output projection
             module.o_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
