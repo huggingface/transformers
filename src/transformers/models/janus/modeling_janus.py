@@ -21,6 +21,7 @@
 
 import collections.abc
 import copy
+import inspect
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -1899,6 +1900,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
+        n_prompts = input_ids.shape[0]
+
         if len(input_ids.shape) != 2:
             raise ValueError(
                 f"Expected input ids as input of shape (batch_size, seq_len), but got {input_ids.shape}"
@@ -1936,6 +1939,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
+        if n_prompts > 1:
+            # if multiple prompts, move the bos token to the beginning, otherwise image generation will break. Janus is
+            # sensitive to the position of this token
+            input_ids = swap_bos_pad(input_ids, generation_config.pad_token_id, generation_config.bos_token_id)
+
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
 
         input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id  # Set Unconditional logits
@@ -1971,38 +1979,32 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        padding_idxs = None
-        min_dtype = None
+        accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
+        if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
+            # attention masking main usefulness here is in its ability to avoid padding tokens from interfering
+            # with the result
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+                # do not use input_tokens here to avoid the rows completely filled with padding
+                inputs_tensor=input_ids.repeat(2, 1),
+                generation_config=generation_config,
+                model_kwargs=model_kwargs,
+            )
+
         for i in tqdm(range(num_image_tokens)):
             # Fix me: What to do with attention mask when expanding and repeating input ids.
             # Should we also modify the attention mask if passed?
-            attention_mask = self.model.language_model._update_causal_mask(
-                attention_mask=None,
-                input_tensor=inputs_embeds,
-                output_attentions=False,
-                past_key_values=model_kwargs["past_key_values"],
-                cache_position=model_kwargs["cache_position"]
-            )
-            if padding_idxs is None:
-                padding_idxs = torch.zeros((attention_mask.shape[0], 1, 1, attention_mask.shape[3]),
-                                           device=attention_mask.device, dtype=bool)
-                padding_idxs[..., :input_ids.shape[-1]] |= (input_ids == 100002).repeat(2, 1)[:, None, None, :]
-                min_dtype = torch.finfo(attention_mask.dtype).min
-            attention_mask = attention_mask.clone()
-            attention_mask[padding_idxs.expand_as(attention_mask)] = min_dtype
-
             outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                attention_mask=attention_mask,
                 **model_kwargs,
             )
 
             # Update model_kwargs like cache_position for next generation.
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
-            # attention_mask[model_kwargs["cache_position"].item()] = True
 
             # Generate scores using the generation head. (not using above defined lm head)
             scores = self.model.gen_head(hidden_state)
@@ -2040,5 +2042,44 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         else:
             return generated_tokens
 
+
+def swap_bos_pad(input_ids, pad_token_id, bos_token_id):
+    # Find the position of the leftmost pad token and BOS token for each example
+
+    # Create masks for pad tokens and BOS tokens
+    pad_mask = (input_ids == pad_token_id)
+    bos_mask = (input_ids == bos_token_id)
+
+    # Find positions (indices) of pad tokens and BOS tokens
+    # For pad tokens, we want the leftmost (minimum) position
+    # arange creates position indices for each token in the sequence
+    batch_size, seq_len = input_ids.shape
+    positions = torch.arange(seq_len, device=input_ids.device).expand_as(input_ids)
+
+    # Set positions where pad_mask is False to a large value
+    # This ensures we find the minimum position where pad_mask is True
+    pad_positions = torch.where(pad_mask, positions, torch.full_like(positions, seq_len))
+    leftmost_pad_pos = torch.min(pad_positions, dim=1).values
+
+    # Default to 0 if no pad token found (min returned seq_len)
+    leftmost_pad_pos = torch.where(leftmost_pad_pos == seq_len,
+                                   torch.zeros_like(leftmost_pad_pos),
+                                   leftmost_pad_pos)
+
+    # Find positions of BOS tokens
+    bos_positions = torch.where(bos_mask, positions, torch.full_like(positions, -1))
+    bos_pos = torch.max(bos_positions, dim=1).values
+
+    # Only swap if BOS is to the right of leftmost pad
+    swap_mask = (bos_pos > leftmost_pad_pos) & (bos_pos >= 0)
+
+    # For each example where swapping is needed
+    for i in range(batch_size):
+        if swap_mask[i]:
+            # Swap the tokens
+            input_ids[i, bos_pos[i]] = pad_token_id
+            input_ids[i, leftmost_pad_pos[i]] = bos_token_id
+
+    return input_ids
 
 __all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration", "JanusModel", "JanusVQVAE", "JanusVisionModel"]
