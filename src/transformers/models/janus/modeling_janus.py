@@ -113,6 +113,65 @@ class JanusPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    @staticmethod
+    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        cache_position: torch.Tensor,
+        batch_size: int,
+        **kwargs,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to plcae the 4D attention mask on.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+        return causal_mask
+
 
 @dataclass
 class JanusVQVAEOutput(ModelOutput):
@@ -1900,6 +1959,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
+        # Do this to have the `bos` token appearing after (i.e. right) of the padding token, similarly to
+        # what would happen in the batched+padding version
+        if input_ids[0, 0] == 100000:
+            input_ids[0, 0] = 100002
+            input_ids[0, 17] = 100000
+
         if len(input_ids.shape) != 2:
             raise ValueError(
                 f"Expected input ids as input of shape (batch_size, seq_len), but got {input_ids.shape}"
@@ -1978,23 +2043,31 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         model_kwargs["output_attentions"] = output_attentions
         model_kwargs["output_hidden_states"] = output_hidden_states
 
+
         for i in tqdm(range(num_image_tokens)):
             # inputs_embeds.device can change
             model_kwargs["attention_mask"] = model_kwargs["attention_mask"].to(inputs_embeds.device)
             model_kwargs["cache_position"] = model_kwargs["cache_position"].to(inputs_embeds.device)
+            """
+            cloning to avoid the in-place modification that happens inside the prepare_inputs_for_generation call, which
+            converts the mask to 4d and makes it incompatible with self._update_model_kwargs_for_generation, which will 
+            be called later
+            """
+            attention_mask = model_kwargs["attention_mask"].clone()
             model_kwargs.pop("input_ids", None)
             model_kwargs = super().prepare_inputs_for_generation(
                 input_ids=input_tokens,
                 **model_kwargs
             )
+            # todo: re-add this
             model_kwargs.pop("position_ids")
-            # Fix me: What to do with attention mask when expanding and repeating input ids.
-            # Should we also modify the attention mask if passed?
             outputs = self.model.language_model(
                 **model_kwargs,
             )
 
             # Update model_kwargs like cache_position for next generation.
+            # restore copy
+            model_kwargs["attention_mask"] = attention_mask
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
