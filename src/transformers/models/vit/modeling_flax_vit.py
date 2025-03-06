@@ -418,12 +418,12 @@ class FlaxViTPooler(nn.Module):
             ),
             dtype=self.dtype,
         )
-        self.act = ACT2FN[self.config.pooler_act]
+        self.activation = ACT2FN[self.config.pooler_act]
 
     def __call__(self, hidden_states):
         cls_hidden_state = hidden_states[:, 0]
         cls_hidden_state = self.dense(cls_hidden_state)
-        return self.act(cls_hidden_state)
+        return self.activation(cls_hidden_state)
 
 
 class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
