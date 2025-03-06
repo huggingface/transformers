@@ -59,13 +59,11 @@ from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
-    distribute_module,
     find_pruneable_heads_and_indices,
     id_tensor_storage,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
-    translate_to_torch_parallel_style,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -817,7 +815,7 @@ def _load_state_dict_into_meta_model(
     It also initialize tensor parallelism for each module if needed.
 
     """
-    tensor_device = None
+    tensor_device = "cpu"
     if device_map is not None and device_map.get("", None) is not None:
         tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
     if device_map is not None:
@@ -1342,7 +1340,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     model_tags = None
 
     _auto_class = None
-    _no_split_modules = None
+    _no_split_modules = []
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
 
@@ -1466,7 +1464,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan
 
-        self._tp_plan = self._tp_plan or self.config.base_model_tp_plan
+        self._tp_plan = self._tp_plan or self.config.base_model_tp_plan or {}
         for name, module in self.named_children():
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
@@ -4299,7 +4297,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if device_mesh is not None and not model.supports_tp_plan:
-            raise NotImplementedError("This model does not have a tensor parallel plan.")
+            if config.base_model_tp_plan is None and config.get_text_config().base_model_tp_plan is None:
+                raise NotImplementedError("This model does not have a tensor parallel plan.")
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
@@ -4549,7 +4548,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @staticmethod
     def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
         """Replace legacy parameter names with their modern equivalents. E.g. beta -> bias, gamma -> weight."""
-
         # Rename LayerNorm beta & gamma params for some early models ported from Tensorflow (e.g. Bert)
         # This rename is logged.
         if key.endswith("LayerNorm.beta"):
@@ -5010,7 +5008,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             state_dict,
-                            start_prefix,
+                            prefix,
                             expected_keys,
                             device_map=device_map,
                             offload_folder=offload_folder,
@@ -5889,9 +5887,13 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
 
     for param_name, device in accelerator_device_map.items():
         try:
-            param = model.get_parameter(param_name)
+            param = getattr(model, param_name)
         except AttributeError:
-            param = model.get_buffer(param_name)
+            if '.' in param_name:
+                param_name, param_type = param_name.rsplit('.',1)
+                param = getattr(model.get_submodule(param_name),param_type)
+            else:
+                param = model.get_buffer(param_name)
         parameter_count[device] += int(math.prod(param.shape) * allocation_factor)
 
     dtype = dtype if dtype is not None else torch.float32
