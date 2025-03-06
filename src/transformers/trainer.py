@@ -2470,6 +2470,16 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
+        # Calculate the number of items in each batch for all epochs
+        num_items_in_batches = self.get_num_items_in_batches(
+            args,
+            epochs_trained,
+            num_train_epochs,
+            train_dataloader,
+            len_dataloader,
+            num_examples,
+        )
+
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
             if hasattr(epoch_dataloader, "set_epoch"):
@@ -2510,7 +2520,8 @@ class Trainer:
             for _ in range(total_updates):
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
-                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
+                batch_samples = self.get_batch_samples(epoch_iterator, num_batches)
+                num_items_in_batch = num_items_in_batches[epoch][update_step]
                 for i, inputs in enumerate(batch_samples):
                     step += 1
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
@@ -5195,27 +5206,78 @@ class Trainer:
 
     def get_batch_samples(self, epoch_iterator, num_batches):
         batch_samples = []
-        num_items_in_batch = None
         for _ in range(num_batches):
             try:
                 batch_samples += [next(epoch_iterator)]
             except StopIteration:
                 break
+        return batch_samples
 
-        if len(batch_samples) > 0 and "labels" in batch_samples[0]:
-            # For now we don't support object detection
+    def get_num_items_in_batches(
+        self, args, epochs_trained, num_train_epochs, train_dataloader, len_dataloader, num_examples
+    ):
+        """
+        Calculate the number of items in each batch for all epochs (including the steps_trained) during training.
+        """
+        # total number of steps in each epoch including the steps_trained
+        steps_in_epoch = (
+            len_dataloader if len_dataloader is not None else args.max_steps * args.gradient_accumulation_steps
+        )
+
+        remainder = num_examples % args.gradient_accumulation_steps
+        if remainder == 0:
+            remainder = args.gradient_accumulation_steps
+
+        total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
+        if args.gradient_accumulation_steps == 1:
+            total_updates -= 1
+
+        num_items_in_batches = []
+        for epoch in range(epochs_trained, num_train_epochs):
+            epoch_dataloader = train_dataloader
+            if hasattr(epoch_dataloader, "set_epoch"):
+                epoch_dataloader.set_epoch(epoch)
+
+            epoch_iterator = iter(epoch_dataloader)
             try:
-                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
-            except (TypeError, AttributeError):
-                pass
+                first_batch = next(epoch_iterator)
+            except StopIteration:
+                break
+            # Check if the batch contains "labels" (once per epoch)
+            if "labels" not in first_batch:
+                num_items_in_batches.append([None] * total_updates)
+                continue
 
-        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
-            num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
+            device = first_batch["labels"].device
 
-        if torch.is_tensor(num_items_in_batch):
-            num_items_in_batch = num_items_in_batch.item()
+            # Reset the iterator
+            epoch_iterator = iter(epoch_dataloader)
 
-        return batch_samples, num_items_in_batch
+            num_items_in_batches.append([])
+            for update_step in range(total_updates):
+                num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
+
+                num_items_in_batch = 0
+                for _ in range(num_batches):
+                    try:
+                        batch = next(epoch_iterator)
+                        num_items_in_batch += (batch["labels"].ne(-100)).sum().item()
+                    except (TypeError, AttributeError):
+                        continue
+                    except StopIteration:
+                        break
+
+                if self.args.average_tokens_across_devices and num_items_in_batch > 0:
+                    num_items_in_batch = torch.tensor(num_items_in_batch, device=device)
+                    num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
+
+                # Set to None if no items in batch
+                if num_items_in_batch == 0:
+                    num_items_in_batch = None
+
+                num_items_in_batches[epoch].append(num_items_in_batch)
+
+        return num_items_in_batches
 
     def set_initial_training_values(
         self, args: TrainingArguments, dataloader: DataLoader, total_train_batch_size: int
