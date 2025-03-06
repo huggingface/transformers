@@ -367,7 +367,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point `parmas` to `jax.numpy.float32`. This method can be used to explicitly convert the
+        Cast the floating-point `params` to `jax.numpy.float32`. This method can be used to explicitly convert the
         model parameters to fp32 precision. This returns a new `params` tree and does not cast the `params` in place.
 
         Arguments:
@@ -394,7 +394,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point `parmas` to `jax.numpy.float16`. This returns a new `params` tree and does not cast the
+        Cast the floating-point `params` to `jax.numpy.float16`. This returns a new `params` tree and does not cast the
         `params` in place.
 
         This method can be used on GPU to explicitly convert the model parameters to float16 precision to do full
@@ -510,7 +510,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation.
-        # Alternativelly, the model can also have a custom `generate` function.
+        # Alternatively, the model can also have a custom `generate` function.
         if "GenerationMixin" in str(cls.prepare_inputs_for_generation) and "GenerationMixin" in str(cls.generate):
             return False
         return True
@@ -968,7 +968,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
             cls._missing_keys = missing_keys
 
-        # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
+        # Mismatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.
         mismatched_keys = []
         for key in state.keys():
