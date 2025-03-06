@@ -1230,16 +1230,20 @@ RTDETR_INPUTS_DOCSTRING = r"""
 class RTDetrEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
-
         self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
-        hidden_states = src
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor:
         for layer in self.layers:
             hidden_states = layer(
-                hidden_states,
-                attention_mask=src_mask,
-                position_embeddings=pos_embed,
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
                 output_attentions=output_attentions,
             )
         return hidden_states
@@ -1367,7 +1371,7 @@ class RTDetrHybridEncoder(nn.Module):
 
                 # build position embeddings
                 if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
+                    position_embeddings = self.build_2d_sincos_position_embedding(
                         width,
                         height,
                         self.encoder_hidden_dim,
@@ -1376,12 +1380,12 @@ class RTDetrHybridEncoder(nn.Module):
                         dtype=hidden_state.dtype,
                     )
                 else:
-                    pos_embed = None
+                    position_embeddings = None
 
                 # 2. Apply transformer encoder layer
                 layer_outputs = self.encoder[i](
                     hidden_state,
-                    pos_embed=pos_embed,
+                    position_embeddings=position_embeddings,
                     output_attentions=output_attentions,
                 )
                 hidden_state = layer_outputs[0]
