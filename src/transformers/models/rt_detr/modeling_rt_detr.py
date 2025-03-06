@@ -1593,15 +1593,10 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         )
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class RTDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_paddle/ppdet/modeling/transformers/utils.py#L453
-
     """
 
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
@@ -1953,14 +1948,14 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         # Detection heads on top
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = config.decoder_layers
-        self.class_embed = nn.ModuleList([nn.Linear(config.hidden_size, config.num_labels) for _ in range(num_pred)])
+        num_layers = config.decoder_layers
+        self.class_embed = nn.ModuleList([nn.Linear(config.hidden_size, config.num_labels) for _ in range(num_layers)])
         self.bbox_embed = nn.ModuleList(
             [
                 RTDetrMLPPredictionHead(
                     input_dim=config.hidden_size, hidden_dim=config.hidden_size, output_dim=4, num_layers=3
                 )
-                for _ in range(num_pred)
+                for _ in range(num_layers)
             ]
         )
 
