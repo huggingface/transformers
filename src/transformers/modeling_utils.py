@@ -766,8 +766,6 @@ def fix_tensor_type_and_device(
     else:
         return False, None
 
-    return
-
 
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
@@ -4623,28 +4621,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 return key.replace("parametrizations.weight.original1", "weight_v"), True
 
         return key, False
-
-    def rename_key(self, key):
-        """
-        When we load a LlamaModel from a checkpoint made using LlamaForCausalLM, the keys have an extra
-        prefix, which can be accessed in the `LlamaModel` via the `self.base_model_prefix` attribute.
-
-        But, what if there is an extra layer on top of it? You load a MistralModel from a LlavaForConditionalGeneration?
-        In that what you actually want is to cut whatever is left of the key.
-        """
-        new_key = key
-        if len(self.base_model_prefix) > 0:
-            if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
-                new_key = ".".join(key.split(".")[1:])
-            elif (
-                hasattr(self, self.base_model_prefix)
-                and not key.startswith(self.base_model_prefix)
-                and key not in self.expected_keys
-            ):
-                new_key = f"{self.base_model_prefix}.{key}"
-
-        new_key, has_changed = self._fix_state_dict_key_on_load(new_key)
-        return new_key, has_changed
 
     def _fix_state_dict_keys_on_load(
         self,
