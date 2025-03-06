@@ -4846,9 +4846,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # For nice tqdm bars
         if checkpoint_files is not None and len(checkpoint_files) > 1:
             checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
-
         # To be able to iterate, even if we don't use it if the state_dict is already provided
-        checkpoint_files = checkpoint_files if state_dict is None else [""]
+        else:
+            checkpoint_files = [None]
 
         # Compute expected model keys
         expected_keys = list(model_to_load.state_dict().keys())
@@ -4875,8 +4875,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             map_location = "meta" if low_cpu_mem_usage else "cpu"
 
-            # If shard_file == "", we use the existing state_dict instead of loading it
-            if shard_file != "":
+            # If shard_fileis None, we use the existing state_dict instead of loading it
+            if shard_file is not None:
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
@@ -4894,7 +4894,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model.base_model_prefix if loading_base_model_from_task_state_dict else "",
             )
 
-            if low_cpu_mem_usage:
+            if low_cpu_mem_usage and shard_file is not None:
                 # Skip it with fsdp on ranks other than 0
                 if not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
                     disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
