@@ -4721,7 +4721,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif state_dict is not None:
             checkpoint_keys = list(state_dict.keys())
         else:
-            checkpoint_keys = list(load_state_dict(checkpoint_files[0], weights_only=weights_only).keys())
+            checkpoint_keys = list(load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only).keys())
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
@@ -4847,7 +4847,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if checkpoint_files is not None and len(checkpoint_files) > 1:
             checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
         # To be able to iterate, even if we don't use it if the state_dict is already provided
-        else:
+        elif checkpoint_files is None:
             checkpoint_files = [None]
 
         # Compute expected model keys
