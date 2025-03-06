@@ -1620,7 +1620,7 @@ class GenerationMixin:
 
     def _get_layer_device_map_for_cache_init(self):
         """
-        Taken from dispatch_model from accelerate.
+        Taken from `dispatch_model` from accelerate.
         This is needed here if we don't want to make changes in accelerate in order to save execution_device
         For offloaded case, we need to get the execution device, not just the device where it is offloaded
         """

@@ -693,4 +693,4 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer("Today is a beautiful day!", return_tensors="pt").to(0)
         _ = model(**inputs)
-        _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
+        _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")

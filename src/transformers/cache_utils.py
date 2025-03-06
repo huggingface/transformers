@@ -1696,6 +1696,13 @@ class HybridCache(Cache):
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
 
+        # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
+        # when the cache is initialized in the forward pass (e.g. Gemma2)
+        if self.key_cache[layer_idx].device != key_states.device:
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
+        if self.value_cache[layer_idx].device != value_states.device:
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
+
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
         key_states = key_states.to(k_out.dtype)
@@ -1782,6 +1789,7 @@ class MambaCache:
     is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
+    # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(
         self,
         config: PretrainedConfig,
@@ -1828,6 +1836,11 @@ class MambaCache:
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
     ) -> torch.Tensor:
+        # This `if` blocks is only reached in multigpu and if `layer_device_map` is not passed. It is used
+        # when the cache is initialized in the forward pass (e.g. Mamba)
+        if self.conv_states[layer_idx].device != new_conv_state.device:
+            self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
+
         conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
