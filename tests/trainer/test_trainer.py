@@ -2964,30 +2964,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
 
     def test_save_collator_tokenizer_by_default(self):
-        set_seed(42)
-        import datasets
-        model_name = "nickypro/tinyllama-15M"
-        dataset_name = "wikitext"
-        dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(
-            dataset_name,
-            dataset_config,
-            split="train[:40]"
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-        def tokenize_function(examples):
-            return tokenizer(
-                examples["text"],
-                max_length=16,
-                padding="max_length",
-                truncation=True
-            )
-        tokenized_dataset = dataset.map(
-            tokenize_function,
-            batched=True,
-            remove_columns=dataset.column_names
-        )
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=tokenizer,
             mlm=False
@@ -3001,13 +2977,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             "disable_tqdm": True,
         }
         tmp_dir = self.get_auto_remove_tmp_dir()
-        args = TrainingArguments(tmp_dir, **args_kwargs)
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset,
+        trainer = get_regression_trainer(
+            output_dir=tmp_dir, 
+            save_steps=5, 
+            save_safetensors=True,
             data_collator=data_collator
-        )
+        ) 
         trainer.train()
         loaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
         assert (
