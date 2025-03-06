@@ -4721,7 +4721,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif state_dict is not None:
             checkpoint_keys = list(state_dict.keys())
         else:
-            checkpoint_keys = list(load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only).keys())
+            checkpoint_keys = list(
+                load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only).keys()
+            )
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
