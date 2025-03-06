@@ -685,7 +685,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
 
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        # We generate a lower triangular causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,

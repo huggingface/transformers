@@ -493,7 +493,15 @@ def main(*args):
     if variant == _VARIANT_GEMMA_3_1B:
         flags.FLAGS.set_default(_TEXT_ONLY.name, True)
 
-    tokenizer = GemmaTokenizerFast(TOKENIZER_PATH.value)
+    tokenizer = GemmaTokenizerFast(
+        TOKENIZER_PATH.value,
+        add_bos_token=True,
+        extra_special_tokens={
+            "image_token": "<image_soft_token>",    # Should be ID=262_144
+            "boi_token": "<start_of_image>",        # Should be ID=255_999
+            "eoi_token": "<end_of_image>",          # Should be ID=256_000
+        }
+    )
 
     if INCLUDE_CHAT_TEMPLATE.value:
         tokenizer.chat_template = _CHAT_TEMPLATE

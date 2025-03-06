@@ -37,7 +37,7 @@ from ...processing_utils import (
     Unpack,
     _validate_images_text_input_order,
 )
-from ...tokenization_utils_base import AddedToken, TextInput
+from ...tokenization_utils_base import TextInput
 from ..gemma import GemmaTokenizer, GemmaTokenizerFast
 from ..siglip import SiglipImageProcessor
 
@@ -82,10 +82,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 IMAGE_TOKEN = "<image>"
 IMAGE_TOKEN_LEN = len(IMAGE_TOKEN)
-START_IMAGE_TOKEN = "<start_of_image>"
-END_IMAGE_TOKEN = "<end_of_image>"
-IMAGE_SOFT_TOKEN = "<image_soft_token>"
-NEWLINE_TOKEN = "\n"
 PAN_AND_SCAN_PREFIX = "Here is the original image"
 PAN_AND_SCAN_POSTFIX = "and here are some crops to help you see better"
 
@@ -176,18 +172,11 @@ class Gemma3Processor(ProcessorMixin):
         except AttributeError as e:
             raise ValueError("`image_processor` is missing the required `image_seq_length` attribute.") from e
 
-        start_image_token = AddedToken(START_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=255_999
-        end_image_token = AddedToken(END_IMAGE_TOKEN, normalized=False, special=True)  # Should be ID=262_144
-        image_token = AddedToken(IMAGE_SOFT_TOKEN, normalized=False, special=True)
-
-        tokens_to_add = {"additional_special_tokens": [start_image_token, end_image_token, image_token]}
-        tokenizer.add_special_tokens(tokens_to_add)
-
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_SOFT_TOKEN)
-        self.full_image_sequence = "".join(
-            [NEWLINE_TOKEN, NEWLINE_TOKEN, START_IMAGE_TOKEN]
-            + [IMAGE_SOFT_TOKEN] * num_mm_soft_tokens_per_image
-            + [END_IMAGE_TOKEN, NEWLINE_TOKEN, NEWLINE_TOKEN]
+        self.image_token_id = tokenizer.convert_tokens_to_ids("<image_soft_token>")
+        self.full_image_sequence = (
+            "\n\n<start_of_image>"
+            + "".join(["<image_soft_token>"] * num_mm_soft_tokens_per_image)
+            + "<end_of_image>\n\n"
         )
 
         super().__init__(
