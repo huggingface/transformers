@@ -600,12 +600,13 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
+            layer_device_map = self._get_layer_device_map_for_cache_init()
             past_key_values = HybridCache(
                 self.config,
                 max_batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
-                device=self.device,
+                layer_device_map=layer_device_map,
             )
 
         if cache_position is None:
