@@ -132,14 +132,14 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     return tensor 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
-    if dim == 0:
+    if dim == 0 or dim == -2:
         size_ = empty_param.shape[0]
         param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
-    elif dim == 1 or dim == -2:
-        size_ = empty_param.shape[1]
-        param = param[:, rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
-    elif dim == 2 or dim == -1:
-        size_ = empty_param.shape[2]
+    elif dim == 1 or dim == -1:
+        size_ = empty_param.shape[-2]
+        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
+    elif dim == 2:
+        size_ = empty_param.shape[-1]
         param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
@@ -174,7 +174,7 @@ class TensorParallelLayer:
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh): ...
 
-    def partition_tensor(self, param_type, module, device_mesh):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         raise NotImplementedError
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -266,15 +266,15 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
         return input_tensor
 
-    def partition_tensor(self, param, empty_param, param_casting_dtype, to_contiguous, device_mesh):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = get_tensor_shard(param, empty_param, device_mesh, -2)
-        param = param.to(param_casting_dtype)
+        parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+        parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
-            param = param.contiguous()
-        parameter = DTensor.from_local(param, device_mesh, [Shard(-2)], run_check=False)
+            parameter = parameter.contiguous()
+        parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
         return nn.Parameter(parameter)
 
     @staticmethod
@@ -286,15 +286,15 @@ class ColwiseParallel(TensorParallelLayer):
         return outputs.to_local() if use_local_output else outputs
 
 class PackedColwiseParallel(ColwiseParallel):
-    def partition_tensor(self, param, empty_param, param_casting_dtype, to_contiguous, device_mesh):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = get_packed_weights(param, empty_param, device_mesh, -2)
-        param = param.to(param_casting_dtype)
+        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
+        parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
-            param = param.contiguous()
-        parameter = DTensor.from_local(param, device_mesh, [Shard(-2)], run_check=False)
+            parameter = parameter.contiguous()
+        parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
         return nn.Parameter(parameter)
 
 class RowwiseParallel(TensorParallelLayer):
@@ -338,20 +338,20 @@ class RowwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
         return input_tensor
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype,to_contiguous, device_mesh):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype,to_contiguous, rank, device_mesh):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
         # means Rowwise as nn.Linear is input * weight^T + bias, where
         # weight would become Shard(0)
         if param_type != "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, -2)
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
             shard = [Shard(-2)]
         else:
             shard = [Replicate()]
             parameter = param[:]
 
-        param = param.to(param_casting_dtype)
+        parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
-            param = param.contiguous()
+            parameter = parameter.contiguous()
 
         parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
         return nn.Parameter(parameter)
@@ -434,7 +434,7 @@ def add_tensor_parallel_hooks_to_module(model, module, full_tp_plan, layer_name,
     """
 
     # 1. We add hooks to the layer being loaded:
-    if not module._has_tp_hooks:
+    if not hasattr(module,"_has_tp_hooks") and current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
         tp_layer.prepare_module_tp(module, device_mesh)
         module._has_tp_hooks = True
@@ -445,16 +445,16 @@ def add_tensor_parallel_hooks_to_module(model, module, full_tp_plan, layer_name,
         pattern = re.sub(r"\d+", "*", parrent_layer_name)
         # The module itself needs hooks
         if pattern in full_tp_plan:
-            module_plan = full_tp_plan.get(pattern)
+            module_plan = re.search(full_tp_plan,pattern)
             module_to_tp_ = model.get_submodule(parrent_layer_name)
-            if not module_to_tp_._has_tp_hooks:
+            if not module_to_tp_._has_tp_hooks and module_plan:
                 module_to_tp_._has_tp_hooks = True
                 tp_layer = translate_to_torch_parallel_style(module_plan)
                 tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, device_mesh
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
 ):
     r"""
     Main uses cases:
@@ -481,7 +481,7 @@ def shard_and_distribute_module(
 
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        param = tp_layer.partition_tensor(param, empty_param, param_type, param_casting_dtype, device_mesh)
+        param = tp_layer.partition_tensor(param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh)
     else:
         param = param[:]
         if is_contiguous:
