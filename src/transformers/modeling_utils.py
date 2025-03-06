@@ -856,19 +856,19 @@ def _load_state_dict_into_meta_model(
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
-        param = (
-            file_pointer.get_slice(serialized_param_name)
-            if shard_file.endswith(".safetensors")
-            else bin_state_dict[serialized_param_name]
-        )
+        if shard_file.endswith(".safetensors"):
+            param = file_pointer.get_slice(serialized_param_name)
+        elif shard_file.endswith(".gguf"):
+            param = empty_param
+        else:
+            param = bin_state_dict[serialized_param_name]
 
         to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
             model, param_name=fixed_param_name, param=empty_param, dtype=dtype, keep_in_fp32_modules=keep_in_fp32_modules
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            param = shard_and_distribute_module(module_to_tp, current_module_plan, param, param_type, rank)
-            module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
+            shard_and_distribute_module(model, empty_param, fixed_param_name, device_mesh, full_tp_plan, param_casting_dtype, to_contiguous)
         else:
             param = param[:]
             if param_casting_dtype is not None:
@@ -4124,7 +4124,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dummy_model = cls(config)
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
-            resolved_archive_file = None
+            resolved_archive_file = gguf_file
             is_sharded = False
         else:
             resolved_archive_file = None
@@ -4914,7 +4914,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
-                    resolved_archive_file=resolved_archive_file,
+                    shard_file=resolved_archive_file,
                     weights_only=weights_only,
                 )
             else:
