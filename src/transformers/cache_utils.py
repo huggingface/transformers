@@ -1068,7 +1068,8 @@ class StaticCache(Cache):
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`):
-            The device on which the cache should be initialized. Should be the same as the layer.
+            The device on which the cache should be initialized. If you're using more than 1 computation device, you
+            should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
@@ -1251,7 +1252,8 @@ class SlidingWindowCache(StaticCache):
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`):
-            The device on which the cache should be initialized. Should be the same as the layer.
+            The device on which the cache should be initialized. If you're using more than 1 computation device, you
+            should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
@@ -1556,7 +1558,8 @@ class HybridCache(Cache):
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
-            The device on which the cache should be initialized. Should be the same as the layer.
+            The device on which the cache should be initialized. If you're using more than 1 computation device, you
+            should pass the `layer_device_map` argument instead.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
@@ -1883,7 +1886,8 @@ class OffloadedStaticCache(StaticCache):
         max_cache_len (`int`):
             The maximum sequence length with which the model will be used.
         device (`Union[str, torch.device]`):
-            The device on which the cache should be initialized. Should be the same as the layer device.
+            The device on which the cache should be initialized. If you're using more than 1 computation device, you
+            should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
