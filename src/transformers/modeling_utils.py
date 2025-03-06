@@ -4635,6 +4635,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _prefix = f"{prefix}."
 
         renamed_keys = {}
+        new_state_dict = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
             # Class specific rename
@@ -4656,12 +4657,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # only the keys starting with the prefix
             elif loading_base_model_from_task_state_dict:
                 if not new_key.startswith(_prefix):
-                    _ = state_dict.pop(key, None)
                     continue
-                else:
-                    new_key = new_key[len(_prefix) :]
+                new_key = new_key[len(_prefix) :]
 
-            state_dict[new_key] = state_dict.pop(key)
+            new_state_dict[new_key] = state_dict.pop(key)
 
             # track gamma/beta rename for logging
             if has_changed:
@@ -4678,7 +4677,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
             logger.info_once(warning_msg)
 
-        return state_dict
+        return new_state_dict
 
     @staticmethod
     def _fix_state_dict_key_on_save(key) -> Tuple[str, bool]:
