@@ -726,23 +726,34 @@ class RTDetrCSPRepLayer(nn.Module):
 
         in_channels = config.encoder_hidden_dim * 2
         out_channels = config.encoder_hidden_dim
-        num_blocks = 3
-        activation = config.activation_function
-
         hidden_channels = int(out_channels * config.hidden_expansion)
-        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
+        params = {"kernel_size": 1, "stride": 1, "activation": config.activation_function}
+
+        # branch 1
+        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, **params)
+        self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(3)])
+
+        # branch 2
+        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, **params)
+
+        # fuse step
         if hidden_channels != out_channels:
-            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, **params)
         else:
             self.conv3 = nn.Identity()
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        # branch 1
         hidden_state_1 = self.conv1(hidden_state)
         hidden_state_1 = self.bottlenecks(hidden_state_1)
+
+        # branch 2
         hidden_state_2 = self.conv2(hidden_state)
-        return self.conv3(hidden_state_1 + hidden_state_2)
+
+        # fuse step
+        hidden_state = self.conv3(hidden_state_1 + hidden_state_2)
+
+        return hidden_state
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
