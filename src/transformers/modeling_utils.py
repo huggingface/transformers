@@ -823,14 +823,6 @@ def _load_state_dict_into_meta_model(
     if device_map is not None:
         device_map_regex = "|".join(sorted(device_map.keys(), reverse=True))
 
-    if device_mesh is not None:
-        full_tp_plan = model.config.base_model_tp_plan or {}
-        for sub in model.config.sub_configs:
-            full_tp_plan.update(getattr(model.config, sub).base_model_tp_plan)
-        for submodule in model.modules():
-            if plan := getattr(submodule, "_tp_plan", None):
-                full_tp_plan.update(plan)
-
     file_pointer = None
     bin_state_dict = None
     if shard_file.endswith(".safetensors"):
@@ -880,10 +872,9 @@ def _load_state_dict_into_meta_model(
                 param,
                 empty_param,
                 fixed_param_name,
-                device_mesh,
-                full_tp_plan,
                 param_casting_dtype,
                 to_contiguous,
+                device_mesh,
             )
         else:
             param = param[:]
@@ -1390,7 +1381,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
     # code. For base models, this attribute comes from
-    # `config.base_model_tp_plan` during `post_init`.
+    # `config.base_model_tp_plan` during `__init__`.
+    # It should identify the layers exactly: if you want to TP model.language_model.layers.fc1
+    # by passing `tp_plan` to the init, it should be {"model.language_model.layers.fc1":"colwise"}
+    # for example.
     _tp_plan = None
 
     # A pipeline parallel plan specifying the layers which may not be present
@@ -1456,6 +1450,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
+        # TP plan should no be related to base model or base prefix: does not extend to multimodal models
+        # we update based on the underlying PreTrainedModel.
+        self._tp_plan = self._tp_plan or self.config.base_model_tp_plan
+        for name, module in self.named_children():
+            if plan := hasattr(module, "_tp_plan"):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
+
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
@@ -1463,9 +1464,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
-        # If current model is a base model, attach `base_model_tp_plan` from config
-        if self.base_model is self:
-            self._tp_plan = self.config.base_model_tp_plan
+
         # If current model is a base model, attach `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan
