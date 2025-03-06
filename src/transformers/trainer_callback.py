@@ -438,7 +438,7 @@ class TrainerCallback:
 
     def on_compute_loss(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
-        Event called in compute_loss method. Useful to track activations memory consumption and stats about model inputs.
+        Event called during `Trainer.compute_loss` method right after the `loss` is fully calculated. Useful to track activations memory consumption and stats about model inputs.
         """
         pass
 
