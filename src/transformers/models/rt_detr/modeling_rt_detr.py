@@ -553,28 +553,19 @@ class RTDetrConvEncoder(nn.Module):
     https://github.com/lyuwenyu/RT-DETR/blob/main/rtdetr_pytorch/src/nn/backbone/presnet.py#L142
     """
 
-    def __init__(self, config):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            replace_batch_norm(backbone)
-
-        self.model = backbone
+        self.model = load_backbone(config)
         self.intermediate_channel_sizes = self.model.channels
 
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
+        # replace batch norm by frozen batch norm
+        if config.freeze_backbone_batch_norms:
+            replace_batch_norm(self.model)
 
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
+    def forward(self, pixel_values: torch.Tensor) -> List[torch.Tensor]:
+        features = self.model(pixel_values).feature_maps
+        return features
 
 
 class RTDetrConvNormLayer(nn.Module):
@@ -1821,15 +1812,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
-        if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
-
         # Stage 1: Convolutional backbone
-        backbone_outputs = self.backbone(pixel_values, pixel_mask)
+        backbone_outputs = self.backbone(pixel_values)
 
         # Stage 2: Hybrid encoder (transformer -> FPN -> PAN)
         projected_feature_maps = [
-            proj(feature_map) for proj, (feature_map, mask) in zip(self.encoder_input_proj, backbone_outputs)
+            layer(feature_map) for layer, feature_map in zip(self.encoder_input_proj, backbone_outputs)
         ]
         encoder_outputs = self.encoder(
             projected_feature_maps,
