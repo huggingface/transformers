@@ -20,11 +20,10 @@ from ...image_processing_utils import (
     BatchFeature,
 )
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorInitKwargs,
     DefaultFastImageProcessorPreprocessKwargs,
+    customize_docstrings,
     group_images_by_shape,
     reorder_images,
 )
@@ -40,7 +39,6 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -69,9 +67,8 @@ class LlavaFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreproces
     do_pad: Optional[bool]
 
 
-@add_start_docstrings(
+@customize_docstrings(
     "Constructs a fast Llava image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         do_pad (`bool`, *optional*, defaults to `self.do_pad`):
             Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
@@ -96,13 +93,6 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[LlavaFastImageProcessorInitKwargs]) -> None:
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
-        """,
-    )
     def preprocess(
         self, images: ImageInput, **kwargs: Unpack[LlavaFastImageProcessorPreprocessKwargs]
     ) -> BatchFeature:
