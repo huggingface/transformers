@@ -3011,7 +3011,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         loaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-        assert(len(loaded_tokenizer) == len(tokenizer))
+        assert (
+            len(loaded_tokenizer) == len(tokenizer)
+        ), "Failed to load updated tokenizer"
 
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
