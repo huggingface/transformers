@@ -1011,12 +1011,12 @@ class RTDetrDecoderLayer(nn.Module):
 
         # self-attention
         self.self_attn = RTDetrMultiheadAttention(
-            embed_dim=config.d_model,
+            embed_dim=config.hidden_size,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # cross-attention
         self.encoder_attn = RTDetrMultiscaleDeformableAttention(
@@ -1024,12 +1024,12 @@ class RTDetrDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # feedforward neural networks
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.fc1 = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1441,7 +1441,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.query_pos_head = RTDetrMLPPredictionHead(
-            input_dim=4, hidden_dim=2 * config.d_model, output_dim=config.d_model, num_layers=2
+            input_dim=4, hidden_dim=2 * config.hidden_size, output_dim=config.hidden_size, num_layers=2
         )
 
         # hack implementation for iterative bounding box refinement and two-stage RT-DETR
@@ -1650,21 +1650,21 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # De-noising part
         if config.num_denoising > 0:
             self.denoising_class_embed = nn.Embedding(
-                config.num_labels + 1, config.d_model, padding_idx=config.num_labels
+                config.num_labels + 1, config.hidden_size, padding_idx=config.num_labels
             )
 
         # Decoder embedding
         if self.learn_initial_query:
-            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
+            self.weight_embedding = nn.Embedding(config.num_queries, config.hidden_size)
 
         # Encoder head
         self.enc_output = nn.Sequential(
-            nn.Linear(config.d_model, config.d_model),
-            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
+            nn.Linear(config.hidden_size, config.hidden_size),
+            nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps),
         )
-        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
+        self.enc_score_head = nn.Linear(config.hidden_size, config.num_labels)
         self.enc_bbox_head = RTDetrMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+            input_dim=config.hidden_size, hidden_dim=config.hidden_size, output_dim=4, num_layers=3
         )
 
         # Init encoder output anchors and valid_mask
@@ -1678,15 +1678,15 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         for idx in range(num_backbone_outs):
             in_channels = config.decoder_in_channels[idx]
-            conv = nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False)
-            batchnorm = nn.BatchNorm2d(config.d_model, eps=config.batch_norm_eps)
+            conv = nn.Conv2d(in_channels, config.hidden_size, kernel_size=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.hidden_size, eps=config.batch_norm_eps)
             self.decoder_input_proj.append(nn.Sequential(conv, batchnorm))
 
         for _ in range(config.num_feature_levels - num_backbone_outs):
-            conv = nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False)
-            batchnorm = nn.BatchNorm2d(config.d_model, eps=config.batch_norm_eps)
+            conv = nn.Conv2d(in_channels, config.hidden_size, kernel_size=3, stride=2, padding=1, bias=False)
+            batchnorm = nn.BatchNorm2d(config.hidden_size, eps=config.batch_norm_eps)
             self.decoder_input_proj.append(nn.Sequential(conv, batchnorm))
-            in_channels = config.d_model
+            in_channels = config.hidden_size
 
         # Decoder
         self.decoder = RTDetrDecoder(config)
@@ -1954,11 +1954,11 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # Detection heads on top
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
-        self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
+        self.class_embed = nn.ModuleList([nn.Linear(config.hidden_size, config.num_labels) for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
                 RTDetrMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                    input_dim=config.hidden_size, hidden_dim=config.hidden_size, output_dim=4, num_layers=3
                 )
                 for _ in range(num_pred)
             ]
