@@ -508,7 +508,6 @@ def main(*args):
             image_processor=SiglipImageProcessor(image_seq_length=1024),
             tokenizer=tokenizer
         )
-        config.text_config.mm_soft_token_id = processor.image_soft_token_id
         processor.save_pretrained(output_path)
         logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
         del processor
