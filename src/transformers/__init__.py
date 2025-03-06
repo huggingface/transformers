@@ -2756,6 +2756,7 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+            "LlavaModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
@@ -7652,6 +7653,7 @@ if TYPE_CHECKING:
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
+            LlavaModel,
             LlavaPreTrainedModel,
         )
         from .models.llava_next import (

@@ -16,7 +16,9 @@
 Processor class for Pixtral.
 """
 
-from typing import List, Union
+from typing import Dict, List, Union
+
+import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -30,13 +32,9 @@ logger = logging.get_logger(__name__)
 
 class PixtralProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
         "images_kwargs": {},
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -100,6 +98,7 @@ class PixtralProcessor(ProcessorMixin):
         self.image_token = image_token
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
+        self.image_token_id = tokenizer.encode(image_token)[0]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -204,10 +203,54 @@ class PixtralProcessor(ProcessorMixin):
                     sample = sample.replace("<placeholder>", replace_str, 1)
                 prompt_strings.append(sample)
 
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(
-            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
-        )
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens(
+        self,
+        image_inputs: Union[BatchFeature, Dict] = None,
+        video_inputs: Union[BatchFeature, Dict] = None,
+        audio_inputs: Union[BatchFeature, Dict] = None,
+        **kwargs,
+    ) -> Dict[str, List[int]]:
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) in the given input dictionary. Each modality input has
+        to be already processed by its respective modality preprocessor.
+
+        Args:
+            image_inputs (Union[BatchFeature, Dict], *optional*):
+                The image input containing pixel values.
+            video_inputs (Union[BatchFeature, Dict], *optional*):
+                The video input containing pixel values for videos.
+            audio_inputs (Union[BatchFeature, Dict], *optional*):
+                The audio input containing audio features.
+
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality, the dict value is set to `0`
+        """
+        if image_inputs is None:
+            raise ValueError("Cannot infer length of placeholder tokens if no image inputs are provided!")
+
+        num_image_tokens_per_item = []
+        for height, width in image_inputs["image_sizes"]:
+            num_height_tokens = height // self.patch_size
+            num_width_tokens = width // self.patch_size
+            num_image_tokens = num_width_tokens * (num_height_tokens)
+            num_image_tokens_per_item.append(num_image_tokens)
+
+        return {"image": num_image_tokens_per_item, "video": 0, "audio": 0}
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

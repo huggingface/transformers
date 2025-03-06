@@ -35,7 +35,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
-        ("aria", "AriaForConditionalGeneration"),
+        ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
         ("autoformer", "AutoformerModel"),

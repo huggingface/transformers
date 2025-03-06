@@ -101,6 +101,7 @@ class PixtralVisionConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
         self.initializer_range = initializer_range
+        self.image_seq_length = 4096
 
 
 __all__ = ["PixtralVisionConfig"]
