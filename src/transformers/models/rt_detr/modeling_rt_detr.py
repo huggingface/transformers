@@ -578,7 +578,16 @@ class RTDetrConvEncoder(nn.Module):
 
 
 class RTDetrConvNormLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
+    def __init__(
+        self,
+        config: RTDetrConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        padding: Optional[int] = None,
+        activation: Optional[str] = None,
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
@@ -591,7 +600,7 @@ class RTDetrConvNormLayer(nn.Module):
         self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv(hidden_state)
         hidden_state = self.norm(hidden_state)
         hidden_state = self.activation(hidden_state)
