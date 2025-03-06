@@ -1993,6 +1993,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
 
         for i in tqdm(range(num_image_tokens)):
+            # inputs_embeds.device can change
+            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].to(inputs_embeds.device)
+            model_kwargs["cache_position"] = model_kwargs["cache_position"].to(inputs_embeds.device)
             # Fix me: What to do with attention mask when expanding and repeating input ids.
             # Should we also modify the attention mask if passed?
             outputs = self.model.language_model(
