@@ -245,6 +245,7 @@ class TimesFmAttention(nn.Module):
     def __init__(self, config: TimesFmConfig, layer_idx: int):
         super().__init__()
         self.attn_implementation = config._attn_implementation
+        self.is_causal = True
         self.attention_dropout = config.attention_dropout
         self.layer_idx = layer_idx
 
