@@ -782,7 +782,7 @@ class Wav2Vec2BertUtilsTest(unittest.TestCase):
 
         features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # sample negative indices
@@ -811,7 +811,7 @@ class Wav2Vec2BertUtilsTest(unittest.TestCase):
 
         features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # replace masked feature vectors with -100 to test that those are not sampled
