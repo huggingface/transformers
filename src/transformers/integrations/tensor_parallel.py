@@ -13,7 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import inspect
 import re
 from functools import lru_cache, partial
 from typing import List, Optional, Tuple, Union
@@ -123,13 +122,14 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
 
     if dim == 0:
         tensor = slice_[tensors_slices, ...]
-    elif dim == 1 or dim==-2:
+    elif dim == 1 or dim == -2:
         tensor = slice_[:, tensors_slices, ...]
-    elif dim==2 or dim==-1:
+    elif dim == 2 or dim == -1:
         tensor = slice_[..., tensors_slices]
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return tensor 
+    return tensor
+
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     if dim == 0 or dim == -2:
@@ -285,6 +285,7 @@ class ColwiseParallel(TensorParallelLayer):
         # back to local tensor
         return outputs.to_local() if use_local_output else outputs
 
+
 class PackedColwiseParallel(ColwiseParallel):
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
@@ -296,6 +297,7 @@ class PackedColwiseParallel(ColwiseParallel):
             parameter = parameter.contiguous()
         parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
         return nn.Parameter(parameter)
+
 
 class RowwiseParallel(TensorParallelLayer):
     """
@@ -338,7 +340,7 @@ class RowwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
         return input_tensor
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype,to_contiguous, rank, device_mesh):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
         # means Rowwise as nn.Linear is input * weight^T + bias, where
         # weight would become Shard(0)
@@ -434,7 +436,7 @@ def add_tensor_parallel_hooks_to_module(model, module, full_tp_plan, layer_name,
     """
 
     # 1. We add hooks to the layer being loaded:
-    if not hasattr(module,"_has_tp_hooks") and current_module_plan is not None:
+    if not hasattr(module, "_has_tp_hooks") and current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
         tp_layer.prepare_module_tp(module, device_mesh)
         module._has_tp_hooks = True
@@ -445,7 +447,7 @@ def add_tensor_parallel_hooks_to_module(model, module, full_tp_plan, layer_name,
         pattern = re.sub(r"\d+", "*", parrent_layer_name)
         # The module itself needs hooks
         if pattern in full_tp_plan:
-            module_plan = re.search(full_tp_plan,pattern)
+            module_plan = re.search(full_tp_plan, pattern)
             module_to_tp_ = model.get_submodule(parrent_layer_name)
             if not module_to_tp_._has_tp_hooks and module_plan:
                 module_to_tp_._has_tp_hooks = True
@@ -481,7 +483,9 @@ def shard_and_distribute_module(
 
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        param = tp_layer.partition_tensor(param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh)
+        param = tp_layer.partition_tensor(
+            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+        )
     else:
         param = param[:]
         if is_contiguous:
