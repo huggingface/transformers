@@ -15,7 +15,6 @@
 # limitations under the License.
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-import enum
 import itertools
 import math
 import re
@@ -25,7 +24,6 @@ import PIL
 import PIL.Image
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
