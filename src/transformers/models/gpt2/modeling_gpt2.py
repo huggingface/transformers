@@ -977,7 +977,11 @@ class GPT2Model(GPT2PreTrainedModel):
 
         past_key_values = past_key_values if use_cache else None
         if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
+            past_key_values = (
+                past_key_values.self_attention_cache.to_legacy_cache()
+                if self.config.add_cross_attention
+                else past_key_values.to_legacy_cache()
+            )
         if not return_dict:
             return tuple(
                 v
