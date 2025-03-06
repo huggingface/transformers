@@ -21,15 +21,17 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Union
+from typing import Callable, List, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -199,17 +201,57 @@ class TimesFmPositionalEmbedding(nn.Module):
         return signal
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class TimesFmAttention(nn.Module):
     """Implements the attention used in TimesFM. One key difference is that there is _per_dim_scaling of the query."""
 
     def __init__(self, config: TimesFmConfig, layer_idx: int):
         super().__init__()
+        self.attn_implementation = config._attn_implementation
         self.attention_dropout = config.attention_dropout
         self.layer_idx = layer_idx
 
         self.num_heads = config.num_heads
         self.hidden_size = config.model_dim
         self.head_dim = config.head_dim
+        self.num_key_value_groups = 1
 
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_heads * self.head_dim
@@ -230,131 +272,45 @@ class TimesFmAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        output_attentions: bool = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch_size, input_len, _ = hidden_states.shape
+        batch_size, input_len = hidden_states.shape[:2]
+        hidden_shape = (batch_size, -1, self.num_heads, self.head_dim)
 
-        xq = self.q_proj(hidden_states)
-        xk = self.k_proj(hidden_states)
-        xv = self.v_proj(hidden_states)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self._scale_query(query_states)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        xq = xq.view(batch_size, -1, self.num_heads, self.head_dim)
-        xk = xk.view(batch_size, -1, self.num_heads, self.head_dim)
-        xv = xv.view(batch_size, -1, self.num_heads, self.head_dim)
-        xq = self._scale_query(xq)
-
-        # Write new kv cache.
-        # [batch_size, input_len, n_local_kv_heads, head_dim]
+        # Write new kv cache if past_key_value is provided
         if past_key_value is not None and cache_position is not None:
-            past_key_value.update(xk, xv, self.layer_idx, cache_position)
-            key = past_key_value.key_states
-            value = past_key_value.value_states
-        else:
-            key = xk
-            value = xv
-
-        # [batch_size, n_local_heads, input_len, head_dim]
-        q = xq.transpose(1, 2)
-        # [batch_size, n_local_heads, max_seq_len, head_dim]
-        k = key.transpose(1, 2)
-        v = value.transpose(1, 2)
-
-        # [batch_size, n_local_heads, input_len, max_seq_len]
-        scores = torch.matmul(q, k.transpose(2, 3))
-
-        if attention_mask is not None:
-            scores = scores + attention_mask
-
-        scores = F.softmax(scores.float(), dim=-1).type_as(q)
-
-        # [batch_size, n_local_heads, input_len, head_dim]
-        output = torch.matmul(scores, v)
-
-        # [batch_size, input_len, hidden_dim]
-        output = output.transpose(1, 2).contiguous().view(batch_size, input_len, -1)
-        output = self.o_proj(output)
-
-        if not output_attentions:
-            scores = None
-
-        return output, scores
-
-
-class TimesFmSdpaAttention(TimesFmAttention):
-    """TimesFM attention implementation using torch.nn.functional.scaled_dot_product_attention."""
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        if output_attentions:
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                past_key_value=past_key_value,
-                cache_position=cache_position,
-                output_attentions=output_attentions,
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
             )
 
-        batch_size, seq_length, _ = hidden_states.shape
+        attention_interface: Callable = eager_attention_forward
+        if self.attn_implementation != "eager":
+            if self.attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.attn_implementation]
 
-        # Project to queries, keys, values
-        xq = self.q_proj(hidden_states)
-        xk = self.k_proj(hidden_states)
-        xv = self.v_proj(hidden_states)
-
-        xq = xq.view(batch_size, -1, self.num_heads, self.head_dim)
-        xk = xk.view(batch_size, -1, self.num_heads, self.head_dim)
-        xv = xv.view(batch_size, -1, self.num_heads, self.head_dim)
-        # Scale query exactly as in original
-        xq = self._scale_query(xq)
-
-        # Handle KV cache
-        if past_key_value is not None and cache_position is not None:
-            past_key_value.update(xk, xv, self.layer_idx, cache_position)
-            key = past_key_value.key_states
-            value = past_key_value.value_states
-        else:
-            key = xk
-            value = xv
-
-        # Transpose for attention: [batch_size, num_heads, seq_length, head_dim]
-        query = xq.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-
-        # Make inputs contiguous
-        query = query.contiguous()
-        key = key.contiguous()
-        value = value.contiguous()
-
-        # Run scaled dot-product attention
-        # Note: attention_mask should already be in the correct format from TimesFmStackedDecoder
-        attn_output = F.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            attn_mask=attention_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=False,  # We use the provided attention mask
-            scale=1,  # We already scaled the query
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=1.0,
+            **kwargs,
         )
-
-        # Reshape output: [batch_size, seq_length, hidden_size]
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_length, -1)
+        attn_output = attn_output.reshape(batch_size, input_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
-        return attn_output, None
-
-
-TIMESFM_ATTENTION_CLASSES = {
-    "eager": TimesFmAttention,
-    "sdpa": TimesFmSdpaAttention,
-}
+        return attn_output, attn_weights
 
 
 class TimesFmDecoderLayer(nn.Module):
@@ -363,11 +319,7 @@ class TimesFmDecoderLayer(nn.Module):
     def __init__(self, config: TimesFmConfig, layer_idx: int):
         super().__init__()
 
-        if config._attn_implementation not in TIMESFM_ATTENTION_CLASSES:
-            raise ValueError(f"Unknown attention implementation: {config._attn_implementation}")
-        attention_class = TIMESFM_ATTENTION_CLASSES[config._attn_implementation]
-
-        self.self_attn = attention_class(config, layer_idx=layer_idx)
+        self.self_attn = TimesFmAttention(config, layer_idx=layer_idx)
         self.mlp = TimesFmMLP(config)
         self.input_layernorm = TimesFmRMSNorm(config.model_dim, eps=config.rms_norm_eps)
 
@@ -427,6 +379,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TimesFmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     main_input_name = "inputs"
+    _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
