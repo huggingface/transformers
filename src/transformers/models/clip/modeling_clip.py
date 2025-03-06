@@ -79,12 +79,12 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
     return normed_tensor
 
 
-def prepare_hidden_states_indices(output_hidden_states: Union[bool, List[int]], num_hidden_layers: int) -> List[int]:
+def prepare_hidden_states_indices(output_hidden_states: Union[bool, List[int]], num_hidden_layers: int) -> Dict[int, int]:
     if not output_hidden_states:
         return {}
     elif output_hidden_states is True:
         return {order_idx: index for order_idx, index in enumerate(range(num_hidden_layers + 1))}
-    elif isinstance(output_hidden_states, list):
+    elif isinstance(output_hidden_states, (list, tuple)):
         if (
             any(index > num_hidden_layers for index in output_hidden_states)
             or any(
