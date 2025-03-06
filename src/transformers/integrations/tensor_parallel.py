@@ -160,6 +160,7 @@ def distribute_module(
         module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
     if output_fn is not None:
         module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
+    module._distribute_module_applied = True
     return module
 
 
@@ -221,7 +222,7 @@ class IsolatedParallel(TensorParallelLayer):
     """
 
     @staticmethod
-    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh=None):
         # annotate module input placements/sharding with input_layouts
         input_tensor = inputs[0]
         if isinstance(input_tensor, DTensor):
@@ -229,7 +230,7 @@ class IsolatedParallel(TensorParallelLayer):
         return input_tensor
 
     @staticmethod
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh=None):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
 
@@ -240,7 +241,6 @@ class IsolatedParallel(TensorParallelLayer):
             partial(self._prepare_input_fn),
             partial(self._prepare_output_fn),
         )
-
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -445,7 +445,7 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
     """
 
     # 1. We add hooks to the layer being loaded:
-    if not hasattr(module, "_has_tp_hooks") and current_module_plan is not None:
+    if not getattr(module, "_distribute_module_applied", False) and current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
         tp_layer.prepare_module_tp(module, device_mesh)
         module._has_tp_hooks = True
@@ -455,10 +455,9 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
         parrent_layer_name = layer_name.rsplit(".", 1)[0]
         generic_name = re.sub(r"\d+", "*", parrent_layer_name)
         # The module itself needs hooks
-        if module_plan:=tp_plan.get(generic_name, False):
+        if module_plan := tp_plan.get(generic_name, False):
             module_to_tp_ = model.get_submodule(parrent_layer_name)
-            if not hasattr(module_to_tp_, "_has_tp_hooks"):
-                module_to_tp_._has_tp_hooks = True
+            if not getattr(module_to_tp_, "_distribute_module_applied", False):
                 tp_layer = translate_to_torch_parallel_style(module_plan)
                 tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
 
@@ -485,9 +484,7 @@ def shard_and_distribute_module(
         current_module_plan = tp_plan[match]
 
     # Add hooks to the module if not done yet
-    add_tensor_parallel_hooks_to_module(
-        model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh
-    )
+    add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
 
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
