@@ -2982,7 +2982,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             save_steps=5,
             save_safetensors=True,
             data_collator=data_collator
-        ) 
+        )
         trainer.train()
         loaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
         assert (
