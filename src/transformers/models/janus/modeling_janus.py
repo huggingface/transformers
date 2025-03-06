@@ -1654,6 +1654,44 @@ class JanusModel(JanusPreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
+def swap_bos_pad(input_ids, pad_token_id, bos_token_id):
+    # Find the position of the leftmost pad token and BOS token for each example
+
+    # Create masks for pad tokens and BOS tokens
+    pad_mask = input_ids == pad_token_id
+    bos_mask = input_ids == bos_token_id
+
+    # Find positions (indices) of pad tokens and BOS tokens
+    # For pad tokens, we want the leftmost (minimum) position
+    # arange creates position indices for each token in the sequence
+    batch_size, seq_len = input_ids.shape
+    positions = torch.arange(seq_len, device=input_ids.device).expand_as(input_ids)
+
+    # Set positions where pad_mask is False to a large value
+    # This ensures we find the minimum position where pad_mask is True
+    pad_positions = torch.where(pad_mask, positions, torch.full_like(positions, seq_len))
+    leftmost_pad_pos = torch.min(pad_positions, dim=1).values
+
+    # Default to 0 if no pad token found (min returned seq_len)
+    leftmost_pad_pos = torch.where(leftmost_pad_pos == seq_len, torch.zeros_like(leftmost_pad_pos), leftmost_pad_pos)
+
+    # Find positions of BOS tokens
+    bos_positions = torch.where(bos_mask, positions, torch.full_like(positions, -1))
+    bos_pos = torch.max(bos_positions, dim=1).values
+
+    # Only swap if BOS is to the right of leftmost pad
+    swap_mask = (bos_pos > leftmost_pad_pos) & (bos_pos >= 0)
+
+    # For each example where swapping is needed
+    for i in range(batch_size):
+        if swap_mask[i]:
+            # Swap the tokens
+            input_ids[i, bos_pos[i]] = pad_token_id
+            input_ids[i, leftmost_pad_pos[i]] = bos_token_id
+
+    return input_ids
+
+
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = True
@@ -1955,7 +1993,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             # Prepare cache if not provided
             model_kwargs["past_key_values"] = self._get_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
-                # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
+                # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
@@ -2045,44 +2083,5 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         else:
             return generated_tokens
 
-
-def swap_bos_pad(input_ids, pad_token_id, bos_token_id):
-    # Find the position of the leftmost pad token and BOS token for each example
-
-    # Create masks for pad tokens and BOS tokens
-    pad_mask = (input_ids == pad_token_id)
-    bos_mask = (input_ids == bos_token_id)
-
-    # Find positions (indices) of pad tokens and BOS tokens
-    # For pad tokens, we want the leftmost (minimum) position
-    # arange creates position indices for each token in the sequence
-    batch_size, seq_len = input_ids.shape
-    positions = torch.arange(seq_len, device=input_ids.device).expand_as(input_ids)
-
-    # Set positions where pad_mask is False to a large value
-    # This ensures we find the minimum position where pad_mask is True
-    pad_positions = torch.where(pad_mask, positions, torch.full_like(positions, seq_len))
-    leftmost_pad_pos = torch.min(pad_positions, dim=1).values
-
-    # Default to 0 if no pad token found (min returned seq_len)
-    leftmost_pad_pos = torch.where(leftmost_pad_pos == seq_len,
-                                   torch.zeros_like(leftmost_pad_pos),
-                                   leftmost_pad_pos)
-
-    # Find positions of BOS tokens
-    bos_positions = torch.where(bos_mask, positions, torch.full_like(positions, -1))
-    bos_pos = torch.max(bos_positions, dim=1).values
-
-    # Only swap if BOS is to the right of leftmost pad
-    swap_mask = (bos_pos > leftmost_pad_pos) & (bos_pos >= 0)
-
-    # For each example where swapping is needed
-    for i in range(batch_size):
-        if swap_mask[i]:
-            # Swap the tokens
-            input_ids[i, bos_pos[i]] = pad_token_id
-            input_ids[i, leftmost_pad_pos[i]] = bos_token_id
-
-    return input_ids
 
 __all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration", "JanusModel", "JanusVQVAE", "JanusVisionModel"]
