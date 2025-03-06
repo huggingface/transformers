@@ -46,20 +46,19 @@ Many features like quantization, LoRA adapters, and distributed inference and se
 > [!TIP]
 > Refer to the [Transformers fallback](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers-fallback) section for more details.
 
-Run the code below, and if it prints `TransformersModel`, then it means the model is a Transformers implementatioon.
+By default, vLLM serves the native implementation and if it doesn't exist, it falls back on the Transformers implementation. But you can also set `--model-impl transformers` to explicitly use the Transformers model implementation.
 
-```py
-from vllm import LLM
-
-llm = LLM(model="...", task="generate")
-llm.apply_model(lambda model: print(type(model)))
+```shell
+vllm serve Qwen/Qwen2.5-1.5B-Instruct \
+    --task generate \
+    --model-impl transformers \
 ```
 
-Add the `trust_remote_code` parameter to enable loading a remote code model.
+Add the `trust-remote-code` parameter to enable loading a remote code model.
 
-```py
-from vllm import LLM
-
-llm = LLM(model="...", task="generate", trust_remote_code=True)
-llm.apply_model(lambda model: print(type(model)))
+```shell
+vllm serve Qwen/Qwen2.5-1.5B-Instruct \
+    --task generate \
+    --model-impl transformers \
+    --trust-remote-code \
 ```
