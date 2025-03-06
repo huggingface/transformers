@@ -68,6 +68,7 @@ from .utils import (
 )
 from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
+from huggingface_hub import list_repo_tree
 
 
 if TYPE_CHECKING:
@@ -1983,6 +1984,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "tokenizer_file": FULL_TOKENIZER_FILE,
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
+                if is_local:
+                    template_dir = Path(pretrained_model_name_or_path, "templates")
+                    if template_dir.is_dir():
+                        for template_file in template_dir.glob("*.jinja"):
+                            template_name = template_file.name.removesuffix(".jinja")
+                            additional_files_names[f"{template_name}_template"] = f"templates/{template_file.name}"
+                else:
+                    for template_file in list_repo_tree(pretrained_model_name_or_path, path_in_repo="templates", recursive=False):
+                        if not template_file.endswith(".jinja"):
+                            continue
+                        template_name = template_file.split('/')[-1].removesuffix(".jinja")
+                        additional_files_names[f"{template_name}_template"] = template_file  # This might be wrong!
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
