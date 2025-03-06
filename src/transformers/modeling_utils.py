@@ -4768,7 +4768,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
-                key[len(_prefix):] in task_specific_expected_keys and key[len(_prefix):] not in base_model_expected_keys for key in checkpoint_keys
+                key[len(_prefix) :] in task_specific_expected_keys
+                and key[len(_prefix) :] not in base_model_expected_keys
+                for key in checkpoint_keys
             ):
                 raise ValueError(
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
@@ -4777,7 +4779,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            cls, model, original_checkpoint_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer, device_map
+            cls,
+            model,
+            original_checkpoint_keys,
+            checkpoint_keys,
+            loading_base_model_from_task_state_dict,
+            hf_quantizer,
+            device_map,
         )
 
         # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
