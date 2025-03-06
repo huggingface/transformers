@@ -1337,7 +1337,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 else input_tensor.shape[1]
             )
 
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        # We generate a lower triangular causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
@@ -1382,8 +1382,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
             batch_size (`torch.Tensor`):
                 Batch size.
         """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+        if attention_mask is not None and attention_mask.dim() == 4 and attention_mask.shape[2] == 1:
+            # In this case that the mask comes already in inverted form and requires no inversion or slicing.
             causal_mask = attention_mask
         else:
             min_dtype = torch.finfo(dtype).min
@@ -1412,7 +1412,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 causal_mask[:, :, :, :mask_length] = causal_mask[
                     :, :, :, :mask_length
                 ].masked_fill(padding_mask, min_dtype)
-
         return causal_mask
 
 
