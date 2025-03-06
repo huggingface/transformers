@@ -11,7 +11,7 @@ from transformers.models.gemma3 import (
 
 torch.set_default_device('cpu')
 
-LOCAL_MODEL = "/usr/local/google/home/ryanmullins/gemma3/gemma3_12b_it_safetensors"
+LOCAL_MODEL = "/usr/local/google/home/ryanmullins/gemma3/gemma3_4b_it_safetensors"
 
 
 def main(*args):
@@ -32,11 +32,11 @@ def main(*args):
 
     inputs = processor(
         # Text-only input
-        images=None,
-        text="Write me a poem about Machine Learning.",
+        # images=None,
+        # text="Write me a poem about Machine Learning.",
         # Single image per-prompt inputs
-        # images=[image, image],
-        # text=[prompt, prompt2],
+        images=[image, image],
+        text=[prompt, prompt2],
         return_tensors="pt",
         padding=True,
         padding_side="left",

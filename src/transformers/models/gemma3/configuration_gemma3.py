@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import enum
 from collections.abc import Mapping, Sequence
 from typing import Literal, Optional, Union, cast
 
@@ -159,7 +158,7 @@ class Gemma3TextConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "gemma3"
+    model_type = "gemma3_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -202,7 +201,6 @@ class Gemma3TextConfig(PretrainedConfig):
         use_cache: bool = True,
         cache_implementation: str = "hybrid",
         torch_dtype: str = "bfloat16",
-        compression_type: Optional[enum.Enum] = None,  # quant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
         super().__init__(
@@ -236,7 +234,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.cache_implementation = cache_implementation
-        self.compression_type = compression_type
 
 
 class Gemma3VisionConfig(SiglipVisionConfig):
@@ -256,7 +253,6 @@ class Gemma3VisionConfig(SiglipVisionConfig):
         layer_norm_eps: float = 0.000001,
         vision_use_head: bool = False,
         torch_dtype: str = "bfloat16",
-        pooled_seq_len: int = 256,
         **kwargs,
     ):
         super().__init__(
@@ -274,7 +270,6 @@ class Gemma3VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
-        self.pooled_seq_len = pooled_seq_len
         self.vision_use_head = vision_use_head
 
 

@@ -65,9 +65,11 @@ from ..gemma import GemmaPreTrainedModel, GemmaTokenizer, GemmaTokenizerFast
 from ..gemma.modeling_gemma import (
     GemmaMLP,
     GemmaRMSNorm,
+    GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..siglip import SiglipImageProcessor, SiglipVisionConfig, SiglipVisionModel
 
 
@@ -233,7 +235,7 @@ class Gemma3TextConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "gemma3"
+    model_type = "gemma3_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -276,9 +278,6 @@ class Gemma3TextConfig(PretrainedConfig):
         use_cache: bool = True,
         cache_implementation: str = "hybrid",
         torch_dtype: str = "bfloat16",
-        compression_type: Optional[
-            enum.Enum
-        ] = None,  # quant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
         super().__init__(
@@ -312,7 +311,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.cache_implementation = cache_implementation
-        self.compression_type = compression_type
 
 
 class Gemma3VisionConfig(SiglipVisionConfig):
@@ -333,7 +331,6 @@ class Gemma3VisionConfig(SiglipVisionConfig):
         layer_norm_eps: float = 0.000001,
         vision_use_head: bool = False,
         torch_dtype: str = "bfloat16",
-        pooled_seq_len: int = 256,
         **kwargs,
     ):
         super().__init__(
@@ -351,7 +348,6 @@ class Gemma3VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
-        self.pooled_seq_len = pooled_seq_len
         self.vision_use_head = vision_use_head
 
 
@@ -713,38 +709,44 @@ class Gemma3Processor(ProcessorMixin):
 class Gemma3RMSNorm(GemmaRMSNorm):
     pass
 
-class Gemma3VisionAvgPool2D(nn.Module):
-  def __init__(self, config: Gemma3VisionConfig):
-    super().__init__()
-    self.config = config
-
-  def forward(self, x):
-      """
-        Applies average pooling on (B, channels, width, width) 
-        to make it (B, channels, final_width, final_width).
-      """
-      batch_size, seq_len, channels = x.shape
-      width = int(seq_len**0.5)
-      if width * width != seq_len:
-          raise ValueError(
-              f"Sequence length {seq_len} is not a perfect square. Cannot reshape to a square image."
-          )
-      final_width = int(self.config.pooled_seq_len**0.5)
-      kernel_size = width//final_width
-      x = x.transpose(1, 2).reshape(batch_size, channels, width, width)
-      x = F.avg_pool2d(x, kernel_size=kernel_size, stride=kernel_size)
-      x = x.flatten(2).transpose(1, 2)
-      return x
 
 class Gemma3MultimodalInputProjection(nn.Module):
 
-    def __init__(self, vision_dim: int, text_dim: int):
+    def __init__(self, config: Gemma3Config):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(vision_dim, text_dim))
 
-    def forward(self, x):
-        output = torch.einsum('btm,md->btd', x, self.weight)
-        return output.type_as(x)
+        self.mm_input_projection_weight = nn.Parameter(torch.zeros(
+            config.vision_config.hidden_size, config.text_config.hidden_size
+        ))
+
+        self.mm_soft_emb_norm = Gemma3RMSNorm(
+            config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
+        )
+
+        self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
+        self.tokens_per_side = int(config.text_config.mm_tokens_per_image ** 0.5)
+        self.kernel_size = self.patches_per_image // self.tokens_per_side
+        self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
+
+    def forward(self, vision_outputs: torch.Tensor):
+        b, _, l = vision_outputs.shape
+
+        reshaped_vision_outputs = vision_outputs.transpose(1, 2)
+        reshaped_vision_outputs = reshaped_vision_outputs.reshape(
+            b, l, self.patches_per_image, self.patches_per_image
+        )
+        reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
+
+        pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
+        pooled_vision_outputs = pooled_vision_outputs.flatten(2)
+        pooled_vision_outputs = pooled_vision_outputs.transpose(1, 2)
+
+        normed_vision_outputs = self.mm_soft_emb_norm(pooled_vision_outputs)
+
+        projected_vision_outputs = torch.einsum(
+            'btm,md->btd', normed_vision_outputs, self.mm_input_projection_weight
+        )
+        return projected_vision_outputs.type_as(vision_outputs)
 
 
 class Gemma3MLP(GemmaMLP):
@@ -864,7 +866,8 @@ class Gemma3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]],
+        position_embeddings_global: torch.Tensor,
+        position_embeddings_local: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -882,14 +885,17 @@ class Gemma3Attention(nn.Module):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        cos, sin = position_embeddings[self.attention_type]
+        if self.attention_type == ATTENTION_TYPE_GLOBAL:
+            cos, sin = position_embeddings_global
+        else:
+            cos, sin = position_embeddings_local
+
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin
         )
 
         if (
-            self.is_sliding
-            and self.sliding_window is not None
+            self.sliding_window is not None
             and attention_mask is not None
             and position_ids is not None
         ):
@@ -983,7 +989,8 @@ class Gemma3DecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]],
+        position_embeddings_global: torch.Tensor,
+        position_embeddings_local: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -1002,7 +1009,8 @@ class Gemma3DecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
+            position_embeddings_global=position_embeddings_global,
+            position_embeddings_local=position_embeddings_local,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -1244,12 +1252,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings: Mapping[
-            AttentionType, tuple[torch.Tensor, torch.Tensor]
-        ] = {
-            ATTENTION_TYPE_GLOBAL: self.rotary_emb_global(hidden_states, position_ids),
-            ATTENTION_TYPE_LOCAL: self.rotary_emb_local(hidden_states, position_ids),
-        }
+        position_embeddings_global = self.rotary_emb_global(hidden_states, position_ids)
+        position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
 
         # normalized
         # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
@@ -1271,7 +1275,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    position_embeddings,
+                    position_embeddings_global,
+                    position_embeddings_local,
                     causal_mask,
                     position_ids,
                     past_key_values,
@@ -1283,7 +1288,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    position_embeddings=position_embeddings,
+                    position_embeddings_global=position_embeddings_global,
+                    position_embeddings_local=position_embeddings_local,
                     attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -1727,14 +1733,8 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         self.language_model = Gemma3ForCausalLM(config=text_config)
         self.vision_model = SiglipVisionModel(config=vision_config)
-        self.mm_input_projection = Gemma3MultimodalInputProjection(
-            vision_dim=vision_config.hidden_size, text_dim=text_config.hidden_size
-        )
-        self.mm_soft_emb_norm = Gemma3RMSNorm(
-            vision_config.hidden_size, eps=vision_config.layer_norm_eps
-        )
+        self.multimodal_projector = Gemma3MultimodalInputProjection(config=config)
 
-        self.avg_pool = Gemma3VisionAvgPool2D(config.vision_config)
         self.vocab_size = text_config.vocab_size
         self.pad_token_id = (
             pad_token_id
@@ -1767,11 +1767,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def encode_vision(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.mm_soft_emb_norm(x)
-        x = self.mm_input_projection(x)
-        return x
-
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -1783,8 +1778,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         vision_outputs = self.vision_model(pixel_values=pixel_values).last_hidden_state
-        pooled_vision_outputs = self.avg_pool(vision_outputs)
-        image_features = self.encode_vision(pooled_vision_outputs)
+        image_features = self.multimodal_projector(vision_outputs)
         return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
@@ -1904,10 +1898,13 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             image_mask = image_soft_token_mask.unsqueeze(-1)
             image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
-            if (emb_nel := inputs_embeds[image_mask].numel()) != (img_nel := image_features.numel()):
+            if (
+                not is_torchdynamo_compiling() and
+                (emb_s := inputs_embeds[image_mask].numel()) != (img_s := image_features.numel())
+            ):
                 raise ValueError(
-                    f"Number of image features ({img_nel}) does not match number of special image tokens in the input "
-                    f"text ({emb_nel}). "
+                    f"Number of image features ({img_s}) does not match number of special image tokens in the input "
+                    f"text ({emb_s}). "
                 )
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)

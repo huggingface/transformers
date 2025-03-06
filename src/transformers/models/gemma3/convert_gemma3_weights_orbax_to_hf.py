@@ -327,10 +327,10 @@ def convert_transformer_weights(
             return zip([], [])
 
         if path.endswith("/mm_input_projection"):
-            converted_paths = ["mm_input_projection.weight"]
+            converted_paths = ["multimodal_projector.mm_input_projection_weight"]
             converted_weights = [weights]
         elif path.endswith("/mm_soft_embedding_norm"):
-            converted_paths = ["mm_soft_emb_norm.weight"]
+            converted_paths = ["multimodal_projector.mm_soft_emb_norm.weight"]
             converted_weights = [weights]
         else:
             raise ValueError(f"Upexpected subpath, `{path}`, in Embedder.")
