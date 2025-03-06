@@ -610,6 +610,8 @@ class RTDetrConvNormLayer(nn.Module):
 class RTDetrEncoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
         self.normalize_before = config.normalize_before
 
         # self-attention
@@ -618,14 +620,16 @@ class RTDetrEncoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
-        self.dropout = config.dropout
+
+        # feed-forward
         self.activation_fn = ACT2FN[config.encoder_activation_function]
-        self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
-        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+
+        # norms
         self.identity = nn.Identity()
+        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
