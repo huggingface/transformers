@@ -616,12 +616,13 @@ class RTDetrEncoderLayer(nn.Module):
         self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
         self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.identity = nn.Identity()
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
     ):
@@ -637,37 +638,39 @@ class RTDetrEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        residual = hidden_states
         if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+            norm1 = self.self_attn_layer_norm
+            norm2 = self.final_layer_norm
+            norm3 = self.identity
+        else:
+            norm1 = self.identity
+            norm2 = self.self_attn_layer_norm
+            norm3 = self.final_layer_norm
 
+        # self-attention step
+        residual = hidden_states
+        hidden_states = norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = norm2(hidden_states)
 
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        # feed-forward step
         residual = hidden_states
-
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-
         hidden_states = self.fc2(hidden_states)
-
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = norm3(hidden_states)
 
+        # clamp values if training
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
@@ -933,9 +936,6 @@ class RTDetrMultiheadAttention(nn.Module):
     def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -949,7 +949,7 @@ class RTDetrMultiheadAttention(nn.Module):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
             hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         # get queries, keys and values
         query_states = self.q_proj(hidden_states) * self.scaling
