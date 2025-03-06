@@ -233,6 +233,15 @@ class IsolatedParallel(TensorParallelLayer):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
 
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn),
+            partial(self._prepare_output_fn),
+        )
+
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -417,7 +426,7 @@ def translate_to_torch_parallel_style(style: str):
         raise ValueError(f"Unsupported parallel style value: {style}")
 
 
-def add_tensor_parallel_hooks_to_module(model, module, full_tp_plan, layer_name, current_module_plan, device_mesh):
+def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
     """
     Add hooks to the module holding the layer. Meaning:
     ```
@@ -444,12 +453,11 @@ def add_tensor_parallel_hooks_to_module(model, module, full_tp_plan, layer_name,
     # 2. We add hooks to the parrent module if needed
     if "." in layer_name:
         parrent_layer_name = layer_name.rsplit(".", 1)[0]
-        pattern = re.sub(r"\d+", "*", parrent_layer_name)
+        generic_name = re.sub(r"\d+", "*", parrent_layer_name)
         # The module itself needs hooks
-        if pattern in full_tp_plan:
-            module_plan = re.search(full_tp_plan, pattern)
+        if module_plan:=tp_plan.get(generic_name, False):
             module_to_tp_ = model.get_submodule(parrent_layer_name)
-            if not module_to_tp_._has_tp_hooks and module_plan:
+            if not hasattr(module_to_tp_, "_has_tp_hooks"):
                 module_to_tp_._has_tp_hooks = True
                 tp_layer = translate_to_torch_parallel_style(module_plan)
                 tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
@@ -468,17 +476,17 @@ def shard_and_distribute_module(
 
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
-    full_tp_plan = model._tp_plan
+    tp_plan = model._tp_plan
     module_to_tp = model.get_submodule(param_name)
     current_module_plan = None
-    full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
+    full_tp_plan_ = "|".join(tp_plan.keys()).replace("*", "[0-9]+")
     if plan := re.search(full_tp_plan_, param_name):
         match = re.sub("[0-9]+", "*", plan[0])
-        current_module_plan = full_tp_plan[match]
+        current_module_plan = tp_plan[match]
 
     # Add hooks to the module if not done yet
     add_tensor_parallel_hooks_to_module(
-        model, module_to_tp, full_tp_plan_, parameter_name, current_module_plan, device_mesh
+        model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh
     )
 
     if current_module_plan is not None:
