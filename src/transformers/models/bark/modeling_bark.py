@@ -1578,7 +1578,7 @@ class BarkModel(BarkPreTrainedModel):
         # Bark has a unique model structure, where the external class (`BarkModel`) doesn't need to inherit from
         # `GenerationMixin` (it has a non-standard generation method), but one of the internal models do
         # (`BarkSemanticModel`). This means that the base `can_generate()` will return `False`, but we need to
-        # override it so do `GenerationConfig` handling in multiple parts of the codebase.
+        # override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
         return True
 
     @property
