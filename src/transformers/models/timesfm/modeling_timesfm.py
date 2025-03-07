@@ -921,7 +921,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     ) -> Union[TimesFmOutputForPrediction, tuple[torch.Tensor, ...]]:
         r"""
         window_size (`int`, *optional*):
-            Window size of trend + residual decomposition. If None thenwe do not do decomposition.
+            Window size of trend + residual decomposition. If None then we do not do decomposition.
         future_target (`torch.Tensor`, *optional*):
             Optional future target time series to be used for loss computation.
         forecast_context_len (`int`, *optional*):
@@ -929,8 +929,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         return_forecast_on_context (`bool`, *optional*):
             True to return the forecast on the context when available, i.e. after the first input patch.
         truncate_negative (`bool`, *optional*):
-            Truncate to only non-negative values if all the contexts have non-negative values.
-            have non-ne ative values.
+            Truncate to only non-negative values if any of the contexts have non-negative values,
+            otherwise do nothing.
 
         Returns:
             A TimesFmOutputForPrediction object or a tuple containing:
