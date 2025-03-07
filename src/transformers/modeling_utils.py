@@ -4621,9 +4621,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return key, False
 
-    def _fix_state_dict_keys_on_load(
+    def _get_key_renaming_mapping(
         self,
-        state_dict: Dict[str, Any],
+        checkpoint_keys: List[str],
         key_mapping: Optional[Dict[str, str]] = None,
         loading_base_model_from_task_state_dict: bool = False,
         loading_task_model_from_base_state_dict: bool = False,
@@ -4635,9 +4635,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _prefix = f"{prefix}."
 
         renamed_keys = {}
-        new_state_dict = {}
-        state_dict_keys = list(state_dict.keys())
-        for key in state_dict_keys:
+        key_renaming_mapping = {}
+        for key in checkpoint_keys:
             # Class specific rename
             new_key, has_changed = self._fix_state_dict_key_on_load(key)
 
@@ -4660,7 +4659,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     continue
                 new_key = new_key[len(_prefix) :]
 
-            new_state_dict[new_key] = state_dict.pop(key)
+            key_renaming_mapping[key] = new_key
 
             # track gamma/beta rename for logging
             if has_changed:
@@ -4677,7 +4676,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             warning_msg += "If you are using a model from the Hub, consider submitting a PR to adjust these weights and help future users."
             logger.info_once(warning_msg)
 
-        return new_state_dict
+        return key_renaming_mapping
 
     @staticmethod
     def _fix_state_dict_key_on_save(key) -> Tuple[str, bool]:
@@ -4736,46 +4735,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
 
-        # Rename the keys (use dummy values in input dict as a small trick)
-        checkpoint_keys = list(
-            model._fix_state_dict_keys_on_load(
-                {k: "" for k in original_checkpoint_keys},
-                key_mapping,
-                loading_base_model_from_task_state_dict,
-                loading_task_model_from_base_state_dict,
-            ).keys()
+        # Find the key names that the model expects from the serialized keys
+        key_renaming_mapping = model._get_key_renaming_mapping(
+            original_checkpoint_keys,
+            key_mapping,
+            loading_base_model_from_task_state_dict,
+            loading_task_model_from_base_state_dict,
         )
-        # The weight_map has to be changed accordingly to match the keys that will be loaded, then renamed.
-        # Note that the device_map in contrary is expected to be in the format of the model weights directly, so we don't change it
-        if sharded_metadata is not None and "weight_map" in sharded_metadata.keys():
-            sharded_metadata["weight_map"] = model._fix_state_dict_keys_on_load(
-                sharded_metadata["weight_map"],
-                key_mapping,
-                loading_base_model_from_task_state_dict,
-                loading_task_model_from_base_state_dict,
-            )
-
-        # Make sure we are able to load base models as well as derived models (specific task models, with heads)
-        model_to_load = model
-        # In this case, we load a ForTaskModel with keys from a BaseModel -> only load keys to the BaseModel
-        if loading_task_model_from_base_state_dict:
-            model_to_load = getattr(model, prefix)
-            # We need to update the device map as well
-            if device_map is not None:
-                device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
-            # small sanity check: the base model should not contain task-specific head keys
-            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
-            base_model_expected_keys = list(model_to_load.state_dict().keys())
-            if any(
-                key[len(_prefix) :] in task_specific_expected_keys
-                and key[len(_prefix) :] not in base_model_expected_keys
-                for key in checkpoint_keys
-            ):
-                raise ValueError(
-                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
-                    "properly saved?"
-                )
-
+        checkpoint_keys = list(key_renaming_mapping.values())
+        
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
             cls,
@@ -4802,6 +4770,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # correctly initialize the missing keys if it was skipped before
         if _fast_init or low_cpu_mem_usage:
             model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
+
+        # Make sure we are able to load base models as well as derived models (specific task models, with heads)
+        model_to_load = model
+        # In this case, we load a ForTaskModel with keys from a BaseModel -> only load keys to the BaseModel
+        if loading_task_model_from_base_state_dict:
+            model_to_load = getattr(model, prefix)
+            # Here we need to remove the prefix we added to correctly find missing/unexpected keys, as we will load
+            # in the submodule
+            key_renaming_mapping = {k: v[len(_prefix) :] for k, v in key_renaming_mapping.items()}
+            checkpoint_keys = list(key_renaming_mapping.values())
+            # We need to update the device map as well
+            if device_map is not None:
+                device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
+            # small sanity check: the base model should not contain task-specific head keys
+            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
+            base_model_expected_keys = list(model_to_load.state_dict().keys())
+            if any(key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys):
+                raise ValueError(
+                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
+                    "properly saved?"
+                )
+
+        # Get reverse key mapping
+        reverse_key_renaming_mapping = {v: k for k,v in key_renaming_mapping.items()}
 
         # Set some modules to fp32 if needed
         if keep_in_fp32_modules is not None:
@@ -4835,12 +4827,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     weight_map = {p: checkpoint_files[0] for p in checkpoint_keys}
                 else:
                     folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
-                    weight_map = {p: os.path.join(folder, f) for p, f in sharded_metadata["weight_map"].items()}
+                    # Fix the weight map keys according to the key mapping
+                    weight_map = {key_renaming_mapping[k]: v for k, v in sharded_metadata["weight_map"].items() if k in key_renaming_mapping}
+                    weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
                     # Find potential checkpoints containing only offloaded weights
-                    disk_only_shard_files = get_disk_only_shard_files(device_map, sharded_metadata)
-                    disk_only_shard_files = [os.path.join(folder, f) for f in disk_only_shard_files]
+                    disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
                 disk_offload_index = {
-                    name: {"safetensors_file": file, "weight_name": name, "dtype": str_dtype}
+                    name: {"safetensors_file": file, "weight_name": reverse_key_renaming_mapping[name], "dtype": str_dtype}
                     for name, file in weight_map.items()
                     if param_device_map[name] == "disk"
                 }
@@ -4873,11 +4866,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expanded_device_map = expand_device_map(device_map, checkpoint_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
-        # This is a mapping from key that `model_to_load` expects to serialized key name
-        reverse_renaming_mapping = model_to_load._fix_state_dict_keys_on_load(
-            {k: k for k in original_checkpoint_keys}, key_mapping, loading_base_model_from_task_state_dict
-        )
-
         error_msgs = []
         mismatched_keys = []
         # Iterate on all the shards to load the weights
@@ -4894,9 +4882,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
 
-            state_dict = model_to_load._fix_state_dict_keys_on_load(
-                state_dict, key_mapping, loading_base_model_from_task_state_dict
-            )
+            # Fix the key names
+            state_dict = {key_renaming_mapping[k]: v for k,v in state_dict.items() if k in key_renaming_mapping}
 
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
@@ -4914,7 +4901,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         model_to_load,
                         state_dict,
                         expected_keys,
-                        reverse_renaming_mapping,
+                        reverse_key_renaming_mapping,
                         device_map=device_map,
                         disk_offload_folder=disk_offload_folder,
                         disk_offload_index=disk_offload_index,
@@ -5866,12 +5853,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
-def get_disk_only_shard_files(device_map, sharded_metadata):
+def get_disk_only_shard_files(device_map, weight_map):
     """
     Returns the list of shard files containing only weights offloaded to disk.
     """
     files_content = collections.defaultdict(list)
-    for weight_name, filename in sharded_metadata["weight_map"].items():
+    for weight_name, filename in weight_map.items():
         while len(weight_name) > 0 and weight_name not in device_map:
             weight_name = ".".join(weight_name.split(".")[:-1])
         files_content[filename].append(device_map[weight_name])
