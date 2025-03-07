@@ -54,6 +54,7 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.tensor_parallel import shard_and_distribute_module
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -182,7 +183,7 @@ if is_peft_available():
     from .utils import find_adapter_config_file
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.distributed.tensor import DTensor, Shard
+    pass
 
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 
@@ -756,6 +757,35 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
+def fix_tensor_type_and_device(
+    model, param_name, param, dtype=None, keep_in_fp32_modules=None
+) -> Union[str, torch.dtype]:
+    # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
+    # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
+    # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+
+    old_param = model
+    pre, last = param_name.rsplit(".", 1)
+    old_param = model.get_submodule(pre)
+    if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+        old_param = None
+
+    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+    # in int/uint/bool and not cast them.
+    param_casting_dtype = None
+    is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
+    if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
+            param_casting_dtype = torch.float32
+        elif dtype is not None:
+            param_casting_dtype = dtype
+        elif old_param is not None:
+            param_casting_dtype = old_param.dtype
+
+    return old_param is not None and old_param.is_contiguous(), param_casting_dtype
+
+
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
@@ -793,12 +823,6 @@ def _load_state_dict_into_meta_model(
     if device_map is not None:
         device_map_regex = "|".join(sorted(device_map.keys(), reverse=True))
 
-    # we need this later to initialize tensor parallelism
-    if device_mesh is not None:
-        full_tp_plan = model.config.base_model_tp_plan
-        for submodule in model.modules():
-            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
-
     file_pointer = None
     bin_state_dict = None
     if shard_file.endswith(".safetensors"):
@@ -818,8 +842,6 @@ def _load_state_dict_into_meta_model(
 
     is_quantized = hf_quantizer is not None
 
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
-
     for serialized_param_name, empty_param in state_dict.items():
         # serialized_param_name is the raw, serialized name
         # fixed_param_name is the model's equivalent
@@ -829,87 +851,37 @@ def _load_state_dict_into_meta_model(
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
-        param = (
-            file_pointer.get_slice(serialized_param_name)
-            if shard_file.endswith(".safetensors")
-            else bin_state_dict[serialized_param_name]
+        if shard_file.endswith(".safetensors"):
+            param = file_pointer.get_slice(serialized_param_name)
+        elif shard_file.endswith(".gguf"):
+            param = empty_param
+        else:
+            param = bin_state_dict[serialized_param_name]
+
+        to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
+            model,
+            param_name=fixed_param_name,
+            param=empty_param,
+            dtype=dtype,
+            keep_in_fp32_modules=keep_in_fp32_modules,
         )
 
-        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-        # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-
-        old_param = model
-        splits = fixed_param_name.split(".")
-        for split in splits:
-            # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
-            old_param = getattr(old_param, split, None)
-            if old_param is None:
-                break
-
-        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-            old_param = None
-
-        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-        # in int/uint/bool and not cast them.
-        param_casting_dtype = None
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-        if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-            if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(fixed_param_name):
-                param_casting_dtype = torch.float32
-            elif dtype is not None:
-                param_casting_dtype = dtype
-            elif old_param is not None:
-                param_casting_dtype = old_param.dtype
-
         if device_mesh is not None:  # In this case, the param is already on the correct device!
-            module_to_tp, param_type = get_module_from_name(model, fixed_param_name)
-            current_module_plan = None
-            full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
-            if plan := re.search(full_tp_plan_, fixed_param_name):
-                match = re.sub("[0-9]+", "*", plan[0])
-                current_module_plan = full_tp_plan[match]
-
-            if current_module_plan is not None:
-                tp_layer = translate_to_torch_parallel_style(current_module_plan)
-                rank = tensor_device
-                row, col = empty_param.shape
-                if "rowwise" == current_module_plan:
-                    param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
-                    shard = Shard(1)
-                    tp_layer.desired_input_layouts = (Shard(-1),)
-                elif "colwise" == current_module_plan:
-                    param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
-                    shard = Shard(0)
-                else:
-                    param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
-                    shard = Shard(0)
-                if param_casting_dtype is not None:
-                    param = param.to(param_casting_dtype)
-                if old_param.is_contiguous():
-                    param = param.contiguous()
-                local_parameter = DTensor.from_local(
-                    param,
-                    device_mesh=device_mesh,
-                    placements=[shard] * device_mesh.ndim,
-                )
-                if isinstance(module_to_tp.weight, nn.Parameter):
-                    local_parameter = torch.nn.Parameter(local_parameter)
-                module_to_tp.weight = local_parameter
-                input_fn = partial(tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts)
-                output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
-                distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
-            else:
-                param = param[:]
-                if old_param is not None and old_param.is_contiguous():
-                    param = param.contiguous()
-                module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
-
+            shard_and_distribute_module(
+                model,
+                param,
+                empty_param,
+                fixed_param_name,
+                param_casting_dtype,
+                to_contiguous,
+                tensor_device,  # the rank
+                device_mesh,
+            )
         else:
             param = param[:]
             if param_casting_dtype is not None:
                 param = param.to(param_casting_dtype)
-            if old_param is not None and old_param.is_contiguous():
+            if to_contiguous:
                 param = param.contiguous()
 
             if device_map is None:
@@ -966,6 +938,7 @@ def _load_state_dict_into_meta_model(
                         val_kwargs["requires_grad"] = False
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
+
     if file_pointer is not None:
         file_pointer.__exit__(None, None, None)
 
@@ -1409,7 +1382,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
     # code. For base models, this attribute comes from
-    # `config.base_model_tp_plan` during `post_init`.
+    # `config.base_model_tp_plan` during `__init__`.
+    # It should identify the layers exactly: if you want to TP model.language_model.layers.fc1
+    # by passing `tp_plan` to the init, it should be {"model.language_model.layers.fc1":"colwise"}
+    # for example.
     _tp_plan = None
 
     # A pipeline parallel plan specifying the layers which may not be present
@@ -1475,6 +1451,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
+        # TP plan should no be related to base model or base prefix: does not extend to multimodal models
+        # we update based on the underlying PreTrainedModel.
+
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
@@ -1482,10 +1461,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
+
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
-            self._tp_plan = self.config.base_model_tp_plan
             self._pp_plan = self.config.base_model_pp_plan
+
+        self._tp_plan = self._tp_plan or self.config.base_model_tp_plan
+        for name, module in self.named_children():
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
 
     def dequantize(self):
         """
@@ -4157,7 +4141,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dummy_model = cls(config)
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
-            resolved_archive_file = None
+            resolved_archive_file = gguf_file
             is_sharded = False
         else:
             resolved_archive_file = None
@@ -4590,10 +4574,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return key, False
 
     def rename_key(self, key):
+        """
+        When we load a LlamaModel from a checkpoint made using LlamaForCausalLM, the keys have an extra
+        prefix, which can be accessed in the `LlamaModel` via the `self.base_model_prefix` attribute.
+
+        But, what if there is an extra layer on top of it? You load a MistralModel from a LlavaForConditionalGeneration?
+        In that what you actually want is to cut whatever is left of the key.
+        """
         new_key = key
         if len(self.base_model_prefix) > 0:
-            if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
-                new_key = ".".join(key.split(".")[1:])
+            if not hasattr(self, self.base_model_prefix) and self.base_model_prefix in key:
+                new_key = key.split(self.base_model_prefix)[1]
             elif (
                 hasattr(self, self.base_model_prefix)
                 and not key.startswith(self.base_model_prefix)
@@ -4940,7 +4931,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
-                    resolved_archive_file=resolved_archive_file,
+                    shard_file=resolved_archive_file,
                     weights_only=weights_only,
                 )
             else:
