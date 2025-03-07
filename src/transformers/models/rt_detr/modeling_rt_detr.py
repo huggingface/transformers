@@ -820,20 +820,18 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
         self.im2col_step = 64
 
-        self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
-        self.n_heads = num_heads
-        self.n_points = n_points
+        self.hidden_size = config.d_model
+        self.num_levels = config.num_feature_levels
+        self.num_heads = num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
-        self.value_proj = nn.Linear(config.d_model, config.d_model)
-        self.output_proj = nn.Linear(config.d_model, config.d_model)
+        self.sampling_offsets = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points * 2)
+        self.attention_weights = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points)
+        self.value_proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.output_proj = nn.Linear(self.hidden_size, self.hidden_size)
 
         self.disable_custom_kernels = config.disable_custom_kernels
-
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
@@ -850,10 +848,11 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
+
         total_elements = sum(height * width for height, width in spatial_shapes_list)
         if total_elements != sequence_length:
             raise ValueError(
@@ -863,34 +862,45 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
             # we invert the attention_mask
-            value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
-        sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
-        )
-        attention_weights = self.attention_weights(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
-        )
-        attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
-        )
-        # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        num_coordinates = reference_points.shape[-1]
-        if num_coordinates == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :]
-                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
-            )
-        elif num_coordinates == 4:
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
-            )
-        else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            value = value.masked_fill(~attention_mask[..., None], 0.0)
 
-        if self.disable_custom_kernels or MultiScaleDeformableAttention is None or is_torchdynamo_compiling():
+        value = value.view(batch_size, sequence_length, self.num_heads, self.head_dim)
+
+        sampling_offsets = self.sampling_offsets(hidden_states)
+        sampling_offsets = sampling_offsets.view(
+            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+        )
+
+        attention_weights = self.attention_weights(hidden_states).view(
+            batch_size, num_queries, self.num_heads, self.num_levels * self.num_points
+        )
+        attention_weights = F.softmax(attention_weights, -1)
+        attention_weights = attention_weights.view(
+            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points
+        )
+
+        # batch_size, num_queries, num_heads, num_levels, num_points, 2
+        num_coordinates = reference_points.shape[-1]
+
+        if num_coordinates == 2:
+            height, width = spatial_shapes[..., 0], spatial_shapes[..., 1]
+            offset_normalizer = torch.stack([width, height], -1)
+            normalized_sampling_offsets = sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+            sampling_locations = reference_points[:, :, None, :, None, :] + normalized_sampling_offsets
+
+        elif num_coordinates == 4:
+            reference_points_xy = reference_points[:, :, None, :, None, :2]
+            offset = sampling_offsets / self.num_points * reference_points[:, :, None, :, None, 2:] * 0.5
+            sampling_locations = reference_points_xy + offset
+
+        else:
+            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {num_coordinates}")
+
+        if (
+            self.disable_custom_kernels  # manually disabled in config
+            or MultiScaleDeformableAttention is None  # error while loading the kernel
+            or is_torchdynamo_compiling()  # torch.compile / torch.export mode
+        ):
             # PyTorch implementation
             output = multi_scale_deformable_attention(
                 value, spatial_shapes_list, sampling_locations, attention_weights
