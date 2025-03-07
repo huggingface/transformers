@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 The GGUF format also supports many quantized data types (refer to [quantization type table](https://hf.co/docs/hub/en/gguf#quantization-types) for a complete list of supported quantization types) which saves a significant amount of memory, making inference with large models like Whisper and Llama feasible on local and edge devices.
 
-Transformers supports loading models stored in the GGUF format for further training or finetuning. Note that the GGUF format is **dequantized to a higher precision (fp16/bf16/fp32)** where the full model weights are available and compatible with PyTorch.
+Transformers supports loading models stored in the GGUF format for further training or finetuning. The GGUF checkpoint is **dequantized to fp32** where the full model weights are available and compatible with PyTorch.
 
 > [!TIP]
 > Models that support GGUF include Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, and Starcoder2 and [more](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/ggml.py)
