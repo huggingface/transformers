@@ -1431,23 +1431,34 @@ class BartModel(BartPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.shared = BartScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.decoder = BartDecoder(config)
-        self.encoder = BartEncoder(config, self.decoder.embed_tokens)
+        self.encoder = BartEncoder(config, self.shared)
+        self.decoder = BartDecoder(config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
+            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens, need check here, see issue #36247
+            if self.shared.weight.device == torch.device(
+                "meta"
+            ) and self.decoder.embed_tokens.weight.device != torch.device("meta"):
+                self._tie_or_clone_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
+                self._tie_or_clone_weights(self.shared, self.decoder.embed_tokens)
+            else:
+                self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+                self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     def get_input_embeddings(self):
-        return self.decoder.embed_tokens
+        return self.shared
 
     def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
-        self.encoder.embed_tokens = self.decoder.embed_tokens
+        self.shared = value
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
 
     def get_encoder(self):
         return self.encoder
@@ -1561,23 +1572,11 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.model = BartModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.decoder.embed_tokens.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.decoder.embed_tokens.num_embeddings, bias=False)
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.decoder.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.decoder.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def get_encoder(self):
         return self.model.get_encoder()
