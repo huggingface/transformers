@@ -1340,13 +1340,14 @@ def _get_device_map(
         special_dtypes = {}
         if hf_quantizer is not None:
             special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
-        special_dtypes.update(
-            {
-                name: torch.float32
-                for name, _ in model.named_parameters()
-                if any(m in name for m in keep_in_fp32_modules)
-            }
-        )
+        if keep_in_fp32_modules is not None:
+            special_dtypes.update(
+                {
+                    name: torch.float32
+                    for name, _ in model.named_parameters()
+                    if any(m in name for m in keep_in_fp32_modules)
+                }
+            )
 
         target_dtype = torch_dtype
 
@@ -4449,7 +4450,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config = model.config
 
         # Find fp32 modules if needed
-        keep_in_fp32_modules = []
+        keep_in_fp32_modules = None
         if use_keep_in_fp32_modules:
             if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
@@ -4770,7 +4771,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
-        if keep_in_fp32_modules is not None and len(keep_in_fp32_modules) > 0:
+        if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
                 if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
