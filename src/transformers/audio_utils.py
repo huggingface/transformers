@@ -22,6 +22,11 @@ from typing import Optional, Union
 import numpy as np
 
 
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]
+]
+
+
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
     """
     Convert frequency from hertz to mels.
