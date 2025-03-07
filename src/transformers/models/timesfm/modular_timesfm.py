@@ -469,7 +469,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TimesFmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     main_input_name = "inputs"
-    _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -605,7 +604,9 @@ class TimesFmModel(TimesFmPreTrainedModel):
             hidden_dims=config.intermediate_size,
         )
         self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.hidden_size)
-        self.layers = nn.ModuleList([TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [TimesFmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         if self.config.use_positional_embedding:
             self.position_emb = TimesFmPositionalEmbedding(config=config)
 
