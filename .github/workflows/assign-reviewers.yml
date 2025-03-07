@@ -3,7 +3,7 @@ on:
   pull_request_target:
     branches:
       - main
-    types: [opened, ready_for_review, reopened]
+    types: [ready_for_review]
 
 jobs:
   assign_reviewers:
