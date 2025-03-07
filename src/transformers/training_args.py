@@ -182,8 +182,11 @@ class OptimizerNames(ExplicitEnum):
     LOMO = "lomo"
     ADALOMO = "adalomo"
     GROKADAMW = "grokadamw"
+    SCHEDULE_FREE_RADAM = "schedule_free_radam"
     SCHEDULE_FREE_ADAMW = "schedule_free_adamw"
     SCHEDULE_FREE_SGD = "schedule_free_sgd"
+    APOLLO_ADAMW = "apollo_adamw"
+    APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -229,7 +232,7 @@ class TrainingArguments:
     command line.
 
     Parameters:
-        output_dir (`str`):
+        output_dir (`str`, *optional*, defaults to `"trainer_output"`):
             The output directory where the model predictions and checkpoints will be written.
         overwrite_output_dir (`bool`, *optional*, defaults to `False`):
             If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
@@ -448,8 +451,8 @@ class TrainingArguments:
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [wandb](https://www.wandb.com/),
-            [mlflow](https://www.mlflow.org/) and [comet](https://www.comet.com/site) logging. If not specified, will
-            be the same as `output_dir`.
+            [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and [swanlab](https://swanlab.cn)
+            logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -539,7 +542,7 @@ class TrainingArguments:
                      all-gathers.
                 - use_orig_params (`bool`, *optional*, defaults to `True`)
                     If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
-                    frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
+                    frozen and trainable parameters. Useful in cases such as parameter-efficient fine-tuning. Please
                     refer this
                     [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
                 - sync_module_states (`bool`, *optional*, defaults to `True`)
@@ -566,9 +569,12 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
-
+        tp_size (`int`, *optional*):
+            Use tp_size to enable PyTorch tensor parallelism. Tensor parallelism support is only available to models having `base_tp_plan`
+            in their respective config classes.
+            Set a value greater than 1 to activate TP. The same is used to prepare device mesh internally. Requires accelerate>1.3.0.
         deepspeed (`str` or `dict`, *optional*):
-            Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
+            Use [Deepspeed](https://github.com/deepspeedai/DeepSpeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
 
@@ -598,8 +604,8 @@ class TrainingArguments:
                     all workers.
                 - use_seedable_sampler (`bool`, *optional*, defaults to `True`):
                     Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-                    training results are fully reproducable using a different sampling technique. While seed-to-seed results
-                    may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+                    training results are fully reproducible using a different sampling technique. While seed-to-seed results
+                    may differ, on average the differences are negligible when using multiple different seeds to compare. Should
                     also be ran with [`~utils.set_seed`] for the best results.
                 - use_configured_state (`bool`, *optional*, defaults to `False`):
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
@@ -636,8 +642,8 @@ class TrainingArguments:
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
-            integrations.
+            `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
+            for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -789,11 +795,10 @@ class TrainingArguments:
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
-            The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
-            https://arxiv.org/abs/2403.03507
-            See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
-            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
-            only.
+            The target modules to optimize, i.e. the module names that you would like to train.
+            Currently used for the GaLore algorithm (https://arxiv.org/abs/2403.03507) and APOLLO algorithm (https://arxiv.org/abs/2412.05270).
+            See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
+            You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
         batch_eval_metrics (`Optional[bool]`, defaults to `False`):
             If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
@@ -811,11 +816,19 @@ class TrainingArguments:
             Whether enable [Liger](https://github.com/linkedin/Liger-Kernel) Kernel for LLM model training.
             It can effectively increase multi-GPU training throughput by ~20% and reduces memory usage by ~60%, works out of the box with
             flash attention, PyTorch FSDP, and Microsoft DeepSpeed. Currently, it supports llama, mistral, mixtral and gemma models.
+
+        average_tokens_across_devices (`bool`, *optional*, defaults to `False`):
+            Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
+            num_tokens_in_batch for precise loss calculation. Reference:
+            https://github.com/huggingface/transformers/issues/34242
     """
 
     framework = "pt"
-    output_dir: str = field(
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    output_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
+        },
     )
     overwrite_output_dir: bool = field(
         default=False,
@@ -1174,7 +1187,9 @@ class TrainingArguments:
 
     run_name: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional descriptor for the run. Notably used for wandb, mlflow and comet logging."},
+        metadata={
+            "help": "An optional descriptor for the run. Notably used for wandb, mlflow comet and swanlab logging."
+        },
     )
     disable_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
@@ -1240,6 +1255,18 @@ class TrainingArguments:
             )
         },
     )
+    tp_size: Optional[int] = field(
+        default=0,
+        metadata={
+            "help": (
+                "Use tp_size to enable pytorch tensor parallelism."
+                "Tensor parallelism support is only available to models having `base_tp_plan` in their respective config classes."
+                "Set a value greater than 1 to activate TP."
+                "The same is used to prepare device mesh internally."
+                "Requires accelerate>1.3.0."
+            )
+        },
+    )
     fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
         default=None,
         metadata={
@@ -1253,7 +1280,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with the internal Accelerator object initializtion. The value is either a "
+                "Config to be used with the internal Accelerator object initialization. The value is either a "
                 "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1503,7 +1530,7 @@ class TrainingArguments:
     neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
-            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instruction fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
         },
     )
 
@@ -1548,10 +1575,18 @@ class TrainingArguments:
     )
 
     def __post_init__(self):
+        # Set default output_dir if not provided
+        if self.output_dir is None:
+            self.output_dir = "trainer_output"
+            logger.info(
+                "No output directory specified, defaulting to 'trainer_output'. "
+                "To change this behavior, specify --output_dir when creating TrainingArguments."
+            )
+
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
             passed_value = getattr(self, field)
-            # We only want to do this if the str starts with a bracket to indiciate a `dict`
+            # We only want to do this if the str starts with a bracket to indicate a `dict`
             # else its likely a filename if supported
             if isinstance(passed_value, str) and passed_value.startswith("{"):
                 loaded_dict = json.loads(passed_value)
@@ -1816,7 +1851,7 @@ class TrainingArguments:
                     torch.backends.cudnn.allow_tf32 = True
             else:
                 logger.warning(
-                    "The speedups for torchdynamo mostly come wih GPU Ampere or higher and which is not detected here."
+                    "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
                 )
         if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
@@ -1957,6 +1992,14 @@ class TrainingArguments:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
+        if self.tp_size > 1:
+            if not is_accelerate_available("1.3.1"):
+                raise NotImplementedError(
+                    "TP using PyTorch requires Accelerate version `accelerate` >= 1.3.1. "
+                    "This is not supported and we recommend you to update your version."
+                )
+            os.environ["ACCELERATE_USE_TP"] = "true"
+            os.environ["TP_SIZE"] = str(self.tp_size)
         # accelerate integration for FSDP
         if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
             os.environ["ACCELERATE_USE_FSDP"] = "true"
@@ -2807,8 +2850,8 @@ class TrainingArguments:
             report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed,
-                `"none"` for no integrations.
+                `"neptune"`, `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations
+                installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):

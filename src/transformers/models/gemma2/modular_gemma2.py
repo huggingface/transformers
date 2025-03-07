@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache
+from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -29,7 +29,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import is_torchdynamo_compiling, logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -131,6 +131,11 @@ class Gemma2Config(PretrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
@@ -344,7 +349,7 @@ class Gemma2DecoderLayer(nn.Module):
             # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
             # from the left, with an offset if we are beyond the sliding window
             else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
+                min_dtype = torch.finfo(attention_mask.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
@@ -545,7 +550,7 @@ class Gemma2Model(GemmaModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
-        if isinstance(past_key_values, HybridCache):
+        if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
@@ -586,10 +591,26 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-2-9b")
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
+
+        >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 
         >>> prompt = "What is your favorite condiment?"
@@ -668,8 +689,13 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]

@@ -176,6 +176,8 @@ class MusicgenDecoderTester:
 @require_torch
 class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenModel, MusicgenForCausalLM) if is_torch_available() else ()
+    # Doesn't run generation tests. See `greedy_sample_model_classes` below
+    all_generative_model_classes = ()
     greedy_sample_model_classes = (
         (MusicgenForCausalLM,) if is_torch_available() else ()
     )  # we don't want to run all the generation tests, only a specific subset
@@ -670,6 +672,15 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
+    @unittest.skip(
+        reason=(
+            "MusicGen has a custom set of generation tests that rely on `GenerationTesterMixin`, controlled by "
+            "`greedy_sample_model_classes`"
+        )
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
+
 
 def prepare_musicgen_inputs_dict(
     config,
@@ -801,6 +812,8 @@ class MusicgenTester:
 @require_torch
 class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
+    # Doesn't run generation tests. See `greedy_sample_model_classes` below
+    all_generative_model_classes = ()
     greedy_sample_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-audio": MusicgenForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False  # training is not supported yet for MusicGen
@@ -1758,6 +1771,15 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             self.assertTrue(all(audio_encoder_grads))
             self.assertFalse(all(text_encoder_grads))
+
+    @unittest.skip(
+        reason=(
+            "MusicGen has a custom set of generation tests that rely on `GenerationTesterMixin`, controlled by "
+            "`greedy_sample_model_classes`"
+        )
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):

@@ -1120,19 +1120,25 @@ def get_model_param_count(model, trainable_only=False):
     return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
-def get_parameter_names(model, forbidden_layer_types):
+def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None):
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
+    if forbidden_layer_names is None:
+        forbidden_layer_names = []
     result = []
     for name, child in model.named_children():
+        child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
         result += [
             f"{name}.{n}"
-            for n in get_parameter_names(child, forbidden_layer_types)
+            for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
+            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
         ]
-    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
-    result += list(model._parameters.keys())
+    # Add model specific parameters that are not in any child
+    result += [
+        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+    ]
     return result
 
 
@@ -1225,8 +1231,8 @@ class AcceleratorConfig:
             all workers.
         use_seedable_sampler (`bool`, *optional*, defaults to `True`):
             Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
@@ -1278,8 +1284,8 @@ class AcceleratorConfig:
         default=True,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )

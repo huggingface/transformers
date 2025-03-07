@@ -78,6 +78,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntModel"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
+        ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
         ("data2vec-text", "Data2VecTextModel"),
@@ -88,6 +89,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("decision_transformer", "DecisionTransformerModel"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
+        ("depth_pro", "DepthProModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
         ("diffllama", "DiffLlamaModel"),
@@ -130,6 +132,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
         ("granite", "GraniteModel"),
         ("granitemoe", "GraniteMoeModel"),
+        ("granitemoeshared", "GraniteMoeSharedModel"),
         ("graphormer", "GraphormerModel"),
         ("grounding-dino", "GroundingDinoModel"),
         ("groupvit", "GroupViTModel"),
@@ -237,6 +240,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
         ("rt_detr", "RTDetrModel"),
+        ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
@@ -246,7 +250,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("siglip", "SiglipModel"),
+        ("siglip2", "Siglip2Model"),
         ("siglip_vision_model", "SiglipVisionModel"),
+        ("smolvlm", "SmolVLMModel"),
+        ("smolvlm_vision", "SmolVLMVisionTransformer"),
         ("speech_to_text", "Speech2TextModel"),
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
@@ -523,6 +530,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJForCausalLM"),
         ("granite", "GraniteForCausalLM"),
         ("granitemoe", "GraniteMoeForCausalLM"),
+        ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
         ("helium", "HeliumForCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
@@ -592,9 +600,11 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
+        ("dab-detr", "DabDetrModel"),
         ("data2vec-vision", "Data2VecVisionModel"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
+        ("depth_pro", "DepthProModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
         ("dinat", "DinatModel"),
@@ -712,6 +722,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("siglip", "SiglipForImageClassification"),
+        ("siglip2", "Siglip2ForImageClassification"),
         ("swiftformer", "SwiftFormerForImageClassification"),
         ("swin", "SwinForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
@@ -807,6 +818,7 @@ MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
         ("aria", "AriaForConditionalGeneration"),
+        ("aya_vision", "AyaVisionForConditionalGeneration"),
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("chameleon", "ChameleonForConditionalGeneration"),
@@ -828,6 +840,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("pixtral", "LlavaForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
         ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
+        ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
@@ -890,10 +903,12 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
+        ("dab-detr", "DabDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
+        ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
@@ -913,6 +928,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for depth estimation mapping
         ("depth_anything", "DepthAnythingForDepthEstimation"),
+        ("depth_pro", "DepthProForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),
         ("glpn", "GLPNForDepthEstimation"),
         ("zoedepth", "ZoeDepthForDepthEstimation"),
@@ -1390,6 +1406,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
         ("siglip", "SiglipModel"),
+        ("siglip2", "Siglip2Model"),
     ]
 )
 

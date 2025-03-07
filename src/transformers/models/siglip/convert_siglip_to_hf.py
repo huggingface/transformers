@@ -19,7 +19,8 @@ URL: https://github.com/google-research/big_vision/tree/main
 
 import argparse
 import collections
-from pathlib import Path
+import os
+from typing import Tuple
 
 import numpy as np
 import requests
@@ -28,13 +29,47 @@ from huggingface_hub import hf_hub_download
 from numpy import load
 from PIL import Image
 
-from transformers import SiglipConfig, SiglipImageProcessor, SiglipModel, SiglipProcessor, SiglipTokenizer
+from transformers import (
+    GemmaTokenizerFast,
+    SiglipConfig,
+    SiglipImageProcessor,
+    SiglipModel,
+    SiglipProcessor,
+    SiglipTokenizer,
+)
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+
+MODEL_CONFIGS = {
+    "base": {
+        "hidden_size": 768,
+        "intermediate_size": 3072,
+        "num_hidden_layers": 12,
+        "num_attention_heads": 12,
+    },
+    "large": {
+        "hidden_size": 1024,
+        "intermediate_size": 4096,
+        "num_hidden_layers": 24,
+        "num_attention_heads": 16,
+    },
+    "giant-opt": {
+        "hidden_size": 1536,
+        "intermediate_size": 6144,
+        "num_hidden_layers": 40,
+        "num_attention_heads": 16,
+    },
+    "so400m": {
+        "hidden_size": 1152,
+        "intermediate_size": 4304,
+        "num_hidden_layers": 27,
+        "num_attention_heads": 16,
+    },
+}
 
 model_name_to_checkpoint = {
     # base checkpoints
@@ -49,56 +84,146 @@ model_name_to_checkpoint = {
     "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
     # so400m checkpoints
     "siglip-so400m-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
+    # ----------------- v2 -----------------
+    # base checkpoints
+    "siglip2-base-patch32-256": "gv-hf/siglip2/siglip2_b32_256.npz",
+    "siglip2-base-patch16-224": "gv-hf/siglip2/siglip2_b16_224.npz",
+    "siglip2-base-patch16-256": "gv-hf/siglip2/siglip2_b16_256.npz",
+    "siglip2-base-patch16-384": "gv-hf/siglip2/siglip2_b16_384.npz",
+    "siglip2-base-patch16-512": "gv-hf/siglip2/siglip2_b16_512.npz",
+    # large checkpoints
+    "siglip2-large-patch16-256": "gv-hf/siglip2/siglip2_l16_256.npz",
+    "siglip2-large-patch16-384": "gv-hf/siglip2/siglip2_l16_384.npz",
+    "siglip2-large-patch16-512": "gv-hf/siglip2/siglip2_l16_512.npz",
+    # giant opt checkpoints
+    "siglip2-giant-opt-patch16-256": "gv-hf/siglip2/siglip2_g-opt16_256.npz",
+    "siglip2-giant-opt-patch16-384": "gv-hf/siglip2/siglip2_g-opt16_384.npz",
+    # so400m checkpoints
+    "siglip2-so400m-patch14-224": "gv-hf/siglip2/siglip2_so400m14_224.npz",
+    "siglip2-so400m-patch14-384": "gv-hf/siglip2/siglip2_so400m14_384.npz",
+    "siglip2-so400m-patch16-256": "gv-hf/siglip2/siglip2_so400m16_256.npz",
+    "siglip2-so400m-patch16-384": "gv-hf/siglip2/siglip2_so400m16_384.npz",
+    "siglip2-so400m-patch16-512": "gv-hf/siglip2/siglip2_so400m16_512.npz",
 }
 
-model_name_to_image_size = {
-    "siglip-base-patch16-224": 224,
-    "siglip-base-patch16-256": 256,
-    "siglip-base-patch16-384": 384,
-    "siglip-base-patch16-512": 512,
-    "siglip-large-patch16-256": 256,
-    "siglip-large-patch16-384": 384,
-    "siglip-base-patch16-256-i18n": 256,
-    "siglip-so400m-patch14-384": 384,
-}
+# ------------------------------------------------------------------------------------------------------
+#  CONFIG
+# ------------------------------------------------------------------------------------------------------
+
+
+def get_image_size_from_model_name(model_name: str) -> int:
+    if "-i18n" not in model_name:
+        size = model_name.split("-")[-1]
+    else:
+        size = model_name.split("-")[-2]
+    return int(size)
+
+
+def get_patch_size_from_model_name(model_name: str) -> int:
+    patch_str = [x for x in model_name.split("-") if "patch" in x][0]
+    return int(patch_str[-2:])
+
+
+def get_vocab_size_from_model_name(model_name: str) -> int:
+    if "siglip2" in model_name:
+        vocab_size = 256000
+    elif "-i18n" in model_name:
+        vocab_size = 250000
+    else:
+        vocab_size = 32000
+    return vocab_size
+
+
+def get_vocab_file_from_model_name(model_name: str) -> str:
+    # get vocab file
+    if "i18n" in model_name:
+        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
+    else:
+        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
+    return vocab_file
+
+
+def get_text_and_vision_vit_variants(model_name: str) -> Tuple[str, str]:
+    variant = model_name.split("-")[1] if "giant-opt" not in model_name else "giant-opt"
+    return {
+        "base": ("base", "base"),
+        "large": ("large", "large"),
+        "so400m": ("so400m", "so400m"),
+        # g-opt siglip2 is not symmetric
+        "giant-opt": ("so400m", "giant-opt"),
+    }[variant]
 
 
 def get_siglip_config(model_name):
-    config = SiglipConfig()
+    text_variant, vision_variant = get_text_and_vision_vit_variants(model_name)
+    text_config = MODEL_CONFIGS[text_variant].copy()
+    vision_config = MODEL_CONFIGS[vision_variant].copy()
 
-    vocab_size = 250000 if "i18n" in model_name else 32000
-    image_size = model_name_to_image_size[model_name]
-    patch_size = 16 if "patch16" in model_name else 14
+    text_config["vocab_size"] = get_vocab_size_from_model_name(model_name)
+    vision_config["image_size"] = get_image_size_from_model_name(model_name)
+    vision_config["patch_size"] = get_patch_size_from_model_name(model_name)
 
-    # size of the architecture
-    config.vision_config.image_size = image_size
-    config.vision_config.patch_size = patch_size
-    config.text_config.vocab_size = vocab_size
+    if text_config["hidden_size"] != vision_config["hidden_size"]:
+        text_config["projection_size"] = vision_config["hidden_size"]
 
-    if "base" in model_name:
-        pass
-    elif "large" in model_name:
-        config.text_config.hidden_size = 1024
-        config.text_config.intermediate_size = 4096
-        config.text_config.num_hidden_layers = 24
-        config.text_config.num_attention_heads = 16
-        config.vision_config.hidden_size = 1024
-        config.vision_config.intermediate_size = 4096
-        config.vision_config.num_hidden_layers = 24
-        config.vision_config.num_attention_heads = 16
-    elif "so400m" in model_name:
-        config.text_config.hidden_size = 1152
-        config.text_config.intermediate_size = 4304
-        config.text_config.num_hidden_layers = 27
-        config.text_config.num_attention_heads = 16
-        config.vision_config.hidden_size = 1152
-        config.vision_config.intermediate_size = 4304
-        config.vision_config.num_hidden_layers = 27
-        config.vision_config.num_attention_heads = 16
+    return SiglipConfig(text_config=text_config, vision_config=vision_config)
+
+
+# ------------------------------------------------------------------------------------------------------
+#  PROCESSING
+# ------------------------------------------------------------------------------------------------------
+
+
+def get_tokenizer(model_name: str) -> GemmaTokenizerFast:
+    if "siglip2" in model_name:
+        tokenizer = GemmaTokenizerFast.from_pretrained(
+            "google/gemma-2-9b-it",
+            add_bos_token=False,
+            add_eos_token=True,
+            padding_side="right",
+            do_lower_case=True,
+            # important: make tokenizer NOT return attention_mask since original one doesn't require it
+            model_input_names=["input_ids"],
+        )
     else:
-        raise ValueError("Model not supported")
+        # for siglip v1
+        vocab_file = get_vocab_file_from_model_name(model_name)
+        # important: make tokenizer not return attention_mask since original one doesn't require it
+        tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
+    return tokenizer
 
-    return config
+
+def get_image_processor(model_name: str) -> SiglipImageProcessor:
+    image_size = get_image_size_from_model_name(model_name)
+    size = {"height": image_size, "width": image_size}
+    if "siglip2" in model_name:
+        image_processor = SiglipImageProcessor(size=size, resample=2)  # bilinear resampling
+    else:
+        image_processor = SiglipImageProcessor(size=size)
+    return image_processor
+
+
+# ------------------------------------------------------------------------------------------------------
+#  CONVERT FUNCTIONS
+# ------------------------------------------------------------------------------------------------------
+
+
+def split_encoderblock_layers(state_dict: dict) -> dict:
+    """
+    Split the encoderblock weight into layers. In some cases they are concatenated in
+    the original checkpoints.
+    """
+    # Make shallow copy
+    state_dict = state_dict.copy()
+    # Split encoderblock weight into layers
+    keys = list(state_dict.keys())
+    for key in keys:
+        if "/encoderblock/" in key:
+            weight = state_dict.pop(key)
+            for i, weight_i in enumerate(weight):
+                new_name = key.replace("encoderblock", f"encoderblock_{i}")
+                state_dict[new_name] = weight_i
+    return state_dict
 
 
 def create_rename_keys(config):
@@ -258,23 +383,21 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     Copy/paste/tweak model's weights to our SigLIP structure.
     """
 
-    # define default SigLIP configuration
+    # Define default SigLIP configuration
     config = get_siglip_config(model_name)
 
-    # get checkpoint
+    # Get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
+    if not os.path.exists(checkpoint):
+        org, repo_id, *filepath = checkpoint.split("/")
+        checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
 
-    # get vocab file
-    if "i18n" in model_name:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
-    else:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
-
-    # load original state dict
+    # Load original state dict
     data = load(checkpoint)
     state_dict = flatten_nested_dict(data)
+    state_dict = split_encoderblock_layers(state_dict)
 
-    # remove and rename some keys
+    # Remove and rename some keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest, config)
@@ -282,64 +405,61 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     # qkv matrices of attention pooling head need special treatment
     read_in_q_k_v_head(state_dict, config)
 
-    # load HuggingFace model
+    # Load HuggingFace model
     model = SiglipModel(config).eval()
     model.load_state_dict(state_dict)
 
-    # create processor
-    # important: make tokenizer not return attention_mask since original one doesn't require it
-    image_size = config.vision_config.image_size
-    size = {"height": image_size, "width": image_size}
-    image_processor = SiglipImageProcessor(size=size)
-    tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
+    # Create processor
+    image_processor = get_image_processor(model_name)
+    tokenizer = get_tokenizer(model_name)
     processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-    # verify on dummy images and texts
+    # Verify forward pass on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
     image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
     url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
     image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
     texts = ["an apple", "a picture of an apple"]
 
-    inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", padding="max_length")
-
-    # verify input_ids against original ones
-    if image_size == 224:
-        filename = "siglip_pixel_values.pt"
-    elif image_size == 256:
-        filename = "siglip_pixel_values_256.pt"
-    elif image_size == 384:
-        filename = "siglip_pixel_values_384.pt"
-    elif image_size == 512:
-        filename = "siglip_pixel_values_512.pt"
-    else:
-        raise ValueError("Image size not supported")
-
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
-    original_pixel_values = torch.load(filepath)
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
-    original_input_ids = torch.load(filepath)
-
-    if "i18n" not in model_name:
-        assert inputs.input_ids.tolist() == original_input_ids.tolist()
-
-    print("Mean of original pixel values:", original_pixel_values.mean())
-    print("Mean of new pixel values:", inputs.pixel_values.mean())
-
-    # note: we're testing with original pixel values here since we don't have exact pixel values
+    inputs = processor(images=[image_1, image_2], text=texts, padding="max_length", max_length=64, return_tensors="pt")
     with torch.no_grad():
-        outputs = model(input_ids=inputs.input_ids, pixel_values=original_pixel_values)
-
-    # with torch.no_grad():
-    #     outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
-
-    print(outputs.logits_per_image[:3, :3])
-
-    probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
-    print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
-    print(f"{probs[0][1]:.1%} that image 0 is '{texts[1]}'")
+        outputs = model(**inputs)
 
     if verify_logits:
+        image_size = config.vision_config.image_size
+
+        # verify input_ids against original ones
+        if image_size == 224:
+            filename = "siglip_pixel_values.pt"
+        elif image_size == 256:
+            filename = "siglip_pixel_values_256.pt"
+        elif image_size == 384:
+            filename = "siglip_pixel_values_384.pt"
+        elif image_size == 512:
+            filename = "siglip_pixel_values_512.pt"
+        else:
+            raise ValueError("Image size not supported")
+
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
+        original_pixel_values = torch.load(filepath)
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
+        original_input_ids = torch.load(filepath)
+
+        if "i18n" not in model_name:
+            assert inputs.input_ids.tolist() == original_input_ids.tolist()
+
+        print("Mean of original pixel values:", original_pixel_values.mean())
+        print("Mean of new pixel values:", inputs.pixel_values.mean())
+
+        # note: we're testing with original pixel values here since we don't have exact pixel values
+        with torch.no_grad():
+            outputs = model(input_ids=original_input_ids, pixel_values=original_pixel_values)
+        print(outputs.logits_per_image[:3, :3])
+
+        probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
+        print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+        print(f"{probs[0][1]:.1%} that image 0 is '{texts[1]}'")
+
         if model_name == "siglip-base-patch16-224":
             expected_slice = torch.tensor(
                 [[-2.9621, -2.1672], [-0.2713, 0.2910]],
@@ -375,15 +495,16 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
         print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        pytorch_dump_folder_path = os.path.join(pytorch_dump_folder_path, model_name)
+        os.makedirs(pytorch_dump_folder_path, exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
         print(f"Saving processor to {pytorch_dump_folder_path}")
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"s0225/{model_name}", private=True)
+        processor.push_to_hub(f"s0225/{model_name}", private=True)
 
 
 if __name__ == "__main__":
@@ -401,7 +522,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verify_logits",
-        action="store_false",
+        action="store_true",
         help="Whether to verify logits against the original implementation.",
     )
     parser.add_argument(

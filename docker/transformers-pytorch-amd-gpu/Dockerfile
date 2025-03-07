@@ -4,13 +4,15 @@ LABEL maintainer="Hugging Face"
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
-    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip python3-dev ffmpeg && \
+    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip python3-dev ffmpeg git-lfs && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
+RUN git lfs install
+
 RUN python3 -m pip install --no-cache-dir --upgrade pip numpy
 
-RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2.4
 
 RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
 

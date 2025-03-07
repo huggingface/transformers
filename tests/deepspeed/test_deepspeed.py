@@ -170,7 +170,6 @@ params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optim
 
 
 @require_deepspeed
-@require_torch_accelerator
 class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     """
     Testing non-Trainer DeepSpeed integration
@@ -194,12 +193,51 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # reset the ds config global so that tests state doesn't leak
         unset_hf_deepspeed_config()
 
+    def test_init_zero3(self):
+        # test that zero.Init() works correctly
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # now remove zero optimization
+        del ds_config["zero_optimization"]
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertFalse(dschf.is_zero3())
+        self.assertFalse(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    AutoModel.from_pretrained(T5_TINY)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+    @require_torch_accelerator
     def test_init_zero3_fp16(self):
         # test that zero.Init() works correctly under zero3/fp16
         ds_config = {
             "train_batch_size": 1,
             "zero_optimization": {
                 "stage": 3,
+            },
+            "fp16": {
+                "enabled": True,
             },
         }
 
@@ -898,7 +936,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.check_trainer_state_are_the_same(state, state1)
 
             # Finally, should be able to resume with the same trainer/same deepspeed engine instance
-            # XXX: but currently this not possible due DS bug: https://github.com/microsoft/DeepSpeed/issues/1612
+            # XXX: but currently this not possible due DS bug: https://github.com/deepspeedai/DeepSpeed/issues/1612
             # trainer.train(resume_from_checkpoint=checkpoint)
             # a workaround needs to be used that re-creates the deepspeed engine
 
@@ -975,7 +1013,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
     def test_load_best_model(self, stage, dtype):
         # Test that forced deepspeed reinit doesn't break the model. the forced re-init after
         # loading the best model in Trainer is there to workaround this bug in Deepspeed
-        # https://github.com/microsoft/DeepSpeed/issues/1612
+        # https://github.com/deepspeedai/DeepSpeed/issues/1612
         #
         # The test is derived from a repro script submitted in this Issue:
         # https://github.com/huggingface/transformers/issues/17114
