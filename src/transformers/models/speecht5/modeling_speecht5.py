@@ -2631,6 +2631,13 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @classmethod
+    def can_generate(cls) -> bool:
+        # Speecht5 has a unique model structure, where the external class (`SpeechT5ForTextToSpeech`) doesn't need to inherit from
+        # `GenerationMixin` (it has a non-standard generation method). This means that the base `can_generate()` will return `False`,
+        # but we need to override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
+        return True
+
     def get_encoder(self):
         return self.speecht5.get_encoder()
 
