@@ -273,6 +273,7 @@ class InternVLProcessor(ProcessorMixin):
         chat_template: Optional[str] = None,
         num_frames: int = 8,
         initial_shift: Union[bool, float, int] = True,
+        video_load_backend="pyav",
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ):
         """
@@ -310,7 +311,12 @@ class InternVLProcessor(ProcessorMixin):
         )
 
         return super().apply_chat_template(
-            conversation, chat_template, num_frames=num_frames, sample_indices_fn=sample_indices_fn, **kwargs
+            conversation,
+            chat_template,
+            video_load_backend=video_load_backend,
+            num_frames=num_frames,
+            sample_indices_fn=sample_indices_fn,
+            **kwargs,
         )
 
 
