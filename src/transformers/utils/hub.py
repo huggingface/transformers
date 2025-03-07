@@ -850,6 +850,7 @@ class PushToHubMixin:
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
+        save_raw_chat_template = deprecated_kwargs.pop("save_raw_chat_template", None)  # Temporary and only for testing
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
@@ -906,7 +907,10 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            if save_raw_chat_template:
+                self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization, save_raw_chat_template=True)
+            else:
+                self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
             # Update model card if needed:
             model_card.save(os.path.join(work_dir, "README.md"))

@@ -2006,7 +2006,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if not template_file.path.endswith(".jinja"):
                                 continue
                             template_name = template_file.path.split("/")[-1].removesuffix(".jinja")
-                            additional_files_names[f"chat_template_{template_name}"] = template_file
+                            additional_files_names[f"chat_template_{template_name}"] = template_file.path
                     except EntryNotFoundError:
                         pass  # No template dir means no template files
 
