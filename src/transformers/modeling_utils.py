@@ -1481,7 +1481,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # atleast catch this case
         # Warning here is not ideal, however this affects all types of models that support `use_cache`, so we need to catch
         # all different cases of their creation (e.g. from_pretrained, from_config, etc)
-        if getattr(self.config, "use_cache", False) and (os.environ.get("FSDP_ACTIVATION_CHECKPOINTING", "false") == "true"):
+        if getattr(self.config, "use_cache", False) and (
+            os.environ.get("FSDP_ACTIVATION_CHECKPOINTING", "false") == "true"
+        ):
             self.config.use_cache = False
             logger.warning_once(
                 "Activation checkpointing is enabled, but `use_cache` is set to True. "
