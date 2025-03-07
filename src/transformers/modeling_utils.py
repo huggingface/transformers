@@ -4783,8 +4783,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # In this case, we load a ForTaskModel with keys from a BaseModel -> only load keys to the BaseModel
         if loading_task_model_from_base_state_dict:
             model_to_load = getattr(model, prefix)
-            # Here we need to remove the prefix (it was necessary before to correctly find missing/unexpected keys)
-            # as we will load the weights directly in the submodule
+            # Here we need to remove the prefix we added to correctly find missing/unexpected keys, as we will load
+            # in the submodule
             key_renaming_mapping = {k: v[len(_prefix) :] for k, v in key_renaming_mapping.items()}
             checkpoint_keys = list(key_renaming_mapping.values())
             # We need to update the device map as well
@@ -4872,7 +4872,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and hf_quantizer is None:
-            expanded_device_map = expand_device_map(device_map, checkpoint_keys)
+            expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
         error_msgs = []
