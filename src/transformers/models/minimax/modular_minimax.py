@@ -75,14 +75,14 @@ class MiniMaxConfig(MixtralConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
@@ -160,35 +160,8 @@ class MiniMaxConfig(MixtralConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "minimax"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=12,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        head_dim=None,
-        hidden_act="silu",
-        max_position_embeddings=4096 * 32,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=None,
-        eos_token_id=None,
-        tie_word_embeddings=False,
-        rope_theta=1e6,
-        sliding_window=None,
-        attention_dropout=0.0,
-        num_experts_per_tok=2,
-        num_local_experts=8,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        router_jitter_noise=0.0,
         attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
         block_size=256,
         postnorm=False,
@@ -198,32 +171,9 @@ class MiniMaxConfig(MixtralConfig):
         layernorm_linear_attention_beta=1,
         layernorm_mlp_alpha=1,
         layernorm_mlp_beta=1,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            max_position_embeddings=max_position_embeddings,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            sliding_window=sliding_window,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            rope_theta=rope_theta,
-            attention_dropout=attention_dropout,
-            head_dim=head_dim,
-            num_experts_per_tok=num_experts_per_tok,
-            num_local_experts=num_local_experts,
-            output_router_logits=output_router_logits,
-            router_aux_loss_coef=router_aux_loss_coef,
-            router_jitter_noise=router_jitter_noise,
-            **kwargs,
-        )
-
+        super().__init__(**super_kwargs)
         self.attn_type_list = attn_type_list
         self.block_size = block_size
         self.postnorm = postnorm
