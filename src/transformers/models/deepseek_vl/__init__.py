@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_deepseek_vl import *
     from .image_processing_deepseek_vl import *
     from .modeling_deepseek_vl import *
+    from .processing_deepseek_vl import *
 else:
     import sys
 
