@@ -15,16 +15,16 @@
 
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.models.llama.modeling_llama import (
-    LlamaModel, 
-    LlamaForCausalLM, 
-    LlamaPreTrainedModel, 
-    LlamaDecoderLayer, 
-    LlamaRMSNorm, 
+    LlamaModel,
+    LlamaForCausalLM,
+    LlamaPreTrainedModel,
+    LlamaDecoderLayer,
+    LlamaRMSNorm,
     LlamaMLP,
-    LlamaRotaryEmbedding, 
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
-    rotate_half 
+    rotate_half,
 )
 from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeFlashAttention2
 from transformers.models.llama.configuration_llama import LlamaConfig
@@ -146,28 +146,29 @@ class DeepseekV2Config(LlamaConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
-            self, 
-            aux_loss_alpha=0.001, 
-            first_k_dense_replace=0,
-            kv_lora_rank=512,
-            q_lora_rank=1536,
-            moe_layer_freq=1,
-            n_group=None,
-            n_routed_experts=None,
-            n_shared_experts=None,
-            qk_nope_head_dim=128,
-            qk_rope_head_dim=64,
-            routed_scaling_factor=1.0,
-            seq_aux=True,
-            topk_group=None,
-            topk_method="greedy",
-            v_head_dim=128,
-            num_experts_per_tok=None,
-            scoring_func ='softmax',
-            norm_topk_prob=False,
-            moe_intermediate_size=1407,
-            ep_size=1, 
-            **super_kwargs):
+        self,
+        aux_loss_alpha=0.001,
+        first_k_dense_replace=0,
+        kv_lora_rank=512,
+        q_lora_rank=1536,
+        moe_layer_freq=1,
+        n_group=None,
+        n_routed_experts=None,
+        n_shared_experts=None,
+        qk_nope_head_dim=128,
+        qk_rope_head_dim=64,
+        routed_scaling_factor=1.0,
+        seq_aux=True,
+        topk_group=None,
+        topk_method="greedy",
+        v_head_dim=128,
+        num_experts_per_tok=None,
+        scoring_func="softmax",
+        norm_topk_prob=False,
+        moe_intermediate_size=1407,
+        ep_size=1,
+        **super_kwargs,
+    ):
         super().__init__(**super_kwargs)
 
         self.aux_loss_alpha = aux_loss_alpha
@@ -216,51 +217,33 @@ class DeepseekV2MoEGate(nn.Module):
         # topk selection algorithm
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(
-            torch.empty((self.n_routed_experts, self.gating_dim))
-        )
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
 
     def forward(self, hidden_states):
         bsz, seq_len, h = hidden_states.shape
         ### compute gating score
         hidden_states = hidden_states.view(-1, h)
-        logits = F.linear(
-            hidden_states.type(torch.float32), self.weight.type(torch.float32), None
-        )
+        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
         if self.scoring_func == "softmax":
             scores = logits.softmax(dim=-1, dtype=torch.float32)
         else:
-            raise NotImplementedError(
-                f"insupportable scoring function for MoE gating: {self.scoring_func}"
-            )
+            raise NotImplementedError(f"insupportable scoring function for MoE gating: {self.scoring_func}")
 
         ### select top-k experts
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(
-                scores, k=self.top_k, dim=-1, sorted=False
-            )
+            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = (
-                scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values
-            )  # [n, n_group]
-            group_idx = torch.topk(
-                group_scores, k=self.topk_group, dim=-1, sorted=False
-            )[
-                1
-            ]  # [n, top_k_group]
+            group_scores = scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
+            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
             group_mask = torch.zeros_like(group_scores)  # [n, n_group]
             group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(
-                    bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group
-                )
+                .expand(bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group)
                 .reshape(bsz * seq_len, -1)
             )  # [n, e]
             tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
-            topk_weight, topk_idx = torch.topk(
-                tmp_scores, k=self.top_k, dim=-1, sorted=False
-            )
+            topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
         ### norm gate to sum 1
         if self.top_k > 1 and self.norm_topk_prob:
@@ -284,19 +267,14 @@ class DeepseekV2MoE(nn.Module):
 
         self.experts = nn.ModuleList(
             [
-                (
-                    DeepseekV2MLP(
-                        config, intermediate_size=config.moe_intermediate_size)
-                )
+                (DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
                 for _ in range(config.n_routed_experts)
             ]
         )
         self.gate = DeepseekV2MoEGate(config)
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekV2MLP(
-                config=config, intermediate_size=intermediate_size
-            )
+            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
@@ -327,12 +305,10 @@ class DeepseekV2MoE(nn.Module):
 
 
 class DeepseekV2MLP(LlamaMLP):
-    def __init__(self, config:DeepseekV2Config, hidden_size=None, intermediate_size=None):
+    def __init__(self, config: DeepseekV2Config, hidden_size=None, intermediate_size=None):
         super().__init__(config)
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = (
-            config.intermediate_size if intermediate_size is None else intermediate_size
-        )
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
 
 
 class DeepseekV2RMSNorm(LlamaRMSNorm):
@@ -488,21 +464,15 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.self_attn = DeepseekV2Attention(
-            config=config, layer_idx=layer_idx
-        )
+        self.self_attn = DeepseekV2Attention(config=config, layer_idx=layer_idx)
 
         if layer_idx >= config.first_k_dense_replace:
             self.mlp = DeepseekV2MoE(config)
         else:
             self.mlp = DeepseekV2MLP(config)
 
-        self.input_layernorm = DeepseekV2RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_attention_layernorm = DeepseekV2RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
@@ -519,19 +489,11 @@ class DeepseekV2Model(LlamaModel):
 
     def __init__(self, config: DeepseekV2Config):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [DeepseekV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-    
 
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
     pass

@@ -592,17 +592,15 @@ class DeepseekV2DecoderLayer(nn.Module):
 
         self.self_attn = DeepseekV2Attention(config=config, layer_idx=layer_idx)
 
-        self.mlp = (
-            DeepseekV2MoE(config)
-            if (
-                config.n_routed_experts is not None
-                and layer_idx >= config.first_k_dense_replace
-                and layer_idx % config.moe_layer_freq == 0
-            )
-            else DeepseekV2MLP(config)
-        )
+        self.mlp = DeepseekV2MLP(config)
+
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        if layer_idx >= config.first_k_dense_replace:
+            self.mlp = DeepseekV2MoE(config)
+        else:
+            self.mlp = DeepseekV2MLP(config)
 
     def forward(
         self,
@@ -784,15 +782,14 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [DeepseekV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
-
         self.gradient_checkpointing = False
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         # Initialize weights and apply final processing
         self.post_init()
