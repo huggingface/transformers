@@ -345,36 +345,20 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1:]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        if image_patches_indices is not None:
-            model_inputs["image_patches_indices"] = image_patches_indices
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "image_patches_indices": image_patches_indices if past_key_values is None else None,
-                "image_patches": image_patches if past_key_values is None else None,
-            }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            image_patches=image_patches,
+            image_patches_indices=image_patches_indices,
+            **kwargs,
         )
+
+        if past_key_values is not None:
+            model_inputs["image_patches_indices"] = None
+            model_inputs["image_patches"] = None
+
         return model_inputs
 
     @staticmethod

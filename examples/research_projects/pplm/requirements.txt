@@ -19,4 +19,4 @@ pytest
 conllu
 sentencepiece != 0.1.92
 protobuf
-transformers==4.38.0
+transformers==4.48.0

@@ -134,7 +134,7 @@ class BaseTransformer(pl.LightningModule):
             {
                 "params": [
                     p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)
-                ],  # check this named paramters
+                ],  # check this named parameters
                 "weight_decay": self.hparams.weight_decay,
             },
             {
@@ -279,7 +279,7 @@ class InitCallback(pl.Callback):
 
 
 class CheckParamCallback(pl.Callback):
-    # check whether new added model paramters are differentiable
+    # check whether new added model parameters are differentiable
     def on_after_backward(self, trainer, pl_module):
         # print(pl_module.model.rag)
         for name, param in pl_module.model.rag.named_parameters():

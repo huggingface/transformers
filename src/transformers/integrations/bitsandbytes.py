@@ -486,7 +486,7 @@ def _validate_bnb_multi_backend_availability(raise_exception):
     import bitsandbytes as bnb
 
     bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
-    available_devices = get_available_devices()
+    available_devices = set(get_available_devices())
 
     if available_devices == {"cpu"} and not is_ipex_available():
         from importlib.util import find_spec

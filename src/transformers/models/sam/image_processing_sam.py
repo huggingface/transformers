@@ -307,8 +307,6 @@ class SamImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Tuple[np.ndarray, Tuple[int, int], Tuple[int, int]]:
-        image = to_numpy_array(image)
-
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:
             image = convert_to_rgb(image)

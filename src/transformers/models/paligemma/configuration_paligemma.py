@@ -74,6 +74,7 @@ class PaliGemmaConfig(PretrainedConfig):
 
     model_type = "paligemma"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

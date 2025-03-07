@@ -24,9 +24,7 @@ from datasets import load_dataset
 from transformers import Wav2Vec2Config, is_flax_available
 from transformers.testing_utils import (
     CaptureLogger,
-    is_flaky,
     is_librosa_available,
-    is_pt_flax_cross_test,
     is_pyctcdecode_available,
     require_flax,
     require_librosa,
@@ -350,11 +348,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             outputs = model(np.ones((1, 1024), dtype="f4"))
             self.assertIsNotNone(outputs)
 
-    @is_pt_flax_cross_test
-    @is_flaky()
-    def test_equivalence_pt_to_flax(self):
-        super().test_equivalence_pt_to_flax()
-
 
 @require_flax
 class FlaxWav2Vec2UtilsTest(unittest.TestCase):
@@ -419,7 +412,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         features = (np.arange(sequence_length * hidden_size) // hidden_size).reshape(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
         features = np.broadcast_to(features[None, :], (batch_size, sequence_length, hidden_size))
 
         negative_indices = _sample_negative_indices(features.shape, num_negatives)
@@ -449,7 +442,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
         features = (np.arange(sequence_length * hidden_size) // hidden_size).reshape(
             sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        )  # each value in vector consists of same value
 
         # second half of last input tensor is padded
         attention_mask = np.ones((batch_size, sequence_length), dtype=np.int8)

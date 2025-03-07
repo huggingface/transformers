@@ -147,6 +147,25 @@ class FalconMambaModelTester:
         config.vocab_size = 300
         return config
 
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            attention_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
+
     def create_and_check_falcon_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
         model = FalconMambaModel(config=config)
@@ -247,7 +266,6 @@ class FalconMambaModelTester:
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (FalconMambaForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker

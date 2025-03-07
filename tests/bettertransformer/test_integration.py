@@ -38,7 +38,7 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
 
     def test_transform_and_reverse(self):
         r"""
-        Classic tests to simply check if the conversion has been successfull.
+        Classic tests to simply check if the conversion has been successful.
         """
         model_id = "hf-internal-testing/tiny-random-t5"
         tokenizer = AutoTokenizer.from_pretrained(model_id)

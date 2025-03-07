@@ -64,7 +64,7 @@ def get_new_python_files_between_commits(base_commit: str, commits: List[str]) -
     return code_diff
 
 
-def get_new_python_files() -> List[str]:
+def get_new_python_files(diff_with_last_commit=False) -> List[str]:
     """
     Return a list of python files that have been added between the current head and the main branch.
 
@@ -80,17 +80,24 @@ def get_new_python_files() -> List[str]:
         # On GitHub Actions runners, it doesn't have local main branch
         main = repo.remotes.origin.refs.main
 
-    print(f"main is at {main.commit}")
-    print(f"Current head is at {repo.head.commit}")
+    if not diff_with_last_commit:
+        print(f"main is at {main.commit}")
+        print(f"Current head is at {repo.head.commit}")
 
-    branching_commits = repo.merge_base(main, repo.head)
-    for commit in branching_commits:
-        print(f"Branching commit: {commit}")
-    return get_new_python_files_between_commits(repo.head.commit, branching_commits)
+        commits = repo.merge_base(main, repo.head)
+        for commit in commits:
+            print(f"Branching commit: {commit}")
+    else:
+        print(f"main is at {main.commit}")
+        commits = main.commit.parents
+        for commit in commits:
+            print(f"Parent commit: {commit}")
+
+    return get_new_python_files_between_commits(repo.head.commit, commits)
 
 
-def get_new_model():
-    new_files = get_new_python_files()
+def get_new_model(diff_with_last_commit=False):
+    new_files = get_new_python_files(diff_with_last_commit)
     reg = re.compile(r"src/transformers/models/(.*)/modeling_.*\.py")
 
     new_model = ""

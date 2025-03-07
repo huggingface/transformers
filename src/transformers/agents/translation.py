@@ -256,7 +256,7 @@ class TranslationTool(PipelineTool):
         },
         "tgt_lang": {
             "type": "string",
-            "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'",
+            "description": "The language for the desired output language. Written in plain English, such as 'Romanian', or 'Albanian'",
         },
     }
     output_type = "string"

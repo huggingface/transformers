@@ -109,6 +109,27 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
+    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `unexpected_keys`.
+
+        Args:
+            unexpected_keys (`List[str]`, *optional*):
+                The list of unexpected keys in the checkpoint compared to the state dict of the model
+        """
+        return unexpected_keys
+
+    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `missing_keys` after loading the model params,
+        but before the model is post-processed.
+
+        Args:
+            missing_keys (`List[str]`, *optional*):
+                The list of missing keys in the checkpoint compared to the state dict of the model
+        """
+        return missing_keys
+
     def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.

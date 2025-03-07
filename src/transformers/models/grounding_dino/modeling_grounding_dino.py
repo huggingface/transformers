@@ -252,6 +252,10 @@ class GroundingDinoModelOutput(ModelOutput):
             background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+            Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+        encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+            Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -267,6 +271,8 @@ class GroundingDinoModelOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    encoder_logits: Optional[torch.FloatTensor] = None
+    encoder_pred_boxes: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -331,6 +337,10 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+            Logits of top `config.num_queries` scoring bounding boxes in the first stage.
+        encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+            Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Encoded candidate labels sequence. Used in processor to post process object detection result.
     """
@@ -353,6 +363,8 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    encoder_logits: Optional[torch.FloatTensor] = None
+    encoder_pred_boxes: Optional[torch.FloatTensor] = None
     input_ids: Optional[torch.LongTensor] = None
 
 
@@ -2374,8 +2386,11 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Fifth, prepare decoder inputs
+        topk_proposals = None
         enc_outputs_class = None
         enc_outputs_coord_logits = None
+        encoder_logits = None
+        encoder_pred_boxes = None
         if self.config.two_stage:
             object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
                 encoder_outputs[0], ~mask_flatten, spatial_shapes
@@ -2408,6 +2423,10 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 target = torch.gather(
                     object_query_embedding, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model)
                 ).detach()
+
+            # Set intermediate topk proposals (coords and class) for loss computation
+            encoder_pred_boxes = reference_points
+            encoder_logits = self.encoder_output_class_embed(target, text_features, text_token_mask)
         else:
             target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
             reference_points = self.reference_points.weight.unsqueeze(0).repeat(batch_size, 1, 1).sigmoid()
@@ -2430,7 +2449,16 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         )
 
         if not return_dict:
-            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
+            enc_outputs = tuple(
+                value
+                for value in [
+                    enc_outputs_class,
+                    enc_outputs_coord_logits,
+                    encoder_logits,
+                    encoder_pred_boxes,
+                ]
+                if value is not None
+            )
             tuple_outputs = (
                 (decoder_outputs[0], init_reference_points) + decoder_outputs[1:] + encoder_outputs + enc_outputs
             )
@@ -2451,6 +2479,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
+            encoder_logits=encoder_logits,
+            encoder_pred_boxes=encoder_pred_boxes,
         )
 
 
@@ -2474,6 +2504,73 @@ class GroundingDinoMLPPredictionHead(nn.Module):
         for i, layer in enumerate(self.layers):
             x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
+
+
+def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> Tuple[torch.FloatTensor]:
+    """
+    Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
+    The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
+    Args:
+        logits (`torch.Tensor` of shape `(batch_size, seq_length, hidden_size)`):
+            The output logits from the model, where `hidden_size` corresponds to the dimension of the model's output features.
+
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_length)`):
+            The input token IDs corresponding to the input prompt. For example, given the prompt "fish. shark.",
+            `input_ids` might look like `[101, 3869, 1012, 11420, 1012, 102]` where each number corresponds to a token including special tokens.
+    Returns:
+        tuple: A tuple containing label maps for each instance in the batch.
+        - label_maps (tuple of `torch.Tensor`):
+            A tuple of tensors, where each tensor in the tuple corresponds to an instance in the batch. Each tensor
+            has shape `(num_labels, hidden_size)` and contains binary values (0 or 1), where `1` indicates the tokens
+            that are associated with a specific label (class) between delimiter tokens, and `0` elsewhere.
+    Example:
+        Given an input prompt "fish. shark." and corresponding `input_ids` as `[101, 3869, 1012, 11420, 1012, 102]`:
+        - The function identifies the tokens for "fish" (IDs `[3869]`) and "shark" (IDs `[11420]`).
+        - The function then constructs label maps for these tokens, where each label map indicates which tokens
+          correspond to which label between the delimiter tokens (e.g., between the period `.`).
+        - The output is a tuple of label maps, one for each instance in the batch.
+    Note:
+        - `SPECIAL_TOKENS` should be a predefined list of tokens that are considered special (e.g., `[CLS]`, `[SEP]`, etc.).
+    """
+    max_seq_len = logits.shape[-1]
+    # Add [PAD] token to the list of special tokens
+    delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
+
+    delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
+    label_groups = torch.cumsum(delimiter_token_masks, dim=1) * (~delimiter_token_masks).to(torch.int32)
+
+    label_maps = ()
+
+    # Iterate over batch dimension as we can have different number of labels
+    for label_group in label_groups:
+        # `label_group` is a tensor of shape `(seq_len,)` with zeros for non-label tokens and integers for label tokens
+        # label tokens with same integer value are part of the same label group
+
+        # Get unique labels and exclude 0 (i.e. non-label tokens)
+        unique_labels = torch.unique(label_group)[1:, None]
+        num_labels = unique_labels.shape[0]
+
+        # Create one-hot encoding for each label group
+        label_map = label_group.unsqueeze(0).repeat(num_labels, 1)
+        label_map = torch.where(label_map == unique_labels, 1, 0)
+
+        # Pad label_map to match `max_seq_len`
+        label_map = F.pad(label_map, (0, max_seq_len - label_map.shape[1]), value=0)
+
+        label_maps += (label_map,)
+
+    return label_maps
+
+
+def build_text_mask(logits, attention_mask):
+    """
+    Create text_mask based on the matching indices
+    """
+    seq_len = attention_mask.shape[1]
+    text_mask = torch.zeros_like(logits, device=logits.device, dtype=attention_mask.dtype)
+    text_mask[:, :, :seq_len] = attention_mask[:, None, :]
+
+    return text_mask.bool()
 
 
 @add_start_docstrings(
@@ -2513,14 +2610,6 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GroundingDinoObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -2648,8 +2737,20 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
+            label_maps = build_label_maps(logits, input_ids)
+            text_mask = build_text_mask(logits, attention_mask)
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                label_maps,
+                text_mask,
+                outputs_class=outputs_class,
+                outputs_coord=outputs_coord,
+                encoder_logits=outputs[-2],
+                encoder_pred_boxes=outputs[-1],
             )
 
         if not return_dict:
@@ -2677,6 +2778,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            encoder_logits=outputs.encoder_logits,
+            encoder_pred_boxes=outputs.encoder_pred_boxes,
             input_ids=input_ids,
         )
 

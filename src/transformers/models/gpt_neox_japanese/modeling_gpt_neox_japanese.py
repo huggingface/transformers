@@ -51,7 +51,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = False  # TODO (fix me): compilation fails due to a stide error?
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -129,8 +129,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         cos, sin = position_embeddings
         query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-        query = torch.cat((query, query_pass), dim=-1)
-        key = torch.cat((key, key_pass), dim=-1)
+        query = torch.cat((query, query_pass), dim=-1).contiguous()
+        key = torch.cat((key, key_pass), dim=-1).contiguous()
 
         # Cache QKV values
         if layer_past is not None:
@@ -272,7 +272,7 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()

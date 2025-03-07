@@ -204,6 +204,10 @@ def is_dvclive_available():
     return importlib.util.find_spec("dvclive") is not None
 
 
+def is_swanlab_available():
+    return importlib.util.find_spec("swanlab") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -610,6 +614,8 @@ def get_available_reporting_integrations():
         integrations.append("codecarbon")
     if is_clearml_available():
         integrations.append("clearml")
+    if is_swanlab_available():
+        integrations.append("swanlab")
     return integrations
 
 
@@ -1218,7 +1224,7 @@ class MLflowCallback(TrainerCallback):
             Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
             run.
         - **MLFLOW_RUN_ID** (`str`, *optional*):
-            Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint. When
+            Allow to reattach to an existing run which can be useful when resuming training from a checkpoint. When
             `MLFLOW_RUN_ID` environment variable is set, `start_run` attempts to resume a run with the specified run ID
             and other parameters are ignored.
         - **MLFLOW_FLATTEN_PARAMS** (`str`, *optional*, defaults to `False`):
@@ -2141,6 +2147,162 @@ class DVCLiveCallback(TrainerCallback):
             self.live.end()
 
 
+class SwanLabCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that logs metrics, media, model checkpoints to [SwanLab](https://swanlab.cn/).
+    """
+
+    def __init__(self):
+        if not is_swanlab_available():
+            raise RuntimeError("SwanLabCallback requires swanlab to be installed. Run `pip install swanlab`.")
+        import swanlab
+
+        self._swanlab = swanlab
+        self._initialized = False
+        self._log_model = os.getenv("SWANLAB_LOG_MODEL", None)
+
+    def setup(self, args, state, model, **kwargs):
+        """
+        Setup the optional SwanLab (*swanlab*) integration.
+
+        One can subclass and override this method to customize the setup if needed. Find more information
+        [here](https://docs.swanlab.cn/guide_cloud/integration/integration-huggingface-transformers.html).
+
+        You can also override the following environment variables. Find more information about environment
+        variables [here](https://docs.swanlab.cn/en/api/environment-variable.html#environment-variables)
+
+        Environment:
+        - **SWANLAB_API_KEY** (`str`, *optional*, defaults to `None`):
+            Cloud API Key. During login, this environment variable is checked first. If it doesn't exist, the system
+            checks if the user is already logged in. If not, the login process is initiated.
+
+                - If a string is passed to the login interface, this environment variable is ignored.
+                - If the user is already logged in, this environment variable takes precedence over locally stored
+                login information.
+
+        - **SWANLAB_PROJECT** (`str`, *optional*, defaults to `None`):
+            Set this to a custom string to store results in a different project. If not specified, the name of the current
+            running directory is used.
+
+        - **SWANLAB_LOG_DIR** (`str`, *optional*, defaults to `swanlog`):
+            This environment variable specifies the storage path for log files when running in local mode.
+            By default, logs are saved in a folder named swanlog under the working directory.
+
+        - **SWANLAB_MODE** (`Literal["local", "cloud", "disabled"]`, *optional*, defaults to `cloud`):
+            SwanLab's parsing mode, which involves callbacks registered by the operator. Currently, there are three modes:
+            local, cloud, and disabled. Note: Case-sensitive. Find more information
+            [here](https://docs.swanlab.cn/en/api/py-init.html#swanlab-init)
+
+        - **SWANLAB_LOG_MODEL** (`str`, *optional*, defaults to `None`):
+            SwanLab does not currently support the save mode functionality.This feature will be available in a future
+            release
+
+        - **SWANLAB_WEB_HOST** (`str`, *optional*, defaults to `None`):
+            Web address for the SwanLab cloud environment for private version (its free)
+
+        - **SWANLAB_API_HOST** (`str`, *optional*, defaults to `None`):
+            API address for the SwanLab cloud environment for private version (its free)
+
+        """
+        self._initialized = True
+
+        if state.is_world_process_zero:
+            logger.info('Automatic SwanLab logging enabled, to disable set os.environ["SWANLAB_MODE"] = "disabled"')
+            combined_dict = {**args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+            trial_name = state.trial_name
+            init_args = {}
+            if trial_name is not None:
+                init_args["experiment_name"] = f"{args.run_name}-{trial_name}"
+            elif args.run_name is not None:
+                init_args["experiment_name"] = args.run_name
+            init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
+
+            if self._swanlab.get_run() is None:
+                self._swanlab.init(
+                    **init_args,
+                )
+            # show transformers logo!
+            self._swanlab.config["FRAMEWORK"] = "🤗transformers"
+            # add config parameters (run may have been created manually)
+            self._swanlab.config.update(combined_dict)
+
+            # add number of model parameters to swanlab config
+            try:
+                self._swanlab.config.update({"model_num_parameters": model.num_parameters()})
+                # get peft model parameters
+                if type(model).__name__ == "PeftModel" or type(model).__name__ == "PeftMixedModel":
+                    trainable_params, all_param = model.get_nb_trainable_parameters()
+                    self._swanlab.config.update({"peft_model_trainable_params": trainable_params})
+                    self._swanlab.config.update({"peft_model_all_param": all_param})
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in SwanLab due to an AttributeError.")
+
+            # log the initial model architecture to an artifact
+            if self._log_model is not None:
+                logger.warning(
+                    "SwanLab does not currently support the save mode functionality. "
+                    "This feature will be available in a future release."
+                )
+                badge_markdown = (
+                    f'[<img src="https://raw.githubusercontent.com/SwanHubX/assets/main/badge1.svg"'
+                    f' alt="Visualize in SwanLab" height="28'
+                    f'0" height="32"/>]({self._swanlab.get_run().public.cloud.exp_url})'
+                )
+
+                modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
+
+    def on_train_end(self, args, state, control, model=None, processing_class=None, **kwargs):
+        if self._log_model is not None and self._initialized and state.is_world_process_zero:
+            logger.warning(
+                "SwanLab does not currently support the save mode functionality. "
+                "This feature will be available in a future release."
+            )
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            for k, v in logs.items():
+                if k in single_value_scalars:
+                    self._swanlab.log({f"single_value/{k}": v})
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._swanlab.log({**non_scalar_logs, "train/global_step": state.global_step})
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._log_model is not None and self._initialized and state.is_world_process_zero:
+            logger.warning(
+                "SwanLab does not currently support the save mode functionality. "
+                "This feature will be available in a future release."
+            )
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._swanlab.log(metrics)
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -2153,6 +2315,7 @@ INTEGRATION_TO_CALLBACK = {
     "dagshub": DagsHubCallback,
     "flyte": FlyteCallback,
     "dvclive": DVCLiveCallback,
+    "swanlab": SwanLabCallback,
 }
 
 

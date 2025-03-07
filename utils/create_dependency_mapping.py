@@ -30,7 +30,7 @@ def topological_sort(dependencies: dict):
 
 # Function to extract class and import info from a file
 def extract_classes_and_imports(file_path):
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=file_path)
     imports = set()
 
@@ -55,6 +55,16 @@ def map_dependencies(py_files):
 
 
 def find_priority_list(py_files):
+    """
+    Given a list of modular files, sorts them by topological order. Modular models that DON'T depend on other modular
+    models will be higher in the topological order.
+
+    Args:
+        py_files: List of paths to the modular files
+
+    Returns:
+        A tuple with the ordered files (list) and their dependencies (dict)
+    """
     dependencies = map_dependencies(py_files)
-    ordered_classes = topological_sort(dependencies)
-    return ordered_classes
+    ordered_files = topological_sort(dependencies)
+    return ordered_files, dependencies

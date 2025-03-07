@@ -13,65 +13,67 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Multi-GPU inference
+# Distributed GPU inference
 
-Built-in Tensor Parallelism (TP) is now available with certain models using PyTorch. Tensor parallelism shards a model onto multiple GPUs, enabling larger model sizes, and parallelizes computations such as matrix multiplication.
+[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple GPUs and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each GPU can process a tensor slice.
 
-To enable tensor parallel, pass the argument `tp_plan="auto"` to [`~AutoModelForCausalLM.from_pretrained`]:
+> [!TIP]
+> Expand the list below to see which models support tensor parallelism. Open a GitHub issue or pull request to add support for a model not currently below.
 
-```python
+<details>
+<summary>Supported models</summary>
+
+* [Cohere](./model_doc/cohere) and [Cohere 2](./model_doc/cohere2)
+* [Gemma](./model_doc/gemma) and [Gemma 2](./model_doc/gemma2)
+* [GLM](./model_doc/glm)
+* [Granite](./model_doc/granite)
+* [Llama](./model_doc/llama)
+* [Mistral](./model_doc/mistral)
+* [Mixtral](./model_doc/mixtral)
+* [OLMo](./model_doc/olmo) and [OLMo2](./model_doc/olmo2)
+* [Phi](./model_doc/phi) and [Phi-3](./model_doc/phi3)
+* [Qwen2](./model_doc/qwen2), [Qwen2Moe](./model_doc/qwen2_moe), and [Qwen2-VL](./model_doc/qwen2_5_vl)
+* [Starcoder2](./model_doc/starcoder2)
+
+</details>
+
+Set `tp_plan="auto"` in [`~AutoModel.from_pretrained`] to enable tensor parallelism for inference.
+
+```py
 import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-
-# Initialize distributed
+# initialize distributed environment
 rank = int(os.environ["RANK"])
 device = torch.device(f"cuda:{rank}")
+torch.cuda.set_device(device)
 torch.distributed.init_process_group("nccl", device_id=device)
 
-# Retrieve tensor parallel model
+# enable tensor parallelism
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
+    "meta-llama/Meta-Llama-3-8B-Instruct",
     tp_plan="auto",
 )
 
-# Prepare input tokens
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+# prepare input tokens
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 prompt = "Can I help"
 inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
 
-# Distributed run
+# distributed run
 outputs = model(inputs)
 ```
 
-You can use `torchrun` to launch the above script with multiple processes, each mapping to a GPU:
+Launch the inference script above on [torchrun](https://pytorch.org/docs/stable/elastic/run.html) with 4 processes per GPU.
 
-```
+```bash
 torchrun --nproc-per-node 4 demo.py
 ```
 
-PyTorch tensor parallel is currently supported for the following models:
-* [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
-* [Gemma](https://huggingface.co/docs/transformers/en/model_doc/gemma), [Gemma2](https://huggingface.co/docs/transformers/en/model_doc/gemma2)
-* [Granite](https://huggingface.co/docs/transformers/en/model_doc/granite)
-* [Mistral](https://huggingface.co/docs/transformers/en/model_doc/mistral)
-* [Qwen2](https://huggingface.co/docs/transformers/en/model_doc/qwen2), [Qwen2MoE](https://huggingface.co/docs/transformers/en/model_doc/qwen2_moe), [Qwen2-VL](https://huggingface.co/docs/transformers/v4.48.0/en/model_doc/qwen2_vl)
-* [Starcoder2](https://huggingface.co/docs/transformers/en/model_doc/starcoder2)
-* [Cohere](https://huggingface.co/docs/transformers/en/model_doc/cohere), [Cohere2](https://huggingface.co/docs/transformers/en/model_doc/cohere2)
-* [GLM](https://huggingface.co/docs/transformers/en/model_doc/glm)
-* [Mixtral](https://huggingface.co/docs/transformers/en/model_doc/mixtral)
-* [OLMo](https://huggingface.co/docs/transformers/en/model_doc/olmo), [OLMo2](https://huggingface.co/docs/transformers/en/model_doc/olmo2)
-* [Phi](https://huggingface.co/docs/transformers/en/model_doc/phi), [Phi-3](https://huggingface.co/docs/transformers/en/model_doc/phi3)
+You can benefit from considerable speed ups for inference, especially for inputs with large batch size or long sequences.
 
-You can request to add tensor parallel support for another model by opening a GitHub Issue or Pull Request.
-
-### Expected speedups
-
-You can benefit from considerable speedups for inference, especially for inputs with large batch size or long sequences.
-
-For a single forward pass on [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel) with a sequence length of 512 and various batch sizes, the expected speedup is as follows:
+For a single forward pass on [Llama](./model_doc/llama) with a sequence length of 512 and various batch sizes, you can expect the following speed ups.
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">

@@ -195,7 +195,7 @@ You have access to the following tools:
 To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 
 At each step, in the 'Thought:' sequence, you should first explain your reasoning towards solving the task, then the tools that you want to use.
-Then in the 'Code:' sequence, you shold write the code in simple Python. The code sequence must end with '/End code' sequence.
+Then in the 'Code:' sequence, you should write the code in simple Python. The code sequence must end with '/End code' sequence.
 During each intermediate step, you can use 'print()' to save whatever important information you will then need.
 These print outputs will then be available in the 'Observation:' field, for using this information as input for the next step.
 
@@ -205,7 +205,7 @@ Here are a few examples using notional tools:
 ---
 {examples}
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. You only have access to those tools:
 <<tool_names>>
 You also can perform computations in the python code you generate.
 

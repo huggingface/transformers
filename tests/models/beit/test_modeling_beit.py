@@ -379,13 +379,13 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -774,7 +774,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        expected_shape = torch.Size((1, 1801, 768))
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
+        # 1 + (480 / 16) * (480 / 16) = 1 + 30 * 30 = 901
+        expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 

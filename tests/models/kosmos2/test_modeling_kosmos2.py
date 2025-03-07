@@ -259,7 +259,6 @@ class Kosmos2ModelTester:
 @require_torch
 class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,

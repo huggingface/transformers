@@ -260,7 +260,7 @@ def main():
         default=None,
         type=str,
         required=False,
-        help="The folder in wich the summaries should be written. Defaults to the folder where the documents are",
+        help="The folder in which the summaries should be written. Defaults to the folder where the documents are",
     )
     parser.add_argument(
         "--compute_rouge",
@@ -315,7 +315,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # Select device (distibuted not available)
+    # Select device (distributed not available)
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
 
     # Check the existence of directories

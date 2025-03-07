@@ -296,7 +296,6 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else {}
     )
 
-    all_generative_model_classes = (PersimmonForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
 
