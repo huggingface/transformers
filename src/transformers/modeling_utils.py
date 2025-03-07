@@ -1739,6 +1739,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
 
+        Under the hood, on classes where this function returns True, some generation-specific changes are triggered:
+        for instance, the model instance will have a populated `generation_config` attribute.
+
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
