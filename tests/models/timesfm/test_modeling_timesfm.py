@@ -122,7 +122,7 @@ class TimesFmModelTester:
         (config, forecast_input, frequency_input) = self.prepare_config_and_inputs()
 
         inputs_dict = {
-            "inputs": forecast_input,
+            "past_values": forecast_input,
             "freq": frequency_input,
         }
         return config, inputs_dict
@@ -184,7 +184,7 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
         batch = self.load_batch()
         with torch.no_grad():
             inputs = batch["past_values"]
-            output = model(inputs=inputs).last_hidden_state
+            output = model(past_values=inputs).last_hidden_state
         self.assertEqual(
             output.shape, torch.Size([64, model.config.context_len // model.config.patch_len, model.config.model_dim])
         )

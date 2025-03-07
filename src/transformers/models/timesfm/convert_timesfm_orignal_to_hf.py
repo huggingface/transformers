@@ -199,7 +199,7 @@ def check_outputs(model_path, huggingface_repo_id):
 
     # Get predictions from converted model
     with torch.no_grad():
-        outputs = converted_model(inputs=forecast_input_tensor, freq=frequency_input_tensor, return_dict=True)
+        outputs = converted_model(past_values=forecast_input_tensor, freq=frequency_input_tensor, return_dict=True)
         point_forecast_conv = outputs.mean_predictions.float().cpu().numpy()
         quantile_forecast_conv = outputs.full_predictions.float().cpu().numpy()
 

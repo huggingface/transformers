@@ -468,7 +468,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    main_input_name = "inputs"
+    main_input_name = "past_values"
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -550,17 +550,16 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         ```python
         # For basic forecasting:
-        outputs = model(input_ts=your_time_series, input_padding=your_padding, freq=your_frequency)
+        outputs = model(past_values=your_time_series, freq=your_frequency)
 
-        # For prediction with quantiles:
+        # For prediction with extra features:
         outputs = model.forward(
-            inputs=your_time_series_list,
+            past_values=your_time_series_list,
             freq=your_frequencies,
             window_size=optional_window_size,
             future_target=optional_target,
             forecast_context_len=optional_context_length
         )
-        ```
 
         See the model's documentation for more details on the forward method parameters.
         """
@@ -572,8 +571,8 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
 TIMESFM_INPUTS_DOCSTRING = r"""
     Args:
-        inputs: list of time series forecast contexts. Each context time series
-            should be a torch Tensor of potentially different context lengths.
+        past_values: list of time series forecast contexts. Each context time series
+            can be a torch Tensor of potentially different context lengths.
         freq: frequency of each context time series in the inputs. 0 for high frequency
             (default), 1 for medium, and 2 for low.
         output_attentions (`bool`, *optional*):
@@ -672,8 +671,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
     @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
     def forward(
         self,
-        inputs: torch.Tensor,
-        input_padding: torch.LongTensor,
+        past_values: torch.Tensor,
+        past_values_padding: torch.LongTensor,
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -682,13 +681,13 @@ class TimesFmModel(TimesFmPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
         """
-        input_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
         """
 
         model_input, patched_padding, stats, _ = self._preprocess_input(
-            input_ts=inputs,
-            input_padding=input_padding,
+            input_ts=past_values,
+            input_padding=past_values_padding,
         )
         f_emb = self.freq_emb(freq)  # B x 1 x D
         model_input += f_emb
@@ -846,10 +845,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     )
     def forward(
         self,
-        inputs: Sequence[torch.Tensor],
+        past_values: Sequence[torch.Tensor],
         freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
         window_size: Optional[int] = None,
-        future_target: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         forecast_context_len: Optional[int] = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
@@ -860,7 +859,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         r"""
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If None then we do not do decomposition.
-        future_target (`torch.Tensor`, *optional*):
+        future_values (`torch.Tensor`, *optional*):
             Optional future target time series to be used for loss computation.
         forecast_context_len (`int`, *optional*):
             Optional max context length.
@@ -872,9 +871,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         Returns:
             A TimesFmOutputForPrediction object or a tuple containing:
-                - the mean forecast of size (# inputs, # forecast horizon),
+                - the mean forecast of size (# past_values, # forecast horizon),
                 - the full forecast (mean + quantiles) of size
-                    (# inputs,  # forecast horizon, 1 + # quantiles).
+                    (# past_values,  # forecast horizon, 1 + # quantiles).
                 - loss: the mean squared error loss + quantile loss if future_target is provided.
         """
         if return_dict is None:
@@ -886,10 +885,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             fcontext_len = forecast_context_len
 
         # Get device from first input tensor
-        device = inputs[0].device
+        device = past_values[0].device
 
         # Truncate inputs to forecast_context_len
-        inputs = [ts[-fcontext_len:] for ts in inputs]
+        inputs = [ts[-fcontext_len:] for ts in past_values]
         inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
         if window_size is not None:
@@ -937,9 +936,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             input_ts = final_out[:, -fcontext_len:]
             input_padding = current_padding[:, -fcontext_len:]
             decoder_output = self.decoder(
-                input_ts,
-                input_padding,
-                inp_freq,
+                past_values=input_ts,
+                past_values_padding=input_padding,
+                freq=inp_freq,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
@@ -982,9 +981,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             full_outputs = torch.maximum(full_outputs, 0.0)
 
         loss = None
-        if future_target is not None:
-            mse_loss = F.mse_loss(mean_outputs, future_target)
-            quantile_loss = self._quantile_loss(full_outputs[:, :, 1:], future_target)
+        if future_values is not None:
+            mse_loss = F.mse_loss(mean_outputs, future_values)
+            quantile_loss = self._quantile_loss(full_outputs[:, :, 1:], future_values)
             loss = mse_loss + quantile_loss
 
         if return_dict:
