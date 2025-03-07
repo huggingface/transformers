@@ -2970,7 +2970,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_save_collator_tokenizer_by_default(self):
         class FakeCollator:
             def __init__(self):
-                self.tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+                self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
                 self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
 
             def __call__(self, features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
