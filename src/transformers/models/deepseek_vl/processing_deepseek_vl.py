@@ -111,7 +111,6 @@ class DeepseekVLProcessor(ProcessorMixin):
             image_processor=image_processor,
             tokenizer=tokenizer,
             chat_template=chat_template,
-            **kwargs,
         )
 
     def __call__(
