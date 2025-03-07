@@ -1324,7 +1324,7 @@ def _find_mismatched_keys(
                     and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
                 ):
                     # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
-                    # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
+                    # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                     pass
                 else:
                     mismatched_keys.append(
@@ -1482,11 +1482,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
-        # If current model is a base model, attach `base_model_tp_plan` from config
+        # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._tp_plan = self.config.base_model_tp_plan
-        # If current model is a base model, attach `base_model_pp_plan` from config
-        if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan
 
     def dequantize(self):
@@ -1616,7 +1614,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             3. SDPA implementation, if available and supported by the model type. (`LlamaSdpaAttention` for example)
             4. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
-        # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitely set by the user.
+        # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitly set by the user.
         # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility (always fall back on "eager").
         # The `hasattr` here is used as some Transformers tests for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
         requested_attn_implementation = None
@@ -2207,7 +2205,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
-        # Since we are basically resuing the same old embeddings with new weight values, gathering is required
+        # Since we are basically reusing the same old embeddings with new weight values, gathering is required
         is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
@@ -2574,7 +2572,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 sample_shape=(added_num_tokens,)
             ).to(old_embeddings.weight.dtype)
         else:
-            # Otherwise, just initialize with the mean. because distribtion will not be created.
+            # Otherwise, just initialize with the mean. because distribution will not be created.
             new_embeddings.weight.data[-1 * added_num_tokens :, :] = (
                 mean_embeddings[None, :].repeat(added_num_tokens, 1).to(old_embeddings.weight.dtype)
             )
@@ -2593,7 +2591,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             new_lm_head.weight.data = new_lm_head.weight.data.T
             old_lm_head.weight.data = old_lm_head.weight.data.T
 
-        # The same initilization logic as Embeddings.
+        # The same initialization logic as Embeddings.
         self._init_added_embeddings_weights_with_mean(
             old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens
         )
@@ -2740,7 +2738,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if self.supports_gradient_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
-            # we will fall back to the overwritten `_set_gradient_checkpointing` methid
+            # we will fall back to the overwritten `_set_gradient_checkpointing` method
             _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
             if not _is_using_old_format:
                 self._set_gradient_checkpointing(enable=False)
@@ -2979,7 +2977,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
 
-        # Rename state_dict keys before saving to file. Do nothing unless overriden in a particular model.
+        # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
         # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
 
@@ -4998,7 +4996,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     shard_file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only
                 )
 
-                # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
+                # Mismatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
                 mismatched_keys += _find_mismatched_keys(
                     state_dict,
@@ -5321,13 +5319,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
         was already loaded in memory, note however that this means that each process will first initialize the whole model,
-        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+        then parallelize it across devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
 
-        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
+        Calling `from_pretrained(..., tp_plan="auto")` is preferred, and will parallelize module-by-module during initialization,
         so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
         Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
         was already loaded in memory, note however that this means that each process will first initialize the whole model,
-        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+        then parallelize it across devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
 
         Args:
             device_mesh (`torch.distributed.DeviceMesh`):
@@ -5869,7 +5867,7 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
 
 def expand_device_map(device_map, param_names, start_prefix):
     """
-    Expand a device map to return the correspondance parameter name to device.
+    Expand a device map to return the correspondence parameter name to device.
     """
     new_device_map = {}
     param_names = [p[len(start_prefix) :] for p in param_names if p.startswith(start_prefix)]
