@@ -456,10 +456,6 @@ class DeepseekV2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekV2FlashAttention2(Qwen2MoeFlashAttention2):
-    pass
-
-
 class DeepseekV2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__(config, layer_idx)
