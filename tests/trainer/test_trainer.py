@@ -28,7 +28,7 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -51,10 +51,6 @@ from transformers import (
     is_torch_available,
     logging,
     set_seed,
-)
-from transformers.data.data_collator import (
-    InputDataClass,
-    default_data_collator
 )
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
@@ -2968,9 +2964,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
 
     def test_save_collator_tokenizer_by_default(self):
+        from typing import Any
+
+        from transformers import BertTokenizer
+        from transformers.data.data_collator import (InputDataClass,
+                                                     default_data_collator)
+
         class FakeCollator:
             def __init__(self):
-                self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+                self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
                 self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
 
             def __call__(self, features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
@@ -2985,7 +2987,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             data_collator=data_collator
         )
         trainer.train()
-        loaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+        loaded_tokenizer = BertTokenizer.from_pretrained(
+            os.path.join(tmp_dir, os.listdir(tmp_dir)[0])
+        )
         assert (
             len(loaded_tokenizer) == len(trainer.data_collator.tokenizer)
         ), "Failed to load updated tokenizer"
