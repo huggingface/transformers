@@ -279,7 +279,7 @@ def mel_filter_bank(
 
     if triangularize_in_mel_space:
         # frequencies of FFT bins in Hz, but filters triangularized in mel space
-        fft_bin_width = sampling_rate / (num_frequency_bins * 2)
+        fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
         fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
         filter_freqs = mel_freqs
     else:
