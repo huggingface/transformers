@@ -203,7 +203,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
         else:
             module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
-            quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+            quantize_(module, self.quantization_config.get_apply_tensor_subclass(), set_inductor_config=False)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
