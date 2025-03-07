@@ -1036,7 +1036,7 @@ class RTDetrDecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_dropout = config.activation_dropout
 
-        # self-attention
+        # Self-Attention
         self.self_attn = RTDetrMultiheadAttention(
             embed_dim=config.hidden_size,
             num_heads=config.decoder_attention_heads,
@@ -1045,7 +1045,7 @@ class RTDetrDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        # cross-attention
+        # Cross-Attention
         self.encoder_attn = RTDetrMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
@@ -1053,7 +1053,7 @@ class RTDetrDecoderLayer(nn.Module):
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        # feedforward neural networks
+        # Feedforward
         self.fc1 = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1092,7 +1092,7 @@ class RTDetrDecoderLayer(nn.Module):
                 returned tensors for more detail.
         """
 
-        # Self Attention
+        # Self-Attention
         self_attn_residual = hidden_states
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -1120,7 +1120,7 @@ class RTDetrDecoderLayer(nn.Module):
         hidden_states = cross_attn_residual + hidden_states
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-        # Fully Connected
+        # Feedforward
         fc_residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
@@ -1146,7 +1146,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initalize the weights"""
 
-        """initialize linear layer bias value according to a given probability value."""
+        # initialize linear layer bias value according to a given probability value
         if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
