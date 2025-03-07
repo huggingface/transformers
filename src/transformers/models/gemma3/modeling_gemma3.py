@@ -41,7 +41,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma import GemmaPreTrainedModel
 from ..siglip import SiglipVisionModel
 from .configuration_gemma3 import Gemma3Config, Gemma3RotaryEmbeddingConfig, Gemma3TextConfig
@@ -769,7 +768,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1071,7 +1069,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         image_features = self.multimodal_projector(vision_outputs)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1147,13 +1144,9 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            if self.config.text_config.image_token_id >= self.get_input_embeddings().num_embeddings:
-                image_token_mask = input_ids == self.config.text_config.image_token_id
-                llm_input_ids = input_ids.clone()
-                llm_input_ids[image_token_mask] = 0
-            else:
-                llm_input_ids = input_ids
-
+            image_token_mask = input_ids == self.config.text_config.image_token_id
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[image_token_mask] = 0
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
@@ -1185,7 +1178,15 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        causal_mask = attention_mask
+        causal_mask = self._update_causal_mask(
+            attention_mask,
+            token_type_ids,
+            past_key_values,
+            cache_position,
+            input_ids,
+            input_ids,
+            is_training,
+        )
         outputs = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
@@ -1308,7 +1309,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
             return attention_mask
 
         min_dtype = torch.finfo(self.dtype).min
-        inputs_lead_dim, sequence_length = input_tensor.shape[:2]
+        batch_size, sequence_length = input_tensor.shape[:2]
         if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
@@ -1317,7 +1318,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 if isinstance(attention_mask, torch.Tensor)
                 else cache_position[0] + sequence_length + 1
             )
-        batch_size, sequence_length = input_ids.shape
 
         # Create a full matrix with large negative values
         causal_mask = torch.full(

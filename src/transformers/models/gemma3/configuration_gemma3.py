@@ -199,7 +199,6 @@ class Gemma3TextConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         use_cache: bool = True,
         cache_implementation: str = "hybrid",
-        torch_dtype: str = "bfloat16",
         **kwargs,
     ):
         super().__init__(
@@ -207,7 +206,6 @@ class Gemma3TextConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            torch_dtype=torch_dtype,
             **kwargs,
         )
 
@@ -239,55 +237,17 @@ class Gemma3TextConfig(PretrainedConfig):
         self.cache_implementation = cache_implementation
 
 
-class Gemma3VisionConfig(SiglipVisionConfig):
-    model_type = "gemma3_vision"
-
-    def __init__(
-        self,
-        hidden_size: int = 1152,
-        intermediate_size: int = 4304,
-        num_hidden_layers: int = 27,
-        num_attention_heads: int = 16,
-        num_channels: int = 3,
-        image_size: int = 896,
-        attention_dropout: float = 0.0,
-        patch_size: int = 14,
-        hidden_act: str = "gelu_pytorch_tanh",
-        layer_norm_eps: float = 0.000001,
-        vision_use_head: bool = False,
-        torch_dtype: str = "bfloat16",
-        **kwargs,
-    ):
-        super().__init__(
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_channels=num_channels,
-            image_size=image_size,
-            patch_size=patch_size,
-            hidden_act=hidden_act,
-            layer_norm_eps=layer_norm_eps,
-            attention_dropout=attention_dropout,
-            torch_dtype=torch_dtype,
-            **kwargs,
-        )
-
-        self.vision_use_head = vision_use_head
-
-
 class Gemma3Config(PretrainedConfig):
     model_type = "gemma3"
     sub_configs = {
         "text_config": Gemma3TextConfig,
-        "vision_config": Gemma3VisionConfig,
+        "vision_config": SiglipVisionConfig,
     }
 
     def __init__(
         self,
         text_config: Optional[Gemma3TextConfig] = None,
-        vision_config: Optional[Gemma3VisionConfig] = None,
-        torch_dtype: str = "bfloat16",
+        vision_config: Optional[SiglipVisionConfig] = None,
         **kwargs,
     ):
         if text_config is None:
@@ -297,13 +257,9 @@ class Gemma3Config(PretrainedConfig):
             self.text_config = Gemma3TextConfig(**text_config)
         elif isinstance(text_config, Gemma3TextConfig):
             self.text_config = text_config
-        else:
-            raise ValueError("text_config must be None or compatible with initializing a Gemma3TextConfig.")
 
         if isinstance(vision_config, dict):
-            self.vision_config = Gemma3VisionConfig(**vision_config)
-        elif isinstance(vision_config, Gemma3VisionConfig):
-            self.vision_config = cast(Gemma3VisionConfig, vision_config)
+            self.vision_config = SiglipVisionConfig(**vision_config)
         else:
             self.vision_config = None
             logger.info(
@@ -311,7 +267,7 @@ class Gemma3Config(PretrainedConfig):
                 "to text tasks."
             )
 
-        super().__init__(torch_dtype=torch_dtype, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["Gemma3Config", "Gemma3TextConfig", "Gemma3VisionConfig"]

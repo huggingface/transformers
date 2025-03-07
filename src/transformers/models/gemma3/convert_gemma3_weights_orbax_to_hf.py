@@ -8,33 +8,32 @@ python -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
     --precision='bfloat16'
 """
 
-from collections.abc import Iterator, Sequence
 import dataclasses
 import math
+from collections.abc import Iterator, Sequence
 from typing import Any
 
-from absl import app
-from absl import flags
-from absl import logging
 import accelerate
 import numpy as np
-from orbax import checkpoint as obc
 import torch
 import tree
+from absl import app, flags, logging
+from orbax import checkpoint as obc
 
 from ..gemma import GemmaTokenizerFast
 from ..siglip import SiglipImageProcessor
+from . import (
+    Gemma3ForCausalLM,
+    Gemma3ForConditionalGeneration,
+    Gemma3Processor,
+)
 from .configuration_gemma3 import (
     DEFAULT_ATTENION_PATTERN,
     Gemma3Config,
     Gemma3TextConfig,
     Gemma3VisionConfig,
 )
-from . import (
-    Gemma3ForCausalLM,
-    Gemma3ForConditionalGeneration,
-    Gemma3Processor,
-)
+
 
 # ==== Internal Constants and Classes ====
 

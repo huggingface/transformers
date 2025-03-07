@@ -473,6 +473,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
+    "models.gemma3": ["Gemma3Config"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -1271,6 +1272,7 @@ else:
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
         ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
@@ -2451,6 +2453,15 @@ else:
             "Gemma2PreTrainedModel",
         ]
     )
+    _import_structure["models.gemma3"].extend(
+        [
+            "Gemma3ForConditionalGeneration",
+            "Gemma3PreTrainedModel",
+            "Gemma3Processor",
+            "Gemma3Model",
+            "Gemma3ForCausalLM",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2553,6 +2564,7 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2560,7 +2572,6 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
-
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -5627,6 +5638,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
+    from .models.gemma3 import Gemma3Config
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -6448,6 +6460,7 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
+        from .models.gemma3 import Gemma3ImageProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
@@ -7458,6 +7471,13 @@ if TYPE_CHECKING:
             Gemma2ForTokenClassification,
             Gemma2Model,
             Gemma2PreTrainedModel,
+        )
+        from .models.gemmma3 import (
+            Gemma3ForCausalLM,
+            Gemma3ForConditionalGeneration,
+            Gemma3Model,
+            Gemma3PreTrainedModel,
+            Gemma3Processor,
         )
         from .models.git import (
             GitForCausalLM,
