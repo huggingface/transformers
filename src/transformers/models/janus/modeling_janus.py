@@ -2035,29 +2035,28 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs["output_attentions"] = output_attentions
-        model_kwargs["output_hidden_states"] = output_hidden_states
-
 
         for i in tqdm(range(num_image_tokens)):
-            # inputs_embeds.device can change
-            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].to(inputs_embeds.device)
-            model_kwargs["cache_position"] = model_kwargs["cache_position"].to(inputs_embeds.device)
             """
             cloning to avoid the in-place modification that happens inside the prepare_inputs_for_generation call, which
             converts the mask to 4d and makes it incompatible with self._update_model_kwargs_for_generation, which will 
             be called later
             """
             attention_mask = model_kwargs["attention_mask"].clone()
-            model_kwargs.pop("input_ids", None)
-            model_kwargs.pop("position_ids", None) # following function should infer it automatically for increment to happen
-            model_kwargs = super().prepare_inputs_for_generation(
+            model_inputs = super().prepare_inputs_for_generation(
+                inputs_embeds=inputs_embeds,
                 input_ids=input_tokens,
                 **model_kwargs
             )
+
+            # inputs_embeds.device can change on multi-gpu
+            model_inputs["attention_mask"] = model_kwargs["attention_mask"].to(inputs_embeds.device)
+            model_inputs["cache_position"] = model_kwargs["cache_position"].to(inputs_embeds.device)
+
             outputs = self.model.language_model(
-                **model_kwargs,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                **model_inputs,
             )
 
             # Update model_kwargs like cache_position for next generation.
@@ -2078,7 +2077,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             # Prepare embeddings for the next step.
             next_token = torch.cat([next_token, next_token])
             img_embeds = self.prepare_embeddings_for_image_generation(next_token)
-            model_kwargs["inputs_embeds"] = img_embeds.unsqueeze(dim=1)
+            inputs_embeds = img_embeds.unsqueeze(dim=1)
 
             # similar to GenerationMixin._sample, this is needed in prepare_inputs_for_generation
             input_tokens = torch.cat([input_tokens, next_token[:, None]], dim=-1)
