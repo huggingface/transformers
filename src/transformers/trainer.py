@@ -171,6 +171,7 @@ from .utils import (
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,
@@ -1734,6 +1735,31 @@ class Trainer:
                 }
             )
             optimizer_kwargs.update(additional_optim_kwargs)
+        elif args.optim == OptimizerNames.STABLE_ADAMW:
+            if not is_torch_optimi_available():
+                raise ImportError(
+                    "You need to install `torch-optimi` in order to use stable_adamw optimizers. "
+                    "Install it with `pip install torch-optimi`."
+                )
+            from optimi import StableAdamW
+
+            max_lr = optim_args.pop("max_lr", None)
+            if max_lr is not None:
+                max_lr = float(max_lr)
+
+            kahan_sum = optim_args.pop("kahan_sum", None)
+            if kahan_sum is not None:
+                kahan_sum = bool(kahan_sum)
+
+            stable_adamw_kwargs = {
+                "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
+                "max_lr": max_lr,
+                "kahan_sum": kahan_sum,
+            }
+
+            optimizer_cls = StableAdamW
+            optimizer_kwargs.update(adam_kwargs)
+            optimizer_kwargs.update(stable_adamw_kwargs)
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
