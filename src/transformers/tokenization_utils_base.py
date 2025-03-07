@@ -149,7 +149,7 @@ SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
-CHAT_TEMPLATE_DIR = "chat_templates"
+CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
