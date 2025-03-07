@@ -289,7 +289,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             tmp.write(requests.get(self.audio_url, stream=True).raw.data)
             tmp.flush()
             tmp.seek(0)
-            audio = soundfile.read(tmp.name)
+            audio, _ = soundfile.read(tmp.name)
 
         prompt = f"{self.user_token}<|audio_1|>What is happening in this audio?{self.end_token}{self.assistant_token}"
         inputs = self.processor(prompt, audios=[audio], return_tensors="pt").to(torch_device)
