@@ -24,7 +24,7 @@ Tailor the [`Pipeline`] to your task with task specific parameters such as addin
 
 Transformers has two pipeline classes, a generic [`Pipeline`] and many individual task-specific pipelines like [`TextGenerationPipeline`] or [`VisualQuestionAnsweringPipeline`]. Load these individual pipelines by setting the task identifier in the `task` parameter in [`Pipeline`]. You can find the task identifier for each pipeline in their API documentation.
 
-Each task is configured to use a default pretrained model and preprocessor, but this can be overriden with the `model` parameter if you want to use a different model.
+Each task is configured to use a default pretrained model and preprocessor, but this can be overridden with the `model` parameter if you want to use a different model.
 
 For example, to use the [`TextGenerationPipeline`] with [Gemma 2](./model_doc/gemma2), set `task="text-generation"` and `model="google/gemma-2-2b"`.
 
