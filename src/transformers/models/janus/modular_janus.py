@@ -732,10 +732,12 @@ class JanusVisionModel(SiglipVisionModel):
 
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
-
-        self.vision_model = JanusVisionTransformer(config)
-
+        del self.vision_model
+        self.vision_transformer = JanusVisionTransformer(config)
         self.post_init()
+
+    def forward(self, *args, **kwargs):
+        return self.vision_transformer(*args, **kwargs)
 
 
 class JanusVisionAlignerMLP(nn.Module):
@@ -1120,8 +1122,7 @@ class JanusModel(JanusPreTrainedModel):
         super().__init__(config)
         self.config = config
         # This is necessary for backward compatibility, see SiglipModel initialization
-        tmp_vision_model = JanusVisionModel._from_config(config.vision_config)
-        self.vision_model = tmp_vision_model.vision_model
+        self.vision_model = JanusVisionModel._from_config(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
 
         self.vqmodel = JanusVQVAE._from_config(config.vq_config)

@@ -914,8 +914,7 @@ class JanusVisionModel(JanusPreTrainedModel):
 
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
-
-        self.vision_model = JanusVisionTransformer(config)
+        self.vision_transformer = JanusVisionTransformer(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -925,14 +924,7 @@ class JanusVisionModel(JanusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(JANUS_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=JanusVisionConfig)
-    def forward(
-        self,
-        pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    def forward(self, *args, **kwargs) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
 
@@ -955,15 +947,7 @@ class JanusVisionModel(JanusPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled features
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-        )
+        return self.vision_transformer(*args, **kwargs)
 
 
 class JanusVisionAlignerMLP(nn.Module):
@@ -1546,8 +1530,7 @@ class JanusModel(JanusPreTrainedModel):
         super().__init__(config)
         self.config = config
         # This is necessary for backward compatibility, see SiglipModel initialization
-        tmp_vision_model = JanusVisionModel._from_config(config.vision_config)
-        self.vision_model = tmp_vision_model.vision_model
+        self.vision_model = JanusVisionModel._from_config(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
 
         self.vqmodel = JanusVQVAE._from_config(config.vq_config)
