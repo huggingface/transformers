@@ -121,7 +121,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
                 if "qkv_proj" in old_key:
                     # Split the tensor into q, k, v projections
                     q_proj, k_proj, v_proj = (
-                        old_attr[:tfm.hparams.model_dims, ...],
+                        old_attr[: tfm.hparams.model_dims, ...],
                         old_attr[tfm.hparams.model_dims : tfm.hparams.model_dims * 2, ...],
                         old_attr[tfm.hparams.model_dims * 2 :, ...],
                     )
