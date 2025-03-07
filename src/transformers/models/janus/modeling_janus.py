@@ -1656,7 +1656,6 @@ class JanusModel(JanusPreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
-
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = True
@@ -1903,7 +1902,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
-
         if len(input_ids.shape) != 2:
             raise ValueError(
                 f"Expected input ids as input of shape (batch_size, seq_len), but got {input_ids.shape}"
@@ -1943,10 +1941,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
-        model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat(2,1)
+        model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat(2, 1)
 
-        input_tokens[batch_size:, :] = torch.where(input_tokens[batch_size:, :] != generation_config.bos_token_id,
-                                                   generation_config.pad_token_id, input_tokens[batch_size:, :])
+        input_tokens[batch_size:, :].masked_fill_(
+            input_tokens[batch_size:, :] != generation_config.bos_token_id, generation_config.pad_token_id
+        )
+
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
@@ -1979,7 +1979,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-
         for i in tqdm(range(num_image_tokens)):
             """
             cloning to avoid the in-place modification that happens inside the prepare_inputs_for_generation call, which
@@ -1988,9 +1987,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             """
             attention_mask = model_kwargs["attention_mask"].clone()
             model_inputs = super().prepare_inputs_for_generation(
-                inputs_embeds=inputs_embeds,
-                input_ids=input_tokens,
-                **model_kwargs
+                inputs_embeds=inputs_embeds, input_ids=input_tokens, **model_kwargs
             )
 
             # inputs_embeds.device can change on multi-gpu
