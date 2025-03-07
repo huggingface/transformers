@@ -1475,6 +1475,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
+        # Activation checkpointing + `use_cache` breaks and results in shape mismatch errors between recomputed and cached data
+        # However, we do not have a way to detect if activation checkpointing is enabled
+        # Only accelerate sets `FSDP_ACTIVATION_CHECKPOINTING` when activation checkpointing is enabled, which enables us to
+        # atleast catch this case
+        # Warning here is not ideal, however this affects all types of models that support `use_cache`, so we need to catch
+        # all different cases of their creation (e.g. from_pretrained, from_config, etc)
+        if getattr(self.config, "use_cache", False) and os.environ.get("FSDP_ACTIVATION_CHECKPOINTING") is not None:
+            self.config.use_cache = False
+            logger.warning_once(
+                "Activation checkpointing is enabled, but `use_cache` is set to True. "
+                "This leads to incorrect behavior, setting `use_cache` to False."
+            )
+
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
