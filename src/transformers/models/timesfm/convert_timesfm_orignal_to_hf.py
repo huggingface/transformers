@@ -53,14 +53,14 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
     )
 
     timesfm_config = TimesFmConfig(
-        patch_len=tfm.hparams.input_patch_len,
-        context_len=tfm.hparams.context_len,
-        horizon_len=tfm.hparams.horizon_len,
-        num_layers=tfm.hparams.num_layers,
-        model_dim=tfm.hparams.model_dims,
+        patch_length=tfm.hparams.input_patch_len,
+        context_length=tfm.hparams.context_len,
+        horizon_length=tfm.hparams.horizon_len,
+        num_hidden_layers=tfm.hparams.num_layers,
+        hidden_size=tfm.hparams.model_dims,
         intermediate_size=tfm.hparams.model_dims,
         head_dim=tfm.hparams.model_dims // tfm.hparams.num_heads,
-        num_heads=tfm.hparams.num_heads,
+        num_attention_heads=tfm.hparams.num_heads,
         use_positional_embedding=tfm.hparams.use_positional_embedding,
     )
     timesfm_config.save_pretrained(tmp_model_path)
