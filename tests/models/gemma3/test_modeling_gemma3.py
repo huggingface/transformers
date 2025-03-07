@@ -20,11 +20,9 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma3Config, HybridCache, is_torch_available, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma3Config, Gemma3TextConfig, HybridCache, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    floats_tensor,
-    ids_tensor,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -33,7 +31,9 @@ from transformers.testing_utils import (
     tooslow,
     torch_device,
 )
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 from ...test_configuration_common import ConfigTester
 
@@ -44,18 +44,19 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3Model,
+        Gemma3ForConditionalGeneration,
     )
 
 
 class Gemma3ModelTester(GemmaModelTester):
     if is_torch_available():
-        config_class = Gemma3Config
+        config_class = Gemma3TextConfig
         model_class = Gemma3Model
         for_causal_lm_class = Gemma3ForCausalLM
 
 
 @require_torch
-class Gemma3ModelTest(GemmaModelTest, unittest.TestCase):
+class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3Model, Gemma3ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
@@ -69,19 +70,6 @@ class Gemma3ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @unittest.skip("Gemma3's forcefully disables sdpa due to softcapping")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
-    @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
@@ -133,53 +121,8 @@ class Gemma3ModelTest(GemmaModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    # overwrite because HybridCache has fixed length for key/values
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            src_len = min_length + idx if not use_cache else max_length
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
-
-    # overwrite because HybridCache has fixed length for key/values
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        self.assertIsInstance(past_key_values, HybridCache)
-
-        # check shape key, value (batch, head, max_seq_length, head_features)
-        head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        num_key_value_heads = (
-            config.num_attention_heads
-            if getattr(config, "num_key_value_heads", None) is None
-            else config.num_key_value_heads
-        )
-        num_hidden_layers = config.num_hidden_layers
-
-        # we should get `max_length` in shape, not `max_length - embeds_length`
-        # `+1` because the test in Mixin subtracts 1 which is needed for tuple cache
-        static_cache_shape = (batch_size, num_key_value_heads, seq_length + 1, head_dim)
-        static_layers = [layer_idx for layer_idx, boolean in enumerate(past_key_values.is_sliding) if not boolean]
-        self.assertTrue(len(past_key_values.key_cache) == num_hidden_layers)
-        self.assertTrue(past_key_values.key_cache[static_layers[0]].shape == static_cache_shape)
-
-    @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
+    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    def test_eager_matches_fa2_generate(self):
         pass
 
 
@@ -187,7 +130,10 @@ class Gemma3Vision2TextModelTester:
     def __init__(
         self,
         parent,
-        image_token_index=0,
+        mm_tokens_per_image=2,
+        image_token_index=1,
+        boi_token_index=2,
+        eoi_token_index=3,
         seq_length=25,
         is_training=True,
         vision_config={
@@ -209,17 +155,20 @@ class Gemma3Vision2TextModelTester:
     ):
         self.parent = parent
         # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
+        self.mm_tokens_per_image = mm_tokens_per_image
         self.image_token_index = image_token_index
-        self.llm_tester = Gemma3ModelTester()
+        self.boi_token_index = boi_token_index
+        self.eoi_token_index = eoi_token_index
+        self.llm_tester = Gemma3ModelTester(self.parent)
         self.text_config = self.llm_tester.get_config()
         self.vision_config = vision_config
         self.seq_length = seq_length
-        self.pad_token_id = self.text_config["pad_token_id"]
+        self.pad_token_id = self.text_config.pad_token_id
 
-        self.num_hidden_layers = self.text_config["num_hidden_layers"]
-        self.vocab_size = self.text_config["vocab_size"]
-        self.hidden_size = self.text_config["hidden_size"]
-        self.num_attention_heads = self.text_config["num_attention_heads"]
+        self.num_hidden_layers = self.text_config.num_hidden_layers
+        self.vocab_size = self.text_config.vocab_size
+        self.hidden_size = self.text_config.hidden_size
+        self.num_attention_heads = self.text_config.num_attention_heads
         self.is_training = is_training
 
         self.batch_size = 3
@@ -232,6 +181,10 @@ class Gemma3Vision2TextModelTester:
         return Gemma3Config(
             text_config=self.text_config,
             vision_config=self.vision_config,
+            image_token_index=self.image_token_index,
+            boi_token_index=self.boi_token_index,
+            eoi_token_index=self.eoi_token_index,
+            mm_tokens_per_image=self.mm_tokens_per_image,
         )
 
     def prepare_config_and_inputs(self):
@@ -253,10 +206,10 @@ class Gemma3Vision2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
-        # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
+        # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, :16] = config.image_token_index
+        input_ids[:, :3] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -266,9 +219,9 @@ class Gemma3Vision2TextModelTester:
 
 
 @require_torch
-class Gemma3Vision2TextModelTest(unittest.TestCase):
-    all_model_classes = (Gemma3Model, Gemma3ForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
+class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
     _is_stateful = True
@@ -280,19 +233,6 @@ class Gemma3Vision2TextModelTest(unittest.TestCase):
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @unittest.skip("Gemma3's forcefully disables sdpa due to softcapping")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
-    @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
@@ -342,55 +282,6 @@ class Gemma3Vision2TextModelTest(unittest.TestCase):
 
     @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    # overwrite because HybridCache has fixed length for key/values
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            src_len = min_length + idx if not use_cache else max_length
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
-
-    # overwrite because HybridCache has fixed length for key/values
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        self.assertIsInstance(past_key_values, HybridCache)
-
-        # check shape key, value (batch, head, max_seq_length, head_features)
-        head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        num_key_value_heads = (
-            config.num_attention_heads
-            if getattr(config, "num_key_value_heads", None) is None
-            else config.num_key_value_heads
-        )
-        num_hidden_layers = config.num_hidden_layers
-
-        # we should get `max_length` in shape, not `max_length - embeds_length`
-        # `+1` because the test in Mixin subtracts 1 which is needed for tuple cache
-        static_cache_shape = (batch_size, num_key_value_heads, seq_length + 1, head_dim)
-        static_layers = [layer_idx for layer_idx, boolean in enumerate(past_key_values.is_sliding) if not boolean]
-        self.assertTrue(len(past_key_values.key_cache) == num_hidden_layers)
-        self.assertTrue(past_key_values.key_cache[static_layers[0]].shape == static_cache_shape)
-
-    @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
         pass
 
 

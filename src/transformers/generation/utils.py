@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import copy
 import inspect
 import warnings
@@ -3213,14 +3214,14 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         model_forward = self.__call__
-        # if isinstance(model_kwargs.get("past_key_values"), Cache):
-        #     is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-        #     is_compileable = is_compileable and not generation_config.disable_compile
-        #     if is_compileable and (
-        #         self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
-        #     ):
-        #         os.environ["TOKENIZERS_PARALLELISM"] = "0"
-        #         model_forward = self.get_compiled_call(generation_config.compile_config)
+        if isinstance(model_kwargs.get("past_key_values"), Cache):
+            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
+            is_compileable = is_compileable and not generation_config.disable_compile
+            if is_compileable and (
+                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
+            ):
+                os.environ["TOKENIZERS_PARALLELISM"] = "0"
+                model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
         while self._has_unfinished_sequences(

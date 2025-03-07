@@ -1056,7 +1056,7 @@ class Gemma3MultiModalProjector(nn.Module):
         )
 
         self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
-        self.tokens_per_side = int(config.text_config.mm_tokens_per_image**0.5)
+        self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
         self.kernel_size = self.patches_per_image // self.tokens_per_side
         self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
