@@ -23,7 +23,7 @@ def process_file(modular_file_path, generated_modeling_content, file_type="model
     file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
     file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
-    with open(file_path, "r") as modeling_file:
+    with open(file_path, "r", encoding="utf-8") as modeling_file:
         content = modeling_file.read()
     output_buffer = StringIO(generated_modeling_content[file_type][0])
     output_buffer.seek(0)
@@ -39,7 +39,7 @@ def process_file(modular_file_path, generated_modeling_content, file_type="model
     # Check for differences
     if diff_list:
         if fix_and_overwrite:
-            with open(file_path, "w") as modeling_file:
+            with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
                 modeling_file.write(generated_modeling_content[file_type][0])
             console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         else:
