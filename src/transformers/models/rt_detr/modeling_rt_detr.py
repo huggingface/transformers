@@ -801,7 +801,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
+    def __init__(self, config: RTDetrConfig, num_heads: int, num_points: int):
         super().__init__()
 
         # Doing basic sanity checks
@@ -824,7 +824,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         self.num_levels = config.num_feature_levels
         self.num_heads = num_heads
         self.head_dim = head_dim
-        self.num_points = n_points
+        self.num_points = num_points
         self.disable_custom_kernels = config.disable_custom_kernels
 
         # Load custom deformable attention kernel if needed,
@@ -1049,7 +1049,7 @@ class RTDetrDecoderLayer(nn.Module):
         self.encoder_attn = RTDetrMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
-            n_points=config.decoder_n_points,
+            num_points=config.decoder_n_points,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -1163,16 +1163,16 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         if isinstance(module, RTDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
+            thetas = torch.arange(module.num_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.num_heads
             )
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
+                .view(module.num_heads, 1, 1, 2)
+                .repeat(1, module.num_levels, module.num_points, 1)
             )
-            for i in range(module.n_points):
+            for i in range(module.num_points):
                 grid_init[:, :, i, :] *= i + 1
             with torch.no_grad():
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
