@@ -2969,23 +2969,23 @@ class Properties:
         Returns score indicating how similar two instances of `Properties` are.
         If the compared device types are "cuda" and "hip" they get half marks as they are similar, but not equal.
         """
-        score = 0
+        score = 0b00000
         if self.type == other.type:
-            score += 100
+            score |= 0b10000
         elif (self.type == "cuda" and other.type == "rocm") or (self.type == "rocm" and other.type == "cuda"):
-            score += 50
+            score |= 0b01000
 
         if self.cap_major == other.cap_major and self.cap_major is not None:
-            score += 25
+            score |= 0b00100
 
             # Minor versions are only better if major already matches
             if self.cap_minor == other.cap_minor and self.cap_minor is not None:
-                score += 10
+                score |= 0b00010
 
         if self == Properties.default():
-            score += 1
+            score |= 0b00001
 
-        return score
+        return int(score)
 
 
 @dataclass(frozen=True)
