@@ -1959,11 +1959,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
-        # Do this to have the `bos` token appearing after (i.e. right) of the padding token, similarly to
-        # what would happen in the batched+padding version
-        if input_ids[0, 0] == 100000:
-            input_ids[0, 0] = 100002
-            input_ids[0, 17] = 100000
 
         if len(input_ids.shape) != 2:
             raise ValueError(
@@ -2006,7 +2001,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
         model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat(2,1)
 
-        input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id  # Set Unconditional logits
+        input_tokens[batch_size:, :] = torch.where(input_tokens[batch_size:, :] != generation_config.bos_token_id,
+                                                   generation_config.pad_token_id, input_tokens[batch_size:, :])
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
@@ -2055,12 +2051,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             """
             attention_mask = model_kwargs["attention_mask"].clone()
             model_kwargs.pop("input_ids", None)
+            model_kwargs.pop("position_ids", None) # following function should infer it automatically for increment to happen
             model_kwargs = super().prepare_inputs_for_generation(
                 input_ids=input_tokens,
                 **model_kwargs
             )
-            # todo: re-add this
-            model_kwargs.pop("position_ids")
             outputs = self.model.language_model(
                 **model_kwargs,
             )
