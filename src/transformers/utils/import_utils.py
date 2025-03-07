@@ -111,6 +111,7 @@ _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
+_torch_optimi_available = _is_package_available("torch-optimi")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -408,6 +409,10 @@ def is_galore_torch_available():
 
 def is_apollo_torch_available():
     return _apollo_torch_available
+
+
+def is_torch_optimi_available():
+    return _torch_optimi_available
 
 
 def is_lomo_available():
