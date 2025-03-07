@@ -1501,7 +1501,7 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
-        ("timesfm", "TimesFMModelForPrediction"),
+        ("timesfm", "TimesFmModelForPrediction"),
     ]
 )
 
