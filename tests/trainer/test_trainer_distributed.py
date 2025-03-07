@@ -19,12 +19,11 @@ import numpy as np
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_gpu,
-    require_torch_multi_xpu,
-    require_torch_neuroncore,
-    require_torch_npu,
+    require_torch_multi_accelerator,
+    torch_device,
 )
 from transformers.training_args import ParallelMode
 from transformers.utils import logging
@@ -117,57 +116,15 @@ if is_torch_available():
             return result
 
 
-class TestTrainerDistributedNeuronCore(TestCasePlus):
-    @require_torch_neuroncore
-    def test_trainer(self):
-        distributed_args = f"""--nproc_per_node=2
-            --master_port={get_torch_dist_unique_port()}
-            {self.test_file_dir}/test_trainer_distributed.py
-        """.split()
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = f"--output_dir {output_dir}".split()
-        cmd = ["torchrun"] + distributed_args + args
-        execute_subprocess_async(cmd, env=self.get_env())
-        # successful return here == success - any errors would have caused an error in the sub-call
-
-
-class TestTrainerDistributedNPU(TestCasePlus):
-    @require_torch_npu
-    def test_trainer(self):
-        distributed_args = f"""--nproc_per_node=2
-            --master_port={get_torch_dist_unique_port()}
-            {self.test_file_dir}/test_trainer_distributed.py
-        """.split()
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = f"--output_dir {output_dir}".split()
-        cmd = ["torchrun"] + distributed_args + args
-        execute_subprocess_async(cmd, env=self.get_env())
-        # successful return here == success - any errors would have caused an error in the sub-call
-
-
 class TestTrainerDistributed(TestCasePlus):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_trainer(self):
-        distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
+        distributed_args = f"""--nproc_per_node={backend_device_count(torch_device)}
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_trainer_distributed.py
         """.split()
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"--output_dir {output_dir} --report_to none".split()
-        cmd = ["torchrun"] + distributed_args + args
-        execute_subprocess_async(cmd, env=self.get_env())
-        # successful return here == success - any errors would have caused an error in the sub-call
-
-
-@require_torch_multi_xpu
-class TestTrainerDistributedXPU(TestCasePlus):
-    def test_trainer(self):
-        distributed_args = f"""--nproc_per_node={torch.xpu.device_count()}
-            --master_port={get_torch_dist_unique_port()}
-            {self.test_file_dir}/test_trainer_distributed.py
-        """.split()
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = f"--output_dir {output_dir}".split()
         cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
