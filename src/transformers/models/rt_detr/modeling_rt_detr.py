@@ -804,20 +804,15 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
-        kernel_loaded = MultiScaleDeformableAttention is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-
-        if config.d_model % num_heads != 0:
+        # Doing basic sanity checks
+        if config.hidden_size % num_heads != 0:
             raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.hidden_size} and {num_heads}"
             )
-        dim_per_head = config.d_model // num_heads
-        # check if dim_per_head is power of 2
-        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
+
+        # check if head_dim is power of 2
+        head_dim = config.hidden_size // num_heads
+        if not ((head_dim & (head_dim - 1) == 0) and head_dim != 0):
             warnings.warn(
                 "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
                 " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
@@ -825,19 +820,30 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
             )
 
         self.im2col_step = 64
-
-        self.hidden_size = config.d_model
+        self.hidden_size = config.hidden_size
         self.num_levels = config.num_feature_levels
         self.num_heads = num_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.head_dim = head_dim
         self.num_points = n_points
+        self.disable_custom_kernels = config.disable_custom_kernels
+
+        # Load custom deformable attention kernel if needed,
+        # otherwise use the pytorch implementation would be used
+        if (
+            not config.disable_custom_kernels  # manually disabled in config
+            and is_torch_cuda_available()  # only CUDA is supported for now
+            and is_ninja_available()  # we need Ninja to compile the kernel
+            and MultiScaleDeformableAttention is not None  # only if the kernel is previously loaded
+        ):
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
 
         self.sampling_offsets = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points * 2)
         self.attention_weights = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points)
         self.value_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.output_proj = nn.Linear(self.hidden_size, self.hidden_size)
-
-        self.disable_custom_kernels = config.disable_custom_kernels
 
     def forward(
         self,
