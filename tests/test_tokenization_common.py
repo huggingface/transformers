@@ -838,7 +838,7 @@ class TokenizerTesterMixin:
                 toks_after_adding = tokenizer.tokenize(text)
                 toks_after_adding2 = tokenizer.tokenize(text2)
 
-                # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                # Rust tokenizers don't lowercase added tokens at the time calling `tokenizer.add_tokens`,
                 # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
                 self.assertIn(added, [2, 4])
 

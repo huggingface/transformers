@@ -191,7 +191,7 @@ class PretrainedConfig(PushToHubMixin):
             v5.
         loss_type (`str`, *optional*):
             The type of loss that the model should use. It should be in `LOSS_MAPPING`'s keys, otherwise the loss will
-            be automatically infered from the model architecture.
+            be automatically inferred from the model architecture.
     """
 
     model_type: str = ""
@@ -254,7 +254,7 @@ class PretrainedConfig(PushToHubMixin):
             if num_labels is not None and len(self.id2label) != num_labels:
                 logger.warning(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
-                    f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
+                    f"{self.id2label}. The number of labels will be overwritten to {self.num_labels}."
                 )
             self.id2label = {int(key): value for key, value in self.id2label.items()}
             # Keys are always strings in JSON so convert ids to int here.
@@ -1094,7 +1094,7 @@ class PretrainedConfig(PushToHubMixin):
                 is_default_in_config = is_default_generation_value = None
                 parameter_value = getattr(self_decoder_config, parameter_name)
                 # Three cases in which is okay for the model config to hold generation config parameters:
-                # 1. The parameter is set to `None`, effectivelly delegating its value to the generation config
+                # 1. The parameter is set to `None`, effectively delegating its value to the generation config
                 if parameter_value is None:
                     continue
                 # 2. If we have a default config, then the instance should hold the same generation defaults
