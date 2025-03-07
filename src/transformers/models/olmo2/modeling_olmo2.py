@@ -7,7 +7,7 @@
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
-from torch import nn
+import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
