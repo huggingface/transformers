@@ -52,6 +52,7 @@ from transformers import (
     logging,
     set_seed,
 )
+from from transformers.data.data_collator import default_data_collator
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
@@ -2964,18 +2965,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
 
     def test_save_collator_tokenizer_by_default(self):
-        data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer,
-            mlm=False
-        )
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        args_kwargs = {
-            "report_to": "none",
-            "logging_steps": 1,
-            "max_steps": 5,
-            "learning_rate": 3e-4,
-            "disable_tqdm": True,
-        }
+        class FakeCollator:
+            def __init__(self):
+                self.tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+                self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
+
+            def __call__(self, features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
+                return default_data_collator(features, return_tensors)
+
+        data_collator = FakeCollator()
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
             output_dir=tmp_dir,
