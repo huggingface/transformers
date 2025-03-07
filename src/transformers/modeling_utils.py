@@ -799,9 +799,10 @@ def _load_state_dict_into_meta_model(
         for submodule in model.modules():
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
+    is_safetensors_shard = shard_file.endswith(".safetensors")
     file_pointer = None
     bin_state_dict = None
-    if shard_file.endswith(".safetensors"):
+    if is_safetensors_shard:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
     else:
         map_location = "cpu"
@@ -831,7 +832,7 @@ def _load_state_dict_into_meta_model(
         # we need to use serialized_param_name as file pointer is untouched
         param = (
             file_pointer.get_slice(serialized_param_name)
-            if shard_file.endswith(".safetensors")
+            if is_safetensors_shard
             else bin_state_dict[serialized_param_name]
         )
 
@@ -900,13 +901,15 @@ def _load_state_dict_into_meta_model(
                 output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
                 distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
             else:
-                param = param[:]
+                if is_safetensors_shard:
+                    param = param[:]
                 if old_param is not None and old_param.is_contiguous():
                     param = param.contiguous()
                 module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
 
         else:
-            param = param[:]
+            if is_safetensors_shard:
+                param = param[:]
             if param_casting_dtype is not None:
                 param = param.to(param_casting_dtype)
             if old_param is not None and old_param.is_contiguous():
