@@ -2013,6 +2013,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 if isinstance(attention_mask, torch.Tensor)
                 else cache_position[0] + sequence_length + 1
             )
+<<<<<<< Updated upstream
 
         if attention_mask is not None and attention_mask.dim() == 4:
             # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
@@ -2044,6 +2045,33 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                     token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
                 )
         return causal_mask
+=======
+        batch_size, sequence_length = input_ids.shape
+
+        # Create a full matrix with large negative values
+        causal_mask = torch.full((batch_size, 1, sequence_length, target_length), min_dtype, dtype=self.dtype, device=self.device)
+
+        # Apply lower-triangular masking
+        causal_mask = torch.triu(causal_mask, diagonal=1)
+
+        shift = cache_position[0].item()
+        if shift > 0:
+            causal_mask = torch.roll(causal_mask, shifts=shift, dims=-1)
+            causal_mask[..., :shift] = 0
+        
+        # Apply bidirectional attention for regions starting with begin_of_image tokens
+        begin_of_image_token = self.config.text_config.boi_token_id
+        for batch_idx in range(batch_size):
+            start_positions = (input_ids[batch_idx] == begin_of_image_token).nonzero(as_tuple=True)[0]
+            for start in start_positions:
+                end = start + 256 + 1  # Define end_of_image_token location
+                end = min(end, sequence_length)  # Ensure it doesn't exceed sequence length
+                causal_mask[batch_idx, 0, start+1:end, start+1:end] = 0  # Enable bidirectional attention
+
+
+        
+        return attention_mask
+>>>>>>> Stashed changes
 
 
 __all__ = [
