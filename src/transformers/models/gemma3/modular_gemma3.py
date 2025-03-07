@@ -1872,14 +1872,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask,
-            token_type_ids,
-            past_key_values,
-            cache_position,
-            inputs_embeds,
-            is_training,
-        )
+        causal_mask = attention_mask
         outputs = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
@@ -1980,6 +1973,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 past_key_values,
                 cache_position,
                 input_tensor,
+                input_ids,
                 is_training,
             )
             model_inputs["attention_mask"] = causal_mask
@@ -1993,6 +1987,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         past_key_values,
         cache_position,
         input_tensor,
+        input_ids,
         is_training: bool = False,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
@@ -2013,39 +2008,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 if isinstance(attention_mask, torch.Tensor)
                 else cache_position[0] + sequence_length + 1
             )
-<<<<<<< Updated upstream
-
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            return attention_mask
-
-        causal_mask = torch.full(
-            (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
-        )
-        # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
-        if sequence_length != 1:
-            if is_training:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            else:
-                causal_mask[:, :sequence_length] = 0.0
-
-        causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
-            padding_mask = padding_mask == 0
-            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                padding_mask, min_dtype
-            )
-            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
-            if is_training:
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
-                )
-        return causal_mask
-=======
         batch_size, sequence_length = input_ids.shape
 
         # Create a full matrix with large negative values
@@ -2064,6 +2026,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         for batch_idx in range(batch_size):
             start_positions = (input_ids[batch_idx] == begin_of_image_token).nonzero(as_tuple=True)[0]
             for start in start_positions:
+                # TODO(imayank): put 256 in configs
                 end = start + 256 + 1  # Define end_of_image_token location
                 end = min(end, sequence_length)  # Ensure it doesn't exceed sequence length
                 causal_mask[batch_idx, 0, start+1:end, start+1:end] = 0  # Enable bidirectional attention
@@ -2071,7 +2034,6 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         
         return attention_mask
->>>>>>> Stashed changes
 
 
 __all__ = [
