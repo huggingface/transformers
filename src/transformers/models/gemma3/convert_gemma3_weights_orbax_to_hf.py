@@ -58,13 +58,9 @@ _DTYPES = {
 
 _SIGLIP_BASE = "SigLiPFromPatches_0/siglip_encoder"
 _SIGLIP_EMBEDDING = "SigLiPFromPatches_0/siglip_encoder/embedding"
-_SIGLIP_TRANSFORMER_ENCODER_BLOCK = (
-    "SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_"
-)
+_SIGLIP_TRANSFORMER_ENCODER_BLOCK = "SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_"
 _SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN = len(_SIGLIP_TRANSFORMER_ENCODER_BLOCK)
-_SIGLIP_TRANSFORMER_ENCODER_NORM = (
-    "SigLiPFromPatches_0/siglip_encoder/Transformer/encoder_norm"
-)
+_SIGLIP_TRANSFORMER_ENCODER_NORM = "SigLiPFromPatches_0/siglip_encoder/Transformer/encoder_norm"
 
 _TRANSFORMER_DECODER_BLOCK = "transformer/layer_"
 _TRANSFORMER_DECODER_BLOCK_LEN = len(_TRANSFORMER_DECODER_BLOCK)
@@ -91,7 +87,7 @@ _VARIANTS = {
             rope_global_base_freq=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=256 ** -0.5,
+            query_pre_attn_scalar=256**-0.5,
             max_position_embeddings=32_768,
         ),
         vision_config=None,
@@ -109,7 +105,7 @@ _VARIANTS = {
             rope_global_base_freq=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=256 ** -0.5,
+            query_pre_attn_scalar=256**-0.5,
         ),
         vision_config=Gemma3VisionConfig(),
     ),
@@ -126,7 +122,7 @@ _VARIANTS = {
             rope_global_base_freq=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=256 ** -0.5,
+            query_pre_attn_scalar=256**-0.5,
         ),
         vision_config=Gemma3VisionConfig(),
     ),
@@ -144,7 +140,7 @@ _VARIANTS = {
             rope_global_base_freq=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=1 / math.sqrt(5376 // 32),   # 1 / sqrt(hidden_size // num_attention_heads)
+            query_pre_attn_scalar=1 / math.sqrt(5376 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
         ),
         vision_config=Gemma3VisionConfig(),
     ),
@@ -160,9 +156,7 @@ CHECKPOINT_PATH = flags.DEFINE_string(
 )
 
 INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
-    name="include_chat_template",
-    default=False,
-    help="If true, will save the default chat template with the tokenizer"
+    name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
 )
 
 OUTPUT_PATH = flags.DEFINE_string(
@@ -214,25 +208,17 @@ def convert_siglip_weight(
     updated_weights: np.ndarray = None
 
     if path == _SIGLIP_BASE:
-        normalized_path = (
-            "vision_model.vision_model.embeddings.position_embedding.weight"
-        )
+        normalized_path = "vision_model.vision_model.embeddings.position_embedding.weight"
         updated_weights = weights.reshape(-1, config.hidden_size)
     elif path == _SIGLIP_EMBEDDING:
         if prop == "kernel":
-            normalized_path = (
-                "vision_model.vision_model.embeddings.patch_embedding.weight"
-            )
+            normalized_path = "vision_model.vision_model.embeddings.patch_embedding.weight"
             updated_weights = weights.transpose(3, 2, 0, 1)
         elif prop == "bias":
-            normalized_path = (
-                "vision_model.vision_model.embeddings.patch_embedding.bias"
-            )
+            normalized_path = "vision_model.vision_model.embeddings.patch_embedding.bias"
             updated_weights = weights
         else:
-            raise ValueError(
-                f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
-            )
+            raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
         next_path_seperator_idx = encoder_block_path.find("/")
@@ -250,13 +236,9 @@ def convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(
-                    f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`."
-                )
+                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
         elif encoder_block_path.startswith("/MlpBlock_0"):
-            normalized_path += (
-                ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
-            )
+            normalized_path += ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
 
             if prop == "kernel":
                 normalized_path += ".weight"
@@ -265,9 +247,7 @@ def convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(
-                    f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
-                )
+                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
         elif encoder_block_path.startswith("/MultiHeadDotProductAttention_0"):
             if encoder_block_path.endswith("/key"):
                 normalized_path += ".self_attn.k_proj"
@@ -278,9 +258,7 @@ def convert_siglip_weight(
             elif encoder_block_path.endswith("/value"):
                 normalized_path += ".self_attn.v_proj"
             else:
-                raise ValueError(
-                    f"Upexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0."
-                )
+                raise ValueError(f"Upexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0.")
 
             if prop == "bias":
                 normalized_path += ".bias"
@@ -289,13 +267,9 @@ def convert_siglip_weight(
                 normalized_path += ".weight"
                 updated_weights = weights.reshape(-1, config.hidden_size).transpose()
             else:
-                raise ValueError(
-                    f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
-                )
+                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
         else:
-            raise ValueError(
-                f"Upexpected path `{path}` in SigLIP Transformer Encoder Block."
-            )
+            raise ValueError(f"Upexpected path `{path}` in SigLIP Transformer Encoder Block.")
     elif path == _SIGLIP_TRANSFORMER_ENCODER_NORM:
         if prop == "scale":
             normalized_path = "vision_model.vision_model.post_layernorm.weight"
@@ -304,9 +278,7 @@ def convert_siglip_weight(
             normalized_path = "vision_model.vision_model.post_layernorm.bias"
             updated_weights = weights
         else:
-            raise ValueError(
-                f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`."
-            )
+            raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
     else:
         raise ValueError(f"Upexpected path `{path}`.")
 
@@ -363,9 +335,7 @@ def convert_transformer_weights(
 
         if path.endswith("attn/attn_vec_einsum"):
             converted_paths = [f"{base_path}.self_attn.o_proj.weight"]
-            converted_weights = [
-                weights.transpose(2, 0, 1).reshape(config.hidden_size, attn_head_dim)
-            ]
+            converted_weights = [weights.transpose(2, 0, 1).reshape(config.hidden_size, attn_head_dim)]
         elif path.endswith("attn/_key_norm"):
             converted_paths = [f"{base_path}.self_attn.k_norm.weight"]
             converted_weights = [weights]
@@ -376,18 +346,12 @@ def convert_transformer_weights(
             ]
             k_proj_weights, v_proj_weights = weights
             converted_weights = [
-                k_proj_weights.transpose(0, 2, 1).reshape(
-                    kv_head_dim, config.hidden_size
-                ),
-                v_proj_weights.transpose(0, 2, 1).reshape(
-                    kv_head_dim, config.hidden_size
-                ),
+                k_proj_weights.transpose(0, 2, 1).reshape(kv_head_dim, config.hidden_size),
+                v_proj_weights.transpose(0, 2, 1).reshape(kv_head_dim, config.hidden_size),
             ]
         elif path.endswith("attn/q_einsum"):
             converted_paths = [f"{base_path}.self_attn.q_proj.weight"]
-            converted_weights = [
-                weights.transpose(0, 2, 1).reshape(attn_head_dim, config.hidden_size)
-            ]
+            converted_weights = [weights.transpose(0, 2, 1).reshape(attn_head_dim, config.hidden_size)]
         elif path.endswith("attn/_query_norm"):
             converted_paths = [f"{base_path}.self_attn.q_norm.weight"]
             converted_weights = [weights]
@@ -463,16 +427,12 @@ def convert(
             if config.vision_config is None:
                 continue
 
-            path, weights = convert_siglip_weight(
-                config=config.vision_config, paths=paths, weights=value
-            )
+            path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
             update_tree(path, weights)
         else:
-            for path, weights in convert_transformer_weights(
-                config=config.text_config, paths=paths, weights=value
-            ):
+            for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if config.vision_config is None:
-                    path = path[len("language_model."):]
+                    path = path[len("language_model.") :]
 
                 update_tree(path, weights)
 
@@ -499,10 +459,10 @@ def main(*args):
         TOKENIZER_PATH.value,
         add_bos_token=True,
         extra_special_tokens={
-            "image_token": "<image_soft_token>",    # Should be ID=262_144
-            "boi_token": "<start_of_image>",        # Should be ID=255_999
-            "eoi_token": "<end_of_image>",          # Should be ID=256_000
-        }
+            "image_token": "<image_soft_token>",  # Should be ID=262_144
+            "boi_token": "<start_of_image>",  # Should be ID=255_999
+            "eoi_token": "<end_of_image>",  # Should be ID=256_000
+        },
     )
 
     if INCLUDE_CHAT_TEMPLATE.value:
@@ -542,11 +502,7 @@ def main(*args):
 
     model.load_state_dict(result.state_tree, assign=True, strict=True)
     model.config.torch_dtype = dtype
-    logging.info(
-        "Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.",
-        variant,
-        type(model).__name__
-    )
+    logging.info("Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.", variant, type(model).__name__)
     model.save_pretrained(output_path, safe_serialization=True)
     logging.info(
         "Saved Gemma 3 (%s) to SafeTensors in %s using %s",

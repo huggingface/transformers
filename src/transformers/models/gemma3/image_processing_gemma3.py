@@ -191,7 +191,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         crop_positions_h = [crop_size_h * i for i in range(num_crops_h)]
 
         return [
-            image[pos_h:pos_h + crop_size_h, pos_w:pos_w + crop_size_w]
+            image[pos_h : pos_h + crop_size_h, pos_w : pos_w + crop_size_w]
             for pos_h, pos_w in itertools.product(crop_positions_h, crop_positions_w)
         ]
 
@@ -300,9 +300,17 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pan_and_scan = do_pan_and_scan if do_pan_and_scan is not None else self.do_pan_and_scan
-        pan_and_scan_min_crop_size = pan_and_scan_min_crop_size if pan_and_scan_min_crop_size is not None else self.pan_and_scan_min_crop_size
-        pan_and_scan_max_num_crops = pan_and_scan_max_num_crops if pan_and_scan_max_num_crops is not None else self.pan_and_scan_max_num_crops
-        pan_and_scan_min_ratio_to_activate = pan_and_scan_min_ratio_to_activate if pan_and_scan_min_ratio_to_activate is not None else self.pan_and_scan_min_ratio_to_activate
+        pan_and_scan_min_crop_size = (
+            pan_and_scan_min_crop_size if pan_and_scan_min_crop_size is not None else self.pan_and_scan_min_crop_size
+        )
+        pan_and_scan_max_num_crops = (
+            pan_and_scan_max_num_crops if pan_and_scan_max_num_crops is not None else self.pan_and_scan_max_num_crops
+        )
+        pan_and_scan_min_ratio_to_activate = (
+            pan_and_scan_min_ratio_to_activate
+            if pan_and_scan_min_ratio_to_activate is not None
+            else self.pan_and_scan_min_ratio_to_activate
+        )
 
         images_list = make_nested_list_of_images(images)
 
@@ -386,7 +394,8 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for images in images_list for image in images
+            for images in images_list
+            for image in images
         ]
 
         data = {"pixel_values": images, "num_crops": num_crops}

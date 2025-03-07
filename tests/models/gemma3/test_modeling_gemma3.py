@@ -56,12 +56,8 @@ class Gemma3ModelTester(GemmaModelTester):
 
 @require_torch
 class Gemma3ModelTest(GemmaModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Gemma3Model, Gemma3ForCausalLM)
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (Gemma3ForCausalLM, ) if is_torch_available() else ()
+    all_model_classes = (Gemma3Model, Gemma3ForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
     _is_stateful = True
@@ -187,7 +183,7 @@ class Gemma3ModelTest(GemmaModelTest, unittest.TestCase):
         pass
 
 
-class Gemma3Vision2TextModelTester():
+class Gemma3Vision2TextModelTester:
     def __init__(
         self,
         parent,
@@ -271,12 +267,8 @@ class Gemma3Vision2TextModelTester():
 
 @require_torch
 class Gemma3Vision2TextModelTest(unittest.TestCase):
-    all_model_classes = (
-        (Gemma3Model, Gemma3ForCausalLM)
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (Gemma3ForCausalLM, ) if is_torch_available() else ()
+    all_model_classes = (Gemma3Model, Gemma3ForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
     _is_stateful = True
@@ -400,6 +392,7 @@ class Gemma3Vision2TextModelTest(unittest.TestCase):
     @unittest.skip("Gemma3's eager attn/sdpa attn outputs are expected to be different")
     def test_sdpa_equivalence(self):
         pass
+
 
 @slow
 @require_torch_gpu

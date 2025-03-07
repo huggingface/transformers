@@ -19,43 +19,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Mapping, Sequence
-from typing import Literal, Optional, Union, cast
+from collections.abc import Sequence
+from typing import Literal, Optional, cast
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class Gemma3RotaryEmbeddingConfig(PretrainedConfig):
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        rope_theta: float,
-        head_dim: Optional[int] = None,
-        max_position_embeddings: int = 131_072,
-        partial_rotary_factor: Optional[float] = None,
-        rope_scaling: Optional[Mapping[str, Union[int, float]]] = None,
-        torch_dtype: str = "bfloat16",
-        **kwargs,
-    ):
-        super().__init__(torch_dtype=torch_dtype, **kwargs)
-        self.hidden_size = hidden_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_attention_heads = num_attention_heads
-        self.rope_theta = rope_theta
-
-        if head_dim is not None:
-            self.head_dim = head_dim
-        if partial_rotary_factor is not None:
-            self.partial_rotary_factor = partial_rotary_factor
-        if rope_scaling is not None:
-            self.rope_scaling = rope_scaling
-
 
 ATTENTION_TYPE_GLOBAL = "global"
 ATTENTION_TYPE_LOCAL = "local_sliding"
@@ -125,10 +98,45 @@ class Gemma3TextConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_global_base_freq (float, *optional*, defaults to `rope_theta`):
-            The base period of the RoPE embeddings for global attention.
         rope_local_base_freq (float, *optional*, defaults to `rope_theta`):
             The base period of the RoPE embeddings for local attention.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_pattern (Sequence[AttentionTypes], defaults to (5 * local, global)):
             The attention pattern to apply
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -157,16 +165,6 @@ class Gemma3TextConfig(PretrainedConfig):
     ```"""
 
     model_type = "gemma3_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
 
     def __init__(
         self,
@@ -182,16 +180,14 @@ class Gemma3TextConfig(PretrainedConfig):
         sliding_window: int = 4096,  # sliding_window_size in FLAX
         query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
-        rope_global_base_freq: float = 1_000_000.0,
+        rope_theta: float = 1_000_000.0,
+        rope_scaling=None,
         rope_local_base_freq: float = 10_000.0,
         rms_norm_eps: float = 1e-6,
         hidden_activation: str = "gelu_pytorch_tanh",
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 256_000,
-        image_token_id: int = 262_144,
         tie_word_embeddings: bool = True,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
@@ -209,9 +205,6 @@ class Gemma3TextConfig(PretrainedConfig):
             **kwargs,
         )
 
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.image_token_id = image_token_id
         self.vocab_size = vocab_size
         self.mm_tokens_per_image = mm_tokens_per_image
         self.max_position_embeddings = max_position_embeddings
@@ -224,7 +217,8 @@ class Gemma3TextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_global_base_freq = rope_global_base_freq
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.rope_local_base_freq = rope_local_base_freq
         self.attention_pattern = attention_pattern
         # For configuring HybridCache to work with 5:1 attention pattern
@@ -235,6 +229,7 @@ class Gemma3TextConfig(PretrainedConfig):
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
         self.cache_implementation = cache_implementation
+        rope_config_validation(self)
 
 
 class Gemma3Config(PretrainedConfig):
@@ -248,26 +243,35 @@ class Gemma3Config(PretrainedConfig):
         self,
         text_config: Optional[Gemma3TextConfig] = None,
         vision_config: Optional[SiglipVisionConfig] = None,
+        boi_token_id: int = 255_999,
+        eoi_token_id: int = 256_000,
+        image_token_id: int = 262_144,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         if text_config is None:
-            self.text_config = Gemma3TextConfig()
+            text_config = Gemma3TextConfig()
             logger.info("text_config is None, using default Gemma3TextConfig vision config.")
         elif isinstance(text_config, dict):
-            self.text_config = Gemma3TextConfig(**text_config)
-        elif isinstance(text_config, Gemma3TextConfig):
-            self.text_config = text_config
+            text_config = Gemma3TextConfig(**text_config)
 
         if isinstance(vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**vision_config)
+            vision_config = SiglipVisionConfig(**vision_config)
         else:
-            self.vision_config = None
+            vision_config = SiglipVisionConfig()
             logger.info(
                 "vision_config is None or incompatible with Gemma3VisionConfig intialization. Gemma3 will be limited "
                 "to text tasks."
             )
 
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.boi_token_id = boi_token_id
+        self.eoi_token_id = eoi_token_id
+        self.image_token_id = image_token_id
+        self.initializer_range = initializer_range
+
         super().__init__(**kwargs)
 
 
-__all__ = ["Gemma3Config", "Gemma3TextConfig", "Gemma3VisionConfig"]
+__all__ = ["Gemma3Config", "Gemma3TextConfig"]
