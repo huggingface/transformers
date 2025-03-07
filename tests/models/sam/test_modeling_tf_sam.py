@@ -522,7 +522,6 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_features(*config_and_inputs)
 
-    # TODO: check for vision as well
     def test_image_hidden_states(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_hidden_states(*config_and_inputs)
