@@ -15,6 +15,8 @@
 # limitations under the License.
 """PyTorch MiniMax model."""
 
+from _utils import show_tensor
+
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -334,68 +336,48 @@ class MiniMaxCache(DynamicCache):
                 self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
-class MiniMaxLightningAttentionDecay(nn.Module):
-    def __init__(self, config: MiniMaxConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_heads = config.num_attention_heads
-        self.num_hidden_layers = config.num_hidden_layers
-        self.block_size = config.block_size
-
-    def forward(self, x, seq_len, return_slope_rate=False):
-        num_blocks = (seq_len + self.block_size - 1) // self.block_size
-        padding = num_blocks * self.block_size - seq_len
-
-        num_heads_range = torch.arange(self.num_heads).to(x) + 1
-        block_size_range = torch.arange(self.block_size).to(x) + 1
-
-        slope_rate = (1 / (2 ** (8 / self.num_heads))) ** num_heads_range
-        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1 + 1e-5) + 1e-5
-        slope_rate = slope_rate[:, None, None]
-
-        if return_slope_rate:
-            return slope_rate
-
-        query_decay = torch.exp(-slope_rate * block_size_range[:, None])
-        query_decay = query_decay[:, None, :, :]
-
-        key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
-        key_decay = key_decay[:, None, :, :]
-        key_decay = key_decay.repeat(1, num_blocks, 1, 1)
-        key_decay[:, -1, : self.block_size - padding] = key_decay[:, -1, padding:]
-
-        diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
-        diagonal_decay = slope_rate * diagonal_decay[None, :, :]
-        diagonal_decay = torch.where(diagonal_decay >= 0, -diagonal_decay, float("-inf"))
-        diagonal_decay = torch.exp(diagonal_decay)
-        diagonal_decay = diagonal_decay[:, None, :, :]
-
-        block_lengths = torch.cat(
-            (torch.full((num_blocks - 1,), self.block_size), torch.tensor([self.block_size - padding]))
-        ).to(x)
-        block_decay = torch.exp(-slope_rate[:, None, :, :] * block_lengths[:, None, None])
-
-        return key_decay, query_decay, diagonal_decay, block_decay
-
-
 class MiniMaxLightningAttention(nn.Module):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_heads = config.num_attention_heads
+        self.num_attention_heads = config.num_attention_heads
         self.num_hidden_layers = config.num_hidden_layers
         self.block_size = config.block_size
 
         self.act_fn = ACT2FN[config.hidden_act]
-        self.norm = MiniMaxRMSNorm(self.head_dim * self.num_heads)
-        self.qkv_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim * 3, bias=False)
-        self.out_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.output_gate = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.decay_factors = MiniMaxLightningAttentionDecay(config, layer_idx)
+        self.norm = MiniMaxRMSNorm(self.head_dim * self.num_attention_heads)
+        self.qkv_proj = nn.Linear(config.hidden_size, self.num_attention_heads * self.head_dim * 3, bias=False)
+        self.out_proj = nn.Linear(self.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.output_gate = nn.Linear(config.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
+
+        self.slope_rate = self.get_slope_rate()
+        self.query_decay, self.key_decay, self.diagonal_decay = self.decay_factors(self.slope_rate)
+
+    def get_slope_rate(self):
+        base = (1 / (2 ** (8 / self.num_attention_heads)))
+        exponent = torch.arange(self.num_attention_heads) + 1
+        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1 + 1e-5) + 1e-5
+
+        rate = base ** exponent
+        rate = rate * factor
+        rate = rate[:, None, None]
+
+        return rate
+
+    def decay_factors(self, slope_rate):
+        block_size_range = torch.arange(self.block_size) + 1
+
+        query_decay = torch.exp(-slope_rate * block_size_range[:, None])
+        key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
+
+        diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
+        diagonal_decay = diagonal_decay[None, None, :, :]
+        diagonal_decay = slope_rate * diagonal_decay
+        diagonal_decay = torch.where(diagonal_decay >= 0, -diagonal_decay, float("-inf"))
+        diagonal_decay = torch.exp(diagonal_decay)
+
+        return query_decay, key_decay, diagonal_decay
 
     def forward(
         self,
@@ -408,10 +390,9 @@ class MiniMaxLightningAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
-        padding = num_blocks * self.block_size - seq_len
 
         qkv_states = self.act_fn(self.qkv_proj(hidden_states))
-        qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_heads, 3 * self.head_dim)
+        qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
 
         query_states, key_states, value_states = torch.split(qkv_states, [self.head_dim] * 3, dim=3)
 
@@ -424,44 +405,49 @@ class MiniMaxLightningAttention(nn.Module):
             kv_cache = past_key_value.get_kv_cache(self.layer_idx)
 
         if kv_cache is None or kv_cache.dim() == 2:
-            kv_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
+            kv_cache = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(value_states)
 
             # apply attention_mask
             if attention_mask is not None:
                 attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
                 value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
 
-            query_states = F.pad(query_states, (0, 0, 0, padding))
-            key_states = F.pad(key_states, (0, 0, 0, padding))
-            value_states = F.pad(value_states, (0, 0, 0, padding))
-
-            query_states = query_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-            key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-            value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-
-            # get decay factors
-            key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
-
-            # intra: ( Q @ K.T ) @ V -> QK * V
-            attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
-            attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, value_states)
-
-            # inter: Q @ ( K.T @ V ) -> Q * KV
-            attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
-            attn_weights_inter = torch.cat([kv_cache, attn_weights_inter], dim=2)
+            attn_weights_inter = kv_cache
+            attn_output = []
             for i in range(num_blocks):
-                attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
-            kv_cache = attn_weights_inter[:, :, -1, :, :]
-            attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
-            attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+                start_idx = i * self.block_size
+                end_idx = min(start_idx + self.block_size, seq_len)
+                current_block_size = end_idx - start_idx
 
-            # inter + intra
-            attn_output = attn_output_inter + attn_output_intra
-            attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
-            attn_output = attn_output[:, :, :seq_len, :]
+                current_query_states = query_states[:, :, start_idx:end_idx].contiguous()
+                current_key_states = key_states[:, :, start_idx:end_idx].contiguous()
+                current_value_states = value_states[:, :, start_idx:end_idx].contiguous()
+
+                current_query_decay = self.query_decay[:, :current_block_size]
+                current_key_decay = self.key_decay[:, -current_block_size:]
+                current_diagonal_decay = self.diagonal_decay[:, :, :current_block_size, :current_block_size]
+                block_decay = torch.exp(-self.slope_rate * current_block_size)
+
+                # intra: ( Q @ K.T ) @ V -> QK * V
+                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2))
+                attn_output_intra = torch.matmul(attn_weights_intra * current_diagonal_decay, current_value_states)
+
+                # inter: Q @ ( K.T @ V ) -> Q * KV
+                attn_output_inter = torch.matmul(current_query_states * current_query_decay, attn_weights_inter)
+
+                # final attention output
+                current_attn_output = attn_output_inter + attn_output_intra
+                attn_output.append(current_attn_output)
+
+                # cacluate attn_weights_inter for next block or cache
+                next_attn_weights_inter = torch.matmul((current_key_states * current_key_decay).transpose(-1, -2), current_value_states)
+                attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
+
+            kv_cache = attn_weights_inter
+
         else:
-            slope_rate = self.decay_factors(query_states, seq_len, return_slope_rate=True)
-            ratio = torch.exp(-slope_rate)
+            # TODO: refactor
+            ratio = torch.exp(-self.slope_rate)
             attn_output = []
             for i in range(seq_len):
                 kv_cache = ratio * kv_cache + torch.einsum(
@@ -471,11 +457,13 @@ class MiniMaxLightningAttention(nn.Module):
                 )
                 attn_output_i = torch.einsum("... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], kv_cache)
                 attn_output.append(attn_output_i)
-            attn_output = torch.concat(attn_output, dim=-2)
+
+        # concatenate attention outputs over all blocks
+        attn_output = torch.cat(attn_output, dim=-2)
 
         # final output projection
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+        attn_output = attn_output.reshape(batch_size, seq_len, self.num_attention_heads * self.head_dim)
         attn_output = self.norm(attn_output)
         attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
         attn_output = self.out_proj(attn_output)
@@ -485,9 +473,9 @@ class MiniMaxLightningAttention(nn.Module):
             past_key_value.set_kv_cache(kv_cache, self.layer_idx)
 
         # TODO: remove these
-        # print()
-        # print(self.layer_idx)
-        # print(kv_cache)
+        print()
+        print(self.layer_idx)
+        print(kv_cache)
 
         return attn_output, kv_cache
 
@@ -740,6 +728,11 @@ class MiniMaxModel(MixtralModel):
 
 
 class MiniMaxForCausalLM(MixtralForCausalLM):
+    # TODO: remove init
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = MiniMaxModel(config)
+
     def forward(self, **super_kwargs):
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -772,7 +765,7 @@ class MiniMaxForCausalLM(MixtralForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        super().forward(**super_kwargs)
+        return super().forward(**super_kwargs)
 
 
 class MiniMaxForSequenceClassification(MixtralForSequenceClassification):
