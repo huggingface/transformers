@@ -1106,6 +1106,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 rope_theta=config.rope_global_base_freq,
                 head_dim=config.head_dim,
                 max_position_embeddings=config.max_position_embeddings,
+                rope_scaling={"factor": 8, "rope_type": "dynamic"},
             )
         )
         self.rotary_emb_local = Gemma3RotaryEmbedding(
