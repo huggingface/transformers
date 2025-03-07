@@ -149,7 +149,6 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
-_quanto_available = _is_package_available("quanto")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -203,6 +202,7 @@ _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
 _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
+_rich_available = _is_package_available("rich")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -958,6 +958,11 @@ def is_flash_attn_2_available():
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
         return False
 
+    # Ascend does not support "flash_attn".
+    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
+    if is_torch_npu_available():
+        return False
+
     if torch.version.cuda:
         return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
     elif torch.version.hip:
@@ -1298,6 +1303,10 @@ def is_liger_kernel_available():
 
 def is_triton_available():
     return _triton_available
+
+
+def is_rich_available():
+    return _rich_available
 
 
 # docstyle-ignore
@@ -1659,6 +1668,11 @@ JINJA_IMPORT_ERROR = """
 jinja2`. Please note that you may need to restart your runtime after installation.
 """
 
+RICH_IMPORT_ERROR = """
+{0} requires the rich library but it was not found in your environment. You can install it with pip: `pip install
+rich`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("av", (is_av_available, AV_IMPORT_ERROR)),
@@ -1705,6 +1719,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
+        ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
     ]
 )
 

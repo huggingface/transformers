@@ -17,12 +17,7 @@ rendered properly in your Markdown viewer.
 # Reformer
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=reformer">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/reformer-crime-and-punishment">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
