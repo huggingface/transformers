@@ -73,6 +73,9 @@ output = bf16_model.generate(**input_ids, max_new_tokens=10, cache_implementatio
 print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 ```
 
+> [!TIP]
+> For best performance, you can use recommended settings by calling `torchao.quantization.utils.recommended_inductor_config_setter()`
+
 </hfoption>
 <hfoption id="automatic">
 
