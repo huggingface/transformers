@@ -28,14 +28,13 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
-from typing import Any
 
 from transformers import (
     AutoFeatureExtractor,
