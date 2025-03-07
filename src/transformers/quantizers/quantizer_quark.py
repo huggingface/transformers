@@ -70,10 +70,7 @@ class QuarkHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # Having imports not at the top of files is the approach taken for quantizers
-        # in Transformers - they quantizer_*.py files are not imported lazily.
-        if is_quark_available():
-            from quark.torch.export.api import _map_to_quark
+        from quark.torch.export.api import _map_to_quark
 
         _map_to_quark(
             model,
