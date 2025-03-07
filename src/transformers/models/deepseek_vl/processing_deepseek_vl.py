@@ -23,6 +23,11 @@ from ...processing_utils import (
 )
 
 IMAGE_TOKEN = "<image_placeholder>"
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a helpful language and vision assistant. "
+    "You are able to understand the visual content that the user provides, "
+    "and assist the user with a variety of tasks using natural language.\n\n"
+)
 
 def add_image_tokens_to_input_ids(
     input_ids: torch.LongTensor,
@@ -89,27 +94,18 @@ class DeepseekVLProcessor(ProcessorMixin):
             self, 
             image_processor=None, 
             tokenizer=None, 
-            chat_template=None, 
+            chat_template=None,
+            use_deafult_system_prompt=True, 
             **kwargs,
         ):
-        self.image_processor = image_processor
-        self.tokenizer = tokenizer
-        self.num_image_tokens = 576
-
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
         
-        image_id = self.tokenizer.vocab.get(IMAGE_TOKEN)
-        if image_id is None:
-            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-            tokens_to_add = {"additional_special_tokens": [image_token]}
-            tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = self.tokenizer.vocab.get(IMAGE_TOKEN)
-        else:  
-            self.image_token_id = image_id
-
+        self.num_image_tokens = 576
+        self.use_default_system_prompt = use_deafult_system_prompt
+        
 
         super().__init__(
             image_processor=image_processor,
@@ -135,44 +131,53 @@ class DeepseekVLProcessor(ProcessorMixin):
             DeepseekVLProcessorKwargs,
             **kwargs,
         )
-        add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
-        # tokenize text
+        if text is None and images is None:
+            raise ValueError("You must provide either text or images.")
+        
         if text is not None:
-            input_ids = self.tokenizer.encode(text)
-            input_ids = torch.LongTensor(input_ids)
+            if isinstance(text, str):
+                text = [text]
+            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
         
-        # add image tokens to the input_ids
-        image_token_mask: torch.BoolTensor = input_ids == self.image_token_id
-        image_indices = image_token_mask.nonzero()
-        input_ids, num_image_tokens = add_image_tokens_to_input_ids(
-            input_ids = input_ids, 
-            image_indices = image_indices,
-            image_token_id = self.image_token_id,
-            num_image_tokens = self.num_image_tokens,
-            add_special_tokens = add_special_tokens
-        )
-        
-        pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
-        return_data = {
-            input_ids: input_ids,
-            pixel_values: pixel_values,
-            num_image_tokens: num_image_tokens,
-        }
-        return BatchFeature(data=return_data)
+        # add and replace image tokens
+        prompt_strings = []
+        single_image_tokes = IMAGE_TOKEN * self.num_image_tokens
+        for prompt in text:
+            prompt = prompt.replace(IMAGE_TOKEN, single_image_tokes)
+            if self.use_default_system_prompt:
+                prompt = DEFAULT_SYSTEM_PROMPT + prompt
+            prompt_strings.append(prompt)
 
+        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+
+        # process images if pixel_values are provided
+        if images is not None:
+            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+        
+        return BatchFeature(data=data)
 
 
     def batch_decode(self, *args, **kwargs):
-        return self.tokenizer.decode(*args, **kwargs)
-    
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
     def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
         return self.tokenizer.decode(*args, **kwargs)
+
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    
 
 
 __all__ = ["DeepseekVLProcessor"]
