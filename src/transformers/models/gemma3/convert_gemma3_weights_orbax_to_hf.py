@@ -31,7 +31,7 @@ from .configuration_gemma3 import (
     DEFAULT_ATTENION_PATTERN,
     Gemma3Config,
     Gemma3TextConfig,
-    Gemma3VisionConfig,
+    SiglipVisionConfig,
 )
 
 
@@ -68,6 +68,20 @@ _TRANSFORMER_EMBEDDER = "transformer/embedder"
 _TRANSFORMER_FINAL_NORM = "transformer/final_norm"
 _TRANSFORMER_POST_TRAINING_PREFIX = "rlx_networks/policy_network/"
 _TRANSFORMER_POST_TRAINING_PREFIX_LEN = len(_TRANSFORMER_POST_TRAINING_PREFIX)
+
+_VISION_CONFIG = {
+    "hidden_size": 1152,
+    "intermediate_size": 4304,
+    "num_hidden_layers": 27,
+    "num_attention_heads": 16,
+    "num_channels": 3,
+    "image_size": 896,
+    "patch_size": 14,
+    "hidden_act": "gelu_pytorch_tanh",
+    "layer_norm_eps": 1e-6,
+    "attention_dropout": 0.0,
+    "vision_use_head": False,
+}
 
 _VARIANT_GEMMA_3_1B = "gemma3_1b"
 _VARIANT_GEMMA_3_4B = "gemma3_4b"
@@ -107,7 +121,7 @@ _VARIANTS = {
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256**-0.5,
         ),
-        vision_config=Gemma3VisionConfig(),
+        vision_config=_VISION_CONFIG,
     ),
     _VARIANT_GEMMA_3_12B: Gemma3Config(
         text_config=Gemma3TextConfig(
@@ -124,7 +138,7 @@ _VARIANTS = {
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256**-0.5,
         ),
-        vision_config=Gemma3VisionConfig(),
+        vision_config=_VISION_CONFIG,
     ),
     _VARIANT_GEMMA_3_27B: Gemma3Config(
         text_config=Gemma3TextConfig(
@@ -142,7 +156,7 @@ _VARIANTS = {
             attn_logit_softcapping=None,
             query_pre_attn_scalar=1 / math.sqrt(5376 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
         ),
-        vision_config=Gemma3VisionConfig(),
+        vision_config=_VISION_CONFIG,
     ),
 }
 
@@ -199,7 +213,7 @@ _VARIANT = flags.DEFINE_enum(
 
 
 def convert_siglip_weight(
-    config: Gemma3VisionConfig,
+    config: SiglipVisionConfig,
     paths: Sequence[str],
     weights: np.ndarray,
 ) -> tuple[str, np.ndarray]:
@@ -208,23 +222,23 @@ def convert_siglip_weight(
     updated_weights: np.ndarray = None
 
     if path == _SIGLIP_BASE:
-        normalized_path = "vision_model.vision_model.embeddings.position_embedding.weight"
+        normalized_path = "vision_tower.vision_model.embeddings.position_embedding.weight"
         updated_weights = weights.reshape(-1, config.hidden_size)
     elif path == _SIGLIP_EMBEDDING:
         if prop == "kernel":
-            normalized_path = "vision_model.vision_model.embeddings.patch_embedding.weight"
+            normalized_path = "vision_tower.vision_model.embeddings.patch_embedding.weight"
             updated_weights = weights.transpose(3, 2, 0, 1)
         elif prop == "bias":
-            normalized_path = "vision_model.vision_model.embeddings.patch_embedding.bias"
+            normalized_path = "vision_tower.vision_model.embeddings.patch_embedding.bias"
             updated_weights = weights
         else:
-            raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+            raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
         next_path_seperator_idx = encoder_block_path.find("/")
         layer_idx = encoder_block_path[:next_path_seperator_idx]
         encoder_block_path = encoder_block_path[next_path_seperator_idx:]
-        normalized_path = f"vision_model.vision_model.encoder.layers.{layer_idx}"
+        normalized_path = f"vision_tower.vision_model.encoder.layers.{layer_idx}"
 
         if encoder_block_path.startswith("/LayerNorm"):
             normalized_path += ".layer_norm1" if path.endswith("_0") else ".layer_norm2"
@@ -236,7 +250,7 @@ def convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
+                raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
         elif encoder_block_path.startswith("/MlpBlock_0"):
             normalized_path += ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
 
@@ -247,7 +261,7 @@ def convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+                raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
         elif encoder_block_path.startswith("/MultiHeadDotProductAttention_0"):
             if encoder_block_path.endswith("/key"):
                 normalized_path += ".self_attn.k_proj"
@@ -258,7 +272,7 @@ def convert_siglip_weight(
             elif encoder_block_path.endswith("/value"):
                 normalized_path += ".self_attn.v_proj"
             else:
-                raise ValueError(f"Upexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0.")
+                raise ValueError(f"Unexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0.")
 
             if prop == "bias":
                 normalized_path += ".bias"
@@ -267,21 +281,23 @@ def convert_siglip_weight(
                 normalized_path += ".weight"
                 updated_weights = weights.reshape(-1, config.hidden_size).transpose()
             else:
-                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+                raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
         else:
-            raise ValueError(f"Upexpected path `{path}` in SigLIP Transformer Encoder Block.")
+            raise ValueError(f"Unexpected path `{path}` in SigLIP Transformer Encoder Block.")
     elif path == _SIGLIP_TRANSFORMER_ENCODER_NORM:
         if prop == "scale":
-            normalized_path = "vision_model.vision_model.post_layernorm.weight"
+            normalized_path = "vision_tower.vision_model.post_layernorm.weight"
             updated_weights = weights.transpose()
         elif prop == "bias":
-            normalized_path = "vision_model.vision_model.post_layernorm.bias"
+            normalized_path = "vision_tower.vision_model.post_layernorm.bias"
             updated_weights = weights
         else:
-            raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
+            raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
     else:
-        raise ValueError(f"Upexpected path `{path}`.")
+        raise ValueError(f"Unexpected path `{path}`.")
 
+    if "vision" in normalized_path:
+        print(normalized_path)
     return normalized_path, updated_weights
 
 
@@ -309,19 +325,19 @@ def convert_transformer_weights(
         elif _TEXT_ONLY.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
             return zip([], [])
         else:
-            raise ValueError(f"Upexpected member, {prop}, in Embedder.")
+            raise ValueError(f"Unexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
         if _TEXT_ONLY.value:
             return zip([], [])
 
         if path.endswith("/mm_input_projection"):
-            converted_paths = ["multimodal_projector.mm_input_projection_weight"]
+            converted_paths = ["multi_modal_projector.mm_input_projection_weight"]
             converted_weights = [weights]
         elif path.endswith("/mm_soft_embedding_norm"):
-            converted_paths = ["multimodal_projector.mm_soft_emb_norm.weight"]
+            converted_paths = ["multi_modal_projector.mm_soft_emb_norm.weight"]
             converted_weights = [weights]
         else:
-            raise ValueError(f"Upexpected subpath, `{path}`, in Embedder.")
+            raise ValueError(f"Unexpected subpath, `{path}`, in Embedder.")
     elif path == _TRANSFORMER_FINAL_NORM:
         converted_paths = ["language_model.model.norm.weight"]
         converted_weights = [weights]
@@ -378,9 +394,9 @@ def convert_transformer_weights(
             converted_paths = [f"{base_path}.pre_feedforward_layernorm.weight"]
             converted_weights = [weights]
         else:
-            raise ValueError(f"Upexpected path `{path}` in Decoder Block.")
+            raise ValueError(f"Unexpected path `{path}` in Decoder Block.")
     else:
-        raise ValueError(f"Upexpected path `{path}`.")
+        raise ValueError(f"Unexpected path `{path}`.")
 
     if (cpl := len(converted_paths)) != (cwl := len(converted_weights)):
         raise ValueError(

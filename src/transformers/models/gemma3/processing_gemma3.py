@@ -48,7 +48,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma3Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
-    image_processor_class = "Gemma3ImageProcessor"
+    image_processor_class = "SiglipImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
