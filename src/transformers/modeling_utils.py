@@ -4743,7 +4743,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             loading_task_model_from_base_state_dict,
         )
         checkpoint_keys = list(key_renaming_mapping.values())
-        
+
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
             cls,
@@ -4786,14 +4786,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # small sanity check: the base model should not contain task-specific head keys
             task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
-            if any(key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys):
+            if any(
+                key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
+            ):
                 raise ValueError(
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
                     "properly saved?"
                 )
 
         # Get reverse key mapping
-        reverse_key_renaming_mapping = {v: k for k,v in key_renaming_mapping.items()}
+        reverse_key_renaming_mapping = {v: k for k, v in key_renaming_mapping.items()}
 
         # Set some modules to fp32 if needed
         if keep_in_fp32_modules is not None:
@@ -4828,12 +4830,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
                     # Fix the weight map keys according to the key mapping
-                    weight_map = {key_renaming_mapping[k]: v for k, v in sharded_metadata["weight_map"].items() if k in key_renaming_mapping}
+                    weight_map = {
+                        key_renaming_mapping[k]: v
+                        for k, v in sharded_metadata["weight_map"].items()
+                        if k in key_renaming_mapping
+                    }
                     weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
                     # Find potential checkpoints containing only offloaded weights
                     disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
                 disk_offload_index = {
-                    name: {"safetensors_file": file, "weight_name": reverse_key_renaming_mapping[name], "dtype": str_dtype}
+                    name: {
+                        "safetensors_file": file,
+                        "weight_name": reverse_key_renaming_mapping[name],
+                        "dtype": str_dtype,
+                    }
                     for name, file in weight_map.items()
                     if param_device_map[name] == "disk"
                 }
@@ -4883,7 +4893,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             # Fix the key names
-            state_dict = {key_renaming_mapping[k]: v for k,v in state_dict.items() if k in key_renaming_mapping}
+            state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
