@@ -261,9 +261,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/XPU/TPU/HPU/MPS/NPU core/CPU for training.
+            The batch size per device accelerator core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/XPU/TPU/HPU/MPS/NPU core/CPU for evaluation.
+            The batch size per device accelerator core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -276,7 +276,7 @@ class TrainingArguments:
 
         eval_accumulation_steps (`int`, *optional*):
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
-            left unset, the whole predictions are accumulated on GPU/NPU/HPU/TPU before being moved to the CPU (faster but
+            left unset, the whole predictions are accumulated on the device accelerator before being moved to the CPU (faster but
             requires more memory).
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
@@ -854,10 +854,10 @@ class TrainingArguments:
     )
 
     per_device_train_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU/HPU/MPS/NPU core/CPU for training."}
+        default=8, metadata={"help": "Batch size per device accelerator core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU/HPU/MPS/NPU core/CPU for evaluation."}
+        default=8, metadata={"help": "Batch size per device accelerator core/CPU for evaluation."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
@@ -1045,7 +1045,7 @@ class TrainingArguments:
     use_cpu: bool = field(
         default=False,
         metadata={
-            "help": "Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu/hpu device if available."
+            "help": "Whether or not to use cpu. If left to False, we will use the available torch device/backend (cuda/mps/xpu/hpu etc.)"
         },
     )
     use_mps_device: bool = field(

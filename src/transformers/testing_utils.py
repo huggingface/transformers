@@ -2888,12 +2888,19 @@ if is_torch_hpu_available():
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
 
 if is_torch_npu_available():
+    BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
     BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
     BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
 
 if is_torch_xpu_available():
+    BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
     BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
     BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
+
+if is_torch_xla_available():
+    BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
+    BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
+    BACKEND_DEVICE_COUNT["xla"] = torch.cuda.device_count
 
 
 def backend_manual_seed(device: str, seed: int):
