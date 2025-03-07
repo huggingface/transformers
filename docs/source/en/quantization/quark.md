@@ -24,6 +24,12 @@ Users interested in Quark can refer to its [documentation](https://quark.docs.am
 
 Although Quark has its own checkpoint / [configuration format](https://huggingface.co/amd/Llama-3.1-8B-Instruct-FP8-KV-Quark-test/blob/main/config.json#L26), the library also supports producing models with a serialization layout compliant with other quantization/runtime implementations ([AutoAWQ](https://huggingface.co/docs/transformers/quantization/awq), [native fp8 in 🤗 Transformers](https://huggingface.co/docs/transformers/quantization/finegrained_fp8)).
 
+To be able to load Quark quantized models in Transformers, the library first needs to be installed:
+
+```bash
+pip install amd-quark
+```
+
 ## Support matrix
 
 Models quantized through Quark support a large range of features, that can be combined together. All quantized models independently of their configuration can seamlessly be reloaded through `PretrainedModel.from_pretrained`.
