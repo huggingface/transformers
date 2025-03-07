@@ -583,6 +583,7 @@ class TrainerMemoryTracker:
                 self.torch.npu.empty_cache()
             elif is_torch_hpu_available():
                 self.torch.hpu.reset_peak_memory_stats()
+                # not available on hpu as it reserves all device memory for the current process
                 # self.torch.hpu.empty_cache()
             elif is_torch_mps_available():
                 self.torch.mps.empty_cache()
@@ -637,7 +638,8 @@ class TrainerMemoryTracker:
             elif is_torch_npu_available():
                 self.torch.npu.empty_cache()
             elif is_torch_hpu_available():
-                # self.torch.hpu.empty_cache()
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.npu.empty_cache()
                 pass
             elif is_torch_mps_available():
                 self.torch.mps.empty_cache()

@@ -3734,8 +3734,9 @@ class Trainer:
             elif is_torch_mps_available(min_version="2.0"):
                 torch.mps.empty_cache()
             elif is_torch_hpu_available():
-                # torch.hpu.empty_cache()
-                pass
+                logger.warning(
+                    "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
+                )
             else:
                 torch.cuda.empty_cache()
 

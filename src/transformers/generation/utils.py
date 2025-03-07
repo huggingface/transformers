@@ -45,6 +45,7 @@ from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     is_accelerate_available,
+    is_habana_gaudi1,
     is_hqq_available,
     is_optimum_quanto_available,
     is_torchdynamo_compiling,
@@ -406,10 +407,7 @@ class GenerationMixin:
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                if input_ids.device.type == "hpu":
-                    input_ids = input_ids.index_select(1, cache_position)
-                else:
-                    input_ids = input_ids[:, cache_position]
+                input_ids = input_ids[:, cache_position]
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
@@ -438,10 +436,13 @@ class GenerationMixin:
             and position_ids_key in set(inspect.signature(self.forward).parameters.keys())
         ):
             position_ids = attention_mask.long().cumsum(-1) - 1
-            if position_ids.device.type == "hpu":
-                position_ids[attention_mask == 0] = 1
-            else:
-                position_ids.masked_fill_(attention_mask == 0, 1)
+
+            if is_habana_gaudi1():
+                # On Gaudi1, masked_fill_ is not supported for int64 tensors
+                # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
+                position_ids = position_ids.to(torch.int32)
+
+            position_ids.masked_fill_(attention_mask == 0, 1)
             kwargs[position_ids_key] = position_ids  # placed in kwargs for further processing (see below)
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
