@@ -5219,22 +5219,25 @@ class Trainer:
         """
         Calculate the number of items in each batch for all epochs (including the steps_trained) during training.
         """
+        gradient_accumulation_steps = args.gradient_accumulation_steps
         # total number of steps in each epoch including the steps_trained
         steps_in_epoch = (
-            len_dataloader if len_dataloader is not None else args.max_steps * args.gradient_accumulation_steps
+            len_dataloader if len_dataloader is not None else args.max_steps * gradient_accumulation_steps
         )
 
-        remainder = num_examples % args.gradient_accumulation_steps
+        remainder = num_examples % gradient_accumulation_steps
         if remainder == 0:
-            remainder = args.gradient_accumulation_steps
+            remainder = gradient_accumulation_steps
 
-        total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
-        if args.gradient_accumulation_steps == 1:
+        total_updates = steps_in_epoch // gradient_accumulation_steps + 1
+        if gradient_accumulation_steps == 1:
             total_updates -= 1
 
+        average_tokens_across_devices = args.average_tokens_across_devices
+
+        epoch_dataloader = train_dataloader
         num_items_in_batches = []
         for epoch in range(epochs_trained, num_train_epochs):
-            epoch_dataloader = train_dataloader
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
 
@@ -5253,9 +5256,9 @@ class Trainer:
             # Reset the iterator
             epoch_iterator = iter(epoch_dataloader)
 
-            num_items_in_batches.append([])
+            batch_counts = []
             for update_step in range(total_updates):
-                num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
+                num_batches = gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
 
                 num_items_in_batch = 0
                 for _ in range(num_batches):
@@ -5267,15 +5270,17 @@ class Trainer:
                     except StopIteration:
                         break
 
-                if self.args.average_tokens_across_devices and num_items_in_batch > 0:
-                    num_items_in_batch = torch.tensor(num_items_in_batch, device=device)
-                    num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
-
-                # Set to None if no items in batch
-                if num_items_in_batch == 0:
+                if num_items_in_batch > 0:
+                    if average_tokens_across_devices:
+                        num_items_in_batch = torch.tensor(num_items_in_batch, device=device)
+                        num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
+                else:
+                    # Set to None if no items in batch
                     num_items_in_batch = None
 
-                num_items_in_batches[epoch].append(num_items_in_batch)
+                batch_counts.append(num_items_in_batch)
+
+            num_items_in_batches.append(batch_counts)
 
         return num_items_in_batches
 
