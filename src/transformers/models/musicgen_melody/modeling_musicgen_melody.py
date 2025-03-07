@@ -666,6 +666,7 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenMelodyDecoderLayer", "MusicgenMelodyAttention"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -949,7 +950,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
 
-        if self.attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.attn_implementation:
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.attn_implementation == "sdpa" and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
@@ -1596,6 +1597,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def __init__(

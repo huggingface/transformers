@@ -620,6 +620,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_cache_class = True
 
@@ -678,6 +679,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2VisionTransformer.get_input_embeddings
     def get_input_embeddings(self):
@@ -721,7 +723,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif not self._use_flash_attention_2:
+        elif not self._use_flash_attention_2 and not self._use_flash_attention_3:
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
@@ -839,6 +841,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.image_token_id = self.config.image_token_id
 
         self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config.text_config._attn_implementation == "flash_attention_3"
 
         self.post_init()
 
