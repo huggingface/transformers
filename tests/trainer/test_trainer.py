@@ -2976,18 +2976,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         data_collator = FakeCollator()
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
-            output_dir=tmp_dir,
-            save_steps=5,
-            save_safetensors=True,
-            data_collator=data_collator
+            output_dir=tmp_dir, save_steps=5, save_safetensors=True, data_collator=data_collator
         )
         trainer.train()
-        loaded_tokenizer = AutoTokenizer.from_pretrained(
-            os.path.join(tmp_dir, os.listdir(tmp_dir)[0])
-        )
-        assert (
-            len(loaded_tokenizer) == len(trainer.data_collator.tokenizer)
-        ), "Failed to load updated tokenizer"
+        loaded_tokenizer = AutoTokenizer.from_pretrained(os.path.join(tmp_dir, os.listdir(tmp_dir)[0]))
+        assert len(loaded_tokenizer) == len(trainer.data_collator.tokenizer), "Failed to load updated tokenizer"
 
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
