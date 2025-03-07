@@ -68,7 +68,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "../InternVLTest-1B"
+_CHECKPOINT_FOR_DOC = "yonigozlan/InternVL2_5-1B-MPO-hf"
 
 _CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
 
@@ -579,9 +579,9 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
         >>> torch_device = "cuda"
-        >>> processor = AutoProcessor.from_pretrained("../InternVLTest-1B")
+        >>> processor = AutoProcessor.from_pretrained("yonigozlan/InternVL2_5-1B-MPO-hf")
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "../InternVLTest-1B", torch_dtype=torch.bfloat16, device_map=torch_device
+        ...     "yonigozlan/InternVL2_5-1B-MPO-hf", torch_dtype=torch.bfloat16, device_map=torch_device
         ... )
 
         >>> messages = [

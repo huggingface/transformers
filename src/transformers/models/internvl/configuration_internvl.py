@@ -72,17 +72,17 @@ class InternVLVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import InternVLVisionConfig, InternVLVisionModel
 
-    >>> # Initializing a InternVLVisionModel ../InternVLTest-1B style configuration
+    >>> # Initializing a InternVLVisionModel yonigozlan/InternVL2_5-1B-MPO-hf style configuration
     >>> configuration = InternVLVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the ../InternVLTest-1B configuration
+    >>> # Initializing a model (with random weights) from the yonigozlan/InternVL2_5-1B-MPO-hf configuration
     >>> model = InternVLVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "intervl_vision"
+    model_type = "internvl_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -165,7 +165,7 @@ class InternVLConfig(PretrainedConfig):
     >>> # Initializing a InternVL style configuration
     >>> configuration = InternVLConfig()
 
-    >>> # Initializing a model (with random weights) from the ../InternVLTest-1B configuration
+    >>> # Initializing a model (with random weights) from the yonigozlan/InternVL2_5-1B-MPO-hf configuration
     >>> model = InternVLForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

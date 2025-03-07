@@ -65,7 +65,7 @@ Here is how you can use the `image-text-to-text` pipeline to perform inference w
 ...     },
 ... ]
 
->>> pipe = pipeline("image-text-to-text", model="../InternVLTest-1B")
+>>> pipe = pipeline("image-text-to-text", model="yonigozlan/InternVL2_5-1B-MPO-hf")
 >>> outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
 >>> outputs[0]["generated_text"]
 'The image depicts a close-up view of a vibrant garden scene, featuring several flowers in various stages of bloom. The primary focus is on a cluster of pink cosmos flowers, which are characterized by their large, five-petaled petals and prominent yellow centers'
@@ -79,7 +79,7 @@ This example demonstrates how to perform inference on a single image with the In
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../InternVLTest-1B"
+>>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -111,7 +111,7 @@ This example shows how to generate text using the InternVL model without providi
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../InternVLTest-1B"
+>>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -141,7 +141,7 @@ InternVL models also support batched image and text inputs.
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../InternVLTest-1B"
+>>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -185,7 +185,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../InternVLTest-1B"
+>>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -229,7 +229,7 @@ TODO modify video loading
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 
->>> model_checkpoint = "../InternVLTest-4B"
+>>> model_checkpoint = "yonigozlan/InternVL2_5-4B-MPO-hf"
 >>> quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, quantization_config=quantization_config)
@@ -269,7 +269,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../InternVLTest-1B"
+>>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 

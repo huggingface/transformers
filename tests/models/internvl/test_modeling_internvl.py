@@ -280,8 +280,8 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch
 class InternVLQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "../InternVLTest-1B"
-        self.medium_model_checkpoint = "../InternVLTest-4B"
+        self.small_model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+        self.medium_model_checkpoint = "yonigozlan/InternVL2_5-4B-MPO-hf"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -601,8 +601,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 @require_torch
 class InternVLLlamaIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.small_model_checkpoint = "../InternVLTest-2B"
-        self.medium_model_checkpoint = "../InternVLTest-8B"
+        self.small_model_checkpoint = "yonigozlan/InternVL2_5-2B-MPO-hf"
+        self.medium_model_checkpoint = "yonigozlan/InternVL2_5-8B-MPO-hf"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

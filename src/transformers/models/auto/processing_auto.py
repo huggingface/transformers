@@ -72,7 +72,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("idefics3", "Idefics3Processor"),
         ("instructblip", "InstructBlipProcessor"),
         ("instructblipvideo", "InstructBlipVideoProcessor"),
-        ("internvl", "PixtralProcessor"),
+        ("internvl", "InternVLProcessor"),
         ("kosmos-2", "Kosmos2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
