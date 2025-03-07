@@ -289,6 +289,11 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.aimv2": [
+        "AIMv2Config",
+        "AIMv2TextConfig",
+        "AIMv2VisionConfig",
+    ],
     "models.clipseg": [
         "CLIPSegConfig",
         "CLIPSegProcessor",
@@ -1850,6 +1855,17 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
+        ]
+    )
+    _import_structure["models.aimv2"].extend(
+        [
+            "AIMv2ForImageClassification",
+            "AIMv2Model",
+            "AIMv2PreTrainedModel",
+            "AIMv2TextModel",
+            "AIMv2TextModelWithProjection",
+            "AIMv2VisionModel",
+            "AIMv2VisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -5459,6 +5475,13 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.aimv2 import (
+        AIMv2Config,
+       
+        AIMv2TextConfig,
+       
+        AIMv2VisionConfig,
+    )
     from .models.clipseg import (
         CLIPSegConfig,
         CLIPSegProcessor,
@@ -7009,6 +7032,15 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
+        )
+        from .models.aimv2 import (
+            AIMv2ForImageClassification,
+            AIMv2Model,
+            AIMv2PreTrainedModel,
+            AIMv2TextModel,
+            AIMv2TextModelWithProjection,
+            AIMv2VisionModel,
+            AIMv2VisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSegForImageSegmentation,
