@@ -1992,7 +1992,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     if template_dir.is_dir():
                         for template_file in template_dir.glob("*.jinja"):
                             template_name = template_file.name.removesuffix(".jinja")
-                            additional_files_names[f"chat_template_{template_name}"] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                            additional_files_names[f"chat_template_{template_name}"] = (
+                                f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                            )
                 else:
                     try:
                         for template_file in list_repo_tree(
