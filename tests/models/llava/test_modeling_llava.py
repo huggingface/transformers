@@ -24,6 +24,7 @@ from transformers import (
     AutoTokenizer,
     LlavaConfig,
     LlavaForConditionalGeneration,
+    LlavaModel,
     is_torch_available,
     is_vision_available,
 )
@@ -180,7 +181,14 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     Model tester for `LlavaForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaModel,
+            LlavaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
         if is_torch_available()
