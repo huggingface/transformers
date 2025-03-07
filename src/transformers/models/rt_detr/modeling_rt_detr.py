@@ -755,38 +755,44 @@ def multi_scale_deformable_attention(
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+
     sampling_grids = 2 * sampling_locations - 1
-    sampling_value_list = []
-    for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, hidden_dim
-        # -> batch_size, height*width, num_heads*hidden_dim
-        # -> batch_size, num_heads*hidden_dim, height*width
-        # -> batch_size*num_heads, hidden_dim, height, width
-        value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
-        )
+    value_levels = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+
+    sampled_values = []
+    for idx, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height * width, num_heads, hidden_dim
+        # -> batch_size, num_heads * hidden_dim, height * width
+        # -> batch_size * num_heads, hidden_dim, height, width
+        value_i = value_levels[idx]
+        value_i = value_i.flatten(2).transpose(1, 2)
+        value_i = value_i.reshape(batch_size * num_heads, hidden_dim, height, width)
+
         # batch_size, num_queries, num_heads, num_points, 2
-        # -> batch_size, num_heads, num_queries, num_points, 2
-        # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
-        sampling_value_l_ = nn.functional.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+        # -> batch_size * num_heads, num_queries, num_points, 2
+        sampling_grid_i = sampling_grids[:, :, :, idx]
+        sampling_grid_i = sampling_grid_i.transpose(1, 2).flatten(0, 1)
+
+        # batch_size * num_heads, hidden_dim, num_queries, num_points
+        sampled_value_i = nn.functional.grid_sample(
+            value_i, sampling_grid_i, mode="bilinear", padding_mode="zeros", align_corners=False
         )
-        sampling_value_list.append(sampling_value_l_)
+        sampled_values.append(sampled_value_i)
+    sampled_values = torch.stack(sampled_values, dim=-2)
+
     # (batch_size, num_queries, num_heads, num_levels, num_points)
     # -> (batch_size, num_heads, num_queries, num_levels, num_points)
     # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_heads, 1, num_queries, num_levels * num_points
-    )
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .view(batch_size, num_heads * hidden_dim, num_queries)
-    )
-    return output.transpose(1, 2).contiguous()
+    attention_weights = attention_weights.transpose(1, 2)
+    attention_weights = attention_weights.reshape(batch_size * num_heads, 1, num_queries, num_levels * num_points)
+
+    attention_weights = attention_weights * sampled_values.flatten(-2)
+
+    output = attention_weights.sum(-1)
+    output = output.view(batch_size, num_heads * hidden_dim, num_queries)
+    output = output.transpose(1, 2).contiguous()
+
+    return output
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
@@ -881,7 +887,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_reference_points, _, num_coordinates = reference_points.shape
         reference_points = reference_points.view(batch_size, num_reference_points, 1, -1, 1, num_coordinates)
-        
+
         if num_coordinates == 2:
             height, width = spatial_shapes[..., 0], spatial_shapes[..., 1]
             offset_normalizer = torch.stack([width, height], -1)
