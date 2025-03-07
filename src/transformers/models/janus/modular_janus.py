@@ -1518,7 +1518,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
-        model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat(2, 1)
+        attention_mask = model_kwargs.pop("attention_mask", None) 
+        attention_mask = attention_mask.repeat(2, 1)
 
         input_tokens[batch_size:, :].masked_fill_(input_tokens[batch_size:, :] != generation_config.bos_token_id,
                                                   generation_config.pad_token_id)
@@ -1557,21 +1558,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
 
         for i in tqdm(range(num_image_tokens)):
-            """
-            cloning to avoid the in-place modification that happens inside the prepare_inputs_for_generation call, which
-            converts the mask to 4d and makes it incompatible with self._update_model_kwargs_for_generation, which will 
-            be called later
-            """
-            attention_mask = model_kwargs["attention_mask"].clone()
             model_inputs = super().prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds,
                 input_ids=input_tokens,
+                attention_mask=attention_mask,
                 **model_kwargs
             )
 
             # inputs_embeds.device can change on multi-gpu
-            model_inputs["attention_mask"] = model_kwargs["attention_mask"].to(inputs_embeds.device)
-            model_inputs["cache_position"] = model_kwargs["cache_position"].to(inputs_embeds.device)
+            model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
+            model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
                 output_attentions=output_attentions,
@@ -1580,9 +1576,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
 
             # Update model_kwargs like cache_position for next generation.
-            # restore copy
-            model_kwargs["attention_mask"] = attention_mask
+            model_kwargs["attention_mask"] = attention_mask  # needed for the following update
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
+            attention_mask = model_kwargs.pop("attention_mask", None) # to avoid future in-place modification
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
