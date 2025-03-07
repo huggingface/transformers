@@ -35,6 +35,7 @@ import numpy as np
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
+from typing import Any
 
 from transformers import (
     AutoFeatureExtractor,
@@ -52,7 +53,10 @@ from transformers import (
     logging,
     set_seed,
 )
-from transformers.data.data_collator import default_data_collator
+from transformers.data.data_collator import (
+    InputDataClass,
+    default_data_collator
+)
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
