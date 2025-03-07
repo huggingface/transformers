@@ -4774,6 +4774,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if keep_in_fp32_modules is not None:
             keep_in_fp32_modules = re.compile("|".join([re.escape(module) for module in keep_in_fp32_modules]))
             for name, param in model.named_parameters():
+                if keep_in_fp32_modules.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
