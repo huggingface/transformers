@@ -21,6 +21,7 @@ import gc
 import importlib
 import inspect
 import logging
+import math
 import multiprocessing
 import os
 import re
@@ -38,7 +39,7 @@ from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
+from typing import Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -48,6 +49,7 @@ import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
 
+from transformers import Trainer
 from transformers import logging as transformers_logging
 
 from .integrations import (
@@ -1411,6 +1413,28 @@ def get_tests_dir(append_path=None):
         return os.path.join(tests_dir, append_path)
     else:
         return tests_dir
+
+
+def get_steps_per_epoch(trainer: Trainer) -> int:
+    train_dataloader = trainer.get_train_dataloader()
+    batches_per_epoch = len(train_dataloader)
+    steps_per_epoch = math.ceil(batches_per_epoch / trainer.args.gradient_accumulation_steps)
+
+    return steps_per_epoch
+
+
+def evaluate_side_effect_factory(
+    side_effect_values: List[Dict[str, float]],
+) -> Generator[Dict[str, float], None, None]:
+    """
+    Function that returns side effects for the _evaluate method.
+    Used when we're unsure of exactly how many times _evaluate will be called.
+    """
+    for side_effect_value in side_effect_values:
+        yield side_effect_value
+
+    while True:
+        yield side_effect_values[-1]
 
 
 #
