@@ -88,3 +88,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## FineGrainedFP8Config
 
 [[autodoc]] FineGrainedFP8Config
+
+## QuarkConfig
+
+[[autodoc]] QuarkConfig
