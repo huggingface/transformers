@@ -28,7 +28,7 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -46,6 +46,7 @@ from transformers import (
     PretrainedConfig,
     TrainerCallback,
     TrainingArguments,
+    default_data_collator,
     enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
@@ -2964,18 +2965,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
 
     def test_save_collator_tokenizer_by_default(self):
-        from typing import Any
-
-        from transformers import BertTokenizer
-        from transformers.data.data_collator import (InputDataClass,
-                                                     default_data_collator)
-
         class FakeCollator:
             def __init__(self):
-                self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+                self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
                 self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
 
-            def __call__(self, features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
+            def __call__(self, features: List[Any], return_tensors="pt") -> Dict[str, Any]:
                 return default_data_collator(features, return_tensors)
 
         data_collator = FakeCollator()
@@ -2987,7 +2982,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             data_collator=data_collator
         )
         trainer.train()
-        loaded_tokenizer = BertTokenizer.from_pretrained(
+        loaded_tokenizer = AutoTokenizer.from_pretrained(
             os.path.join(tmp_dir, os.listdir(tmp_dir)[0])
         )
         assert (
