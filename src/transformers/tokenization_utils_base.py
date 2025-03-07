@@ -2163,11 +2163,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if chat_template_file is not None:
             with open(chat_template_file) as chat_template_handle:
                 chat_templates["default"] = chat_template_handle.read()
-        extra_chat_template_files = resolved_vocab_files.pop("additional_chat_template_files", [])
         for extra_chat_template in extra_chat_templates:
             template_file = resolved_vocab_files.pop(extra_chat_template, None)
             if template_file is None:
-                continue
+                continue  # I think this should never happen, but just in case
             template_name = extra_chat_template.removeprefix("chat_template_")
             with open(template_file) as chat_template_handle:
                 chat_templates[template_name] = chat_template_handle.read()
