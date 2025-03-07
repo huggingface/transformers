@@ -53,7 +53,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
     valid_init_kwargs = Phi4MultimodalFastImageProcessorInitKwargs
-    model_input_names = ["input_image_embeds", "image_sizes", "image_attention_mask"]
+    model_input_names = ["image_pixel_values", "image_sizes", "image_attention_mask"]
 
     def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -251,7 +251,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         returned_num_img_tokens = num_img_tokens
 
         data = {
-            "input_image_embeds": returned_input_image_embeds,
+            "image_pixel_values": returned_input_image_embeds,
             "image_sizes": returned_image_sizes,
             "image_attention_mask": returned_image_attention_mask,
             "num_img_tokens": returned_num_img_tokens,

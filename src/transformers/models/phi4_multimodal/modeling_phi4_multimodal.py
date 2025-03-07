@@ -677,19 +677,19 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.Tensor,
-        img_embeds: torch.FloatTensor,
+        image_pixel_values: torch.FloatTensor,
         image_sizes: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.FloatTensor:
-        img_embeds = img_embeds.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
+        image_pixel_values = image_pixel_values.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
 
         target_device = self.img_projection_up.bias.device
         target_dtype = self.img_projection_up.bias.dtype
 
-        batch_size = img_embeds.shape[0]
+        batch_size = image_pixel_values.shape[0]
 
         img_features = self.get_img_features(
-            img_embeds.flatten(0, 1),
+            image_pixel_values.flatten(0, 1),
             attention_mask=image_attention_mask.flatten(0, 1).to(dtype=bool, device=target_device),
         )
         base_feat_size = int(np.sqrt(img_features.shape[1]))
@@ -1253,7 +1253,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.Tensor,
-        audio_embeds: torch.FloatTensor,
+        audio_input_features: torch.FloatTensor,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         audio_projection_mode="speech",
@@ -1269,22 +1269,22 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         target_device = up_proj.bias.device
         target_dtype = up_proj.bias.dtype
 
-        audio_embeds = audio_embeds.to(device=target_device, dtype=target_dtype)
+        audio_input_features = audio_input_features.to(device=target_device, dtype=target_dtype)
 
-        audio_features, _ = self.encoder(audio_embeds, audio_attention_mask)
-        audio_set_tensor = up_proj(audio_features)
-        audio_set_tensor = nn.functional.gelu(audio_set_tensor)
-        audio_set_tensor = down_proj(audio_set_tensor)
+        audio_encoder_hidden_states, _ = self.encoder(audio_input_features, audio_attention_mask)
+        audio_encoder_hidden_states = up_proj(audio_encoder_hidden_states)
+        audio_encoder_hidden_states = nn.functional.gelu(audio_encoder_hidden_states)
+        audio_embeds = down_proj(audio_encoder_hidden_states)
 
-        merged_audio_set_tensor = torch.cat(
-            [audio_set_tensor[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
+        merged_audio_embeds = torch.cat(
+            [audio_embeds[i, : audio_embed_sizes[i], :] for i in range(len(audio_embed_sizes))], dim=0
         )
-        merged_audio_set_tensor = merged_audio_set_tensor.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+        merged_audio_embeds = merged_audio_embeds.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
         with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
             audio_embeds = inputs_embeds.index_put(
-                indices=positions_tuple, values=merged_audio_set_tensor, accumulate=False
+                indices=positions_tuple, values=merged_audio_embeds, accumulate=False
             )
 
         audio_embeds = self.drop(audio_embeds)
@@ -1573,8 +1573,8 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.Tensor,
-        input_image_embeds: Optional[torch.FloatTensor] = None,
-        input_audio_embeds: Optional[torch.FloatTensor] = None,
+        image_pixel_values: Optional[torch.FloatTensor] = None,
+        audio_input_features: Optional[torch.FloatTensor] = None,
         image_sizes=None,
         image_attention_mask=None,
         audio_embed_sizes=None,
@@ -1586,20 +1586,20 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
         image_embeds = None
         audio_embeds = None
-        if input_image_embeds is not None and (input_ids == self.image_token_id).any():
+        if image_pixel_values is not None and (input_ids == self.image_token_id).any():
             image_embeds = self.image_embed(
                 input_ids,
                 inputs_embeds,
-                img_embeds=input_image_embeds,
+                image_pixel_values=image_pixel_values,
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
             )
-        if input_audio_embeds is not None and (input_ids == self.audio_token_id).any():
-            audio_projection_mode = "vision" if input_image_embeds is not None else "speech"
+        if audio_input_features is not None and (input_ids == self.audio_token_id).any():
+            audio_projection_mode = "vision" if image_pixel_values is not None else "speech"
             audio_embeds = self.audio_embed(
                 input_ids,
                 inputs_embeds,
-                audio_embeds=input_audio_embeds,
+                audio_input_features=audio_input_features,
                 audio_embed_sizes=audio_embed_sizes,
                 audio_attention_mask=audio_attention_mask,
                 audio_projection_mode=audio_projection_mode,
@@ -1779,14 +1779,14 @@ PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        input_image_embeds (`torch.FloatTensor`, *optional*):
+        image_pixel_values (`torch.FloatTensor`, *optional*):
             If the input contains images, these correspond to the pixel values after transformations (as returned by
             the Processor)
         image_sizes (`torch.LongTensor`, *optional*):
             If the input contains images, these correspond to size of each image.
         image_attention_mask (`torch.LongTensor`, *optional*):
             Attention mask for the images.
-        input_audio_embeds (`torch.FloatTensor`, *optional*):
+        audio_input_features (`torch.FloatTensor`, *optional*):
             If the input contains audio samples, these correspond to the values after transformation (as returned by
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):
@@ -1857,10 +1857,10 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        input_image_embeds: Optional[torch.FloatTensor] = None,
+        image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         image_attention_mask=None,
-        input_audio_embeds: Optional[torch.FloatTensor] = None,
+        audio_input_features: Optional[torch.FloatTensor] = None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         use_cache: Optional[bool] = None,
@@ -1896,8 +1896,8 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             inputs_embeds = self.embed_tokens_extend(
                 input_ids,
                 inputs_embeds,
-                input_image_embeds=input_image_embeds,
-                input_audio_embeds=input_audio_embeds,
+                image_pixel_values=image_pixel_values,
+                audio_input_features=audio_input_features,
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
                 audio_embed_sizes=audio_embed_sizes,
@@ -2167,10 +2167,10 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        input_image_embeds: Optional[torch.FloatTensor] = None,
+        image_pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         image_attention_mask=None,
-        input_audio_embeds: Optional[torch.FloatTensor] = None,
+        audio_input_features: Optional[torch.FloatTensor] = None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         labels: Optional[torch.LongTensor] = None,
@@ -2222,10 +2222,10 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            input_image_embeds=input_image_embeds,
+            image_pixel_values=image_pixel_values,
             image_sizes=image_sizes,
             image_attention_mask=image_attention_mask,
-            input_audio_embeds=input_audio_embeds,
+            audio_input_features=audio_input_features,
             audio_embed_sizes=audio_embed_sizes,
             audio_attention_mask=audio_attention_mask,
             use_cache=use_cache,
@@ -2263,10 +2263,10 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        input_image_embeds=None,
+        image_pixel_values=None,
         image_sizes=None,
         image_attention_mask=None,
-        input_audio_embeds=None,
+        audio_input_features=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         cache_position=None,
@@ -2294,10 +2294,10 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            input_image_embeds=input_image_embeds,
+            image_pixel_values=image_pixel_values,
             image_sizes=image_sizes,
             image_attention_mask=image_attention_mask,
-            input_audio_embeds=input_audio_embeds,
+            audio_input_features=audio_input_features,
             audio_embed_sizes=audio_embed_sizes,
             audio_attention_mask=audio_attention_mask,
             cache_position=cache_position,
