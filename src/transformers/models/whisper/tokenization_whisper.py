@@ -852,13 +852,22 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return forced_decoder_ids
 
     def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
-        return _decode_asr(
-            self,
-            model_outputs,
-            return_timestamps=return_timestamps,
-            return_language=return_language,
-            time_precision=time_precision,
-        )
+        if return_timestamps:
+            return _decode_asr_segments(
+                self,
+                model_outputs,
+                return_timestamps=return_timestamps,
+                return_language=return_language,
+                time_precision=time_precision,
+            )
+        else:
+            return _decode_asr(
+                self,
+                model_outputs,
+                return_timestamps=return_timestamps,
+                return_language=return_language,
+                time_precision=time_precision,
+            )
 
     def get_prompt_ids(self, text: str, return_tensors="np"):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
@@ -906,6 +915,33 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+
+
+def _decode_asr_segments(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
+    """
+    Decode segments in the model output to obtain chunks of text with their timestamp ranges
+    """
+    timestamp_begin_id = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
+    prompt_token_id = tokenizer.convert_tokens_to_ids("<|startofprev|>")
+    decoder_start_token_id = tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
+    all_special_ids = set(tokenizer.all_special_ids)
+    segments = model_outputs[0]["segments"][0]
+    chunks = []
+    for segment in segments:
+        chunk = {}
+        token_ids = segment["tokens"].tolist()
+        token_ids = tokenizer._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
+        start_time = segment["start"].item()
+        end_time = segment["end"].item()
+        # ignore special tokens
+        token_ids = [token for token in token_ids if (token < timestamp_begin_id) and (token not in all_special_ids)]
+        chunk["text"] = tokenizer.decode(token_ids)
+        chunk["timestamp"] = (start_time, end_time)
+        chunks.append(chunk)
+
+    full_text = "".join(chunk["text"] for chunk in chunks)
+    optional = {"chunks": chunks}
+    return full_text, optional
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
