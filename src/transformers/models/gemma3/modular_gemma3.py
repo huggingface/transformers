@@ -291,6 +291,8 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rope_global_base_freq = rope_global_base_freq
         self.rope_local_base_freq = rope_local_base_freq
         self.attention_pattern = attention_pattern
+        # For configuring HybridCache to work with 5:1 attention pattern
+        self.sliding_window_pattern=len(self.attention_pattern)
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -782,6 +784,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# TODO(ryanmullins): Can this inherit from Gemma2Attention?
 class Gemma3Attention(nn.Module):
 
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
@@ -833,10 +836,8 @@ class Gemma3Attention(nn.Module):
         position_embeddings_global: torch.Tensor,
         position_embeddings_local: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -858,58 +859,31 @@ class Gemma3Attention(nn.Module):
             query_states, key_states, cos, sin
         )
 
-        if (
-            self.sliding_window is not None
-            and attention_mask is not None
-            and position_ids is not None
-        ):
-            sliding_mask = create_sliding_window_mask(
-                position_ids=position_ids,
-                cache_position=last_cache_position,
-                cache_len=attention_mask.shape[-1],
-                sliding_window_size=self.sliding_window,
-            )
-            attention_mask *= sliding_mask
-
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
                 "sin": sin,
                 "cos": cos,
-                # Why is this a torch.LongTensor? Feels like last_cache_position should be in here somehow?
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            if (
-                attention_mask is not None
-                and self.config._attn_implementation == "flash_attention_2"
-            ):
+            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
                 seq_len = attention_mask.shape[-1]
-                key_states, value_states = (
-                    key_states[:, :, :seq_len, :],
-                    value_states[:, :, :seq_len, :],
-                )
+                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get(
-                "output_attentions", False
-            ):
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. "
                     "Falling back to eager attention. This warning can be removed using the argument "
                     '`attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = cast(
-                    Callable[..., tuple[torch.Tensor, torch.Tensor]],
-                    ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation],
-                )
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -963,9 +937,30 @@ class Gemma3DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: int = 0,
         **kwargs,
-    ) -> tuple[
-        torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]
-    ]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        # TODO(ryanmullins):
+        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
+            # In prefill, we may be larger than sliding window
+            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
+            # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
+            # thus we must slice from the right (at most `effective_seq_len` elements)
+            if self.config._attn_implementation == "flash_attention_2":
+                attention_mask = attention_mask[:, -effective_seq_len:]
+            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
+            # from the left, with an offset if we are beyond the sliding window
+            else:
+                min_dtype = torch.finfo(attention_mask.dtype).min
+                sliding_window_mask = torch.tril(
+                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+                )
+                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
+                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
+                offset = last_cache_position - effective_seq_len
+                # Should only be used when beyond the sliding window (i.e. offset > 0)
+                offset = max(0, offset)
+                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
+
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -981,7 +976,6 @@ class Gemma3DecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            last_cache_position=last_cache_position,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -1533,6 +1527,9 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
+    # TODO(ryanmullins, imayank): Do we need this method, or can we just make
+    # the Gemma3ForConditionalGeneration the only/primary interface for loading
+    # these models? The only model that is "limited" to this is 1B.
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1995,12 +1992,14 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 return attention_mask
             return None
 
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted
+            # form and requires no inversion or slicing.
+            return attention_mask
+
         min_dtype = torch.finfo(self.dtype).min
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
-        if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        elif isinstance(past_key_values, HybridCache):
+        if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -2020,7 +2019,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
         if shift > 0:
             causal_mask = torch.roll(causal_mask, shifts=shift, dims=-1)
             causal_mask[..., :shift] = 0
-        
+
         # Apply bidirectional attention for regions starting with begin_of_image tokens
         begin_of_image_token = self.config.text_config.boi_token_id
         for batch_idx in range(batch_size):
@@ -2032,7 +2031,7 @@ class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 causal_mask[batch_idx, 0, start+1:end, start+1:end] = 0  # Enable bidirectional attention
 
 
-        
+
         return attention_mask
 
 

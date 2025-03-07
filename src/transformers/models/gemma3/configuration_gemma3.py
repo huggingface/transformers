@@ -229,6 +229,8 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rope_global_base_freq = rope_global_base_freq
         self.rope_local_base_freq = rope_local_base_freq
         self.attention_pattern = attention_pattern
+        # For configuring HybridCache to work with 5:1 attention pattern
+        self.sliding_window_pattern = len(self.attention_pattern)
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
