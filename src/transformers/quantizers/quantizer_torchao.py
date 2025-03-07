@@ -213,7 +213,10 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             model = torch.compile(model, mode="max-autotune")
             model = autoquant(
-                model, qtensor_class_list=ALL_AUTOQUANT_CLASS_LIST, set_inductor_config=False, **self.quantization_config.quant_type_kwargs
+                model,
+                qtensor_class_list=ALL_AUTOQUANT_CLASS_LIST,
+                set_inductor_config=False,
+                **self.quantization_config.quant_type_kwargs,
             )
             return model
         return
