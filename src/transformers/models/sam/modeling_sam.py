@@ -1234,7 +1234,7 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
-SAM_VISION_INPUTS_DOCSTRING = """
+SAM_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for

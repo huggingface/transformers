@@ -521,7 +521,7 @@ class GotOcr2VisionNeck(nn.Module):
         return hidden_states
 
 
-GOT_OCR2_VISION_INPUTS_DOCSTRING = """
+GOT_OCR2_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`GotOcr2Processor`]. See [`GotOcr2Processor.__call__`] for

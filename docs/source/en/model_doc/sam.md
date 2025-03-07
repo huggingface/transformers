@@ -161,6 +161,12 @@ alt="drawing" width="900"/>
     - forward
 
 
+## TFSamVisionEncoder
+
+[[autodoc]] TFSamVisionEncoder
+    - call
+
+
 ## TFSamModel
 
 [[autodoc]] TFSamModel

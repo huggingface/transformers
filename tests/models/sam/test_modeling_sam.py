@@ -96,6 +96,10 @@ class SamVisionTester:
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
 
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
+
     def get_config(self):
         return SamVisionConfig(
             image_size=self.image_size,
@@ -162,10 +166,7 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SamVisionTester(self)
-        common_properties = ["initializer_range"]  # TODO
-        self.config_tester = ConfigTester(
-            self, config_class=SamVisionConfig, has_text_modality=False, common_properties=common_properties
-        )
+        self.config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
