@@ -101,11 +101,6 @@ class QuarkTest(unittest.TestCase):
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
         self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
 
-    def test_quantized_layers_class(self):
-        """
-        Simple test to check if the model conversion has been done correctly by checking on
-        the class type of the linear layers of the converted models
-        """
         self.assertTrue(isinstance(self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear))
 
     def check_inference_correctness(self, model):
