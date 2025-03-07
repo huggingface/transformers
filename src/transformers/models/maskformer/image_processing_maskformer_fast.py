@@ -20,7 +20,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import INIT_SERVICE_KWARGS, BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -28,19 +32,15 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
-    ChannelDimension,
     ImageInput,
-    ImageType,
     PILImageResampling,
-    get_image_type,
-    infer_channel_dimension_format,
     make_list_of_images,
     valid_images,
-    validate_fast_preprocess_arguments,
-    validate_kwargs,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
+    add_start_docstrings,
     filter_out_non_signature_kwargs,
     is_torch_available,
     is_torchvision_available,
@@ -119,40 +119,31 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks, labels
 
 
-class MaskFormerImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast MaskFormer image processor.
+class MaskFormerFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    size_divisor: Optional[int]
+    ignore_index: Optional[int]
+    do_reduce_labels: Optional[bool]
+    num_labels: Optional[int]
+    do_pad: Optional[bool]
+    pad_size: Optional[Dict[str, int]]
 
-    This image processor inherits from [`BaseImageProcessorFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
 
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
-        size (`int`, *optional*, defaults to 800):
-            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`. If size is a
-            sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
-            the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
-            height / width, size)`.
+class MaskFormerFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    segmentation_maps: Optional[ImageInput]
+    instance_id_to_semantic_id: Optional[Dict[int, int]]
+    size_divisor: Optional[int]
+    ignore_index: Optional[int]
+    do_reduce_labels: Optional[bool]
+    pad_size: Optional[Dict[str, int]]
+
+
+@add_start_docstrings(
+    "Constructs a fast MaskFormer image processor.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    """
         size_divisor (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
-        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
-            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
-            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
-            to `True`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the input to a certain `scale`.
-        rescale_factor (`float`, *optional*, defaults to `1/ 255`):
-            Rescale the input by the given factor. Only has an effect if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
-            The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
-        image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
-            ImageNet std.
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
             denoted with 0 (background) will be replaced with `ignore_index`.
@@ -162,78 +153,57 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             The background label will be replaced by `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
         pad_size (`Dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
-
-    """
-
+    """,
+)
+class MaskFormerImageProcessorFast(BaseImageProcessorFast):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"shortest_edge": 800, "longest_edge": 1333}
+    default_to_square = False
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    do_pad = True
+    default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
+    size_divisor = 32
+    do_reduce_labels = False
+    valid_init_kwargs = MaskFormerFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = MaskFormerFastImageProcessorPreprocessKwargs
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
     @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
     @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        size_divisor: int = 32,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        ignore_index: Optional[int] = None,
-        do_reduce_labels: bool = False,
-        num_labels: Optional[int] = None,
-        pad_size: Optional[Dict[str, int]] = None,
-        **kwargs,
-    ):
+    def __init__(self, **kwargs: Unpack[MaskFormerFastImageProcessorInitKwargs]) -> None:
+        if "pad_and_return_pixel_mask" in kwargs:
+            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+
+        size = kwargs.pop("size", None)
+        if "max_size" in kwargs:
+            logger.warning_once(
+                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "Please specify in `size['longest_edge'] instead`.",
+            )
+            max_size = kwargs.pop("max_size")
+        else:
+            max_size = None if size is None else 1333
+
+        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
+
         super().__init__(**kwargs)
-
-        # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-        # `size` can still be pass in as an int
-        self._max_size = kwargs.pop("max_size", 1333)
-
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
-        size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
-
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.size_divisor = size_divisor
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.ignore_index = ignore_index
-        self.do_reduce_labels = do_reduce_labels
-        self.num_labels = num_labels
-        self.pad_size = pad_size
-        self._valid_processor_keys = [
-            "images",
-            "segmentation_maps",
-            "instance_id_to_semantic_id",
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "ignore_index",
-            "do_reduce_labels",
-            "pad_size",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -322,13 +292,77 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         )
         return image
 
-    def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
-        return self.preprocess(images, segmentation_maps=segmentation_maps, **kwargs)
-
-    def preprocess(
+    def pad(
         self,
-        images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        image: torch.Tensor,
+        padded_size: Tuple[int, int],
+        segmentation_map: Optional[torch.Tensor] = None,
+        fill: int = 0,
+    ) -> BatchFeature:
+        original_size = image.size()[-2:]
+        padding_bottom = padded_size[0] - original_size[0]
+        padding_right = padded_size[1] - original_size[1]
+        if padding_bottom < 0 or padding_right < 0:
+            raise ValueError(
+                f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
+                f"original size. Got padded size: {padded_size}, original size: {original_size}."
+            )
+        if original_size != padded_size:
+            padding = [0, 0, padding_right, padding_bottom]
+            image = F.pad(image, padding, fill=fill)
+            if segmentation_map is not None:
+                segmentation_map = F.pad(segmentation_map, padding, fill=fill)
+
+        # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
+        pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
+        pixel_mask[: original_size[0], : original_size[1]] = 1
+
+        return image, pixel_mask, segmentation_map
+
+    @add_start_docstrings(
+        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+        """
+        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            List of annotations associated with the image or batch of images. If annotation is for object
+            detection, the annotations should be a dictionary with the following keys:
+            - "image_id" (`int`): The image id.
+            - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                dictionary. An image can have no annotations, in which case the list should be empty.
+            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+            - "image_id" (`int`): The image id.
+            - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                An image can have no segments, in which case the list should be empty.
+            - "file_name" (`str`): The file name of the image.
+        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
+        masks_path (`str` or `pathlib.Path`, *optional*):
+            Path to the directory containing the segmentation masks.
+        """,
+    )
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[MaskFormerFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: List["torch.Tensor"],
+        segmentation_maps: Optional["torch.Tensor"] = None,
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -342,51 +376,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         ignore_index: Optional[int] = None,
         do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
-        do_resize = self.do_resize if do_resize is None else do_resize
-        size = self.size if size is None else size
-        size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
-        size_divisor = self.size_divisor if size_divisor is None else size_divisor
-        resample = self.resample if resample is None else resample
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-        ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
-        pad_size = self.pad_size if pad_size is None else pad_size
-        device = kwargs.pop("device", None)
-
-        # Make hashable for cache
-        size = SizeDict(**size)
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        images = make_list_of_images(images)
-        image_type = get_image_type(images[0])
-
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        validate_fast_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
-
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(
                 "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -400,26 +392,6 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("Images and segmentation maps must have the same length.")
 
         data = {}
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
-
-        if device is not None:
-            images = [image.to(device) for image in images]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
-            input_data_format = ChannelDimension.FIRST
-
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
 
         processed_images = []
         processed_segmentation_maps = []
@@ -441,7 +413,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
 
             if do_rescale and do_normalize:
                 # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
             elif do_rescale:
                 image = image * rescale_factor
             elif do_normalize:
@@ -502,33 +474,6 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             encoded_inputs["class_labels"] = class_labels
 
         return encoded_inputs
-
-    def pad(
-        self,
-        image: torch.Tensor,
-        padded_size: Tuple[int, int],
-        segmentation_map: Optional[torch.Tensor] = None,
-        fill: int = 0,
-    ) -> BatchFeature:
-        original_size = image.size()[-2:]
-        padding_bottom = padded_size[0] - original_size[0]
-        padding_right = padded_size[1] - original_size[1]
-        if padding_bottom < 0 or padding_right < 0:
-            raise ValueError(
-                f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded size: {padded_size}, original size: {original_size}."
-            )
-        if original_size != padded_size:
-            padding = [0, 0, padding_right, padding_bottom]
-            image = F.pad(image, padding, fill=fill)
-            if segmentation_map is not None:
-                segmentation_map = F.pad(segmentation_map, padding, fill=fill)
-
-        # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-        pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
-        pixel_mask[: original_size[0], : original_size[1]] = 1
-
-        return image, pixel_mask, segmentation_map
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_segmentation
     def post_process_segmentation(
