@@ -344,12 +344,13 @@ GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 class GenerationMixin:
     """
-    A class containing all functions for auto-regressive text generation, to be used as a mixin in models.
+    A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
 
-    A model class should inherit from `GenerationMixin` to include shared methods like `generate`, or when it has a
-    custom `generate` method that relies on some part of `GenerationMixin`, directly or indirectly (e.g. an inner model
-    calling `GenerationMixin.generate`). Inheriting from this class causes the model to load a `GenerationConfig` at
-    initialization time, and ensures `generate`-related class tests are run.
+    A model class should inherit from `GenerationMixin` to enable calling methods like `generate`, or when it
+    has a custom `generate` method that relies on some part of `GenerationMixin`, directly or indirectly (e.g. the
+    model with a custom `generate` has an inner model calling `GenerationMixin.generate`). Inheriting from this class
+    causes the model to load a `GenerationConfig` at initialization time, and ensures `generate`-related class tests
+    are run in `transformers` CI.
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
