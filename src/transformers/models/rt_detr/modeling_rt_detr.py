@@ -780,15 +780,13 @@ def multi_scale_deformable_attention(
         sampled_values.append(sampled_value_i)
     sampled_values = torch.stack(sampled_values, dim=-2)
 
-    # (batch_size, num_queries, num_heads, num_levels, num_points)
-    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    # (batch_size, num_queries, num_heads, ...) -> (batch_size, num_heads, num_queries, ...)
     attention_weights = attention_weights.transpose(1, 2)
     attention_weights = attention_weights.reshape(batch_size * num_heads, 1, num_queries, num_levels * num_points)
 
-    attention_weights = attention_weights * sampled_values.flatten(-2)
+    output = attention_weights * sampled_values.flatten(-2)
+    output = output.sum(-1)
 
-    output = attention_weights.sum(-1)
     output = output.view(batch_size, num_heads * hidden_dim, num_queries)
     output = output.transpose(1, 2).contiguous()
 
