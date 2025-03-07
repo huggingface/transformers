@@ -4758,9 +4758,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
         # they are not in the loaded state dict)
         if low_cpu_mem_usage:
-            model._move_missing_keys_from_meta_to_cpu(
-                missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, hf_quantizer
-            )
+            model._move_missing_keys_from_meta_to_cpu(missing_keys, unexpected_keys, dtype, hf_quantizer)
             # In this case we also need to move everything back
             if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                 for key, param in model.state_dict().items():
@@ -4770,6 +4768,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # correctly initialize the missing keys if it was skipped before
         if _fast_init or low_cpu_mem_usage:
             model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
+
+        # Set some modules to fp32 if needed
+        if keep_in_fp32_modules is not None and len(keep_in_fp32_modules) > 0:
+            for name, param in model.named_parameters():
+                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                    # param = param.to(torch.float32) does not work here as only in the local scope.
+                    param.data = param.data.to(torch.float32)
 
         # Make sure we are able to load base models as well as derived models (specific task models, with heads)
         model_to_load = model
@@ -4796,14 +4801,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Get reverse key mapping
         reverse_key_renaming_mapping = {v: k for k, v in key_renaming_mapping.items()}
-
-        # Set some modules to fp32 if needed
-        if keep_in_fp32_modules is not None:
-            keep_in_fp32_modules = re.compile("|".join(keep_in_fp32_modules))
-            for name, param in model.named_parameters():
-                if keep_in_fp32_modules.search(name):
-                    # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
 
         is_offloaded_safetensors = False
         # This offload index if for params explicitly on the "disk" in the device_map
@@ -5276,7 +5273,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys: List[str],
         unexpected_keys: List[str],
         dtype: Optional[torch.dtype],
-        keep_in_fp32_modules: Optional[List[str]],
         hf_quantizer: Optional[HfQuantizer],
     ) -> "PreTrainedModel":
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
@@ -5290,11 +5286,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if param.device == torch.device("meta"):
                 # upcast in fp32 if any
                 target_dtype = dtype
-                if keep_in_fp32_modules is not None and any(
-                    module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
-                ):
-                    target_dtype = torch.float32
-
                 value = torch.empty(*param.size(), dtype=target_dtype)
                 if (
                     not is_quantized
