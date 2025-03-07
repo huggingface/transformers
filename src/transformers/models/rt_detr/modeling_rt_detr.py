@@ -866,11 +866,6 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
         value = value.view(batch_size, sequence_length, self.num_heads, self.head_dim)
 
-        sampling_offsets = self.sampling_offsets(hidden_states)
-        sampling_offsets = sampling_offsets.view(
-            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
-        )
-
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.num_heads, self.num_levels * self.num_points
         )
@@ -879,18 +874,23 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
             batch_size, num_queries, self.num_heads, self.num_levels, self.num_points
         )
 
-        # batch_size, num_queries, num_heads, num_levels, num_points, 2
-        num_coordinates = reference_points.shape[-1]
+        sampling_offsets = self.sampling_offsets(hidden_states)
+        sampling_offsets = sampling_offsets.view(
+            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+        )
 
+        batch_size, num_reference_points, _, num_coordinates = reference_points.shape
+        reference_points = reference_points.view(batch_size, num_reference_points, 1, -1, 1, num_coordinates)
+        
         if num_coordinates == 2:
             height, width = spatial_shapes[..., 0], spatial_shapes[..., 1]
             offset_normalizer = torch.stack([width, height], -1)
             normalized_sampling_offsets = sampling_offsets / offset_normalizer[None, None, None, :, None, :]
-            sampling_locations = reference_points[:, :, None, :, None, :] + normalized_sampling_offsets
+            sampling_locations = reference_points + normalized_sampling_offsets
 
         elif num_coordinates == 4:
-            reference_points_xy = reference_points[:, :, None, :, None, :2]
-            offset = sampling_offsets / self.num_points * reference_points[:, :, None, :, None, 2:] * 0.5
+            reference_points_xy = reference_points[..., :2]
+            offset = sampling_offsets / self.num_points * reference_points[..., 2:] * 0.5
             sampling_locations = reference_points_xy + offset
 
         else:
