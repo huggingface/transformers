@@ -754,7 +754,8 @@ def multi_scale_deformable_attention(
     attention_weights: Tensor,
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
-    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    batched_num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    num_queries = batched_num_queries // batch_size
 
     sampling_grids = 2 * sampling_locations - 1
     value_levels = value.split([height * width for height, width in value_spatial_shapes], dim=1)
@@ -768,9 +769,10 @@ def multi_scale_deformable_attention(
         value_i = value_i.flatten(2).transpose(1, 2)
         value_i = value_i.reshape(batch_size * num_heads, hidden_dim, height, width)
 
-        # batch_size, num_queries, num_heads, num_points, 2
+        # batch_size * num_queries, num_heads, num_points, 2
         # -> batch_size * num_heads, num_queries, num_points, 2
-        sampling_grid_i = sampling_grids[:, :, :, idx]
+        sampling_grid_i = sampling_grids[:, :, idx]
+        sampling_grid_i = sampling_grid_i.view(batch_size, num_queries, num_heads, num_points, 2)
         sampling_grid_i = sampling_grid_i.transpose(1, 2).flatten(0, 1)
 
         # batch_size * num_heads, hidden_dim, num_queries, num_points
@@ -880,16 +882,16 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
         sampling_offsets = self.sampling_offsets(hidden_states)
         sampling_offsets = sampling_offsets.view(
-            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+            batch_size * num_queries, self.num_heads, self.num_levels, self.num_points, 2
         )
 
         batch_size, num_reference_points, _, num_coordinates = reference_points.shape
-        reference_points = reference_points.view(batch_size, num_reference_points, 1, -1, 1, num_coordinates)
+        reference_points = reference_points.view(batch_size * num_reference_points, 1, -1, 1, num_coordinates)
 
         if num_coordinates == 2:
             height, width = spatial_shapes[..., 0], spatial_shapes[..., 1]
             offset_normalizer = torch.stack([width, height], -1)
-            normalized_sampling_offsets = sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+            normalized_sampling_offsets = sampling_offsets / offset_normalizer[None, None, :, None, :]
             sampling_locations = reference_points + normalized_sampling_offsets
 
         elif num_coordinates == 4:
@@ -911,12 +913,17 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
             )
         else:
             try:
-                # custom kernel
+                # Calling custom kernel
+                # Note: for custom kernel we pass sampling locations as 6D tensor,
+                #       but for torch implementation we keep it as 5D tensor (for CoreML compat)
+                kernel_sampling_locations = sampling_locations.view(
+                    batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+                )
                 output = MultiScaleDeformableAttentionFunction.apply(
                     value,
                     spatial_shapes,
                     level_start_index,
-                    sampling_locations,
+                    kernel_sampling_locations,
                     attention_weights,
                     self.im2col_step,
                 )
