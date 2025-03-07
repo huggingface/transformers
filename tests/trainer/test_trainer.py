@@ -52,7 +52,7 @@ from transformers import (
     logging,
     set_seed,
 )
-from from transformers.data.data_collator import default_data_collator
+from transformers.data.data_collator import default_data_collator
 from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
