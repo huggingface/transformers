@@ -147,14 +147,14 @@ class Phi3VImageProcessingTester:
 
         if not numpify and not torchify:
             # PIL expects the channel dimension as last dimension
-            images_list = [[Image.fromarray(np.moveaxis(image, 0, -1)) for image in images] for images in images_list]
+            images_list = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in images]
 
         if torchify:
-            images_list = [[torch.from_numpy(image) for image in images] for images in images_list]
+            images_list = [torch.from_numpy(image) for image in images]
 
         if numpify:
             # Numpy images are typically in channels last format
-            images_list = [[image.transpose(1, 2, 0) for image in images] for images in images_list]
+            images_list = [image.transpose(1, 2, 0) for image in images]
 
         return images_list
 
