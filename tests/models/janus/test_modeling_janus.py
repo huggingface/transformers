@@ -459,7 +459,7 @@ class JanusIntegrationTest(unittest.TestCase):
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
         )
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
+        inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
@@ -485,15 +485,15 @@ class JanusIntegrationTest(unittest.TestCase):
             "What constellation is this image showing?<image_placeholder>\n",
         ]
 
-        inputs = processor(images=[image_1, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
-        )
+        inputs = processor(
+            images=[image_1, image_2], text=prompts, generation_mode="text", padding=True, return_tensors="pt"
+        ).to(model.device, torch.float16)
 
         EXPECTED_TEXT_COMPLETION = [
             'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
         ]
-        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
@@ -510,7 +510,9 @@ class JanusIntegrationTest(unittest.TestCase):
         )
         prompt = "What do these two images <image_placeholder> and <image_placeholder> have in common?"
 
-        inputs = processor(images=[image_1, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image_1, image_2], text=prompt, generation_mode="text", return_tensors="pt").to(
+            model.device, torch.float16
+        )
 
         EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
@@ -520,11 +522,12 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
-        processor = AutoProcessor.from_pretrained(self.model_id, generation_mode="image")
+        processor = AutoProcessor.from_pretrained(self.model_id)
 
         inputs = processor(
             text=["a portrait of young girl. masterpiece, film grained, best quality."],
             padding=True,
+            generation_mode="image",
             return_tensors="pt",
         ).to(model.device)
 

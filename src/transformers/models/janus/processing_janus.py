@@ -30,8 +30,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-IMAGE_TOKEN = "<image_placeholder>"
-
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful language and vision assistant. "
     "You are able to understand the visual content that the user provides, "
@@ -42,7 +40,7 @@ DEFAULT_SYSTEM_PROMPT = (
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
-        "text_kwargs": {"padding": False, "return_tensors": "pt"},
+        "text_kwargs": {"padding": False},
         "common_kwargs": {"return_tensors": "pt"},
     }
 
@@ -66,28 +64,16 @@ class JanusProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "use_default_system_prompt"]
+    valid_kwargs = ["chat_template", "use_default_system_prompt", "generation_mode"]
     image_processor_class = "JanusImageProcessor"
-    """
-    The default from the original Janus codebase uses LlamaTokenizerFast, but not LlamaTokenizer.
-    Trying to load their HUB tokenizer config with LlamaTokenizer.from_pretrained(model_path)
-    throws an error due to the sentencepiece parameter not being found. Keeping the regular LlamaTokenizer here
-    results in errors when testing, as the ProcessorTesterMixin.get_component() method tries to load the tokenizer
-    using LlamaTokenizer.from_pretrained(model_path).
-    """
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.num_image_tokens = 576
-        self.image_start_token = "<begin_of_image>"  # Can be Hardcoded as it won't change.
-        self.image_end_token = "<end_of_image>"
+        self.image_token = tokenizer.image_token
+        self.image_start_token = tokenizer.boi_token
+        self.image_end_token = tokenizer.eoi_token
         self.use_default_system_prompt = use_default_system_prompt
-        self.generation_mode = kwargs.get("generation_mode", None)
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -95,6 +81,7 @@ class JanusProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
+        generation_mode: bool = None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
         """Construct a Janus processor with Janus Image procesor and Llama text tokenizer"""
@@ -106,9 +93,9 @@ class JanusProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
 
-        if not self.generation_mode:
-            logger.info("Generation mode argument not provided.Setting default to `text generation` mode.")
-            self.generation_mode = "text"
+        if not generation_mode:
+            logger.info("Generation mode argument not provided. Setting default to `text generation` mode.")
+            generation_mode = "text"
 
         if text is not None:
             if isinstance(text, str):
@@ -118,19 +105,19 @@ class JanusProcessor(ProcessorMixin):
 
         # Replace the image token with expanded image tokens.
         prompt_strings = []
-        one_img_tokens = self.image_start_token + (IMAGE_TOKEN * self.num_image_tokens) + self.image_end_token
+        one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
         for prompt in text:
-            prompt = prompt.replace(IMAGE_TOKEN, one_img_tokens)
-            if self.use_default_system_prompt and self.generation_mode == "text":
+            prompt = prompt.replace(self.image_token, one_img_tokens)
+            if self.use_default_system_prompt and generation_mode == "text":
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
-            if self.generation_mode == "image":
+            if generation_mode == "image":
                 prompt += self.image_start_token
             prompt_strings.append(prompt)
 
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         # Process images if pixel values are provided.
-        if images is not None and self.generation_mode != "image":
+        if images is not None and generation_mode != "image":
             data["pixel_values"] = self.image_processor(images=images, **output_kwargs["images_kwargs"])[
                 "pixel_values"
             ]

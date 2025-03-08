@@ -51,6 +51,7 @@ if is_torch_available():
     import torch.nn as nn
     import torch.nn.functional as F
 
+
 logger = logging.get_logger(__name__)
 
 # General docstring
