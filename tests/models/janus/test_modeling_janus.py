@@ -17,7 +17,7 @@
 import tempfile
 import unittest
 from functools import reduce
-
+import re
 import numpy as np
 import requests
 
@@ -279,17 +279,13 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
 
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
+                if any(re.finditer(r"Attention(?!Pool)", class_name)):
+                    self.assertTrue(submodule.config._attn_implementation == "eager")
 
-            has_sdpa = False
             for name, submodule in model_sdpa.named_modules():
                 class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    has_sdpa = True
-                    break
-            if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                raise ValueError("The SDPA model should have SDPA attention layers")
+                if any(re.finditer(r"Attention(?!Pool)", class_name)):
+                    self.assertTrue(submodule.config._attn_implementation == "sdpa")
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
