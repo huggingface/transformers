@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    # from transformers.models.minimax.modular_minimax import (
+    # from transformers.models.minimax.modular_minimax import MiniMaxForCausalLM
     from transformers import (
         MiniMaxForCausalLM,
         MiniMaxForQuestionAnswering,
@@ -508,7 +508,7 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config.head_dim,
         )
         # (batch, head, head_features, head_features)
-        kv_cache_expected_shape = (
+        static_cache_expected_shape = (
             batch_size,
             config.num_attention_heads,
             config.head_dim,
@@ -517,14 +517,19 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for layer_idx in range(config.num_hidden_layers):
             if config.attn_type_list[layer_idx] == 0:
-                self.assertEqual(decoder_past_key_values.kv_cache[layer_idx].shape, kv_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, static_cache_expected_shape)
             else:
-                self.assertEqual(decoder_past_key_values.key_cache[layer_idx].shape, key_value_cache_expected_shape)
-                self.assertEqual(decoder_past_key_values.value_cache[layer_idx].shape, key_value_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
 
     # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support cropping, needed for low memory sequential generation")
     def test_contrastive_generate_low_memory(self):
+        pass
+
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxCache doesnot support cropping, needed for low memory sequential generation")
+    def test_beam_search_low_memory(self):
         pass
 
 

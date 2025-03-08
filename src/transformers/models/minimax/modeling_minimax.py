@@ -83,97 +83,45 @@ class MiniMaxRMSNorm(nn.Module):
 
 
 class MiniMaxCache(DynamicCache):
-    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+    def __init__(self):
         super().__init__()
-        self.config = config
-        self.num_hidden_layers = config.num_hidden_layers
-        self.attn_type_list = config.attn_type_list
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_heads = config.num_attention_heads
+        self.static_cache: List[torch.Tensor] = []
 
-        self.batch_size = batch_size
-        self.dtype = dtype
-        self.device = device
+    def set_static_cache(self, layer_idx, static_cache):
+        # There may be skipped layers, fill them with empty lists
+        for _ in range(len(self.static_cache), layer_idx + 1):
+            self.static_cache.append([])
+        self.static_cache[layer_idx] = static_cache
 
-        self.kv_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-
-    def set_kv_cache(self, kv_cache, layer_idx):
-        self.kv_cache[layer_idx] = kv_cache
-
-    def get_kv_cache(self, layer_idx):
-        return self.kv_cache[layer_idx]
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs=None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
-        # Update the cache
-        if self.key_cache[layer_idx].dim() == 2:
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
-        else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    @classmethod
-    def from_dynamic_cache(cls, past_key_values, config, batch_size, dtype=torch.float16, device=None):
-        new_cache = cls(config, batch_size, dtype, device)
-        # new_cache._seen_tokens = past_key_values._seen_tokens
-        # new_cache.key_cache = past_key_values.key_cache
-        # new_cache.value_cache = past_key_values.value_cache
-        return new_cache
-
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        raise NotImplementedError("MiniMaxCache does not have a legacy cache equivalent.")
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("MiniMaxCache does not have a legacy cache equivalent.")
+    def get_static_cache(self, layer_idx: int):
+        if layer_idx < len(self):
+            return self.static_cache[layer_idx]
+        return None
 
     def __len__(self):
-        """
-        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
-        to the number of layers in the model.
-        """
-        return self.num_hidden_layers
+        return max(super().__len__(), len(self.static_cache))
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
-        is_empty_layer = (
-            len(self.key_cache) == 0  # no cache in any layer
-            or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
-            or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
-            or self.key_cache[layer_idx].dim() == 2  # specific to MiniMax
-        )
-        layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
-        return layer_seq_length
+    def __getitem__(self, layer_idx: int):
+        if layer_idx < len(self.static_cache) and self.static_cache[layer_idx] != []:
+            return (self.static_cache[layer_idx],)
+        return super().__getitem__(layer_idx)
+
+    def __iter__(self):
+        for layer_idx in range(len(self)):
+            yield self[layer_idx]
 
     def batch_repeat_interleave(self, repeats: int):
-        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
         for layer_idx in range(len(self)):
-            if self.attn_type_list[layer_idx] == 0:
-                self.kv_cache[layer_idx] = self.kv_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            if self.static_cache[layer_idx] != []:
+                self.static_cache[layer_idx] = self.static_cache[layer_idx].repeat_interleave(repeats, dim=0)
             else:
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
                 self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor):
-        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
         for layer_idx in range(len(self)):
-            if self.attn_type_list[layer_idx] == 0:
-                self.kv_cache[layer_idx] = self.kv_cache[layer_idx][indices, ...]
+            if self.static_cache[layer_idx] != []:
+                self.static_cache[layer_idx] = self.static_cache[layer_idx][indices, ...]
             else:
                 self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
                 self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
@@ -243,19 +191,21 @@ class MiniMaxLightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        kv_cache = None
+        static_cache = None
         if past_key_value is not None:
-            kv_cache = past_key_value.get_kv_cache(self.layer_idx)
+            static_cache = past_key_value.get_static_cache(self.layer_idx)
 
-        if kv_cache is None or kv_cache.dim() == 2:
-            kv_cache = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(value_states)
+        if static_cache is None:
+            static_cache = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
+                value_states
+            )
 
             # apply attention_mask
             if attention_mask is not None:
                 attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
                 value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
 
-            attn_weights_inter = kv_cache
+            attn_weights_inter = static_cache
             attn_output = []
             for i in range(num_blocks):
                 start_idx = i * self.block_size
@@ -288,19 +238,21 @@ class MiniMaxLightningAttention(nn.Module):
                 )
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
-            kv_cache = attn_weights_inter
+            static_cache = attn_weights_inter
 
         else:
             # TODO: refactor
             ratio = torch.exp(-self.slope_rate)
             attn_output = []
             for i in range(seq_len):
-                kv_cache = ratio * kv_cache + torch.einsum(
+                static_cache = ratio * static_cache + torch.einsum(
                     "... n d, ... n e -> ... d e",
                     key_states[:, :, i : i + 1],
                     value_states[:, :, i : i + 1],
                 )
-                attn_output_i = torch.einsum("... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], kv_cache)
+                attn_output_i = torch.einsum(
+                    "... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], static_cache
+                )
                 attn_output.append(attn_output_i)
 
         # concatenate attention outputs over all blocks
@@ -315,14 +267,14 @@ class MiniMaxLightningAttention(nn.Module):
 
         # update cache
         if past_key_value is not None:
-            past_key_value.set_kv_cache(kv_cache, self.layer_idx)
+            past_key_value.set_static_cache(self.layer_idx, static_cache)
 
         # TODO: remove these
-        print()
-        print(self.layer_idx)
-        print(kv_cache)
+        # print()
+        # print(self.layer_idx)
+        # print(static_cache)
 
-        return attn_output, kv_cache
+        return attn_output, static_cache
 
 
 def rotate_half(x):
@@ -909,21 +861,21 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
                 )
                 use_cache = False
 
-        config = self.config
-        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
-        dtype = input_ids.dtype if input_ids is not None else inputs_embeds.dtype
+        # TODO: remove comment
+        # config = self.config
+        # batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+        # dtype = input_ids.dtype if input_ids is not None else inputs_embeds.dtype
+        # if use_cache and past_key_values is None:
+        #     past_key_values = MiniMaxCache(
+        #         config=config,
+        #         batch_size=batch_size,
+        #         dtype=dtype,
+        #     )
         if use_cache and past_key_values is None:
-            past_key_values = MiniMaxCache(
-                config=config,
-                batch_size=batch_size,
-                dtype=dtype,
-            )
+            past_key_values = MiniMaxCache()
         elif use_cache and not isinstance(past_key_values, MiniMaxCache):
-            past_key_values = MiniMaxCache.from_dynamic_cache(
-                past_key_values,
-                config=config,
-                batch_size=batch_size,
-                dtype=dtype,
+            raise ValueError(
+                f"MiniMax uses cache of its own and is not compatible with `past_key_values` of type {type(past_key_values)}."
             )
 
         if inputs_embeds is None:
@@ -1253,6 +1205,9 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _supports_cache_class = True  # Note: only supports MiniMaxCache
+    _supports_static_cache = False
+    _supports_quantized_cache = False
 
     def __init__(self, config):
         super().__init__(config)
