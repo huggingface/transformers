@@ -103,7 +103,7 @@ class AIMv2Embeddings(nn.Module):
 class AIMv2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: AIMv2Config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -115,12 +115,12 @@ class AIMv2Attention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
+        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
+        self.proj_drop = nn.Dropout(config.projection_dropout)
 
     def forward(
         self,
@@ -170,9 +170,12 @@ class AIMv2Attention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
 
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.proj_out(attn_output)
+        attn_output = self.proj_drop(attn_output)
 
-        return attn_output, attn_weights
+        output = (attn_output, attn_weights) if output_attentions else (attn_output,)
+
+        return output
 
 
 class AIMv2EncoderLayer(nn.Module):
@@ -329,4 +332,4 @@ class AIMv2Model(nn.Module):
         )
 
 
-__all__ = ["AIMv2Model"]
+__all__ = ["AIMv2Model", "AIMv2PreTrainedModel"]
