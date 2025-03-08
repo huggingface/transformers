@@ -43,6 +43,8 @@ class JanusVisionConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to `hidden_size * mlp_ratio`):
+            Dimensionality of the intermediate layer in the MLP block.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
@@ -327,9 +329,8 @@ class JanusConfig(PretrainedConfig):
 
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        # The default are only the indexes for the 1B model, 7B uses different ones
+        # The default is only the index for the 1B model, 7B uses a different one
         self.image_token_index = kwargs.get("image_token_index", 100581)
-        self.boi_token_index = kwargs.get("boi_token_index", 100003)
         super().__init__(**kwargs)
 
 

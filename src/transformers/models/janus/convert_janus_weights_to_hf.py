@@ -388,7 +388,6 @@ def convert_model(
         vision_config=vision_config,
         vq_config=vq_config,
         image_token_index=tokenizer.vocab.get("<image_placeholder>"),
-        boi_token_index=tokenizer.vocab.get("<begin_of_image>"),
     )
 
     # Save the config
@@ -407,6 +406,7 @@ def convert_model(
     model.generation_config.pad_token_id = tokenizer.vocab.get(
         "<\uff5c\u2581pad\u2581\uff5c>"
     )
+    model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict
     print("Loading state dict...")

@@ -1238,7 +1238,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         input_tokens[batch_size:, :].masked_fill_(
             (input_tokens[batch_size:, :] != generation_config.bos_token_id) &
-            (input_tokens[batch_size:, :] != self.model.config.boi_token_index),
+            (input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]),
             generation_config.pad_token_id
         )
 
