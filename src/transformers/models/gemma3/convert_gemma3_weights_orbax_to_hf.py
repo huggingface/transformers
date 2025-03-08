@@ -21,11 +21,12 @@ from absl import app, flags, logging
 from orbax import checkpoint as obc
 
 from ..gemma import GemmaTokenizerFast
-from ..siglip import SiglipImageProcessor
+from ...image_utils import PILImageResampling
 from . import (
     Gemma3ForCausalLM,
     Gemma3ForConditionalGeneration,
     Gemma3Processor,
+    Gemma3ImageProcessor,
 )
 from .configuration_gemma3 import (
     DEFAULT_ATTENION_PATTERN,
@@ -490,11 +491,13 @@ def main(*args):
         logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
         del tokenizer
     else:
-        image_processor = SiglipImageProcessor(
+        image_processor = Gemma3ImageProcessor(
             image_seq_length=256,
             image_mean=(127.5,) * 3,
             image_std=(127.5,) * 3,
             size={"height": 896, "width": 896},
+            do_rescale=False,
+            resample=PILImageResampling.BILINEAR,
         )
         processor = Gemma3Processor(
             image_processor=image_processor,
