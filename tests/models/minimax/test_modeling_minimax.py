@@ -38,9 +38,9 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers.models.minimax.modular_minimax import MiniMaxForCausalLM
+    # from transformers.models.minimax.modular_minimax import MiniMaxForCausalLM
     from transformers import (
-        # MiniMaxForCausalLM,
+        MiniMaxForCausalLM,
         MiniMaxForQuestionAnswering,
         MiniMaxForSequenceClassification,
         MiniMaxForTokenClassification,
