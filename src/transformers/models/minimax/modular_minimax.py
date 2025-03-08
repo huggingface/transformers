@@ -522,16 +522,6 @@ class MiniMaxModel(MixtralModel):
                 )
                 use_cache = False
 
-        # TODO: remove comment
-        # config = self.config
-        # batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
-        # dtype = input_ids.dtype if input_ids is not None else inputs_embeds.dtype
-        # if use_cache and past_key_values is None:
-        #     past_key_values = MiniMaxCache(
-        #         config=config,
-        #         batch_size=batch_size,
-        #         dtype=dtype,
-        #     )
         if use_cache and past_key_values is None:
             past_key_values = MiniMaxCache()
         elif use_cache and not isinstance(past_key_values, MiniMaxCache):
