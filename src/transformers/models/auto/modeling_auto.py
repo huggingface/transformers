@@ -929,6 +929,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
         # Model for depth estimation mapping
         ("depth_anything", "DepthAnythingForDepthEstimation"),
         ("depth_pro", "DepthProForDepthEstimation"),
+        ("distill_any_depth", "DistillAnyDepthForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),
         ("glpn", "GLPNForDepthEstimation"),
         ("zoedepth", "ZoeDepthForDepthEstimation"),
