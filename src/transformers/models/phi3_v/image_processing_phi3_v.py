@@ -72,6 +72,14 @@ def calc_padded_size(width, height, padding_unit=336):
 
 
 def HD_transform(img, hd_num=16):
+    #breakpoint()
+    is_tensor = isinstance(img, torch.Tensor)
+    is_numpy = isinstance(img, np.ndarray)
+
+    if is_numpy:
+        img = Image.fromarray(img)
+    elif is_tensor:
+        img = torchvision.transforms.functional.to_pil_image(img)
     width, height = img.size
     trans = False
     if width < height:
@@ -91,9 +99,13 @@ def HD_transform(img, hd_num=16):
         [new_h, new_w],
     )
     img = padding_336(img)
-    width, height = img.size
     if trans:
         img = img.transpose(Image.TRANSPOSE)
+
+    if is_tensor:
+        img = torchvision.transforms.functional.to_tensor(img)
+    elif is_numpy:
+        img = np.asarray(img)
 
     return img
 
@@ -155,6 +167,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         num_crops: int = 1,
+        num_img_tokens: int = 144,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
@@ -162,6 +175,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         self.num_crops = num_crops
+        self.num_img_tokens = num_img_tokens
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
@@ -206,6 +220,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ):
         """
         Args:
@@ -231,16 +246,14 @@ class Phi3VImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_list_of_images(images)
+        if not isinstance(images, List):
+            images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
 
         image_sizes = []
         img_processor = torchvision.transforms.Compose(
@@ -250,7 +263,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
         # PIL images
         # HD_transform pad images to size of multiiply of 336, 336
         # convert to RGB first
-        images = [image.convert("RGB") for image in images]
+        images = [convert_to_rgb(image) for image in images]
         elems = [HD_transform(im, hd_num=self.num_crops) for im in images]
         # tensor transform and normalize
         hd_images = [img_processor(im) for im in elems]
