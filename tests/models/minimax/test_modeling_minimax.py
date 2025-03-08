@@ -508,7 +508,7 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config.head_dim,
         )
         # (batch, head, head_features, head_features)
-        static_cache_expected_shape = (
+        linear_cache_expected_shape = (
             batch_size,
             config.num_attention_heads,
             config.head_dim,
@@ -517,7 +517,7 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for layer_idx in range(config.num_hidden_layers):
             if config.attn_type_list[layer_idx] == 0:
-                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, static_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, linear_cache_expected_shape)
             else:
                 self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
                 self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)

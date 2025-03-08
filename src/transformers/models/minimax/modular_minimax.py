@@ -190,25 +190,25 @@ class MiniMaxRMSNorm(MixtralRMSNorm):
 class MiniMaxCache(DynamicCache):
     def __init__(self):
         super().__init__()
-        self.static_cache: List[torch.Tensor] = []
+        self.linear_cache: List[torch.Tensor] = []
 
-    def set_static_cache(self, layer_idx, static_cache):
+    def set_linear_cache(self, layer_idx, linear_cache):
         # There may be skipped layers, fill them with empty lists
-        for _ in range(len(self.static_cache), layer_idx + 1):
-            self.static_cache.append([])
-        self.static_cache[layer_idx] = static_cache
+        for _ in range(len(self.linear_cache), layer_idx + 1):
+            self.linear_cache.append([])
+        self.linear_cache[layer_idx] = linear_cache
 
-    def get_static_cache(self, layer_idx: int):
+    def get_linear_cache(self, layer_idx: int):
         if layer_idx < len(self):
-            return self.static_cache[layer_idx]
+            return self.linear_cache[layer_idx]
         return None
 
     def __len__(self):
-        return max(super().__len__(), len(self.static_cache))
+        return max(super().__len__(), len(self.linear_cache))
 
     def __getitem__(self, layer_idx: int):
-        if layer_idx < len(self.static_cache) and self.static_cache[layer_idx] != []:
-            return (self.static_cache[layer_idx],)
+        if layer_idx < len(self.linear_cache) and self.linear_cache[layer_idx] != []:
+            return (self.linear_cache[layer_idx],)
         return super().__getitem__(layer_idx)
 
     def __iter__(self):
@@ -217,16 +217,16 @@ class MiniMaxCache(DynamicCache):
 
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
-            if self.static_cache[layer_idx] != []:
-                self.static_cache[layer_idx] = self.static_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            if self.linear_cache[layer_idx] != []:
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
             else:
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
                 self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor):
         for layer_idx in range(len(self)):
-            if self.static_cache[layer_idx] != []:
-                self.static_cache[layer_idx] = self.static_cache[layer_idx][indices, ...]
+            if self.linear_cache[layer_idx] != []:
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
             else:
                 self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
                 self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
@@ -296,12 +296,13 @@ class MiniMaxLightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        static_cache = None
+        # calculated (K.T @ V) and saved as cache
+        attn_weights_inter = None
         if past_key_value is not None:
-            static_cache = past_key_value.get_static_cache(self.layer_idx)
+            attn_weights_inter = past_key_value.get_linear_cache(self.layer_idx)
 
-        if static_cache is None:
-            static_cache = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
+        if attn_weights_inter is None:
+            attn_weights_inter = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
                 value_states
             )
 
@@ -310,7 +311,6 @@ class MiniMaxLightningAttention(nn.Module):
                 attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
                 value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
 
-            attn_weights_inter = static_cache
             attn_output = []
             for i in range(num_blocks):
                 start_idx = i * self.block_size
@@ -343,20 +343,18 @@ class MiniMaxLightningAttention(nn.Module):
                 )
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
-            static_cache = attn_weights_inter
-
         else:
             # TODO: refactor
             ratio = torch.exp(-self.slope_rate)
             attn_output = []
             for i in range(seq_len):
-                static_cache = ratio * static_cache + torch.einsum(
+                attn_weights_inter = ratio * attn_weights_inter + torch.einsum(
                     "... n d, ... n e -> ... d e",
                     key_states[:, :, i : i + 1],
                     value_states[:, :, i : i + 1],
                 )
                 attn_output_i = torch.einsum(
-                    "... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], static_cache
+                    "... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], attn_weights_inter
                 )
                 attn_output.append(attn_output_i)
 
@@ -372,14 +370,14 @@ class MiniMaxLightningAttention(nn.Module):
 
         # update cache
         if past_key_value is not None:
-            past_key_value.set_static_cache(self.layer_idx, static_cache)
+            past_key_value.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         # TODO: remove these
         # print()
         # print(self.layer_idx)
-        # print(static_cache)
+        # print(linear_cache)
 
-        return attn_output, static_cache
+        return attn_output, attn_weights_inter
 
 
 class MiniMaxAttention(MixtralAttention):
