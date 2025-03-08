@@ -199,6 +199,15 @@ ATTENTION_TYPE_LOCAL = "local_sliding"
 AttentionType = Literal["global", "local_sliding"]
 
 
+def create_sliding_window_mask(
+    sliding_window_size: int,
+    q_pos: torch.Tensor,
+    kv_pos: torch.Tensor,
+) -> torch.Tensor:
+    """Creates mask for sliding window attention."""
+    return q_pos < kv_pos + sliding_window_size
+
+
 def eager_attention_forward(
     module: "Gemma3Attention",
     query: torch.Tensor,
@@ -308,6 +317,18 @@ class Gemma3Attention(nn.Module):
                 seq_len = attention_mask.shape[-1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
+        if self.is_sliding and key_states.shape[-2] > self.sliding_window:
+            assert self.sliding_window is not None
+            if query_states.shape[-2] == key_states.shape[-2]:
+                sliding_window_mask = create_sliding_window_mask(
+                    sliding_window_size=self.sliding_window,
+                    q_pos=torch.arange(query_states.shape[-2]).unsqueeze(-1),
+                    kv_pos=torch.arange(key_states.shape[-2]).unsqueeze(-2),
+                )
+                attention_mask = torch.logical_and(attention_mask, sliding_window_mask)
+            else:
+                raise ValueError()
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
@@ -324,7 +345,7 @@ class Gemma3Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask.to(query_states),
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
@@ -365,7 +386,9 @@ class Gemma3DecoderLayer(nn.Module):
         last_cache_position: int = 0,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        # TODO(ryanmullins):
+        if not isinstance(past_key_value, HybridCache):
+            raise ValueError("Gemma 3 only supports a HybridCache, required for local vs global attention")
+
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
@@ -1184,29 +1207,37 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
                 else cache_position[0] + sequence_length + 1
             )
 
-        # Create a full matrix with large negative values
-        causal_mask = torch.full(
-            (batch_size, 1, sequence_length, target_length), min_dtype, dtype=self.dtype, device=self.device
+        causal_mask = torch.ones((sequence_length, target_length), dtype=torch.bool)
+        causal_mask = torch.tril(causal_mask)
+        causal_mask = causal_mask.to(self.device)
+
+        attention_mask = attention_mask.unsqueeze(-2).to(self.device)
+        causal_mask = causal_mask.unsqueeze(0).repeat(attention_mask.shape[0], 1, 1)
+        combined_mask = attention_mask * causal_mask[:, :, :sequence_length]
+
+        image_token_mask = input_tensor == self.config.image_token_index
+        image_token_mask.to(self.device)
+        # logger.warning("image_token_mask shape = %s", image_token_mask.shape)
+        padded_mask = nn.functional.pad(image_token_mask, (1, 0), value=0)
+        padded_mask = padded_mask.to(self.device)
+        # logger.warning("padded_mask shape = %s", padded_mask.shape)
+        boundary = padded_mask[:, 1:] > padded_mask[:, :-1]
+        boundary = boundary.to(self.device)
+        numbered_boundary = torch.cumsum(boundary, dim=-1)
+        numbered_boundary = numbered_boundary.to(self.device)
+        q_block_indices = image_token_mask * numbered_boundary
+        q_block_indices = q_block_indices.to(self.device)
+        kv_block_indices = q_block_indices
+        # logger.warning("q_block_indices/kv_block_indices shape = %s", q_block_indices.shape)
+        bidirectional_mask = torch.logical_and(
+            kv_block_indices[:, None, :] == q_block_indices.unsqueeze(-1),
+            q_block_indices.unsqueeze(-1) > 0,
         )
-
-        # Apply lower-triangular masking
-        causal_mask = torch.triu(causal_mask, diagonal=1)
-
-        shift = cache_position[0].item()
-        if shift > 0:
-            causal_mask = torch.roll(causal_mask, shifts=shift, dims=-1)
-            causal_mask[..., :shift] = 0
-
-        # Apply bidirectional attention for regions starting with begin_of_image tokens
-        # TODO: enable unmasking with token type ids
-        begin_of_image_token = self.config.boi_token_index
-        for batch_idx in range(batch_size):
-            start_positions = (input_tensor[batch_idx] == begin_of_image_token).nonzero(as_tuple=True)[0]
-            for start in start_positions:
-                # TODO(imayank): put 256 in configs
-                end = start + 256 + 1  # Define end_of_image_token location
-                end = min(end, sequence_length)  # Ensure it doesn't exceed sequence length
-                causal_mask[batch_idx, 0, start + 1 : end, start + 1 : end] = 0  # Enable bidirectional attention
+        bidirectional_mask.to(self.device)
+        attention_mask = torch.logical_or(combined_mask.unsqueeze(1), bidirectional_mask.unsqueeze(1)).to(self.device)
+        full_attention_mask = torch.zeros((batch_size, 1, sequence_length, target_length)).to(self.device, torch.bool)
+        full_attention_mask[:, :, :, :sequence_length] = attention_mask
+        attention_mask = torch.where(full_attention_mask, 0, min_dtype).to(self.device)
 
         return attention_mask
 
