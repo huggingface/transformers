@@ -473,7 +473,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
-    "models.gemma3": ["Gemma3Config"],
+    "models.gemma3": ["Gemma3Config", "Gemma3TextConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -5638,7 +5638,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
-    from .models.gemma3 import Gemma3Config
+    from .models.gemma3 import Gemma3Config, Gemma3TextConfig
     from .models.git import (
         GitConfig,
         GitProcessor,

@@ -170,7 +170,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self,
         # Config parameters found in all implementations, name differences noted
         vocab_size: int = 262_144,  # num_embed in FLAX
-        mm_tokens_per_image: int = 256,
         hidden_size: int = 2304,  # embed_dim in FLAX
         intermediate_size: int = 9216,  # hidden_dim in FLAX
         num_hidden_layers: int = 26,  # num_layers in FLAX
@@ -194,6 +193,8 @@ class Gemma3TextConfig(PretrainedConfig):
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         use_cache: bool = True,
+        final_logit_softcapping=None,
+        attn_logit_softcapping=None,
         cache_implementation: str = "hybrid",
         **kwargs,
     ):
@@ -206,7 +207,6 @@ class Gemma3TextConfig(PretrainedConfig):
         )
 
         self.vocab_size = vocab_size
-        self.mm_tokens_per_image = mm_tokens_per_image
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -228,6 +228,8 @@ class Gemma3TextConfig(PretrainedConfig):
         self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
+        self.final_logit_softcapping = final_logit_softcapping
+        self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
         rope_config_validation(self)
 
@@ -243,9 +245,10 @@ class Gemma3Config(PretrainedConfig):
         self,
         text_config: Optional[Gemma3TextConfig] = None,
         vision_config: Optional[SiglipVisionConfig] = None,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 256_000,
-        image_token_id: int = 262_144,
+        mm_tokens_per_image: int = 256,
+        boi_token_index: int = 255_999,
+        eoi_token_index: int = 256_000,
+        image_token_index: int = 262_144,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -266,9 +269,10 @@ class Gemma3Config(PretrainedConfig):
 
         self.text_config = text_config
         self.vision_config = vision_config
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.image_token_id = image_token_id
+        self.mm_tokens_per_image = mm_tokens_per_image
+        self.boi_token_index = boi_token_index
+        self.eoi_token_index = eoi_token_index
+        self.image_token_index = image_token_index
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
