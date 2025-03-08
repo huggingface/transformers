@@ -236,42 +236,61 @@ def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
 @dataclass
 class DataCollatorWithPadding:
     """
-    Data collator that will dynamically pad the inputs received.
+    A data collator that dynamically pads input sequences to the desired length.
+
+    This class is used for padding a batch of tokenized input sequences. It adjusts the padding behavior based on
+    the specified `padding`, `padding_side`, `max_length`, and `pad_to_multiple_of` parameters. This ensures that
+    the sequences in the batch are padded uniformly according to the selected strategy.
 
     Args:
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
-            The tokenizer used for encoding the data.
-        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
-            among:
+            The tokenizer used for encoding and padding the input data. It should be compatible with Hugging Face's tokenizers.
 
-            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
-              sequence is provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-              acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
-        max_length (`int`, *optional*):
-            Maximum length of the returned list and optionally padding length (see above).
-        pad_to_multiple_of (`int`, *optional*):
-            If set will pad the sequence to a multiple of the provided value.
+        padding (`bool`, `str`, or [`~utils.PaddingStrategy`]):
+            Defines the padding strategy for the sequences. Possible values include:
+            - `True` or `'longest'`: Pad all sequences in the batch to the length of the longest sequence.
+            - `'max_length'`: Pad all sequences to the length specified by `max_length` or the maximum acceptable input length for the model.
+            - `False` or `'do_not_pad'`: No padding, sequences may have different lengths.
 
-            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.0 (Volta).
-        return_tensors (`str`, *optional*, defaults to `"pt"`):
-            The type of Tensor to return. Allowable values are "np", "pt" and "tf".
+        padding_side (`str`):
+            Defines the side to pad the sequences. Can be `"left"` or `"right"`.
+            - `"left"`: Pads sequences to the left.
+            - `"right"`: Pads sequences to the right.
+
+        max_length (`int`):
+            Specifies the maximum length of the returned sequences. If provided, sequences will be padded or truncated to this length.
+
+        pad_to_multiple_of (`int`):
+            If set, the sequences will be padded to be a multiple of the given value. This is particularly useful for optimizing performance
+            on hardware such as NVIDIA Tensor Cores (compute capability >= 7.0).
+
+        return_tensors (`str`):
+            Defines the format of the returned tensors. Must be one of `"np"`, `"pt"`, or `"tf"` for NumPy, PyTorch, or TensorFlow formats respectively.
+
+    Example:
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        collator = DataCollatorWithPadding(tokenizer=tokenizer, padding="longest", padding_side="right", max_length=128, pad_to_multiple_of=8, return_tensors="pt")
+        batch = collator(features)
+
+    Returns:
+        dict:
+            A dictionary containing the padded sequences and associated labels (if any). The keys depend on the tokenizer and feature
+            structure and typically include `"input_ids"`, `"attention_mask"`, and potentially `"labels"`.
     """
 
     tokenizer: PreTrainedTokenizerBase
-    padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
-    return_tensors: str = "pt"
+    padding: Union[bool, str, PaddingStrategy]
+    padding_side: str
+    max_length: int
+    pad_to_multiple_of: int
+    return_tensors: str
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
             features,
             padding=self.padding,
+            padding_side=self.padding_side,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=self.return_tensors,
