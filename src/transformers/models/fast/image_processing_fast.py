@@ -40,11 +40,16 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
-from ...utils.import_utils import is_cv2_available, is_torch_available
+from ...utils.import_utils import is_cv2_available, is_scipy_available, is_torch_available
 
 
 if is_cv2_available():
     import cv2
+
+if is_scipy_available():
+    import scipy.ndimage as ndi
+    from scipy.spatial import ConvexHull
+
 if is_torch_available():
     import torch
     import torch.nn as nn
@@ -417,15 +422,50 @@ class FastImageProcessor(BaseImageProcessor):
         final_results.update({"results": results})
 
         return results
+
+    def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
+        label_num = len(keys)
+        bboxes = []
+        scores = []
+        for index in range(1, label_num):
+            i = keys[index]
+            ind = label == i
+            ind_np = ind.data.cpu().numpy()
+            points = np.array(np.where(ind_np)).transpose((1, 0))
+            if points.shape[0] < self.min_area:
+                label[ind] = 0
+                continue
+            score_i = score[ind].mean().item()
+            if score_i < threshold:
+                label[ind] = 0
+                continue
+
+            if bbox_type == "rect":
+                rect = self.min_area_rect(points[:, ::-1])
+                alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
+                rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
+                bbox = self.box_points(rect) * scales
+
+            elif bbox_type == "poly":
+                binary = np.zeros(label.shape, dtype="uint8")
+                binary[ind_np] = 1
+                # cv2.findContours is too complex to replicate :(
+                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                bbox = contours[0] * scales
+            bbox = bbox.astype("int32")
+            bboxes.append(bbox.reshape(-1).tolist())
+            scores.append(score_i)
+
+        return bboxes, scores
+
     def connected_components(self, image, connectivity=8):
-        import scipy.ndimage as ndi
         """
         Computes connected components of a binary image using SciPy.
-        
+
         Parameters:
             image (np.ndarray): Binary input image (0s and 1s)
             connectivity (int): Connectivity, 4 or 8 (default is 8)
-        
+
         Returns:
             labels (np.ndarray): Labeled output image
             num_labels (int): Number of labels found
@@ -434,15 +474,14 @@ class FastImageProcessor(BaseImageProcessor):
             structure = np.ones((3, 3), dtype=np.int32)  # 8-connectivity
         else:
             structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.int32)  # 4-connectivity
-        
+
         labels, num_labels = ndi.label(image, structure=structure)
         return num_labels, labels
 
     def min_area_rect(self, points):
-        from scipy.spatial import ConvexHull
         """
         Compute the minimum area rotated bounding rectangle around a set of 2D points.
-        
+
         Args:
             points (np.ndarray): Nx2 array of (x, y) coordinates.
 
@@ -462,7 +501,7 @@ class FastImageProcessor(BaseImageProcessor):
         edge_angles = np.unique(np.abs(edge_angles))  # remove duplicates
 
         # initialize min area variables
-        min_area = float('inf')
+        min_area = float("inf")
         best_rect = None
 
         for angle in edge_angles:
@@ -503,6 +542,7 @@ class FastImageProcessor(BaseImageProcessor):
             angle -= 180
 
         return ((center[0], center[1]), (w, h), -angle)
+
     def box_points(self, rect):
         """
         Computes the four corner points of a rotated rectangle in OpenCV's order.
@@ -527,48 +567,17 @@ class FastImageProcessor(BaseImageProcessor):
         a = np.sin(angle) * 0.5
 
         # compute four corners
-        points = np.array([
-            [cx - a * h - b * w, cy + b * h - a * w],  # top-left
-            [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
-            [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
-            [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)]   # bottom-left
-        ], dtype=np.float32)
+        points = np.array(
+            [
+                [cx - a * h - b * w, cy + b * h - a * w],  # top-left
+                [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
+                [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
+                [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)],  # bottom-left
+            ],
+            dtype=np.float32,
+        )
 
         return points
-
-    def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
-        label_num = len(keys)
-        bboxes = []
-        scores = []
-        for index in range(1, label_num):
-            i = keys[index]
-            ind = label == i
-            ind_np = ind.data.cpu().numpy()
-            points = np.array(np.where(ind_np)).transpose((1, 0))
-            if points.shape[0] < self.min_area:
-                label[ind] = 0
-                continue
-            score_i = score[ind].mean().item()
-            if score_i < threshold:
-                label[ind] = 0
-                continue
-
-            if bbox_type == "rect":
-                rect = self.min_area_rect(points[:, ::-1])
-                alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
-                rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-                bbox = self.box_points(rect) * scales
-
-            elif bbox_type == "poly":
-                binary = np.zeros(label.shape, dtype="uint8")
-                binary[ind_np] = 1
-                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                bbox = contours[0] * scales
-            bbox = bbox.astype("int32")
-            bboxes.append(bbox.reshape(-1).tolist())
-            scores.append(score_i)
-
-        return bboxes, scores
 
 
 __all__ = ["FastImageProcessor"]

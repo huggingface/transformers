@@ -13,10 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for FAST."""
-from ...utils.import_utils import is_cv2_available, is_torch_available
+from ...utils.import_utils import is_cv2_available, is_torch_available, is_scipy_available
 import math
 if is_cv2_available():
     import cv2
+
+if is_scipy_available():
+    import scipy.ndimage as ndi
+    from scipy.spatial import ConvexHull
+
 if is_torch_available():
     import torch
     import torch.nn as nn
@@ -107,9 +112,8 @@ class FastImageProcessor(TextNetImageProcessor):
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
         labels_ = []
         for kernel in kernels.numpy():
-            import cv2
 
-            ret, label_ = cv2.connectedComponents(kernel)
+            ret, label_ = self.connected_components(kernel)
             labels_.append(label_)
         labels_ = np.array(labels_)
         labels_ = torch.from_numpy(labels_)
@@ -156,14 +160,15 @@ class FastImageProcessor(TextNetImageProcessor):
                 continue
 
             if bbox_type == "rect":
-                rect = cv2.minAreaRect(points[:, ::-1])
+                rect = self.min_area_rect(points[:, ::-1])
                 alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
                 rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-                bbox = cv2.boxPoints(rect) * scales
+                bbox = self.box_points(rect) * scales
 
             elif bbox_type == "poly":
                 binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
+                # cv2.findContours is too complex to replicate :(
                 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 bbox = contours[0] * scales
             bbox = bbox.astype("int32")
@@ -171,6 +176,125 @@ class FastImageProcessor(TextNetImageProcessor):
             scores.append(score_i)
 
         return bboxes, scores
+    
+    def connected_components(self, image, connectivity=8):
+        
+        """
+        Computes connected components of a binary image using SciPy.
+        
+        Parameters:
+            image (np.ndarray): Binary input image (0s and 1s)
+            connectivity (int): Connectivity, 4 or 8 (default is 8)
+        
+        Returns:
+            labels (np.ndarray): Labeled output image
+            num_labels (int): Number of labels found
+        """
+        if connectivity == 8:
+            structure = np.ones((3, 3), dtype=np.int32)  # 8-connectivity
+        else:
+            structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.int32)  # 4-connectivity
+        
+        labels, num_labels = ndi.label(image, structure=structure)
+        return num_labels, labels
+
+    def min_area_rect(self, points):
+        
+        """
+        Compute the minimum area rotated bounding rectangle around a set of 2D points.
+        
+        Args:
+            points (np.ndarray): Nx2 array of (x, y) coordinates.
+
+        Returns:
+            tuple: ((cx, cy), (w, h), angle) where
+                - (cx, cy) is the center of the rectangle,
+                - (w, h) are the width and height of the rectangle,
+                - angle is the rotation angle in degrees.
+        """
+        # compute convex hull
+        hull = ConvexHull(points)
+        hull_points = points[hull.vertices]
+
+        # compute edge angles
+        edges = np.diff(hull_points, axis=0, append=hull_points[:1])
+        edge_angles = np.arctan2(edges[:, 1], edges[:, 0])  # get angles in radians
+        edge_angles = np.unique(np.abs(edge_angles))  # remove duplicates
+
+        # initialize min area variables
+        min_area = float('inf')
+        best_rect = None
+
+        for angle in edge_angles:
+            # rotation matrix
+            R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+            rotated_points = points @ R.T
+
+            # get bounding box in rotated space
+            xmin, ymin = rotated_points.min(axis=0)
+            xmax, ymax = rotated_points.max(axis=0)
+            w, h = xmax - xmin, ymax - ymin
+            area = w * h
+
+            if area < min_area:
+                min_area = area
+                best_rect = (xmin, ymin, xmax, ymax, angle, w, h)
+
+        # extract best rectangle parameters
+        xmin, ymin, xmax, ymax, angle, w, h = best_rect
+
+        # compute center in rotated space
+        center_rotated = np.array([(xmin + xmax) / 2, (ymin + ymax) / 2])
+
+        # rotate center back to original coordinates
+        R_inv = np.linalg.inv(np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]))
+        center = center_rotated @ R_inv.T
+
+        # convert angle to degrees
+        angle = np.degrees(angle)
+
+        # fix angle range to match OpenCV [-90, 0]
+        if w < h:
+            angle += 90
+            w, h = h, w  # Swap width and height
+
+        # we ensure angle sign matches opencv's convention
+        if angle > 0:
+            angle -= 180
+
+        return ((center[0], center[1]), (w, h), -angle)
+    def box_points(self, rect):
+        """
+        Computes the four corner points of a rotated rectangle in OpenCV's order.
+
+        Args:
+            rect (tuple): ((cx, cy), (w, h), angle)
+                        - Center (cx, cy)
+                        - Width (w) and Height (h)
+                        - Rotation angle in degrees
+
+        Returns:
+            np.ndarray: (4,2) array containing the rectangle's four corners in OpenCV order:
+                        [Top-Left, Top-Right, Bottom-Right, Bottom-Left]
+        """
+        (cx, cy), (w, h), angle = rect
+
+        # convert angle from degrees to radians
+        angle = np.radians(angle)
+
+        # compute movement vectors using OpenCV's method
+        b = np.cos(angle) * 0.5
+        a = np.sin(angle) * 0.5
+
+        # compute four corners
+        points = np.array([
+            [cx - a * h - b * w, cy + b * h - a * w],  # top-left
+            [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
+            [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
+            [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)]   # bottom-left
+        ], dtype=np.float32)
+
+        return points
 
 __all__ = [
     "FastImageProcessor",
