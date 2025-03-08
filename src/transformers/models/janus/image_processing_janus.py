@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,6 +31,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
@@ -56,20 +57,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-def expand2square(pil_img, background_color):
-    width, height = pil_img.size
-    if width == height:
-        return pil_img
-    elif width > height:
-        result = PIL.Image.new(pil_img.mode, (width, width), background_color)
-        result.paste(pil_img, (0, (width - height) // 2))
-        return result
-    else:
-        result = PIL.Image.new(pil_img.mode, (height, height), background_color)
-        result.paste(pil_img, ((height - width) // 2, 0))
-        return result
 
 
 class JanusImageProcessor(BaseImageProcessor):
@@ -182,33 +169,18 @@ class JanusImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        if input_data_format == ChannelDimension.FIRST:
-            _, height, width = image.shape
-        elif input_data_format == ChannelDimension.LAST:
-            height, width, _ = image.shape
-        else:
-            raise ValueError(
-                f"Invalid `input_data_format`. Must be one of {ChannelDimension.FIRST}, {ChannelDimension.LAST}"
-            )
-
+        height, width = get_image_size(image, input_data_format)
         max_size = max(height, width)
 
-        if isinstance(size, dict):
-            if "height" not in size or "width" not in size:
-                raise ValueError(
-                    f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
-                )
-            if size["height"] != size["width"]:
-                raise ValueError(
-                    f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
-                )
-            size = size["height"]
-        elif not isinstance(size, int):
-            ValueError(f"Expected `size` to be of type `int` or `dict`. Got {type(size)}")
+        size = get_size_dict(size, default_to_square=True)
+        if size["height"] != size["width"]:
+            raise ValueError(
+                f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
+            )
+        size = size["height"]
 
         delta = size / max_size
-
-        # Largest side becomes `size` and the other side is scaled according to the aspect ratio
+        # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = [
             max(int(height * delta), self.min_size),
             max(int(width * delta), self.min_size),
@@ -220,16 +192,14 @@ class JanusImageProcessor(BaseImageProcessor):
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
-            return_numpy=False,
+            return_numpy=True,
             **kwargs,
         )
-        # expand and pad the images to obtain a square image of dimensions `size x size`
-        image = expand2square(image, self.background_color)
-        # PS: to_numpy_array puts the channel dimension last
-        image = to_channel_dimension_format(
-            to_numpy_array(image),
-            data_format if data_format is not None else input_data_format,
-            input_channel_dim=ChannelDimension.LAST,
+        # Expand and pad the images to obtain a square image of dimensions `size x size`
+        image = self.pad_to_square(
+            image=image,
+            background_color=self.background_color,
+            input_data_format=input_data_format,
         )
         return image
 
@@ -368,6 +338,80 @@ class JanusImageProcessor(BaseImageProcessor):
         encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         return encoded_outputs
+
+    def pad_to_square(
+        self,
+        image: np.ndarray,
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        height, width = get_image_size(image, input_data_format)
+        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+
+        if height == width:
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
+            return image
+
+        max_dim = max(height, width)
+
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        if input_data_format == ChannelDimension.FIRST:
+            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[i, :, :] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[:, start : start + height, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, :, start : start + width] = image
+        else:
+            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[:, :, i] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[start : start + height, :, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, start : start + width, :] = image
+
+        return result
 
     def postprocess(
         self,

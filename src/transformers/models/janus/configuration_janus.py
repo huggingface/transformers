@@ -53,24 +53,20 @@ class JanusVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"`, and `"gelu_new"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
+        attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys, and values in the attention layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for attention weights.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate per sample (applied in the main path of residual layers).
+
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        num_register_tokens (`int`, *optional*, defaults to 0):
-            Number of register tokens to use.
+
         hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for fully connected layers in the encoder.
         projection_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the projection layer.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to normalize the query and key matrices.
-        layerscale_value (`float`, *optional*):
-            Initial value to use for layer scale.
         use_vision_head (`bool`, *optional*, defaults to `True`):
             Whether to use a Vision specific Attention Pool head.
         depth (`int`, *optional*, defaults to 2):
@@ -94,15 +90,12 @@ class JanusVisionConfig(PretrainedConfig):
         patch_size=16,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
-        qkv_bias=True,
+        attention_bias=True,
         attention_dropout=0.0,
-        drop_path_rate=0.0,
         initializer_range=0.02,
-        num_register_tokens=0,
         hidden_dropout_rate=0.0,
         projection_dropout=0.0,
         use_qk_norm=False,
-        layerscale_value=None,
         use_vision_head=True,
         depth=2,
         num_image_tokens=576,
@@ -118,18 +111,15 @@ class JanusVisionConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
-        self.qkv_bias = qkv_bias
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.intermediate_size = int(hidden_size * mlp_ratio)
-        self.num_register_tokens = num_register_tokens
         self.hidden_dropout_rate = hidden_dropout_rate
         self.projection_dropout = projection_dropout
         self.use_qk_norm = use_qk_norm
         self.initializer_range = initializer_range
-        self.layerscale_value = layerscale_value
         self.use_vision_head = use_vision_head
         self.depth = depth
         self.num_image_tokens = num_image_tokens
@@ -180,7 +170,7 @@ class JanusVQVAEConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         image_token_embed_dim (`int`, *optional*, defaults to 2048):
-            Dimension of image embeddings. It should be same as the Dimensionality of text embeddings.
+            Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
     """
 
     model_type = "janus_vqgan"

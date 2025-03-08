@@ -15,18 +15,17 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from tqdm import tqdm
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache
 from ...generation import (
     ClassifierFreeGuidanceLogitsProcessor,
     GenerationMixin,
@@ -34,7 +33,7 @@ from ...generation import (
     LogitsProcessorList,
 )
 from ...generation.utils import GenerateDecoderOnlyOutput
-from ...image_processing_utils import BatchFeature
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import (
     resize,
     to_channel_dimension_format,
@@ -43,25 +42,25 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
 )
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     is_torch_available,
-    is_torchdynamo_compiling,
     is_vision_available,
     logging,
     replace_return_docstrings,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from ..chameleon.modeling_chameleon import (
     ChameleonVQVAE,
@@ -71,17 +70,14 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderResnetBlock,
     ChameleonVQVAEVectorQuantizer,
 )
-from ..dinov2_with_registers.modeling_dinov2_with_registers import (
-    Dinov2WithRegistersDropPath,
-    Dinov2WithRegistersLayerScale,
-)
+from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionModel, SiglipVisionTransformer
 from ..vit.modeling_vit import ViTPatchEmbeddings
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
 
 
 if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+    pass
 
 if is_torch_available():
     import torch
@@ -156,92 +152,22 @@ class JanusVQVAEOutput(ModelOutput):
     Args:
         decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             Reconstructed pixel values after encoding and decoding the input.
-        emb_loss (`torch.FloatTensor`):
+        embedding_loss (`torch.FloatTensor`):
             Embedding loss.
     """
 
     decoded_pixel_values: Optional[torch.FloatTensor] = None
-    emb_loss: torch.FloatTensor = None
+    embedding_loss: torch.FloatTensor = None
 
 
 @dataclass
-class JanusBaseModelOutputWithPast(ModelOutput):
-    """
-    Base class for Janus model.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+class JanusBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
+    pass
 
 
 @dataclass
-class JanusCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for Janus causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+class JanusCausalLMOutputWithPast(IdeficsCausalLMOutputWithPast):
+    pass
 
 
 class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
@@ -251,20 +177,12 @@ class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
 class JanusVisionEmbeddings(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
-
-        self.use_special_tokens = config.use_special_tokens
-        if self.use_special_tokens:
-            self.cls_token = nn.Parameter(torch.rand(1, 1, config.hidden_size))
-            self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
-
         self.dropout = nn.Dropout(config.hidden_dropout_rate)
         self.patch_embeddings = JanusVisionPatchEmbeddings(config)
-        self.num_patches = self.patch_embeddings.num_patches
 
-        num_prefix_tokens = config.num_register_tokens + 1
-        num_positions = self.num_patches + num_prefix_tokens if self.use_special_tokens else self.num_patches
-        self.position_embeddings = nn.Embedding(num_positions, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_positions).expand((1, -1)), persistent=False)
+        num_patches = self.patch_embeddings.num_patches
+        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
+        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -305,7 +223,7 @@ class JanusVisionEmbeddings(nn.Module):
         return patch_pos_embed
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
+        _, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
@@ -314,24 +232,35 @@ class JanusVisionEmbeddings(nn.Module):
         else:
             pos_embeds = self.position_embeddings(self.position_ids)
 
-        # Add CLS and Register token embeddings.
-        special_token_embeddings = []
-        if self.use_special_tokens:
-            cls_token_embeddings = self.cls_token.expand((batch_size, -1, -1))
-            special_token_embeddings.append(cls_token_embeddings)
-
-            if self.register_tokens.shape[1]:
-                register_token_embeddings = self.register_tokens.expand((batch_size, -1, -1))
-                special_token_embeddings.append(register_token_embeddings)
-
-        if self.use_special_tokens:
-            embeddings = embeddings + pos_embeds
-            embeddings = torch.cat(special_token_embeddings + [embeddings], dim=1)
-        else:
-            embeddings = embeddings + pos_embeds
-
+        embeddings = embeddings + pos_embeds
         embeddings = self.dropout(embeddings)
+
         return embeddings
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+    # Only apply attention dropout during training.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class JanusVisionAttention(nn.Module):
@@ -353,57 +282,59 @@ class JanusVisionAttention(nn.Module):
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
 
-        self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.projection_layer = nn.Linear(self.embed_dim, self.embed_dim)
         self.projection_dropout = nn.Dropout(proj_dropout) if proj_dropout > 0 else nn.Identity()
 
-        self.query_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
-        self.key_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
+        self.q_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
+        self.k_norm = nn.LayerNorm(self.embed_dim) if qk_norm else nn.Identity()
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
-        # Batched computation of query, key, value states.
-        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        # Permute the dims of qkv vector and unravel it into query, key, value states.
-        query_states, key_states, value_states = qkv.permute(2, 0, 3, 1, 4).unbind(0)
-        query_states = self.query_norm(query_states)
-        key_states = self.key_norm(key_states)
+        query_states = query_states.reshape(-1, self.num_heads, self.head_dim)
+        query_states = self.q_norm(query_states)
 
-        # Is it a bug or deliberate change?
-        query_states = query_states * self.scale
+        key_states = key_states.reshape(-1, self.num_heads, self.head_dim)
+        key_states = self.k_norm(key_states)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+        query_states = query_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if attn_weights.size() != (batch_size, self.num_heads, seq_len, seq_len):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, seq_len, self.head_dim)}, but is"
-                f" {attn_weights.size()}"
-            )
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, seq_len, self.head_dim):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_len, self.head_dim)}, but is {attention_mask.size()}"
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        # Only apply attention dropout during training.
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (batch_size, self.num_heads, seq_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, seq_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
 
         output = self.projection_layer(attn_output)
@@ -411,165 +342,6 @@ class JanusVisionAttention(nn.Module):
 
         outputs = (output, attn_weights) if output_attentions else (output, None)
         return outputs
-
-
-class JanusVisionFlashAttention2(JanusVisionAttention):
-    """
-    JanusVision flash attention module. This module inherits from `JanusVisionAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    is_causal = False
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        batch_size, seq_len, _ = hidden_states.size()
-
-        # Batched computation of query, key, value states.
-        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states, key_states, value_states = qkv.unbind(2)
-        query_states = self.query_norm(query_states)
-        key_states = self.key_norm(key_states)
-
-        dropout_rate = self.attention_dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (Idefics2VisionRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.qkv.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            seq_len,
-            dropout=dropout_rate,
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim).contiguous()
-        output = self.projection_layer(attn_output)
-        output = self.projection_dropout(output)
-
-        return output, None
-
-
-class JanusVisionSdpaAttention(JanusVisionAttention):
-    """
-    Janusvision attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `JanusVisionAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    is_causal = False
-
-    # Adapted from transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "JanusVisionModel is using JanusVisionSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-            )
-
-        batch_size, seq_len, _ = hidden_states.size()
-
-        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
-
-        query_states, key_states, value_states = qkv.permute(2, 0, 3, 1, 4).unbind(0)
-        query_states = self.query_norm(query_states)
-        key_states = self.key_norm(key_states)
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if self.is_causal and seq_len > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(batch_size, seq_len, self.embed_dim)
-
-        output = self.projection_layer(attn_output)
-        output = self.projection_dropout(output)
-        return output, None
-
-
-JANUS_VISION_ATTENTION_CLASSES = {
-    "eager": JanusVisionAttention,
-    "sdpa": JanusVisionSdpaAttention,
-    "flash_attention_2": JanusVisionFlashAttention2,
-}
-
-
-class JanusVisionLayerScale(Dinov2WithRegistersLayerScale):
-    pass
-
-
-class JanusVisionDropPath(Dinov2WithRegistersDropPath):
-    pass
 
 
 class JanusVisionMLP(nn.Module):
@@ -596,14 +368,9 @@ class JanusVisionEncoderLayer(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        self.attn = JanusVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-        self.layer_scale1 = JanusVisionLayerScale(config) if config.layerscale_value else nn.Identity()
-        self.layer_scale2 = JanusVisionLayerScale(config) if config.layerscale_value else nn.Identity()
-        self.drop_path1 = JanusVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.drop_path2 = JanusVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.mlp = JanusVisionMLP(config)
 
     def forward(
@@ -622,25 +389,18 @@ class JanusVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        # Pre-Norm before attention .
         norm_hidden_states = self.layer_norm1(hidden_states)
+
         attn_output, attn_weights = self.attn(
             norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
-
-        scaled_attn_output = self.layer_scale1(attn_output)
-        dropped_attn_output = self.drop_path1(scaled_attn_output)
-        hidden_states = hidden_states + dropped_attn_output
-
+        hidden_states = hidden_states + attn_output
         norm_hidden_states = self.layer_norm2(hidden_states)
 
         mlp_output = self.mlp(norm_hidden_states)
+        hidden_states = hidden_states + mlp_output
 
-        scaled_mlp_output = self.layer_scale2(mlp_output)
-        dropped_mlp_output = self.drop_path2(scaled_mlp_output)
-        hidden_states = hidden_states + dropped_mlp_output
-
-        return (hidden_states, attn_weights if output_attentions else None)
+        return (hidden_states, attn_weights) if output_attentions else (hidden_states,)
 
 
 class JanusVisionAttentionPoolLatent(nn.Module):
@@ -659,7 +419,8 @@ class JanusVisionAttentionPoolLatent(nn.Module):
 
         # Linear layers for QKV projection
         self.q = nn.Linear(self.hidden_size, self.hidden_size)
-        self.kv = nn.Linear(self.hidden_size, self.hidden_size * 2)
+        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.projection_layer = nn.Linear(self.hidden_size, self.hidden_size)
 
         # Normalization & MLP
@@ -676,13 +437,11 @@ class JanusVisionAttentionPoolLatent(nn.Module):
 
         # Compute Q projection from latent tokens
         query_states = self.q(q_latent)  # (B, latent_len, hidden_size)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        # Compute combined KV projection
-        kv = self.kv(hidden_states)
-        key_states, value_states = kv.view(batch_size, seq_len, 2, self.num_heads, self.head_dim).unbind(2)
-
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         query_states = query_states.view(batch_size, self.latent_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
@@ -994,17 +753,17 @@ class JanusVQVAE(ChameleonVQVAE):
         Returns:
             decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Reconstructed pixel values after encoding and decoding the input.
-            emb_loss (`torch.FloatTensor`): Embedding loss.
+            embedding_loss (`torch.FloatTensor`): Embedding loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size = pixel_values.shape[0]
-        quant, emb_loss, indices = self.encode(pixel_values)
+        quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
 
         if not return_dict:
-            return (decoded_pixel_values, emb_loss)
-        return JanusVQVAEOutput(decoded_pixel_values, emb_loss)
+            return (decoded_pixel_values, embedding_loss)
+        return JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -1262,7 +1021,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=JanusCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1348,70 +1106,26 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
-        position_ids=None,
-        use_cache=True,
+        logits_to_keep=None,
         **kwargs,
     ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+        # Overwritten -- extra custom processing
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        # (we can't check exception 3 while compiling)
-        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
-        # generate the first token for each sequence. Later use the generated Input ids for continuation.
-
-        if past_key_values is not None:
-            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
-                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-            elif (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        if cache_position[0] != 0:
-            pixel_values = None
-
-        # if `inputs_embeds` are passed, only use them in the 1st generation step for every prompt.
-        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-        else:
-            model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
-
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = inputs_embeds.shape
-                device = inputs_embeds.device
-            else:
-                batch_size, sequence_length = input_ids.shape
-                device = input_ids.device
-
-            attention_mask = self.model.language_model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-                config=self.config,
-                past_key_values=past_key_values,
-            )
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
-                "cache_position": cache_position,
-            }
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
         )
+
+        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+        # Otherwise we need pixel values to be passed to model
+        if cache_position[0] == 0:
+            model_inputs["pixel_values"] = pixel_values
+
         return model_inputs
 
     def decode_image_tokens(self, image_tokens: torch.Tensor):
@@ -1509,8 +1223,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
+        # Should we double nly when guidance scale is not None.
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
-
         input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id  # Set Unconditional logits
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
@@ -1522,7 +1236,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
                 batch_size=batch_size * 2,
-                # we should have at least a cache len of seq_len + num_image_tokens
+                # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
                 device=input_ids,
                 model_kwargs=model_kwargs,
@@ -1544,7 +1258,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        for i in tqdm(range(num_image_tokens)):
+        for i in range(num_image_tokens):
             # Fix me: What to do with attention mask when expanding and repeating input ids.
             # Should we also modify the attention mask if passed?
             outputs = self.model.language_model(
@@ -1561,10 +1275,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             # Generate scores using the generation head. (not using above defined lm head)
             scores = self.model.gen_head(hidden_state)
             logits = logits_processor(input_ids, scores)
-            probs = torch.softmax(logits / generation_config.temperature, dim=-1)
+            next_token_scores = logits / generation_config.temperature
 
-            # Sample the next token
-            next_token = torch.multinomial(probs, num_samples=1).squeeze(-1)
+            # Sample next token.
+            if generation_config.do_sample:
+                probs = torch.softmax(next_token_scores, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1).squeeze(-1)
+            else:
+                next_token = torch.argmax(next_token_scores, dim=-1)
+
             generated_tokens[:, i] = next_token
 
             # Prepare embeddings for the next step.
@@ -1669,6 +1388,80 @@ class JanusImageProcessor(BlipImageProcessor):
         else:
             self.background_color = tuple([int(x * 255) for x in image_mean])
 
+    def pad_to_square(
+        self,
+        image: np.ndarray,
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        height, width = get_image_size(image, input_data_format)
+        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+
+        if height == width:
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
+            return image
+
+        max_dim = max(height, width)
+
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        if input_data_format == ChannelDimension.FIRST:
+            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[i, :, :] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[:, start : start + height, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, :, start : start + width] = image
+        else:
+            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[:, :, i] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[start : start + height, :, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, start : start + width, :] = image
+
+        return result
+
     def resize(
         self,
         image: np.ndarray,
@@ -1705,33 +1498,18 @@ class JanusImageProcessor(BlipImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        if input_data_format == ChannelDimension.FIRST:
-            _, height, width = image.shape
-        elif input_data_format == ChannelDimension.LAST:
-            height, width, _ = image.shape
-        else:
-            raise ValueError(
-                f"Invalid `input_data_format`. Must be one of {ChannelDimension.FIRST}, {ChannelDimension.LAST}"
-            )
-
+        height, width = get_image_size(image, input_data_format)
         max_size = max(height, width)
 
-        if isinstance(size, dict):
-            if "height" not in size or "width" not in size:
-                raise ValueError(
-                    f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
-                )
-            if size["height"] != size["width"]:
-                raise ValueError(
-                    f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
-                )
-            size = size["height"]
-        elif not isinstance(size, int):
-            ValueError(f"Expected `size` to be of type `int` or `dict`. Got {type(size)}")
+        size = get_size_dict(size, default_to_square=True)
+        if size["height"] != size["width"]:
+            raise ValueError(
+                f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
+            )
+        size = size["height"]
 
         delta = size / max_size
-
-        # Largest side becomes `size` and the other side is scaled according to the aspect ratio
+        # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = [
             max(int(height * delta), self.min_size),
             max(int(width * delta), self.min_size),
@@ -1743,16 +1521,14 @@ class JanusImageProcessor(BlipImageProcessor):
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
-            return_numpy=False,
+            return_numpy=True,
             **kwargs,
         )
-        # expand and pad the images to obtain a square image of dimensions `size x size`
-        image = expand2square(image, self.background_color)
-        # PS: to_numpy_array puts the channel dimension last
-        image = to_channel_dimension_format(
-            to_numpy_array(image),
-            data_format if data_format is not None else input_data_format,
-            input_channel_dim=ChannelDimension.LAST,
+        # Expand and pad the images to obtain a square image of dimensions `size x size`
+        image = self.pad_to_square(
+            image=image,
+            background_color=self.background_color,
+            input_data_format=input_data_format,
         )
         return image
 

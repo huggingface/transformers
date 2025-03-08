@@ -242,7 +242,7 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("janus", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("janus", ("LlamaTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "jetmoe",
                 (

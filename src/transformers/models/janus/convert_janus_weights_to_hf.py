@@ -124,19 +124,46 @@ def convert_old_keys_to_new_keys(state_dict):
     return output_dict
 
 
+def split_tensor(tensor, key):
+    """Splits a merged tensor (qkv or kv) into separate tensors and creates keys for each part."""
+
+    if "qkv" in key:
+        prefix_to_replace = "qkv"
+        num_splits = 3
+        new_keys = ["q_proj", "k_proj", "v_proj"]
+    elif "kv" in key:
+        prefix_to_replace = "kv"
+        num_splits = 2
+        new_keys = ["k_proj", "v_proj"]
+    else:
+        raise ValueError(f"Unrecognized tensor type in key: {key}")
+
+    split_size = tensor.shape[0] // num_splits
+    tensors = torch.split(tensor, split_size, dim=0)
+    return {key.replace(prefix_to_replace, new_keys[i]): tensors[i] for i in range(num_splits)}
+
+
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
     conversion_dict = convert_old_keys_to_new_keys(state_dict)
     converted_state_dict = {}
+
     for old_key, new_key in conversion_dict.items():
         if new_key:
-            converted_state_dict[new_key] = state_dict[old_key]
+            if "qkv" in new_key or "kv" in new_key:  # Detect merged keys and split them.
+                dct = split_tensor(state_dict[old_key], new_key)
+                print(dct)
+                converted_state_dict.update(
+                    split_tensor(state_dict[old_key], new_key)
+                )  # Split dynamically based on key
+            else:
+                converted_state_dict[new_key] = state_dict[old_key]
 
     # Embeddings will not have initial dimension
     converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"] = converted_state_dict[
         "model.vision_model.embeddings.position_embeddings.weight"
     ].squeeze(0)
-
+    # print(converted_state_dict.keys())
     return converted_state_dict
 
 
