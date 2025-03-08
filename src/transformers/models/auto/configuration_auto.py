@@ -32,6 +32,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("aimv2", "AIMv2Config"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -64,7 +65,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
-        ("aimv2", "AIMv2Config"),
         ("clip_text_model", "CLIPTextConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
         ("clipseg", "CLIPSegConfig"),
@@ -359,6 +359,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("aimv2", "AIMv2"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -397,7 +398,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
-        ("aimv2", "AIMv2"),
         ("clip_text_model", "CLIPTextModel"),
         ("clip_vision_model", "CLIPVisionModel"),
         ("clipseg", "CLIPSeg"),

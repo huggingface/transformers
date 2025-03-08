@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    aimv2,
     albert,
     align,
     altclip,
@@ -49,7 +50,6 @@ from . import (
     chinese_clip,
     clap,
     clip,
-    aimv2,
     clipseg,
     clvp,
     code_llama,

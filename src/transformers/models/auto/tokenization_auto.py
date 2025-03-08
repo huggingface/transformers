@@ -61,6 +61,13 @@ else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
             (
+                "aimv2",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "albert",
                 (
                     "AlbertTokenizer" if is_sentencepiece_available() else None,
@@ -126,13 +133,6 @@ else:
             ),
             (
                 "clip",
-                (
-                    "CLIPTokenizer",
-                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "aimv2",
                 (
                     "CLIPTokenizer",
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
