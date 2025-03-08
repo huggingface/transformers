@@ -39,12 +39,12 @@ logger = logging.get_logger(__name__)
 
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
+        ("aimv2", "AIMv2FeatureExtractor"),
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
         ("beit", "BeitFeatureExtractor"),
         ("chinese_clip", "ChineseCLIPFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
-        ("aimv2", "AIMv2FeatureExtractor"),
         ("clipseg", "ViTFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
         ("conditional_detr", "ConditionalDetrFeatureExtractor"),

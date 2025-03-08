@@ -388,7 +388,9 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AIMv2VisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AIMv2VisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=AIMv2VisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1111,7 +1113,9 @@ class AIMv2ModelIntegrationTest(unittest.TestCase):
         model = AIMv2Model.from_pretrained("apple/aimv2-large-patch14-224").to(torch_device)
 
         processor = CLIPProcessor.from_pretrained(
-            "apple/aimv2-large-patch14-224", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+            "apple/aimv2-large-patch14-224",
+            size={"height": 180, "width": 180},
+            crop_size={"height": 180, "width": 180},
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

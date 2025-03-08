@@ -5302,6 +5302,11 @@ if TYPE_CHECKING:
         load_tf2_model_in_pytorch_model,
         load_tf2_weights_in_pytorch_model,
     )
+    from .models.aimv2 import (
+        AIMv2Config,
+        AIMv2TextConfig,
+        AIMv2VisionConfig,
+    )
     from .models.albert import AlbertConfig
     from .models.align import (
         AlignConfig,
@@ -5438,13 +5443,6 @@ if TYPE_CHECKING:
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
-    )
-    from .models.aimv2 import (
-        AIMv2Config,
-       
-        AIMv2TextConfig,
-       
-        AIMv2VisionConfig,
     )
     from .models.clipseg import (
         CLIPSegConfig,
@@ -6671,6 +6669,15 @@ if TYPE_CHECKING:
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
+        from .models.aimv2 import (
+            AIMv2ForImageClassification,
+            AIMv2Model,
+            AIMv2PreTrainedModel,
+            AIMv2TextModel,
+            AIMv2TextModelWithProjection,
+            AIMv2VisionModel,
+            AIMv2VisionModelWithProjection,
+        )
         from .models.albert import (
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
@@ -6979,15 +6986,6 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
-        )
-        from .models.aimv2 import (
-            AIMv2ForImageClassification,
-            AIMv2Model,
-            AIMv2PreTrainedModel,
-            AIMv2TextModel,
-            AIMv2TextModelWithProjection,
-            AIMv2VisionModel,
-            AIMv2VisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSegForImageSegmentation,
