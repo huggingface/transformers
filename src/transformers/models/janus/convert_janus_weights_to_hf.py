@@ -44,11 +44,11 @@ from transformers.models.janus.processing_janus import JanusProcessor
 # Mappings
 MAPPINGS = {
     # Vision model
-    r"(?<!gen_)vision_model.vision_tower.blocks": "model.vision_model.vision_transformer.encoder.layers",
-    r"(?<!gen_)vision_model.vision_tower.pos_embed": "model.vision_model.vision_transformer.embeddings.position_embeddings.weight",
-    r"(?<!gen_)vision_model.vision_tower.patch_embed.proj": "model.vision_model.vision_transformer.embeddings.patch_embeddings.projection",
-    r"(?<!gen_)vision_model.vision_tower.norm": "model.vision_model.vision_transformer.post_layernorm",
-    r"(?<!gen_)vision_model.vision_tower.attn_pool": "model.vision_model.vision_transformer.head",
+    r"(?<!gen_)vision_model.vision_tower.blocks": "model.vision_model.vision_model.encoder.layers",
+    r"(?<!gen_)vision_model.vision_tower.pos_embed": "model.vision_model.vision_model.embeddings.position_embeddings.weight",
+    r"(?<!gen_)vision_model.vision_tower.patch_embed.proj": "model.vision_model.vision_model.embeddings.patch_embeddings.projection",
+    r"(?<!gen_)vision_model.vision_tower.norm": "model.vision_model.vision_model.post_layernorm",
+    r"(?<!gen_)vision_model.vision_tower.attn_pool": "model.vision_model.vision_model.head",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)proj(?=\.|\s|$)": r"\g<pre>projection_layer",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm(?=\.|\s|$)": r"\g<pre>layer_norm",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm1(?=\.|\s|$)": r"\g<pre>layer_norm1",
@@ -123,18 +123,43 @@ def convert_old_keys_to_new_keys(state_dict):
     return output_dict
 
 
+def split_tensor(tensor, key):
+    """Splits a merged tensor (qkv or kv) into separate tensors and creates keys for each part."""
+
+    if "qkv" in key:
+        prefix_to_replace = "qkv"
+        num_splits = 3
+        new_keys = ["q_proj", "k_proj", "v_proj"]
+    elif "kv" in key:
+        prefix_to_replace = "kv"
+        num_splits = 2
+        new_keys = ["k_proj", "v_proj"]
+    else:
+        raise ValueError(f"Unrecognized tensor type in key: {key}")
+
+    split_size = tensor.shape[0] // num_splits
+    tensors = torch.split(tensor, split_size, dim=0)
+    return {key.replace(prefix_to_replace, new_keys[i]): tensors[i] for i in range(num_splits)}
+
+
 def convert_state_dict_to_hf(state_dict):
     """Convert state dict keys to HF format."""
     conversion_dict = convert_old_keys_to_new_keys(state_dict)
     converted_state_dict = {}
+
     for old_key, new_key in conversion_dict.items():
         if new_key:
-            converted_state_dict[new_key] = state_dict[old_key]
+            if "qkv" in new_key or "kv" in new_key:  # Detect merged keys and split them.
+                converted_state_dict.update(
+                    split_tensor(state_dict[old_key], new_key)
+                )  # Split dynamically based on key
+            else:
+                converted_state_dict[new_key] = state_dict[old_key]
 
     # Embeddings will not have initial dimension
-    converted_state_dict["model.vision_model.vision_transformer.embeddings.position_embeddings.weight"] = (
+    converted_state_dict["model.vision_model.vision_model.embeddings.position_embeddings.weight"] = (
         converted_state_dict[
-            "model.vision_model.vision_transformer.embeddings.position_embeddings.weight"
+            "model.vision_model.vision_model.embeddings.position_embeddings.weight"
         ].squeeze(0))
 
     return converted_state_dict
