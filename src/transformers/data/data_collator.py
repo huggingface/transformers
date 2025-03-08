@@ -250,10 +250,12 @@ class DataCollatorWithPadding:
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
             - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
+        padding_side (`str`, *optional*):
+            The side on which padding should be applied. Should be either `"left"` or `"right"`.
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
-            If set will pad the sequence to a multiple of the provided value.
+            If set, will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.0 (Volta).
@@ -263,6 +265,7 @@ class DataCollatorWithPadding:
 
     tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = True
+    padding_side: Optional[str] = None
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     return_tensors: str = "pt"
@@ -272,6 +275,7 @@ class DataCollatorWithPadding:
             self.tokenizer,
             features,
             padding=self.padding,
+            padding_side=self.padding_side,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=self.return_tensors,
