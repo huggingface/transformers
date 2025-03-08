@@ -105,6 +105,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
+        size = get_size_dict(size, default_to_square=True)
         image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 

@@ -115,3 +115,23 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(
             out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
         )
+
+    def test_pan_and_scan(self):
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="np",
+            do_pan_and_scan=True,
+            image_seq_length=2,
+            pan_and_scan_min_crop_size=10,
+        )
+
+        # base image + 4 crops
+        self.assertEqual(len(inputs[self.images_input_name]), 5)
+        self.assertEqual(len(inputs[self.text_input_name][0]), 67)
