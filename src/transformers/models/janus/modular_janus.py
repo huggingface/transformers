@@ -1233,8 +1233,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask = model_kwargs.pop("attention_mask", None)
         attention_mask = attention_mask.repeat(2, 1)
 
-        input_tokens[batch_size:, :].masked_fill_(input_tokens[batch_size:, :] != generation_config.bos_token_id,
-                                                  generation_config.pad_token_id)
+        input_tokens[batch_size:, :].masked_fill_(
+            (input_tokens[batch_size:, :] != generation_config.bos_token_id) &
+            (input_tokens[batch_size:, :] != self.model.config.boi_token_index),
+            generation_config.pad_token_id
+        )
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 

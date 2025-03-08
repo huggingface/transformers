@@ -301,7 +301,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
         that are matched with images on Siglip, as the forward pass of our models---which is what is used to check
         gradients in this test---does not include the forward pass on this layer.
         """
-        skip_patterns = ["vision_model.vision_transformer.head", "vqmodel", "gen_embed", "gen_aligner", "gen_head"]
+        skip_patterns = ["vision_model.vision_model.head", "vqmodel", "gen_embed", "gen_aligner", "gen_head"]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):

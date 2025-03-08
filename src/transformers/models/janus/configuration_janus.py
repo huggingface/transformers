@@ -320,8 +320,9 @@ class JanusConfig(PretrainedConfig):
 
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        # The default is only the index for the 1B model, 7B uses a different one
+        # The default are only the indexes for the 1B model, 7B uses different ones
         self.image_token_index = kwargs.get("image_token_index", 100581)
+        self.boi_token_index = kwargs.get("boi_token_index", 100003)
         super().__init__(**kwargs)
 
 
