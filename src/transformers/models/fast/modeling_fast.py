@@ -432,4 +432,4 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             hidden_states=all_hidden_states if output_hidden_states else None,
         )
 
-__all__ = ["FastForSceneTextRecognition"]
+__all__ = ["FastPreTrainedModel", "FastForSceneTextRecognition"]
