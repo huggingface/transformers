@@ -41,6 +41,7 @@ from transformers import (
 from transformers.models.janus.image_processing_janus import JanusImageProcessor
 from transformers.models.janus.processing_janus import JanusProcessor
 
+
 # Mappings
 MAPPINGS = {
     # Vision model
@@ -149,10 +150,9 @@ def convert_state_dict_to_hf(state_dict):
 
     for old_key, new_key in conversion_dict.items():
         if new_key:
-            if "qkv" in new_key or "kv" in new_key:  # Detect merged keys and split them.
-                converted_state_dict.update(
-                    split_tensor(state_dict[old_key], new_key)
-                )  # Split dynamically based on key
+            if "qkv" in new_key or "kv" in new_key:  # Detect merged attention keys and split them.
+                qkv_split_dict = split_tensor(state_dict[old_key], new_key)
+                converted_state_dict.update(qkv_split_dict)
             else:
                 converted_state_dict[new_key] = state_dict[old_key]
 
@@ -235,13 +235,13 @@ def load_model_state_dict(input_path: str) -> dict:
 
 
 def convert_model(
-        repo_id=None,
-        local_dir=None,
-        text_model_id=None,
-        output_dir=None,
-        output_hub_path=None,
-        safe_serialization=True,
-        revision=None,
+    repo_id=None,
+    local_dir=None,
+    text_model_id=None,
+    output_dir=None,
+    output_hub_path=None,
+    safe_serialization=True,
+    revision=None,
 ):
     """Convert and save the model weights, processor, and configuration."""
     if output_dir is None and output_hub_path is None:
@@ -281,10 +281,17 @@ def convert_model(
 
     # Create tokenizer directly from tokenizer.json if it exists
     tokenizer_json_path = os.path.join(input_path, "tokenizer.json")
+    special_image_tokens = {
+        "image_token": "<image_placeholder>",
+        "boi_token": "<begin_of_image>",
+        "eoi_token": "<end_of_image>",
+    }
+
     if os.path.exists(tokenizer_json_path) and not text_model_id:
         tokenizer = AutoTokenizer.from_pretrained(
             input_path,  # This will load tokenizer.json directly
             model_max_length=tokenizer_config["model_max_length"],
+            extra_special_tokens=special_image_tokens,
         )
     else:
         # Fallback to creating from text_model_id with special tokens
@@ -295,6 +302,7 @@ def convert_model(
             pad_token=special_tokens_map["pad_token"],
             additional_special_tokens=special_tokens_map["additional_special_tokens"],
             model_max_length=tokenizer_config["model_max_length"],
+            extra_special_tokens=special_image_tokens,
         )
 
     # Create image processor from config

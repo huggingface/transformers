@@ -16,12 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Janus
 
-## Overview 
+## Overview
 
-The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DeepSeek AI team and later refined in [Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling](https://github.com/briankb/DeepSeek-Janus/blob/main/janus_pro_tech_report.pdf). Janus is a vision-language model that can generate both image and text output, it can also take both images and text as input.
+The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DeepSeek AI team and later refined in [Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling](https://arxiv.org/abs/2501.17811). Janus is a vision-language model that can generate both image and text output, it can also take both images and text as input.
 
 > [!NOTE]
-> The model doesn't generate both images and text in an interleaved format. The user has to pass a parameter indicating whether to generate or image.
+> The model doesn't generate both images and text in an interleaved format. The user has to pass a parameter indicating whether to generate text or image.
 
 The abstract from the original paper is the following:
 
@@ -29,10 +29,7 @@ The abstract from the original paper is the following:
 
 The abstract from the aforementioned `Janus-Pro` paper, released afterwards, is the following:
 
-*In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strategy, (2) expanded training data,
-and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant
-advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will
-inspire further exploration in the field. Code and models are publicly available.*
+*In this work, we introduce Janus-Pro, an advanced version of the previous work Janus. Specifically, Janus-Pro incorporates (1) an optimized training strate (2) expanded training data, and (3) scaling to larger model size. With these improvements, Janus-Pro achieves significant advancements in both multimodal understanding and text-to-image instruction-following capabilities, while also enhancing the stability of text-to-image generation. We hope this work will inspire further exploration in the field. Code and models are publicly available.*
 
 This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali) and [Hugo Silva](https://huggingface.co/hugosilva664).
 The original code can be found [here](https://github.com/deepseek-ai/Janus).
@@ -53,25 +50,33 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor  
 
-# use "hugosilva664/Janus-Pro-7B-HF" for the 7B version
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
 # Prepare Input for generation.
 image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
 messages = [
     {
         "role": "user",
-        "content": [{'type':'image'},{'type':"text", "text":"What do you see in this image?."}]
+        "content": [
+            {'type':'image', 'url': 'http://images.cocodataset.org/val2017/000000039769.jpg'},
+            {'type':"text", "text":"What do you see in this image?."}
+        ]
     },
 ]
 
 # Set generation mode to `text` to perform text generation.
-processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
-model = JanusForConditionalGeneration.from_pretrained(model_id,     
+processor = JanusProcessor.from_pretrained(model_id)
+model = JanusForConditionalGeneration.from_pretrained(daesmodel_id,     
         torch_dtype=torch.bfloat16,
         device_map="auto")
 
-prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
-inputs = processor(text=prompt,images=image,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    generation_mode="text",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device, dtype=torch.bfloat16)
 
 output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
 text = processor.decode(output[0], skip_special_tokens=True)
@@ -89,49 +94,52 @@ import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
 
-# use "hugosilva664/Janus-Pro-7B-HF" for the 7B version
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
-image_cat = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
-image_stop = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
-image_snowman = Image.open(requests.get("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True).raw)
+
+image_urls = [
+    "http://images.cocodataset.org/val2017/000000039769.jpg",
+    "https://www.ilankelman.org/stopsigns/australia.jpg",
+    "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
+]
 
 messages = [
-    [{
+    {
         "role": "user",
         "content": [
             {"type": "text", "text": "What’s the difference between"},
-            {"type": "image"},
+            {"type": "image", "url": image_urls[0]},
             {"type": "text", "text": " and "},
-            {"type": "image"}
+            {"type": "image", "url": image_urls[1]}
         ]
-    }],
-    # Second prompt
-    [{
+    },
+    {
         "role": "user",
         "content": [
-            {"type": "text", "text": "What do you see in this image?"},
-            {"type": "image"}
+            {"type": "image", "url": image_urls[2]},
+            {"type": "text", "text": "What do you see in this image?"}
         ]
-    }]
+    }
 ]
 
+# Load model and processor
+processor = JanusProcessor.from_pretrained(model_id)
+model = JanusForConditionalGeneration.from_pretrained(
+    model_id, torch_dtype=torch.bfloat16, device_map="auto"
+)
 
-# Set generation mode to `text` to perform text generation.
-processor = JanusProcessor.from_pretrained(model_id, generation_mode="text")
-model = JanusForConditionalGeneration.from_pretrained(model_id,
-        torch_dtype=torch.bfloat16,
-        device_map="auto")
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    generation_mode="text",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device, dtype=torch.bfloat16)
 
-prompt = processor.apply_chat_template(messages,add_generation_prompt=True)
-inputs = processor(text=prompt,
-                   images=[image_cat,image_stop,image_snowman],
-                   return_tensors="pt",
-                   padding=True).to(model.device, dtype=torch.bfloat16)
-
+# Generate response
 output = model.generate(**inputs, max_new_tokens=40, generation_mode='text', do_sample=False)
-for o in output:
-    text = processor.decode(o, skip_special_tokens=True)
-    print(text)
+text = processor.batch_decode(output, skip_special_tokens=True)
+print(text)
 ```
 
 ## Text to Image generation
@@ -143,9 +151,9 @@ import torch
 from transformers import JanusForConditionalGeneration, JanusProcessor
 
 # Set generation mode to `image` to prepare inputs for image generation..
-# use "hugosilva664/Janus-Pro-7B-HF" for the 7B version
+
 model_id = "yaswanthgali/Janus-Pro-1B-HF"
-processor = JanusProcessor.from_pretrained(model_id, generation_mode="image")
+processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,
         torch_dtype=torch.bfloat16,
         device_map="auto")
@@ -160,7 +168,7 @@ messages = [
 ]
 
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=prompt,return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(text=prompt,generation_mode="image",return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 # Set num_return_sequence parameter to generate multiple images per prompt.
 model.generation_config.num_return_sequences = 2

@@ -27,17 +27,22 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     pass
 
-# This will be changed to HUB location once the final converted model is uploaded there
-HUB_LOCATION = "yaswanthgali/Janus-Pro-1B-HF"
-
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = JanusProcessor
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        # Similar to Qwen2VLProcessorTest. Tests are done with 1B processor (7B tokenizer is different)
-        processor = self.processor_class.from_pretrained(HUB_LOCATION)
+        special_image_tokens = {
+            "image_token": "<image_placeholder>",
+            "boi_token": "<begin_of_image>",
+            "eoi_token": "<end_of_image>",
+        }
+
+        processor = self.processor_class.from_pretrained(
+            "yaswanthgali/Janus-Pro-1B-HF",
+            extra_special_tokens=special_image_tokens,
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
