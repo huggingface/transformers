@@ -741,7 +741,7 @@ class Gemma3MultiModalProjector(nn.Module):
         )
 
         self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
-        self.tokens_per_side = int(config.text_config.mm_tokens_per_image**0.5)
+        self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
         self.kernel_size = self.patches_per_image // self.tokens_per_side
         self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
@@ -852,7 +852,10 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            special_image_mask = (input_ids == self.config.image_token_index)
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[special_image_mask] = 0
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -867,7 +870,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
                 image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
