@@ -517,17 +517,17 @@ class MiniMaxDecoderLayer(nn.Module):
         self.layer_idx = layer_idx
         self.postnorm = config.postnorm
         self.attn_type = config.attn_type_list[layer_idx]
-        self.layernorm_mlp_alpha = config.layernorm_mlp_alpha
-        self.layernorm_mlp_beta = config.layernorm_mlp_beta
+        self.mlp_alpha_factor = config.layernorm_mlp_alpha
+        self.mlp_beta_factor = config.layernorm_mlp_beta
 
         if self.attn_type == 0:
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
-            self.layernorm_alpha = config.layernorm_linear_attention_alpha
-            self.layernorm_beta = config.layernorm_linear_attention_beta
+            self.attn_alpha_factor = config.layernorm_linear_attention_alpha
+            self.attn_beta_factor = config.layernorm_linear_attention_beta
         else:
             self.self_attn = MiniMaxAttention(config, layer_idx)
-            self.layernorm_alpha = config.layernorm_full_attention_alpha
-            self.layernorm_beta = config.layernorm_full_attention_beta
+            self.attn_alpha_factor = config.layernorm_full_attention_alpha
+            self.attn_beta_factor = config.layernorm_full_attention_beta
 
     def forward(
         self,
@@ -585,7 +585,7 @@ class MiniMaxDecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = residual * self.layernorm_alpha + hidden_states * self.layernorm_beta
+        hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
 
         # Fully Connected
         residual = hidden_states
@@ -593,7 +593,7 @@ class MiniMaxDecoderLayer(nn.Module):
         if self.postnorm:
             residual = hidden_states
         hidden_states, router_logits = self.block_sparse_moe(hidden_states)
-        hidden_states = residual * self.layernorm_mlp_alpha + hidden_states * self.layernorm_mlp_beta
+        hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 
         outputs = (hidden_states,)
 
