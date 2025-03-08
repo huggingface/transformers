@@ -611,6 +611,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mimi": ["MimiConfig"],
+    "models.minimax": ["MiniMaxConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
@@ -2916,6 +2917,16 @@ else:
         [
             "MimiModel",
             "MimiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.minimax"].extend(
+        [
+            "MiniMaxForCausalLM",
+            "MiniMaxForQuestionAnswering",
+            "MiniMaxForSequenceClassification",
+            "MiniMaxForTokenClassification",
+            "MiniMaxModel",
+            "MiniMaxPreTrainedModel",
         ]
     )
     _import_structure["models.mistral"].extend(
@@ -5774,6 +5785,7 @@ if TYPE_CHECKING:
     from .models.mimi import (
         MimiConfig,
     )
+    from .models.minimax import MiniMaxConfig
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
@@ -7813,6 +7825,14 @@ if TYPE_CHECKING:
         from .models.mimi import (
             MimiModel,
             MimiPreTrainedModel,
+        )
+        from .models.minimax import (
+            MiniMaxForCausalLM,
+            MiniMaxForQuestionAnswering,
+            MiniMaxForSequenceClassification,
+            MiniMaxForTokenClassification,
+            MiniMaxModel,
+            MiniMaxPreTrainedModel,
         )
         from .models.mistral import (
             MistralForCausalLM,
