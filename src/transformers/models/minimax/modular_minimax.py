@@ -351,7 +351,7 @@ class MiniMaxLightningAttention(nn.Module):
                 current_key_states = key_states[:, :, i : i + 1]
                 current_value_states = value_states[:, :, i : i + 1]
 
-                current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2) , current_value_states)
+                current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2), current_value_states)
                 attn_weights_inter = ratio * attn_weights_inter + current_attn_weights_inter
                 current_attn_output = torch.matmul(current_query_states, attn_weights_inter)
 
