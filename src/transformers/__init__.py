@@ -414,6 +414,7 @@ _import_structure = {
         "DistilBertConfig",
         "DistilBertTokenizer",
     ],
+    "models.distill_any_depth": ["DistillAnyDepthConfig"],
     "models.dit": [],
     "models.donut": [
         "DonutProcessor",
@@ -2259,6 +2260,12 @@ else:
             "DistilBertForTokenClassification",
             "DistilBertModel",
             "DistilBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.distill_any_depth"].extend(
+        [
+            "DistillAnyDepthForDepthEstimation",
+            "DistillAnyDepthPreTrainedModel",
         ]
     )
     _import_structure["models.donut"].extend(
@@ -5568,6 +5575,7 @@ if TYPE_CHECKING:
         DistilBertConfig,
         DistilBertTokenizer,
     )
+    from .models.distill_any_depth import DistillAnyDepthConfig
     from .models.donut import (
         DonutProcessor,
         DonutSwinConfig,
@@ -7300,6 +7308,10 @@ if TYPE_CHECKING:
             DistilBertForTokenClassification,
             DistilBertModel,
             DistilBertPreTrainedModel,
+        )
+        from .models.distill_any_depth import (
+            DistillAnyDepthForDepthEstimation,
+            DistillAnyDepthPreTrainedModel,
         )
         from .models.donut import (
             DonutSwinModel,
