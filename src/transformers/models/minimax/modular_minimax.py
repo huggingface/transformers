@@ -410,6 +410,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -417,12 +418,14 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
@@ -580,6 +583,7 @@ class MiniMaxModel(MixtralModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    position_embeddings,
                     input_attention_mask,
                     position_ids,
                     past_key_values,
@@ -587,11 +591,11 @@ class MiniMaxModel(MixtralModel):
                     output_router_logits,
                     use_cache,
                     cache_position,
-                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
+                    position_embeddings=position_embeddings,
                     attention_mask=input_attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -599,7 +603,6 @@ class MiniMaxModel(MixtralModel):
                     output_router_logits=output_router_logits,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    position_embeddings=position_embeddings,
                     **flash_attn_kwargs,
                 )
 
