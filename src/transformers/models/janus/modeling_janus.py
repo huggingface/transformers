@@ -1737,7 +1737,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         for i in range(num_image_tokens):
-            model_inputs = super().prepare_inputs_for_generation(
+            model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
             )
 
@@ -1777,7 +1777,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
             # similar to GenerationMixin._sample, this is needed in prepare_inputs_for_generation
-            input_tokens = torch.cat([input_tokens, next_token[:, None]], dim=-1)
+            input_tokens = next_token[:, None]
 
         if return_dict_in_generate:
             if output_scores:
