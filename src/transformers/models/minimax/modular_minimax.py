@@ -344,19 +344,18 @@ class MiniMaxLightningAttention(nn.Module):
                 attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
 
         else:
-            # TODO: refactor
             ratio = torch.exp(-self.slope_rate)
             attn_output = []
             for i in range(seq_len):
-                attn_weights_inter = ratio * attn_weights_inter + torch.einsum(
-                    "... n d, ... n e -> ... d e",
-                    key_states[:, :, i : i + 1],
-                    value_states[:, :, i : i + 1],
-                )
-                attn_output_i = torch.einsum(
-                    "... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], attn_weights_inter
-                )
-                attn_output.append(attn_output_i)
+                current_query_states = query_states[:, :, i : i + 1]
+                current_key_states = key_states[:, :, i : i + 1]
+                current_value_states = value_states[:, :, i : i + 1]
+
+                current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2) , current_value_states)
+                attn_weights_inter = ratio * attn_weights_inter + current_attn_weights_inter
+                current_attn_output = torch.matmul(current_query_states, attn_weights_inter)
+
+                attn_output.append(current_attn_output)
 
         # concatenate attention outputs over all blocks
         attn_output = torch.cat(attn_output, dim=-2)
