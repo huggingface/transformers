@@ -613,6 +613,11 @@ class Gemma3Model(Gemma2Model):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+            # normalized
+            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
+            # See https://github.com/huggingface/transformers/pull/29402
+            normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds * normalizer
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
@@ -658,12 +663,6 @@ class Gemma3Model(Gemma2Model):
         # create position embeddings to be shared across the decoder layers
         position_embeddings_global = self.rotary_emb(hidden_states, position_ids)
         position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
-
-        # normalized
-        # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
-        hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -856,6 +855,11 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             llm_input_ids = input_ids.clone()
             llm_input_ids[special_image_mask] = 0
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+            # normalized
+            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
+            # See https://github.com/huggingface/transformers/pull/29402
+            normalizer = torch.tensor(self.config.text_config.hidden_size**0.5, dtype=inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds * normalizer
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
