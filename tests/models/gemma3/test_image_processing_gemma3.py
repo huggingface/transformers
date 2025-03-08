@@ -86,7 +86,6 @@ class Gemma3ImageProcessingTester:
             "pan_and_scan_min_ratio_to_activate": self.pan_and_scan_min_ratio_to_activate,
         }
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.expected_output_image_shape
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
@@ -136,10 +135,12 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+            self.assertEqual(image_processor.size, {"shortest_edge": 20})
+            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
+            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     def test_pan_and_scan(self):
         """
@@ -223,5 +224,5 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     @unittest.skip("Gemma3 doesn't work with 4 channels due to pan and scan method")
-    def test_call_numpy_4_channels (self):
+    def test_call_numpy_4_channels(self):
         pass

@@ -1259,6 +1259,7 @@ else:
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -1272,7 +1273,6 @@ else:
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
-    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
         ["LlavaOnevisionImageProcessor", "LlavaOnevisionVideoProcessor"]
@@ -2455,11 +2455,11 @@ else:
     )
     _import_structure["models.gemma3"].extend(
         [
+            "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
+            "Gemma3Model",
             "Gemma3PreTrainedModel",
             "Gemma3Processor",
-            "Gemma3Model",
-            "Gemma3ForCausalLM",
         ]
     )
     _import_structure["models.git"].extend(

@@ -82,6 +82,9 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
         do_pan_and_scan (`bool`, *optional*):
             Whether to apply `pan_and_scan` to images.
+        pan_and_scan_min_crop_size (`int`, *optional*): <fill_docstring>
+        pan_and_scan_max_num_crops (`int`, *optional*): <fill_docstring>
+        pan_and_scan_min_ratio_to_activate (`float`, *optional*): <fill_docstring>
     """
 
     model_input_names = ["pixel_values", "num_crops"]
