@@ -20,6 +20,7 @@ from . import (
     audio_spectrogram_transformer,
     auto,
     autoformer,
+    aya_vision,
     bamba,
     bark,
     bart,

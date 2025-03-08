@@ -55,6 +55,7 @@ from .integrations import (
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
+    is_swanlab_available,
     is_tensorboard_available,
     is_wandb_available,
 )
@@ -1096,6 +1097,16 @@ def require_sigopt(test_case):
 
     """
     return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
+
+
+def require_swanlab(test_case):
+    """
+    Decorator marking a test that requires swanlab.
+
+    These tests are skipped when swanlab isn't installed.
+
+    """
+    return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
 
 
 def require_wandb(test_case):
@@ -2407,7 +2418,7 @@ class SubprocessCallException(Exception):
 def run_command(command: List[str], return_stdout=False):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
-    if an error occured while running `command`
+    if an error occurred while running `command`
     """
     try:
         output = subprocess.check_output(command, stderr=subprocess.STDOUT)
@@ -2541,7 +2552,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
                     requests.exceptions.RequestException,
                 ) as err:
                     logger.error(
-                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specied Hub repository."
+                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
                     )
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
@@ -2661,7 +2672,7 @@ def run_test_using_subprocess(func):
 The following contains utils to run the documentation tests without having to overwrite any files.
 
 The `preprocess_string` function adds `# doctest: +IGNORE_RESULT` markers on the fly anywhere a `load_dataset` call is
-made as a print would otherwise fail the corresonding line.
+made as a print would otherwise fail the corresponding line.
 
 To skip cuda tests, make sure to call `SKIP_CUDA_DOCTEST=1 pytest --doctest-modules <path_to_files_to_test>
 """

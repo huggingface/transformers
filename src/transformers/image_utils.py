@@ -545,7 +545,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
 
     Args:
         metadata (`VideoMetadata`):
-            `VideoMetadata` object containing metadat about the video, such as "total_num_frames" or "fps".
+            `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly.
         fps (`int`, *optional*):

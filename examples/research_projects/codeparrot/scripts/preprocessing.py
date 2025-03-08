@@ -84,7 +84,7 @@ def is_config_or_test(example, scan_width=5, coeff=0.05):
 
 
 def has_no_keywords(example):
-    """Check if a python file has none of the keywords for: funcion, class, for loop, while loop."""
+    """Check if a python file has none of the keywords for: function, class, for loop, while loop."""
     keywords = ["def ", "class ", "for ", "while "]
     lines = example["content"].splitlines()
     for line in lines:

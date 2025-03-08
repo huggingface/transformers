@@ -265,7 +265,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     Data collator that will dynamically pad the inputs received.
     Args:
         processor ([`Wav2Vec2Processor`])
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         decoder_start_token_id (:obj: `int`)
             The begin-of-sentence of the decoder.
         input_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):

@@ -449,6 +449,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
 
+    @slow
     def test_loss_with_padding(self):
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
         model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")

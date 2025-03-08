@@ -130,7 +130,7 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     mask_tgt = decoder_attention_mask = None
     mask_cls = None
 
-    # The original model does not apply the geneator layer immediatly but rather in
+    # The original model does not apply the generator layer immediatly but rather in
     # the beam search (where it combines softmax + linear layer). Since we already
     # apply the softmax in our generation process we only apply the linear layer here.
     # We make sure that the outputs of the full stack are identical
@@ -143,9 +143,9 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     output_converted_generator = new_model.generator(output_converted_model)
 
     maximum_absolute_difference = torch.max(torch.abs(output_converted_model - output_original_model)).item()
-    print("Maximum absolute difference beween weights: {:.2f}".format(maximum_absolute_difference))
+    print("Maximum absolute difference between weights: {:.2f}".format(maximum_absolute_difference))
     maximum_absolute_difference = torch.max(torch.abs(output_converted_generator - output_original_generator)).item()
-    print("Maximum absolute difference beween weights: {:.2f}".format(maximum_absolute_difference))
+    print("Maximum absolute difference between weights: {:.2f}".format(maximum_absolute_difference))
 
     are_identical = torch.allclose(output_converted_model, output_original_model, atol=1e-3)
     if are_identical:

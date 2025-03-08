@@ -838,7 +838,7 @@ class TokenizerTesterMixin:
                 toks_after_adding = tokenizer.tokenize(text)
                 toks_after_adding2 = tokenizer.tokenize(text2)
 
-                # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                # Rust tokenizers don't lowercase added tokens at the time calling `tokenizer.add_tokens`,
                 # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
                 self.assertIn(added, [2, 4])
 
@@ -1563,6 +1563,33 @@ class TokenizerTesterMixin:
                 self.assertEqual(
                     prefill_output,
                     "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message",
+                )
+
+    @require_jinja
+    def test_continue_final_message_with_decoy_earlier_message(self):
+        """Regression test for chat templates where an earlier message has similar content to the final message
+        https://github.com/huggingface/transformers/issues/35433"""
+
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" + message['content'] | trim + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "hi 0"},
+            {"role": "assistant", "content": "bye: 0"},
+            {"role": "user", "content": "hi 1"},
+            {"role": "assistant", "content": "bye: "},
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                prefill_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
+                )
+                # Assert that the final message is unterminated
+                self.assertEqual(
+                    prefill_output,
+                    "<|im_start|>user\nhi 0<|im_end|>\n<|im_start|>assistant\nbye: 0<|im_end|>\n<|im_start|>user\nhi 1<|im_end|>\n<|im_start|>assistant\nbye:",
                 )
 
     @require_jinja

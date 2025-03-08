@@ -1132,7 +1132,9 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
 
         # confirm that every token is either the original token or [MASK]
         self.assertTrue(
-            tf.reduce_all((batch["input_ids"] == inputs) | (batch["input_ids"] == tokenizer.mask_token_id))
+            tf.reduce_all(
+                (batch["input_ids"] == tf.cast(inputs, tf.int64)) | (batch["input_ids"] == tokenizer.mask_token_id)
+            )
         )
 
         # numpy call

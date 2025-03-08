@@ -12,6 +12,10 @@ specific language governing permissions and limitations under the License.
 
 # TVP
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
@@ -107,7 +111,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     Returns:
         frames (tensor): decoded frames from the video.
     '''
-    assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
+    assert clip_idx >= -2, "Not a valid clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
     index = np.linspace(0, clip_size - 1, num_frames)

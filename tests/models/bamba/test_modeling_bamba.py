@@ -510,7 +510,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             # 7: "",
             8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-            #  9: """,
+            9: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
         }
 
         self.model.to(torch_device)
@@ -549,7 +549,10 @@ class BambaModelIntegrationTest(unittest.TestCase):
                 "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
                 "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
             ],
-            9: [],
+            9: [
+                "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                "!!!<|begin_of_text|>I am late! I need to be at the airport in 20 minutes! I",
+            ],
         }
 
         self.model.to(torch_device)

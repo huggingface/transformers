@@ -373,7 +373,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
         updated_architecture = "mistral"
-    # FIXME: Currnetly this implementation is only for flan-t5 architecture.
+    # FIXME: Currently this implementation is only for flan-t5 architecture.
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
@@ -437,7 +437,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
 
     # retrieve config vocab_size from tokenizer
-    # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
+    # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
         tokenizer_parameters = parsed_parameters["tokenizer"]
         if "tokens" in tokenizer_parameters:

@@ -118,7 +118,7 @@ class ConfigTester:
 
     def create_and_test_config_from_and_save_pretrained_composite(self):
         """
-        Tests that composite or nested cofigs can be loaded and saved correctly. In case the config
+        Tests that composite or nested configs can be loaded and saved correctly. In case the config
         has a sub-config, we should be able to call `sub_config.from_pretrained('general_config_file')`
         and get a result same as if we loaded the whole config and obtained `config.sub_config` from it.
         """

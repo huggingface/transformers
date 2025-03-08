@@ -88,7 +88,7 @@ class TrainerState:
             impact the way data will be logged in TensorBoard.
         stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
-            Relevent callbacks should implement a `state` and `from_state` function.
+            Relevant callbacks should implement a `state` and `from_state` function.
     """
 
     epoch: Optional[float] = None
