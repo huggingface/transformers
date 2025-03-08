@@ -250,9 +250,6 @@ class MiniMaxLightningAttention(nn.Module):
         self.out_proj = nn.Linear(self.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.output_gate = nn.Linear(config.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
 
-        self.slope_rate = self.get_slope_rate()
-        self.query_decay, self.key_decay, self.diagonal_decay = self.decay_factors(self.slope_rate)
-
         slope_rate = self.get_slope_rate()
         query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
 
