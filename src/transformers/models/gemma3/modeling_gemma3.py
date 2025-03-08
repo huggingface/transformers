@@ -447,7 +447,12 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Gemma3DecoderLayer"]
+    _no_split_modules = [
+        "Gemma3DecoderLayer",
+        "SiglipVisionEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipMultiheadAttentionPoolingHead",
+    ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -458,8 +463,15 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        # important: this ported version of Gemma2 isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1199,7 +1211,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             causal_mask[..., :shift] = 0
 
         # Apply bidirectional attention for regions starting with begin_of_image tokens
-        begin_of_image_token = self.config.boi_token_id
+        # TODO: enable unmasking with token type ids
+        begin_of_image_token = self.config.boi_token_index
         for batch_idx in range(batch_size):
             start_positions = (input_tensor[batch_idx] == begin_of_image_token).nonzero(as_tuple=True)[0]
             for start in start_positions:
@@ -1298,7 +1311,11 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # In case there is no embedding corresponding to the image token, we'll just replace it with PAD
+            # In cases when PAD id undefined (-1), we replace with `0`
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[input_ids == self.config.image_token_index] = max(self.pad_token_id, 0)
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

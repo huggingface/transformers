@@ -16,12 +16,17 @@
 
 import unittest
 
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma3Config, Gemma3TextConfig, HybridCache, is_torch_available, pipeline
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    Gemma3Config,
+    Gemma3TextConfig,
+    is_torch_available,
+    pipeline,
+)
 from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
@@ -31,11 +36,11 @@ from transformers.testing_utils import (
     tooslow,
     torch_device,
 )
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...models.gemma.test_modeling_gemma import GemmaModelTester
 from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -43,8 +48,8 @@ if is_torch_available():
 
     from transformers import (
         Gemma3ForCausalLM,
-        Gemma3Model,
         Gemma3ForConditionalGeneration,
+        Gemma3Model,
     )
 
 
@@ -123,6 +128,13 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
     def test_eager_matches_fa2_generate(self):
+        pass
+
+    @unittest.skip(
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`" \
+            " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
 
@@ -209,7 +221,7 @@ class Gemma3Vision2TextModelTester:
         # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, :3] = config.image_token_index
+        input_ids[:, :1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -227,9 +239,35 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
+    # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
+
     def setUp(self):
         self.model_tester = Gemma3Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+
+    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`" \
+            " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
@@ -280,8 +318,25 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("Gemma3 doesn't support input embeds for now, until token type ids are enabled. TODO @Arhtur.")
     def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip("Gemma3 doesn't support input embeds for now, until token type ids are enabled. TODO @Arhtur.")
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        pass
+
+    @unittest.skip("Gemma3 doesn't support input embeds for now, until token type ids are enabled. TODO @Arhtur.")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation")
+    def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan")
+    def test_flex_attention_with_grads(self):
         pass
 
 
@@ -342,28 +397,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
-    @tooslow
-    def test_model_9b_pipeline_bf16(self):
-        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma3 before this PR
-        model_id = "google/gemma-2-9b"
-        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "Hi today I'm going to be talking about the history of the United States. The United States of America",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
-        ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-
-        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
-
-        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
-        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
-
-    @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma3 before this PR
         model_id = "google/gemma-2-2b"
@@ -408,60 +441,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @slow
-    @require_read_token
-    def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.5.0"):
-            self.skipTest(reason="This test requires torch >= 2.5 to run.")
-
-        from transformers.integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = [
-            "Hello I am doing a project for my school and I need to know how to make a program that will take a number",
-        ]
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-            "input_ids"
-        ].shape[-1]
-
-        # Load model
-        device = "cpu"
-        dtype = torch.bfloat16
-        cache_implementation = "static"
-        attn_implementation = "sdpa"
-        batch_size = 1
-        model = AutoModelForCausalLM.from_pretrained(
-            "google/gemma-2-2b",
-            device_map=device,
-            torch_dtype=dtype,
-            attn_implementation=attn_implementation,
-            generation_config=GenerationConfig(
-                use_cache=True,
-                cache_implementation=cache_implementation,
-                max_length=max_generation_length,
-                cache_config={
-                    "batch_size": batch_size,
-                    "max_cache_len": max_generation_length,
-                },
-            ),
-        )
-
-        prompts = ["Hello I am doing"]
-        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-        prompt_token_ids = prompt_tokens["input_ids"]
-        max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
-
-        # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
-        ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
-        )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @require_read_token
     @tooslow

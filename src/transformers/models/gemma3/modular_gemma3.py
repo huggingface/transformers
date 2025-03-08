@@ -38,6 +38,7 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2ForCausalLM,
     Gemma2MLP,
     Gemma2Model,
+    Gemma2PreTrainedModel,
     Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
@@ -568,6 +569,35 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
+GEMMA3_START_DOCSTRING = None
+
+class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
+    _no_split_modules = [
+        "Gemma3DecoderLayer",
+        "SiglipVisionEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipMultiheadAttentionPoolingHead",
+    ]
+
+    def _init_weights(self, module):
+        # important: this ported version of Gemma2 isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 class Gemma3Model(Gemma2Model):
     config_class = Gemma3TextConfig
 
@@ -741,7 +771,7 @@ class Gemma3MultiModalProjector(nn.Module):
         )
 
         self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
-        self.tokens_per_side = int(config.text_config.mm_tokens_per_image**0.5)
+        self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
         self.kernel_size = self.patches_per_image // self.tokens_per_side
         self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
@@ -852,7 +882,11 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # In case there is no embedding corresponding to the image token, we'll just replace it with PAD
+            # In cases when PAD id undefined (-1), we replace with `0`
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[input_ids == self.config.image_token_index] = max(self.pad_token_id, 0)
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

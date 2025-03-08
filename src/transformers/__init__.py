@@ -7472,7 +7472,7 @@ if TYPE_CHECKING:
             Gemma2Model,
             Gemma2PreTrainedModel,
         )
-        from .models.gemmma3 import (
+        from .models.gemma3 import (
             Gemma3ForCausalLM,
             Gemma3ForConditionalGeneration,
             Gemma3Model,
