@@ -310,7 +310,10 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tiktoken_fast_tokenizer = GPT2TokenizerFast.from_pretrained(self.tmpdirname)
         rust_tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
         sequence = "lower newer"
-        self.assertEqual(rust_tokenizer.decode(rust_tokenizer.encode(sequence)), tiktoken_fast_tokenizer.decode(rust_tokenizer.encode(sequence)))
+        self.assertEqual(
+            rust_tokenizer.decode(rust_tokenizer.encode(sequence)),
+            tiktoken_fast_tokenizer.decode(rust_tokenizer.encode(sequence)),
+        )
 
 
 @require_tokenizers
