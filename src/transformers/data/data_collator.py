@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import inspect
 import random
 import warnings
 from collections.abc import Mapping
@@ -271,15 +271,19 @@ class DataCollatorWithPadding:
     return_tensors: str = "pt"
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
-        batch = pad_without_fast_tokenizer_warning(
-            self.tokenizer,
-            features,
-            padding=self.padding,
-            padding_side=self.padding_side,
-            max_length=self.max_length,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors=self.return_tensors,
-        )
+        pad_kwargs = {
+            "padding": self.padding,
+            "max_length": self.max_length,
+            "pad_to_multiple_of": self.pad_to_multiple_of,
+            "return_tensors": self.return_tensors,
+        }
+
+        # Only add padding_side if tokenizer supports it
+        if "padding_side" in inspect.signature(self.tokenizer.pad).parameters:
+            pad_kwargs["padding_side"] = self.padding_side
+
+        batch = pad_without_fast_tokenizer_warning(self.tokenizer, features, **pad_kwargs)
+
         if "label" in batch:
             batch["labels"] = batch["label"]
             del batch["label"]
