@@ -14,20 +14,15 @@
 # limitations under the License.
 """AIMv2 model configuration"""
 
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import Any
 
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
 
 class AIMv2Config(PretrainedConfig):
     """This is the configuration class to store the configuration of an [`AIMv2Model`].
@@ -64,8 +59,10 @@ class AIMv2Config(PretrainedConfig):
         rms_norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
         projection_dropout: float = 0.0,
-        qkv_bias: bool = False,
+        attention_bias: bool = False,
         use_bias: bool = False,
+        hidden_act = 'silu',
+        initializer_range=0.02,
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
@@ -80,7 +77,10 @@ class AIMv2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
         self.projection_dropout = projection_dropout
-        self.qkv_bias = qkv_bias
+        self.attention_bias = attention_bias
         self.use_bias = use_bias
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+
 
 __all__ = ["AIMv2Config"]
