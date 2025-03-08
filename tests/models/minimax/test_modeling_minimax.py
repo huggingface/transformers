@@ -523,13 +523,38 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
 
     # Ignore copy
-    @unittest.skip(reason="MiniMaxCache doesnot support cropping, needed for low memory sequential generation")
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_contrastive_generate_low_memory(self):
         pass
 
     # Ignore copy
-    @unittest.skip(reason="MiniMaxCache doesnot support cropping, needed for low memory sequential generation")
-    def test_beam_search_low_memory(self):
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    def test_assisted_decoding_with_logits_to_keep(self):
+        pass
+
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
 

@@ -126,6 +126,9 @@ class MiniMaxCache(DynamicCache):
                 self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
                 self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
+    def crop(self, max_length: int):
+        raise RuntimeError("MiniMaxCache doesnot support `crop` method")
+
 
 class MiniMaxLightningAttention(nn.Module):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):

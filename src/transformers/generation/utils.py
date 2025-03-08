@@ -3468,6 +3468,7 @@ class GenerationMixin:
                         "xlnet",
                         "cpm",
                         "jamba",
+                        "minimax",
                     ]
                 ):
                     raise RuntimeError(
