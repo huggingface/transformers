@@ -390,22 +390,18 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
 
         self.layer_idx = layer_idx
         self.postnorm = config.postnorm
-        self.layernorm_full_attention_alpha = config.layernorm_full_attention_alpha
-        self.layernorm_full_attention_beta = config.layernorm_full_attention_beta
-        self.layernorm_linear_attention_alpha = config.layernorm_linear_attention_alpha
-        self.layernorm_linear_attention_beta = config.layernorm_linear_attention_beta
+        self.attn_type = config.attn_type_list[layer_idx]
         self.layernorm_mlp_alpha = config.layernorm_mlp_alpha
         self.layernorm_mlp_beta = config.layernorm_mlp_beta
-        self.attn_type = config.attn_type_list[layer_idx]
 
         if self.attn_type == 0:
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
-            self.layernorm_alpha = self.layernorm_linear_attention_alpha
-            self.layernorm_beta = self.layernorm_linear_attention_beta
+            self.layernorm_alpha = config.layernorm_linear_attention_alpha
+            self.layernorm_beta = config.layernorm_linear_attention_beta
         else:
             self.self_attn = MiniMaxAttention(config, layer_idx)
-            self.layernorm_alpha = self.layernorm_full_attention_alpha
-            self.layernorm_beta = self.layernorm_full_attention_beta
+            self.layernorm_alpha = config.layernorm_full_attention_alpha
+            self.layernorm_beta = config.layernorm_full_attention_beta
 
     def forward(
         self,
