@@ -45,11 +45,11 @@ from transformers.models.janus.processing_janus import JanusProcessor
 # Mappings
 MAPPINGS = {
     # Vision model
-    r"(?<!gen_)vision_model.vision_tower.blocks": "model.vision_model.encoder.layers",
-    r"(?<!gen_)vision_model.vision_tower.pos_embed": "model.vision_model.embeddings.position_embeddings.weight",
-    r"(?<!gen_)vision_model.vision_tower.patch_embed.proj": "model.vision_model.embeddings.patch_embeddings.projection",
-    r"(?<!gen_)vision_model.vision_tower.norm": "model.vision_model.post_layernorm",
-    r"(?<!gen_)vision_model.vision_tower.attn_pool": "model.vision_model.head",
+    r"(?<!gen_)vision_model.vision_tower.blocks": "model.vision_model.vision_model.encoder.layers",
+    r"(?<!gen_)vision_model.vision_tower.pos_embed": "model.vision_model.vision_model.embeddings.position_embeddings.weight",
+    r"(?<!gen_)vision_model.vision_tower.patch_embed.proj": "model.vision_model.vision_model.embeddings.patch_embeddings.projection",
+    r"(?<!gen_)vision_model.vision_tower.norm": "model.vision_model.vision_model.post_layernorm",
+    r"(?<!gen_)vision_model.vision_tower.attn_pool": "model.vision_model.vision_model.head",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)proj(?=\.|\s|$)": r"\g<pre>projection_layer",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm(?=\.|\s|$)": r"\g<pre>layer_norm",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm1(?=\.|\s|$)": r"\g<pre>layer_norm1",
@@ -157,9 +157,10 @@ def convert_state_dict_to_hf(state_dict):
                 converted_state_dict[new_key] = state_dict[old_key]
 
     # Embeddings will not have initial dimension
-    converted_state_dict["model.vision_model.embeddings.position_embeddings.weight"] = converted_state_dict[
-        "model.vision_model.embeddings.position_embeddings.weight"
-    ].squeeze(0)
+    converted_state_dict["model.vision_model.vision_model.embeddings.position_embeddings.weight"] = (
+        converted_state_dict[
+            "model.vision_model.vision_model.embeddings.position_embeddings.weight"
+        ].squeeze(0))
 
     return converted_state_dict
 
@@ -404,7 +405,8 @@ def convert_model(
     model.generation_config.guidance_scale = 5
     model.generation_config.pad_token_id = tokenizer.vocab.get(
         "<\uff5c\u2581pad\u2581\uff5c>"
-    )  # If fixed for all janus variants then hardcode it.
+    )
+    model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict
     print("Loading state dict...")

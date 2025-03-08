@@ -148,6 +148,7 @@ class JanusPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+
 @dataclass
 class JanusVQVAEOutput(ModelOutput):
     """
@@ -881,8 +882,7 @@ class JanusModel(JanusPreTrainedModel):
         super().__init__(config)
         self.config = config
         # This is necessary for backward compatibility, see SiglipModel initialization
-        tmp_vision_model = JanusVisionModel._from_config(config.vision_config)
-        self.vision_model = tmp_vision_model.vision_model
+        self.vision_model = JanusVisionModel._from_config(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
 
         self.vqmodel = JanusVQVAE._from_config(config.vq_config)
@@ -909,6 +909,10 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.vision_model(pixel_values)
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
+
+    def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
+        return self.language_model._prepare_4d_causal_attention_mask_with_cache_position(*args, **kwargs)
+
 
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
@@ -1217,6 +1221,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # 6. Expand inputs for multiple image generations per prompt.
         input_ids, model_kwargs = self._expand_inputs_for_generation(
             input_ids=input_ids,
+            attention_mask=attention_mask,
             expand_size=generation_config.num_return_sequences,
             **model_kwargs,
         )
@@ -1226,9 +1231,17 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
-        # Should we double nly when guidance scale is not None.
+        # Should we double only when guidance scale is not None.
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
-        input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id  # Set Unconditional logits
+        attention_mask = model_kwargs.pop("attention_mask", None)
+        attention_mask = attention_mask.repeat(2, 1)
+
+        input_tokens[batch_size:, :].masked_fill_(
+            (input_tokens[batch_size:, :] != generation_config.bos_token_id) &
+            (input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]),
+            generation_config.pad_token_id
+        )
+
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
@@ -1237,7 +1250,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             # Prepare cache if not provided
             model_kwargs["past_key_values"] = self._get_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
-                # batch_size should account for both conditional/unconditional input; hence mulitplied by 2.
+                # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
@@ -1261,18 +1274,29 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
+
         for i in range(num_image_tokens):
-            # Fix me: What to do with attention mask when expanding and repeating input ids.
-            # Should we also modify the attention mask if passed?
-            outputs = self.model.language_model(
+            model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds,
+                input_ids=input_tokens,
+                attention_mask=attention_mask,
+                **model_kwargs
+            )
+
+            # inputs_embeds.device can change on multi-gpu
+            model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
+            model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
+
+            outputs = self.model.language_model(
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                **model_kwargs,
+                **model_inputs,
             )
 
             # Update model_kwargs like cache_position for next generation.
+            model_kwargs["attention_mask"] = attention_mask  # needed for the following update
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
+            attention_mask = model_kwargs.pop("attention_mask", None) # to avoid future in-place modification
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
@@ -1293,6 +1317,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             next_token = torch.cat([next_token, next_token])
             img_embeds = self.prepare_embeddings_for_image_generation(next_token)
             inputs_embeds = img_embeds.unsqueeze(dim=1)
+
+            # similar to GenerationMixin._sample, this is needed in prepare_inputs_for_generation
+            input_tokens = next_token[:, None]
 
         if return_dict_in_generate:
             if output_scores:
