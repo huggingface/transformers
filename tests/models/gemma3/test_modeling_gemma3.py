@@ -131,8 +131,8 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         pass
 
     @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`" \
-            " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
+        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -263,8 +263,8 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
     @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`" \
-            " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
+        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -331,11 +331,15 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan")
+    @unittest.skip(
+        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
+    )
     def test_flex_attention_with_grads(self):
         pass
 

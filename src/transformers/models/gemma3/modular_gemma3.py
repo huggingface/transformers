@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable, Sequence
-from typing import List, Literal, Optional, Tuple, Union, cast
+from typing import List, Literal, Optional, Tuple, Union, Unpack, cast
 
 import torch
 import torch.nn as nn
@@ -205,7 +205,7 @@ class Gemma3TextConfig(PretrainedConfig):
         query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
         rope_theta: float = 1_000_000.0,
-        rope_scaling = None,
+        rope_scaling=None,
         rope_local_base_freq: float = 10_000.0,
         rms_norm_eps: float = 1e-6,
         hidden_activation: str = "gelu_pytorch_tanh",
@@ -571,6 +571,7 @@ class Gemma3DecoderLayer(nn.Module):
 
 GEMMA3_START_DOCSTRING = None
 
+
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -790,6 +791,7 @@ class Gemma3MultiModalProjector(nn.Module):
 
         projected_vision_outputs = torch.einsum("btm,md->btd", normed_vision_outputs, self.mm_input_projection_weight)
         return projected_vision_outputs.type_as(vision_outputs)
+
 
 # The only diff on forward is that Gemma3 relies on `input_ids` when creating causal mask, while Paligemma
 # passes input embeds. Can be removed when we enable good token type ids

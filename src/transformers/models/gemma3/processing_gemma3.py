@@ -56,13 +56,14 @@ class Gemma3Processor(ProcessorMixin):
         image_processor,
         tokenizer,
         chat_template=None,
-        num_mm_soft_tokens_per_image: int = 256,
+        image_seq_length: int = 256,
         **kwargs,
     ):
-        self.image_seq_length = getattr(image_processor, "image_seq_length")
+        self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
-        image_tokens_expanded = "".join([tokenizer.image_token] * num_mm_soft_tokens_per_image)
-        self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded }{tokenizer.eoi_token}\n\n"
+        self.image_token = tokenizer.image_token
+        image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
+        self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
         super().__init__(
             image_processor=image_processor,
@@ -100,7 +101,7 @@ class Gemma3Processor(ProcessorMixin):
 
             # Create empty text to be replaced with placeholders
             if not text:
-                text = [" ".join(["<image>"] * len(images)) for images in batched_images]
+                text = [" ".join([self.image_token] * len(images)) for images in batched_images]
 
             if len(batched_images) != len(text):
                 raise ValueError(
@@ -110,7 +111,7 @@ class Gemma3Processor(ProcessorMixin):
             # Replace image tokens by the full expanded sequence
             batch_num_crops = to_py_obj(image_inputs.pop("num_crops"))
             for prompt, images, num_crops in zip(text, batched_images, batch_num_crops):
-                image_indexes = [m.start() for m in re.finditer("<image>", prompt)]
+                image_indexes = [m.start() for m in re.finditer(self.image_token, prompt)]
 
                 if len(images) != len(image_indexes):
                     raise ValueError(
@@ -121,13 +122,13 @@ class Gemma3Processor(ProcessorMixin):
                 for num, idx in reversed(list(zip(num_crops, image_indexes))):
                     if num:
                         formatted_image_text = (
-                            "Here is the original image <image> and here are some crops to help you see better "
-                            + " ".join(["<image>"] * num)
+                            f"Here is the original image {self.image_token} and here are some crops to help you see better "
+                            + " ".join([self.image_token] * num)
                         )
-                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + len("<image>") :]
+                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.image_token) :]
 
             # Expand placeholder image tokens to the full image token sequence
-            text = [prompt.replace("<image>", self.full_image_sequence) for prompt in text]
+            text = [prompt.replace(self.image_token, self.full_image_sequence) for prompt in text]
 
         text_input = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_input, **image_inputs})
