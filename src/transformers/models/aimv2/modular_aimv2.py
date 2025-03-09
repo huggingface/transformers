@@ -13,22 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union, List
+"""Pytorch implementation of AIMv2 Model"""
+
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from transformers.modeling_outputs import BaseModelOutput
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
+from ...utils import (
+    logging,
+)
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder
+from ..siglip.modeling_siglip import SiglipEncoder
 from .configuration_aimv2 import AIMv2Config
 
 
-class AIMv2PreTrainedModel(PreTrainedModel):
-    pass
+logger = logging.get_logger(__name__)
 
 
 class AIMv2RMSNorm(LlamaRMSNorm):
@@ -56,6 +60,7 @@ class AIMv2SwiGLUFFN(nn.Module):
 
 class AIMv2Embeddings(nn.Module):
     def __init__(self, config: AIMv2Config):
+        super().__init__()
         self.patch_embed = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
@@ -63,6 +68,7 @@ class AIMv2Embeddings(nn.Module):
 
         num_patches = (config.image_size // config.patch_size) ** 2
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
+        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     @staticmethod
     def build_2d_sincos_position_embedding(height, width, embed_dim):
@@ -70,20 +76,45 @@ class AIMv2Embeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         hidden_states = self.patch_embed(pixel_values).flatten(2).transpose(1, 2)
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.rms_norm(hidden_states)
 
         _, num_patches, _ = hidden_states.size()
 
         # added logic for native in build s2d sincos pos embed
-        hidden_states = hidden_states + self.position_embeddings
+        hidden_states = hidden_states + self.position_embeddings(self.position_ids)
 
         return hidden_states
+
+# Replace atttn_mask with head mask
+def eager_attention_forward(
+    module: nn.Module,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+    # Only apply attention dropout during training.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class AIMv2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config:AIMv2Config):
+    def __init__(self, config: AIMv2Config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -107,6 +138,7 @@ class AIMv2Attention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -120,40 +152,34 @@ class AIMv2Attention(nn.Module):
         key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        k_v_seq_len = key_states.shape[-2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
-
-        if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, k_v_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, q_len, k_v_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, q_len, k_v_seq_len)}, but is {attention_mask.size()}"
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
+            **kwargs,
+        )
 
-        if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
 
         attn_output = self.proj_out(attn_output)
         attn_output = self.proj_drop(attn_output)
 
-        output = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
 
         return output
 
@@ -167,11 +193,11 @@ class AIMv2EncoderLayer(nn.Module):
         self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
-        self, hidden_states: torch.Tensor, attention_mask, output_attention: Optional[bool] = False
+        self, hidden_states: torch.Tensor, attention_mask, output_attentions: Optional[bool] = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states = self.rms_norm1(hidden_states)
         attn_output, attn_wights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attention=output_attention
+            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
 
         hidden_states = hidden_states + attn_output
@@ -179,7 +205,7 @@ class AIMv2EncoderLayer(nn.Module):
         mlp_output = self.ffn(norm_hidden_states)
 
         hidden_states = hidden_states + mlp_output
-        return (hidden_states, attn_wights) if output_attention else (hidden_states,)
+        return (hidden_states, attn_wights) if output_attentions else (hidden_states, None)
 
 
 class AIMv2Encoder(SiglipEncoder):
@@ -215,9 +241,10 @@ class AIMv2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
 
-class AIMv2Model(nn.Module):
+
+class AIMv2Model(AIMv2PreTrainedModel):
     def __init__(self, config: AIMv2Config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.embeddings = AIMv2Embeddings(config)
         self.encoder = AIMv2Encoder(config)
