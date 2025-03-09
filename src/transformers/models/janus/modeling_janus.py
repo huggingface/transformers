@@ -26,7 +26,6 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -1695,7 +1694,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
-        # Should we double only when guidance scale is not None.
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
         attention_mask = model_kwargs.pop("attention_mask", None)
         attention_mask = attention_mask.repeat(2, 1)
@@ -1711,7 +1709,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if model_kwargs.get("past_key_values", None) is None:
-            # Prepare cache if not provided
+            # Prepare cache if not provided.
             model_kwargs["past_key_values"] = self._get_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
@@ -1732,12 +1730,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
 
-        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        for i in tqdm(range(num_image_tokens)):
+        for i in range(num_image_tokens):
             model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
             )
@@ -1758,8 +1756,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
-            logits = self.model.gen_head(hidden_state)
-            logits = logits_processor(input_ids, logits)
+            scores = self.model.gen_head(hidden_state)
+            logits = logits_processor(input_ids, scores)
             next_token_scores = logits / generation_config.temperature
 
             # Sample next token.
@@ -1779,7 +1777,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         if return_dict_in_generate:
             if output_scores:
-                scores += (scores,)
+                raw_scores += (scores,)
             if output_logits:
                 raw_logits += (hidden_state.float(),)
             if output_attentions:
