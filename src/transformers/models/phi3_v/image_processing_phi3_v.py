@@ -101,11 +101,6 @@ def HD_transform(img, hd_num=16):
     if trans:
         img = img.transpose(Image.TRANSPOSE)
 
-    if is_tensor:
-        img = torchvision.transforms.functional.to_tensor(img)
-    elif is_numpy:
-        img = np.asarray(img)
-
     return img
 
 
