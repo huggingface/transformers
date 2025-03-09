@@ -1645,7 +1645,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # 2. Initialize logit processors
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
-        # Don't require stopping criteria for image generation.
 
         # Set `use_cache=True` as we will be using input embeds for generation.
         model_kwargs["use_cache"] = True
@@ -1691,6 +1690,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # 7. Prepare input and model caches
         batch_size, seq_len = input_ids.shape
+        dtype, device = input_ids.dtype, input_ids.device
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
@@ -1721,8 +1721,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 model_kwargs=model_kwargs,
             )
 
-        # Placeholder for generated tokens
-        dtype, device = input_ids.dtype, input_ids.device
+        # Placeholder for generated tokens.
         generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=dtype, device=device)
 
         # 8. init attention / hidden states / scores tuples
@@ -1742,20 +1741,19 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
             )
 
-            # inputs_embeds.device can change on multi-gpu
             model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
             model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
+                **model_inputs,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                **model_inputs,
             )
 
             # Update model_kwargs like cache_position for next generation.
-            model_kwargs["attention_mask"] = attention_mask  # needed for the following update
+            model_kwargs["attention_mask"] = attention_mask
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
-            attention_mask = model_kwargs.pop("attention_mask", None)  # to avoid future in-place modification
+            attention_mask = model_kwargs.pop("attention_mask", None)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
@@ -1774,11 +1772,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Prepare embeddings for the next step.
             next_token = torch.cat([next_token, next_token])
-            img_embeds = self.prepare_embeddings_for_image_generation(next_token)
-            inputs_embeds = img_embeds.unsqueeze(dim=1)
+            next_token = next_token.unsqueeze(-1)
 
-            # similar to GenerationMixin._sample, this is needed in prepare_inputs_for_generation
-            input_tokens = next_token[:, None]
+            inputs_embeds = self.prepare_embeddings_for_image_generation(next_token)
 
         if return_dict_in_generate:
             if output_scores:

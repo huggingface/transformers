@@ -158,9 +158,8 @@ def convert_state_dict_to_hf(state_dict):
 
     # Embeddings will not have initial dimension
     converted_state_dict["model.vision_model.vision_model.embeddings.position_embeddings.weight"] = (
-        converted_state_dict[
-            "model.vision_model.vision_model.embeddings.position_embeddings.weight"
-        ].squeeze(0))
+        converted_state_dict["model.vision_model.vision_model.embeddings.position_embeddings.weight"].squeeze(0)
+    )
 
     return converted_state_dict
 
@@ -403,9 +402,7 @@ def convert_model(
 
     model.generation_config.temperature = 1
     model.generation_config.guidance_scale = 5
-    model.generation_config.pad_token_id = tokenizer.vocab.get(
-        "<\uff5c\u2581pad\u2581\uff5c>"
-    )
+    model.generation_config.pad_token_id = tokenizer.vocab.get("<\uff5c\u2581pad\u2581\uff5c>")
     model.generation_config.generation_kwargs["boi_token_id"] = tokenizer.vocab.get("<begin_of_image>")
 
     # Load and convert state dict

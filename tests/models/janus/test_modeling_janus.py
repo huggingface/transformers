@@ -14,10 +14,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Janus model."""
 
+import re
 import tempfile
 import unittest
 from functools import reduce
-import re
+
 import numpy as np
 import requests
 
@@ -224,7 +225,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
             with torch.no_grad():
                 model(**inputs)
 
-    # Overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs.
+    # Overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -521,7 +522,7 @@ class JanusIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         inputs = processor(
-            text=["a portrait of young girl. masterpiece, film grained, best quality."],
+            text=["A portrait of young girl. masterpiece, film grained, best quality."],
             padding=True,
             generation_mode="image",
             return_tensors="pt",
@@ -532,10 +533,10 @@ class JanusIntegrationTest(unittest.TestCase):
         out = model.generate(
             **inputs,
             generation_mode="image",
-            do_sample=False,
+            do_sample=True,
         )
 
-        # It should run for num_image_tokens in this case 576
+        # It should run for num_image_tokens in this case 576.
         self.assertTrue(out.shape[1] == 576)
 
         decoded_pixel_values = model.decode_image_tokens(out)

@@ -148,7 +148,6 @@ class JanusPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-
 @dataclass
 class JanusVQVAEOutput(ModelOutput):
     """
@@ -913,7 +912,6 @@ class JanusModel(JanusPreTrainedModel):
     def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
         return self.language_model._prepare_4d_causal_attention_mask_with_cache_position(*args, **kwargs)
 
-
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1182,7 +1180,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # 2. Initialize logit processors
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
-        # Don't require stopping criteria for image generation.
 
         # Set `use_cache=True` as we will be using input embeds for generation.
         model_kwargs["use_cache"] = True
@@ -1228,6 +1225,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # 7. Prepare input and model caches
         batch_size, seq_len = input_ids.shape
+        dtype, device = input_ids.dtype, input_ids.device
 
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
@@ -1237,9 +1235,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask = attention_mask.repeat(2, 1)
 
         input_tokens[batch_size:, :].masked_fill_(
-            (input_tokens[batch_size:, :] != generation_config.bos_token_id) &
-            (input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]),
-            generation_config.pad_token_id
+            (input_tokens[batch_size:, :] != generation_config.bos_token_id)
+            & (input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]),
+            generation_config.pad_token_id,
         )
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
@@ -1258,8 +1256,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 model_kwargs=model_kwargs,
             )
 
-        # Placeholder for generated tokens
-        dtype, device = input_ids.dtype, input_ids.device
+        # Placeholder for generated tokens.
         generated_tokens = torch.zeros((batch_size, num_image_tokens), dtype=dtype, device=device)
 
         # 8. init attention / hidden states / scores tuples
@@ -1274,29 +1271,24 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-
         for i in range(num_image_tokens):
             model_inputs = self.prepare_inputs_for_generation(
-                inputs_embeds=inputs_embeds,
-                input_ids=input_tokens,
-                attention_mask=attention_mask,
-                **model_kwargs
+                inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
             )
 
-            # inputs_embeds.device can change on multi-gpu
             model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
             model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
+                **model_inputs,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                **model_inputs,
             )
 
             # Update model_kwargs like cache_position for next generation.
-            model_kwargs["attention_mask"] = attention_mask  # needed for the following update
+            model_kwargs["attention_mask"] = attention_mask
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
-            attention_mask = model_kwargs.pop("attention_mask", None) # to avoid future in-place modification
+            attention_mask = model_kwargs.pop("attention_mask", None)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
@@ -1315,11 +1307,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Prepare embeddings for the next step.
             next_token = torch.cat([next_token, next_token])
-            img_embeds = self.prepare_embeddings_for_image_generation(next_token)
-            inputs_embeds = img_embeds.unsqueeze(dim=1)
+            next_token = next_token.unsqueeze(-1)
 
-            # similar to GenerationMixin._sample, this is needed in prepare_inputs_for_generation
-            input_tokens = next_token[:, None]
+            inputs_embeds = self.prepare_embeddings_for_image_generation(next_token)
 
         if return_dict_in_generate:
             if output_scores:
@@ -1342,20 +1332,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
         else:
             return generated_tokens
-
-
-def expand2square(pil_img, background_color):
-    width, height = pil_img.size
-    if width == height:
-        return pil_img
-    elif width > height:
-        result = PIL.Image.new(pil_img.mode, (width, width), background_color)
-        result.paste(pil_img, (0, (width - height) // 2))
-        return result
-    else:
-        result = PIL.Image.new(pil_img.mode, (height, height), background_color)
-        result.paste(pil_img, ((height - width) // 2, 0))
-        return result
 
 
 class JanusImageProcessor(BlipImageProcessor):
@@ -1668,8 +1644,6 @@ class JanusVisionConfig(SiglipVisionConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to `hidden_size * mlp_ratio`):
-            Dimensionality of the intermediate layer in the MLP block.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):

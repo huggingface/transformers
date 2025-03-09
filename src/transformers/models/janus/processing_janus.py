@@ -94,7 +94,7 @@ class JanusProcessor(ProcessorMixin):
             raise ValueError("You must specify either text or images.")
 
         if not generation_mode:
-            logger.info("Generation mode argument not provided. Setting default to `text generation` mode.")
+            logger.warning("Generation mode argument not provided. Setting default to `text generation` mode.")
             generation_mode = "text"
 
         if text is not None:

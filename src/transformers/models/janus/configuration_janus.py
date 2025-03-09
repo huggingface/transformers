@@ -43,8 +43,6 @@ class JanusVisionConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to `hidden_size * mlp_ratio`):
-            Dimensionality of the intermediate layer in the MLP block.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
