@@ -51,11 +51,12 @@ class Phi3VImageProcessingTester:
         do_rescale=True,
         rescale_factor=1 / 255,
         do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
+        image_mean=[0.48145466, 0.4578275, 0.40821073],
+        image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
         do_pad=True,
-        do_image_splitting=True,
+        #do_image_splitting=True,
+        num_crops=1
     ):
         self.size = size if size is not None else {"longest_edge": max_resolution}
         self.parent = parent
@@ -66,8 +67,8 @@ class Phi3VImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.do_image_splitting = do_image_splitting
-        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 20}
+        #self.do_image_splitting = do_image_splitting
+        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 336}
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
@@ -75,6 +76,7 @@ class Phi3VImageProcessingTester:
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
         self.do_pad = do_pad
+        self.num_crops = num_crops
 
     def prepare_image_processor_dict(self):
         return {
@@ -88,7 +90,8 @@ class Phi3VImageProcessingTester:
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_pad": self.do_pad,
-            "do_image_splitting": self.do_image_splitting,
+            #"do_image_splitting": self.do_image_splitting,
+            "num_crops": self.num_crops
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -101,7 +104,8 @@ class Phi3VImageProcessingTester:
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         effective_nb_images = (
-            self.num_images * 5 if self.do_image_splitting else 1
+            #self.num_images * 5 if self.do_image_splitting else 1
+            (self.num_crops + 1) * self.num_images
         )  # 5 is a squared image divided into 4 + global image resized
         return effective_nb_images, self.num_channels, height, width
 
@@ -131,8 +135,8 @@ class Phi3VImageProcessingTester:
         num_images = num_images if num_images is not None else self.num_images
 
         images_list = []
+        images = []
         for i in range(batch_size):
-            images = []
             for j in range(num_images):
                 if equal_resolution:
                     width = height = max_resolution
@@ -143,7 +147,6 @@ class Phi3VImageProcessingTester:
                         min_resolution = max(size_divisor, min_resolution)
                     width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
                 images.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
-            images_list.append(images)
 
         if not numpify and not torchify:
             # PIL expects the channel dimension as last dimension
@@ -177,7 +180,6 @@ class Phi3VImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_image_splitting"))
         self.assertTrue(hasattr(image_processing, "max_image_size"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
@@ -185,4 +187,28 @@ class Phi3VImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_pad"))
-        self.assertTrue(hasattr(image_processing, "do_image_splitting"))
+        self.assertTrue(hasattr(image_processing, "num_crops"))
+
+    def test_call_numpy_4_channels(self):
+        # Phi3V always processes images as RGB, so it always returns images with 3 channels
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processor_dict = self.image_processor_dict
+            image_processing = self.image_processing_class(**image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertEqual(
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            )

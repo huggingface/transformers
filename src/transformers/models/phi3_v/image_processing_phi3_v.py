@@ -72,7 +72,6 @@ def calc_padded_size(width, height, padding_unit=336):
 
 
 def HD_transform(img, hd_num=16):
-    #breakpoint()
     is_tensor = isinstance(img, torch.Tensor)
     is_numpy = isinstance(img, np.ndarray)
 
