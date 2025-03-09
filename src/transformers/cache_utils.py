@@ -1602,7 +1602,8 @@ class HybridCache(Cache):
         ```
     """
 
-    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation
+    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
+    # ALL changes from the PR that commented the line below when reactivating it.
     # is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
