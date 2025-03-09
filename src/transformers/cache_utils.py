@@ -1602,7 +1602,8 @@ class HybridCache(Cache):
         ```
     """
 
-    is_compileable = True
+    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation
+    # is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
