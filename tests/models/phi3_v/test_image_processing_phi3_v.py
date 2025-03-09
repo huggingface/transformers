@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -55,7 +54,6 @@ class Phi3VImageProcessingTester:
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
         do_pad=True,
-        #do_image_splitting=True,
         num_crops=1
     ):
         self.size = size if size is not None else {"longest_edge": max_resolution}
@@ -67,7 +65,6 @@ class Phi3VImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        #self.do_image_splitting = do_image_splitting
         self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 336}
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -90,7 +87,6 @@ class Phi3VImageProcessingTester:
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_pad": self.do_pad,
-            #"do_image_splitting": self.do_image_splitting,
             "num_crops": self.num_crops
         }
 
@@ -104,9 +100,8 @@ class Phi3VImageProcessingTester:
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         effective_nb_images = (
-            #self.num_images * 5 if self.do_image_splitting else 1
             (self.num_crops + 1) * self.num_images
-        )  # 5 is a squared image divided into 4 + global image resized
+        )
         return effective_nb_images, self.num_channels, height, width
 
     def prepare_image_inputs(

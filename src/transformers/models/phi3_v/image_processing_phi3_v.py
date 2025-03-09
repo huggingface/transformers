@@ -145,6 +145,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
 
     Args:
         num_crops (`int`, *optional*, defaults to 1): Number of different image crops to use.
+        num_img_tokens (`int`, *optional*, defaults to 144): <fill_docstring>
         image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
@@ -249,13 +250,12 @@ class Phi3VImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        image_sizes = []
         img_processor = torchvision.transforms.Compose(
             [torchvision.transforms.ToTensor(), torchvision.transforms.Normalize(image_mean, image_std)]
         )
 
         # PIL images
-        # HD_transform pad images to size of multiiply of 336, 336
+        # HD_transform pad images to size of multiply of 336, 336
         # convert to RGB first
         images = [convert_to_rgb(image) for image in images]
         elems = [HD_transform(im, hd_num=self.num_crops) for im in images]
@@ -291,7 +291,6 @@ class Phi3VImageProcessor(BaseImageProcessor):
         # pad to max_num_crops
         image_transformed = [pad_to_max_num_crops_tensor(im, self.num_crops + 1) for im in hd_images_reshape]
         image_transformed = torch.stack(image_transformed, dim=0)
-        image_sizes = [torch.LongTensor(_shapes) for _shapes in shapes]
         padded_images = image_transformed
         image_sizes = shapes
 
