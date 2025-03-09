@@ -14,9 +14,6 @@
 # limitations under the License.
 """AIMv2 model configuration"""
 
-from typing import Any
-
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,26 +22,6 @@ logger = logging.get_logger(__name__)
 
 
 class AIMv2Config(PretrainedConfig):
-    """This is the configuration class to store the configuration of an [`AIMv2Model`].
-    Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224).
-    Args:
-        hidden_size: Dimension of the hidden representations.
-        intermediate_size: Dimension of the SwiGLU representations.
-        num_hidden_layers: Number of hidden layers in the Transformer.
-        num_attention_heads: Number of attention heads for each attention layer
-            in the Transformer.
-        num_channels: Number of input channels.
-        image_size: Image size.
-        patch_size: Patch size.
-        rms_norm_eps: Epsilon value used for the RMS normalization layer.
-        attention_dropout: Dropout ratio for attention probabilities.
-        projection_dropout: Dropout ratio for the projection layer after the attention.
-        qkv_bias: Whether to add a bias to the queries, keys and values.
-        use_bias: Whether to add a bias in the feed-forward and projection layers.
-        kwargs: Keyword arguments for the [`PretrainedConfig`].
-    """
-
     model_type: str = "aimv2"
 
     def __init__(
@@ -61,9 +38,9 @@ class AIMv2Config(PretrainedConfig):
         projection_dropout: float = 0.0,
         attention_bias: bool = False,
         use_bias: bool = False,
-        hidden_act = 'silu',
+        hidden_act="silu",
         initializer_range=0.02,
-        **kwargs: Any,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
