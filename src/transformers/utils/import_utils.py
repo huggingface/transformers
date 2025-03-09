@@ -951,6 +951,11 @@ def is_flash_attn_2_available():
     if not is_torch_available():
         return False
 
+    if is_torch_npu_available():
+        warnings.warn("FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask. Manually update "
+                      "`sparse_mode` to 2 in `npu_flash_attention_utils.py` when using top-left aligned causal mask.")
+        return True
+
     if not _is_package_available("flash_attn"):
         return False
 
@@ -958,11 +963,6 @@ def is_flash_attn_2_available():
     import torch
 
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
-        return False
-
-    # Ascend does not support "flash_attn".
-    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
-    if is_torch_npu_available():
         return False
 
     if torch.version.cuda:
@@ -978,6 +978,11 @@ def is_flash_attn_2_available():
 
 @lru_cache()
 def is_flash_attn_greater_or_equal_2_10():
+    if is_torch_npu_available():
+        warnings.warn("FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask. Manually update "
+                      "`sparse_mode` to 2 in `npu_flash_attention_utils.py` when using top-left aligned causal mask.")
+        return True
+
     if not _is_package_available("flash_attn"):
         return False
 
@@ -986,6 +991,11 @@ def is_flash_attn_greater_or_equal_2_10():
 
 @lru_cache()
 def is_flash_attn_greater_or_equal(library_version: str):
+    if is_torch_npu_available():
+        warnings.warn("FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask. Manually update "
+                      "`sparse_mode` to 2 in `npu_flash_attention_utils.py` when using top-left aligned causal mask.")
+        return True
+
     if not _is_package_available("flash_attn"):
         return False
 
