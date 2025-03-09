@@ -17,39 +17,36 @@ Validators to be used with `huggingface_hub.utils.strict_dataclass`. We recommen
 describe the constraints of your dataclass fields, for a best user experience (e.g. better error messages).
 """
 
-from typing import Iterable
+from typing import Callable, Optional
 
 from .activations import ACT2CLS
 
 
-# Integer validators
+# Numerical validators
 
 
-def positive_int(value: int):
-    """Ensures that `value` is a positive integer (including 0)."""
-    if not value >= 0:
-        raise ValueError(f"Value must be a positive integer, got {value}.")
+def interval(min: Optional[int | float] = None, max: Optional[int | float] = None) -> Callable:
+    """
+    Parameterized validator that ensures that `value` is within the defined interval.
+    Expected usage: `validated_field(interval(min=0), default=8)`
+    """
+    error_message = "Value must be"
+    if min is not None:
+        error_message += f" at least {min}"
+    if min is not None and max is not None:
+        error_message += " and"
+    if max is not None:
+        error_message += f" at most {max}"
+    error_message += ", got {value}."
 
+    min = min or float("-inf")
+    max = max or float("inf")
 
-def strictly_positive_int(value: int):
-    """Ensures that `value` is a positive integer (excluding 0)."""
-    if not value > 0:
-        raise ValueError(f"Value must be a strictly positive integer, got {value}.")
+    def _inner(value: int | float):
+        if not min <= value <= max:
+            raise ValueError(error_message.format(value=value))
 
-
-def vocabulary_token(value: int, vocab_size: int):
-    """Ensures that `value` is a valid vocabulary token index."""
-    if not 0 <= value < vocab_size:
-        raise ValueError(f"Value must be a token in the vocabulary, got {value}. (vocabulary size = {vocab_size})")
-
-
-# Float validators
-
-
-def positive_float(value: float):
-    """Ensures that `value` is a positive float (including 0.0)."""
-    if not value >= 0:
-        raise ValueError(f"Value must be a positive float, got {value}.")
+    return _inner
 
 
 def probability(value: float):
@@ -61,16 +58,11 @@ def probability(value: float):
 # String validators
 
 
-def activation_function_key(value: str):
+def activation_fn_key(value: str):
     """Ensures that `value` is a string corresponding to an activation function."""
+    # TODO (joao): in python 3.11+, we can build a Literal type from the keys of ACT2CLS
     if value not in ACT2CLS:
         raise ValueError(
             f"Value must be one of {list(ACT2CLS.keys())}, got {value}. "
             "Make sure to use a string that corresponds to an activation function."
         )
-
-
-def choice_str(value: str, choices: Iterable[str]):
-    """Ensures that `value` is one of the choices in `choices`."""
-    if value not in choices:
-        raise ValueError(f"Value must be one of {choices}, got {value}")

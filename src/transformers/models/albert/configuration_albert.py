@@ -16,21 +16,13 @@
 """ALBERT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from typing import Literal, Mapping, Optional
 
 from huggingface_hub.utils import strict_dataclass, validated_field
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-from ...validators import (
-    activation_function_key,
-    choice_str,
-    positive_float,
-    positive_int,
-    probability,
-    strictly_positive_int,
-    vocabulary_token,
-)
+from ...validators import activation_fn_key, interval, probability
 
 
 @strict_dataclass
@@ -65,9 +57,9 @@ class AlbertConfig(PretrainedConfig):
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
@@ -115,28 +107,26 @@ class AlbertConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    vocab_size: int = validated_field(strictly_positive_int, default=30000)
-    embedding_size: int = validated_field(strictly_positive_int, default=128)
-    hidden_size: int = validated_field(strictly_positive_int, default=4096)
-    num_hidden_layers: int = validated_field(strictly_positive_int, default=12)
-    num_hidden_groups: int = validated_field(strictly_positive_int, default=1)
-    num_attention_heads: int = validated_field(positive_int, default=64)
-    intermediate_size: int = validated_field(strictly_positive_int, default=16384)
-    inner_group_num: int = validated_field(positive_int, default=1)
-    hidden_act: str = validated_field(activation_function_key, default="gelu_new")
-    hidden_dropout_prob: float = validated_field(probability, default=0)
-    attention_probs_dropout_prob: float = validated_field(probability, default=0)
-    max_position_embeddings: int = validated_field(positive_int, default=512)
-    type_vocab_size: int = validated_field(strictly_positive_int, default=2)
-    initializer_range: float = validated_field(positive_float, default=0.02)
-    layer_norm_eps: float = validated_field(positive_float, default=1e-12)
+    vocab_size: int = validated_field(interval(min=1), default=30000)
+    embedding_size: int = validated_field(interval(min=1), default=128)
+    hidden_size: int = validated_field(interval(min=1), default=4096)
+    num_hidden_layers: int = validated_field(interval(min=1), default=12)
+    num_hidden_groups: int = validated_field(interval(min=1), default=1)
+    num_attention_heads: int = validated_field(interval(min=0), default=64)
+    intermediate_size: int = validated_field(interval(min=1), default=16384)
+    inner_group_num: int = validated_field(interval(min=0), default=1)
+    hidden_act: str = validated_field(activation_fn_key, default="gelu_new")
+    hidden_dropout_prob: float = validated_field(probability, default=0.0)
+    attention_probs_dropout_prob: float = validated_field(probability, default=0.0)
+    max_position_embeddings: int = validated_field(interval(min=0), default=512)
+    type_vocab_size: int = validated_field(interval(min=1), default=2)
+    initializer_range: float = validated_field(interval(min=0.0), default=0.02)
+    layer_norm_eps: float = validated_field(interval(min=0.0), default=1e-12)
     classifier_dropout_prob: float = validated_field(probability, default=0.1)
-    position_embedding_type: str = validated_field(
-        choice_str, choices=["absolute", "relative_key", "relative_key_query"], default="absolute"
-    )
-    pad_token_id: int = validated_field(vocabulary_token, vocab_size=vocab_size, default=0)
-    bos_token_id: int = validated_field(vocabulary_token, vocab_size=vocab_size, default=2)
-    eos_token_id: int = validated_field(vocabulary_token, vocab_size=vocab_size, default=3)
+    position_embedding_type: Literal["absolute", "relative_key", "relative_key_query"] = "absolute"
+    pad_token_id: Optional[int] = 0
+    bos_token_id: Optional[int] = 2
+    eos_token_id: Optional[int] = 3
 
     # Not part of __init__
     model_type = "albert"
@@ -156,6 +146,14 @@ class AlbertConfig(PretrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads}"
             )
+
+        # Special tokens must be in the vocabulary
+        for token_name in ["pad_token_id", "bos_token_id", "eos_token_id"]:
+            token_id = getattr(self, token_name)
+            if token_id is not None and not 0 <= token_id < self.vocab_size:
+                raise ValueError(
+                    f"{token_name} must be in the vocabulary with size {self.vocab_size}, got {token_id}."
+                )
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
