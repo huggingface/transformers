@@ -26,6 +26,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -1736,7 +1737,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
-        for i in range(num_image_tokens):
+        for i in tqdm(range(num_image_tokens)):
             model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
             )
@@ -1757,8 +1758,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
             # Generate scores using the generation head. (not using above defined lm head)
-            scores = self.model.gen_head(hidden_state)
-            logits = logits_processor(input_ids, scores)
+            logits = self.model.gen_head(hidden_state)
+            logits = logits_processor(input_ids, logits)
             next_token_scores = logits / generation_config.temperature
 
             # Sample next token.
