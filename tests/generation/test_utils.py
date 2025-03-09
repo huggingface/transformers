@@ -123,6 +123,7 @@ VLM_CLASS_NAMES = [
     "gotocr2",
     "qwen2vl",
     "qwen2_5_vl",
+    "ayavision",
     "janus",
 ]
 

@@ -29,7 +29,7 @@ It is important the PSU has stable voltage otherwise it may not be able to suppl
 
 ## Cooling
 
-An overheated GPU throttles its performance and can even shutdown if it's too hot to prevent damage. Keeping the GPU temperature low, anywhere between 158 - 167F, is essential for delivering full perfomance and maintaining its lifespan. Once temperatures reach 183 - 194F, the GPU may begin to throttle performance.
+An overheated GPU throttles its performance and can even shutdown if it's too hot to prevent damage. Keeping the GPU temperature low, anywhere between 158 - 167F, is essential for delivering full performance and maintaining its lifespan. Once temperatures reach 183 - 194F, the GPU may begin to throttle performance.
 
 ## Multi-GPU connectivity
 

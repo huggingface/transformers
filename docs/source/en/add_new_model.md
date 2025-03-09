@@ -57,7 +57,7 @@ There is never more than two levels of abstraction for any model to keep the cod
 
 Other important functions like the forward method are defined in the `modeling.py` file.
 
-Specific model heads (for example, sequence classification or language modeling) should call the base model in the forward pass rather than inherting from it to keep abstraction low.
+Specific model heads (for example, sequence classification or language modeling) should call the base model in the forward pass rather than inheriting from it to keep abstraction low.
 
 New models require a configuration, for example `BrandNewLlamaConfig`, that is stored as an attribute of [`PreTrainedModel`].
 
@@ -233,7 +233,7 @@ If you run into issues, you'll need to choose one of the following debugging str
 This strategy relies on breaking the original model into smaller sub-components, such as when the code can be easily run in eager mode. While more difficult, there are some advantages to this approach.
 
 1. It is easier later to compare the original model to your implementation. You can automatically verify that each individual component matches its corresponding component in the Transformers' implementation. This is better than relying on a visual comparison based on print statements.
-2. It is easier to port individal components instead of the entire model.
+2. It is easier to port individual components instead of the entire model.
 3. It is easier for understanding how a model works by breaking it up into smaller parts.
 4. It is easier to prevent regressions at a later stage when you change your code thanks to component-by-component tests.
 
@@ -328,7 +328,7 @@ def _init_weights(self, module):
 
 The initialization scheme can look different if you need to adapt it to your model. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers.
 
-The `_is_hf_initialized` flag makes sure the submodule is only initialized once. Setting `module.project_q` and `module.project_hid` to `True` ensures the custom initialization is not overriden later. The `_init_weights` function won't be applied to these modules.
+The `_is_hf_initialized` flag makes sure the submodule is only initialized once. Setting `module.project_q` and `module.project_hid` to `True` ensures the custom initialization is not overridden later. The `_init_weights` function won't be applied to these modules.
 
 ```py
 def _init_weights(self, module):
@@ -457,7 +457,7 @@ Don't be discouraged if your forward pass isn't identical with the output from t
 Your output should have a precision of *1e-3*. Ensure the output shapes and output values are identical. Common reasons for why the outputs aren't identical include:
 
 - Some layers were not added (activation layer or a residual connection).
-- The word embedding matix is not tied.
+- The word embedding matrix is not tied.
 - The wrong positional embeddings are used because the original implementation includes an offset.
 - Dropout is applied during the forward pass. Fix this error by making sure `model.training` is `False` and passing `self.training` to [torch.nn.functional.dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout).
 

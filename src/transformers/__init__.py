@@ -141,6 +141,7 @@ _import_structure = {
         "is_ray_available",
         "is_ray_tune_available",
         "is_sigopt_available",
+        "is_swanlab_available",
         "is_tensorboard_available",
         "is_wandb_available",
     ],
@@ -194,6 +195,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.autoformer": ["AutoformerConfig"],
+    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor"],
     "models.bamba": ["BambaConfig"],
     "models.bark": [
         "BarkCoarseConfig",
@@ -1607,6 +1609,7 @@ else:
             "AutoformerPreTrainedModel",
         ]
     )
+    _import_structure["models.aya_vision"].extend(["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"])
     _import_structure["models.bamba"].extend(
         [
             "BambaForCausalLM",
@@ -5281,6 +5284,7 @@ if TYPE_CHECKING:
         is_ray_available,
         is_ray_tune_available,
         is_sigopt_available,
+        is_swanlab_available,
         is_tensorboard_available,
         is_wandb_available,
     )
@@ -5335,6 +5339,10 @@ if TYPE_CHECKING:
     )
     from .models.autoformer import (
         AutoformerConfig,
+    )
+    from .models.aya_vision import (
+        AyaVisionConfig,
+        AyaVisionProcessor,
     )
     from .models.bamba import BambaConfig
     from .models.bark import (
@@ -6788,6 +6796,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
