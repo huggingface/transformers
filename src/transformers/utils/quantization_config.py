@@ -1731,6 +1731,7 @@ class QuarkConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         if is_torch_available() and is_quark_available():
+            from quark import __version__ as quark_version
             from quark.torch.export.config.config import JsonExporterConfig
             from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
             from quark.torch.quantization.config.config import Config
@@ -1747,6 +1748,13 @@ class QuarkConfig(QuantizationConfigMixin):
             self.quant_config = Config.from_dict(kwargs)
 
             if "export" in kwargs:
+                # TODO: Remove this check once configuration version is handled natively by Quark.
+                if "min_kv_scale" in kwargs["export"] and version.parse(quark_version) < version.parse("0.8"):
+                    min_kv_scale = kwargs["export"].pop("min_kv_scale")
+                    logger.warning(
+                        f"The parameter `min_kv_scale={min_kv_scale}` was found in the model config.json's `quantization_config.export` configuration, but this parameter is supported only for quark>=0.8. Ignoring this configuration parameter. Please update the `amd-quark` package."
+                    )
+
                 self.json_export_config = JsonExporterConfig(**kwargs["export"])
             else:
                 # Legacy (quark<1.0) or custom export.

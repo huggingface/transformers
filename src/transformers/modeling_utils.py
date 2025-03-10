@@ -829,11 +829,12 @@ def _load_state_dict_into_meta_model(
             continue
 
         # we need to use serialized_param_name as file pointer is untouched
-        param = (
-            file_pointer.get_slice(serialized_param_name)
-            if shard_file.endswith(".safetensors")
-            else bin_state_dict[serialized_param_name]
-        )
+        if shard_file.endswith(".safetensors"):
+            param = file_pointer.get_slice(serialized_param_name)
+            param_ndim = len(param.get_shape())
+        else:
+            param = bin_state_dict[serialized_param_name]
+            param_ndim = param.ndim
 
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
@@ -900,13 +901,22 @@ def _load_state_dict_into_meta_model(
                 output_fn = partial(tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output)
                 distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
             else:
-                param = param[:]
+                if param_ndim > 0:
+                    param = param[:]
+                else:
+                    param = param[...]
+
                 if old_param is not None and old_param.is_contiguous():
                     param = param.contiguous()
                 module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
 
         else:
-            param = param[:]
+            if param_ndim > 0:
+                param = param[:]
+            else:
+                # param[:] does not work on 0-dim tensors. Nevertheless, we need to materialize the PySafeSlice in case the model is loaded using safetensors.
+                param = param[...]
+
             if param_casting_dtype is not None:
                 param = param.to(param_casting_dtype)
             if old_param is not None and old_param.is_contiguous():
