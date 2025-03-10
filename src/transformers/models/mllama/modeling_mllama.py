@@ -1963,7 +1963,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.config.vocab_size, **loss_kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -2135,6 +2135,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         if cross_attention_mask is not None and cache_position is not None:
             cross_attention_mask = cross_attention_mask[:, :, cache_position]
             full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
+
+        # if the vocab size was updated, it should propagate down to the language model
+        self.language_model.config.vocab_size = self.config.get_text_config().vocab_size
 
         outputs = self.language_model(
             input_ids=input_ids,
