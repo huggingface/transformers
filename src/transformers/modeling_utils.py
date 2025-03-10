@@ -5901,7 +5901,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
 
         param_size = int(math.prod(param.shape) * allocation_factor)
 
-        if _torch_distributed_available:
+        if _torch_distributed_available and torch.distributed.is_initialized():
             generic_name = re.sub(r"\d+", "*", param_name)
             param_size //= torch.distributed.get_world_size() if not model._tp_plan.get(generic_name, False) else 1
 
