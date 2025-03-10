@@ -383,7 +383,7 @@ class Gemma3Attention(nn.Module):
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar
-        self.is_sliding = not bool((layer_idx + 1) % 6)
+        self.is_sliding = bool((layer_idx + 1) % 6)
         self.sliding_window = config.sliding_window
 
         self.q_proj = nn.Linear(
