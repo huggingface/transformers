@@ -1476,7 +1476,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
-            for _, v in self.base_model_tp_plan.items():
+            for _, v in self._tp_plan.items():
                 if v not in SUPPORTED_TP_STYLES:
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
