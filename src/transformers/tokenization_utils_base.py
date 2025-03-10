@@ -2523,9 +2523,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif isinstance(self.chat_template, dict):
             # Legacy format for multiple templates:
             # chat template dicts are saved to the config as lists of dicts with fixed key names.
-            # They will be reconstructed as a single dict during loading.
-            # We're trying to discourage chat template dicts, and they are always
-            # saved in the config, never as single files.
             tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
         elif self.chat_template is not None:
             # Legacy format for single templates: Just make them a key in tokenizer_config.json
