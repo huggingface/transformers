@@ -789,7 +789,7 @@ def fix_tensor_type_and_device(
     else:
         return False, None
 
-    return 
+    return
 
 
 @torch.no_grad()
