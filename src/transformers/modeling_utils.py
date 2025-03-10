@@ -1280,7 +1280,9 @@ def _get_torch_dtype(
                     elif state_dict is not None:
                         torch_dtype = get_state_dict_dtype(state_dict)
                     else:
-                        state_dict = load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only)
+                        state_dict = load_state_dict(
+                            checkpoint_files[0], map_location="meta", weights_only=weights_only
+                        )
                         torch_dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `torch_dtype` attribute can't be found in model's config object, "
