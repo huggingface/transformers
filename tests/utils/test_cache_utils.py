@@ -176,7 +176,6 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
     @require_torch_gpu
-    @require_read_token
     def test_dynamic_cache_exportability(self):
         if not is_torch_greater_or_equal_than_2_6:
             self.skipTest(reason="This test requires torch >= 2.6 to run.")
