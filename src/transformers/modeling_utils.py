@@ -54,7 +54,7 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
-from .integrations.tensor_parallel import shard_and_distribute_module, translate_to_torch_parallel_style
+from .integrations.tensor_parallel import shard_and_distribute_module, translate_to_torch_parallel_style, SUPPORTED_TP_STYLES
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -1465,7 +1465,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self._tp_plan = self._tp_plan or self.config.base_model_tp_plan or {}
         for name, module in self.named_children():
             if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
+
+        if self.base_model_tp_plan is not None and is_torch_greater_or_equal("2.3"):
+            for _, v in self.base_model_tp_plan.items():
+                if v not in SUPPORTED_TP_STYLES:
+                    raise ValueError(
+                        f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
+                    )
 
     def dequantize(self):
         """

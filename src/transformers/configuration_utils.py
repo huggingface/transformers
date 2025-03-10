@@ -26,7 +26,6 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .integrations import SUPPORTED_TP_STYLES
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
@@ -40,6 +39,7 @@ from .utils import (
     is_remote_url,
     is_torch_available,
     logging,
+    is_torch_greater_or_equal
 )
 from .utils.generic import is_timm_config_dict
 
@@ -318,13 +318,6 @@ class PretrainedConfig(PushToHubMixin):
                 "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
                 "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
             )
-
-        if self.base_model_tp_plan is not None and is_torch_available():
-            for _, v in self.base_model_tp_plan.items():
-                if v not in SUPPORTED_TP_STYLES:
-                    raise ValueError(
-                        f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
-                    )
 
         # Additional attributes without default values
         for key, value in kwargs.items():
