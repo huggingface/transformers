@@ -17,9 +17,18 @@ import os
 import github
 import json
 from github import Github
-from fnmatch import fnmatch
+import re
 from collections import Counter
 from pathlib import Path
+
+def pattern_to_regex(pattern):
+    start_anchor = pattern.startswith("/")
+    pattern = re.escape(pattern)
+    # Replace `*` with "any number of non-slash characters"
+    pattern = pattern.replace(r"\*", "[^/]*")
+    if start_anchor:
+        pattern = "^" + pattern
+    return pattern
 
 def get_file_owners(file_path, codeowners_lines):
     # Process lines in reverse (last matching pattern takes precedence)
@@ -36,18 +45,20 @@ def get_file_owners(file_path, codeowners_lines):
         owners = [owner.removeprefix("@") for owner in parts[1:]]
 
         # Check if file matches pattern
-        if fnmatch(file_path, pattern):
+        file_regex = pattern_to_regex(pattern)
+        if re.search(file_regex, file_path) is not None:
             return owners  # Remember, can still be empty!
     return []  # Should never happen, but just in case
 
 def main():
+    script_dir = Path(__file__).parent.absolute()
+    with open(script_dir / "codeowners_for_review_action") as f:
+        codeowners_lines = f.readlines()
+
     g = Github(os.environ['GITHUB_TOKEN'])
     repo = g.get_repo("huggingface/transformers")
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
-    script_dir = Path(__file__).parent.absolute()
-    with open(script_dir / "codeowners_for_review_action") as f:
-        codeowners_lines = f.readlines()
 
     # The PR number is available in the event payload
     pr_number = event['pull_request']['number']
