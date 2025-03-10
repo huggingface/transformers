@@ -1,5 +1,5 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-# Modifications Copyright (C) 2024, Advanced Micro Devices, Inc. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
