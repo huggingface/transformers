@@ -108,13 +108,8 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         }
         audio_kwargs = {
             "sampling_rate": kwargs.pop("sampling_rate", None),
-            "pad_to_multiple_of": kwargs.pop("pad_to_multiple_of", None),
-            "padding": kwargs.get("padding", "longest"),
-            "max_length": kwargs.get("max_length", None),
-            "truncation": kwargs.get("truncation", False),
-            "return_attention_mask": kwargs.pop("return_attention_mask", True),
             "device": kwargs.pop("device", "cpu"),
-            "return_tensors": kwargs.get("return_tensors", None),
+            **kwargs,
         }
         text_kwargs = kwargs
 
