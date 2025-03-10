@@ -205,7 +205,7 @@ class DinoDetrConfig(PretrainedConfig):
         embed_init_tgt=True,
         two_stage_pat_embed=0,
         two_stage_add_query_num=0,
-        two_stage_learn_wh=0.05,
+        two_stage_learn_wh=False,
         num_classes=91,
         dn_labelbook_size=91,
         fix_refpoints_hw=-1,

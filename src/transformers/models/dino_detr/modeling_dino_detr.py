@@ -2521,6 +2521,7 @@ class DinoDeformableTransformer(nn.Module):
         # - enc_intermediate_refpoints: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
         #########################################################
 
+        mask_flatten = ~mask_flatten
         if self.two_stage_type == "standard":
             if self.two_stage_learn_wh:
                 input_hw = self.two_stage_wh_embedding.weight[0]
@@ -2923,10 +2924,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 copy.deepcopy(_class_embed)
                 for _ in range(self.transformer.num_decoder_layers)
             ]
-        self.bbox_embed = nn.ModuleList(box_embed_layerlist)
-        self.class_embed = nn.ModuleList(class_embed_layerlist)
-        self.transformer.decoder.bbox_embed = self.bbox_embed
-        self.transformer.decoder.class_embed = self.class_embed
+        self.transformer.decoder.bbox_embed = nn.ModuleList(box_embed_layerlist)
+        self.transformer.decoder.class_embed = nn.ModuleList(class_embed_layerlist)
 
         # two stage
         self.two_stage_type = config.two_stage_type
@@ -3042,7 +3041,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         """
 
         features, poss = self.backbone(pixel_values, pixel_mask)
-
         srcs = []
         masks = []
         for l, (src, mask) in enumerate(features):
@@ -3082,7 +3080,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         else:
             assert targets is None
             input_query_bbox = input_query_label = attn_mask = dn_meta = None
-
         hs, reference, hs_enc, ref_enc, init_box_proposal = self.transformer(
             srcs, masks, input_query_bbox, poss, input_query_label, attn_mask
         )
@@ -3184,7 +3181,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         # reference_before_sigmoid = inverse_sigmoid(reference[:-1]) # n_dec, bs, nq, 4
         outputs_coord_list = []
         for _, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
-            zip(reference[:-1], self.model.bbox_embed, hs)
+            zip(reference[:-1], self.model.transformer.decoder.bbox_embed, hs)
         ):
             layer_delta_unsig = layer_bbox_embed(layer_hs)
             layer_outputs_unsig = layer_delta_unsig + inverse_sigmoid(layer_ref_sig)
@@ -3195,7 +3192,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         outputs_class = torch.stack(
             [
                 layer_cls_embed(layer_hs)
-                for layer_cls_embed, layer_hs in zip(self.model.class_embed, hs)
+                for layer_cls_embed, layer_hs in zip(
+                    self.model.transformer.decoder.class_embed, hs
+                )
             ]
         )
         if self.model.dn_number > 0 and dn_meta is not None:
