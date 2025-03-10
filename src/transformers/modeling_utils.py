@@ -1338,7 +1338,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     model_tags = None
 
     _auto_class = None
-    _no_split_modules = []
+    _no_split_modules = None
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
 
@@ -1447,8 +1447,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
-        # TP plan should no be related to base model or base prefix: does not extend to multimodal models
-        # we update based on the underlying PreTrainedModel.
+        self._no_split_modules = self._no_split_modules or []
 
     def post_init(self):
         """
