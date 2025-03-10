@@ -122,6 +122,13 @@ from transformers.utils import (
 from transformers.utils.hp_naming import TrialShortNamer
 
 
+if torch_device == "hpu":
+    RTOL = 1e-3
+    ATOL = 1e-3
+else:
+    RTOL = 1e-5
+    ATOL = 1e-5
+
 if is_torch_available():
     import torch
     from torch import nn
@@ -729,11 +736,11 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.alternate_trained_model = (trainer.model.a, trainer.model.b)
 
-    def check_trained_model(self, model, alternate_seed=False):
+    def check_trained_model(self, model, alternate_seed=False, **kwargs):
         # Checks a training seeded with learning_rate = 0.1
         (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
-        torch.testing.assert_close(model.a, a)
-        torch.testing.assert_close(model.b, b)
+        torch.testing.assert_close(model.a, a, **kwargs)
+        torch.testing.assert_close(model.b, b, **kwargs)
 
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
@@ -1217,15 +1224,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.b, b))
             self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
-    @require_torch_accelerator
     @require_torch_bf16
-    @require_non_hpu
+    @require_torch_accelerator
     def test_mixed_bf16(self):
         # very basic test
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(learning_rate=0.1, bf16=True, output_dir=tmp_dir)
             trainer.train()
-            self.check_trained_model(trainer.model)
+            self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
 
         # --bf16 --half_precision_backend apex can't be used together
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3243,7 +3249,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(b, b1, delta=1e-5)
 
     @slow
-    @require_non_hpu
     @require_accelerate
     @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
