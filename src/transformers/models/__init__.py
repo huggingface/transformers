@@ -83,6 +83,7 @@ from . import (
     dinov2,
     dinov2_with_registers,
     distilbert,
+    distill_any_depth,
     dit,
     donut,
     dpr,
