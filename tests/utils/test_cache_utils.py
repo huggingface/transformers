@@ -199,13 +199,12 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
-    @slow
     @require_read_token
     def test_dynamic_cache_exportability(self):
         if not is_torch_greater_or_equal_than_2_6:
             self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-7B")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model = model.eval().cuda()
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B")
         prompt = "What is the best way to debug python script?"
