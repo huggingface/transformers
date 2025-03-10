@@ -517,7 +517,7 @@ GEMMA3_START_DOCSTRING = r"""
 )
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
