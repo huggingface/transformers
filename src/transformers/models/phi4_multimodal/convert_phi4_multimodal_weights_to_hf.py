@@ -162,8 +162,10 @@ def convert_and_write_model(input_dir: str, output_dir: str):
 
 
 def convert_and_save_processor(input_dir: str, output_dir: str):
-    """Convert the model and save it (this implicitly save the config as well)."""
+    """Convert the processor."""
     processor = Phi4MultimodalProcessor.from_pretrained(input_dir)
+    del processor.image_processor.auto_map
+    del processor.audio_processor.auto_map
     processor.chat_template = processor.tokenizer.chat_template
     processor.tokenizer.extra_special_tokens = {"image_token": "<|endoftext10|>", "audio_token": "<|endoftext11|>"}
     processor.save_pretrained(output_dir)
