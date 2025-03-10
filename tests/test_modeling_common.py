@@ -74,6 +74,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    hub_retry,
     is_flaky,
     require_accelerate,
     require_bitsandbytes,
@@ -105,6 +106,8 @@ from transformers.utils import (
     is_torch_sdpa_available,
 )
 from transformers.utils.generic import ContextManagers
+
+from .generation.test_utils import GenerationTesterMixin
 
 
 if is_accelerate_available():
@@ -211,6 +214,16 @@ class ModelTesterMixin:
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    # Note: for all mixins that utilize the Hub in some way, we should ensure that
+    # they contain the `hub_retry` decorator in case of failures.
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for attr_name in dir(cls):
+            if attr_name.startswith("test_"):
+                attr = getattr(cls, attr_name)
+                if callable(attr):
+                    setattr(cls, attr_name, hub_retry()(attr))
 
     @property
     def all_generative_model_classes(self):
@@ -1175,6 +1188,10 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
+                    elif "Siglip2" in model_class.__name__:
+                        outputs = model(**inputs)
+                        example_inputs = [t for t in inputs.values() if isinstance(t, torch.Tensor)]
+                        traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
 
@@ -1473,7 +1490,7 @@ class ModelTesterMixin:
             if model.config.is_encoder_decoder:
                 signature = inspect.signature(model.forward)
                 arg_names = [*signature.parameters.keys()]
-                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                if "decoder_head_mask" in arg_names:  # necessary differentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
                 if "cross_attn_head_mask" in arg_names:
                     inputs["cross_attn_head_mask"] = head_mask
@@ -1835,7 +1852,7 @@ class ModelTesterMixin:
                 cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the position embeddings with a larger max_position_embeddings increases
-            # the model's postion embeddings size
+            # the model's position embeddings size
             model.resize_position_embeddings(max_position_embeddings + 10)
             self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
 
@@ -3035,6 +3052,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
                 "UniSpeechSatForSequenceClassification",
@@ -3980,7 +3998,7 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not self._is_composite:
-                self.skipTest("This model is not a composte model!")
+                self.skipTest("This model is not a composite model!")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -4393,9 +4411,9 @@ class ModelTesterMixin:
                     exported_outputs = exported_model.module().forward(**inputs_dict)
 
                 # Check if outputs are close:
-                # is_tested is a boolean flag idicating if we comapre any outputs,
+                # is_tested is a boolean flag indicating if we compare any outputs,
                 # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
-                # In case of outputs are different the error will be rasied in `recursively_check` function.
+                # In case of outputs are different the error will be raised in `recursively_check` function.
                 is_tested = recursively_check(eager_outputs, exported_outputs)
                 self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
 
@@ -4411,6 +4429,33 @@ class ModelTesterMixin:
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(inputs_dict["input_ids"].to(torch_device))
+
+    def test_generation_tester_mixin_inheritance(self):
+        """
+        Ensures that we have the generation tester mixin if the model can generate. The test will fail otherwise,
+        forcing the mixin to be added -- and ensuring proper test coverage
+        """
+        if len(self.all_generative_model_classes) > 0:
+            self.assertTrue(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can call `generate` from `GenerationMixin`, so one of two things must happen: 1) the "
+                    "tester must inherit from `GenerationTesterMixin` to run `generate` tests, or 2) if the model "
+                    "doesn't fully support the original `generate` or has a custom `generate` with partial feature "
+                    "support, the tester must overwrite `all_generative_model_classes` to skip the failing classes "
+                    "(make sure to comment why). If `all_generative_model_classes` is overwritten as `()`, then we "
+                    "need to remove the `GenerationTesterMixin` inheritance -- no `generate` tests are being run."
+                ),
+            )
+        else:
+            self.assertFalse(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can't call `generate`, so its tester can't inherit `GenerationTesterMixin`. (If you "
+                    "think the model should be able to `generate`, the model may be missing the `GenerationMixin` "
+                    "inheritance)"
+                ),
+            )
 
 
 global_rng = random.Random()
