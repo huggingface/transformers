@@ -167,6 +167,7 @@ from . import (
     megatron_gpt2,
     mgp_str,
     mimi,
+    minimax,
     mistral,
     mixtral,
     mllama,
