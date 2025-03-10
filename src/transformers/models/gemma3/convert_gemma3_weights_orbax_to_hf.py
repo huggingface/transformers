@@ -508,6 +508,10 @@ def main(*args):
         },
     )
 
+    if INCLUDE_CHAT_TEMPLATE.value:
+        # Include chat temaplate for CausalLM models
+        tokenizer.chat_template = _CHAT_TEMPLATE
+
     if _TEXT_ONLY.value:
         config.vision_config = None
         tokenizer.save_pretrained(output_path)
@@ -525,11 +529,9 @@ def main(*args):
             image_processor=image_processor,
             tokenizer=tokenizer,
         )
-
         if INCLUDE_CHAT_TEMPLATE.value:
             # Duplicate so multimodal instruct models can also be used for CausalLM
-            processor.chat_template = _CHAT_TEMPLATE
-            tokenizer.chat_template = _CHAT_TEMPLATE
+            processor.chat_template = tokenizer.chat_template
 
         processor.save_pretrained(output_path)
         logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
