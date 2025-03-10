@@ -1233,7 +1233,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     """,
     BLIP_START_DOCSTRING,
 )
-class BlipForQuestionAnswering(BlipPreTrainedModel):
+class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
@@ -1251,14 +1251,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        # Blip has a unique model structure, where the external class (`BlipForQuestionAnswering`) doesn't need to inherit from
-        # `GenerationMixin` (it has a non-standard generation method), but one of the internal models do
-        # (`BlipForConditionalGeneration`). This means that the base `can_generate()` will return `False`, but we need to
-        # override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
-        return True
 
     def set_input_embeddings(self, value):
         self.text_encoder.set_input_embeddings(value)

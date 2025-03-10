@@ -817,11 +817,6 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict.pop("return_loss")
         return inputs_dict
 
-    def test_model_can_generate(self):
-        for model_class in self.all_model_classes:
-            model = model_class(self.model_tester.get_config())
-            self.assertTrue(model.can_generate())
-
     def test_class_name_consistency(self):
         """
         Tests that all VQA models have a class name that ends with "ForQuestionAnswering"
