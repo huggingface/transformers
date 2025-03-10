@@ -119,7 +119,9 @@ def write_model(
 
     # Check if position embeddings exist before squeezing
     if "embeddings.position_embeddings.weight" in state_dict:
-        state_dict["embeddings.position_embeddings.weight"] = state_dict["embeddings.position_embeddings.weight"].squeeze(0)
+        state_dict["embeddings.position_embeddings.weight"] = state_dict[
+            "embeddings.position_embeddings.weight"
+        ].squeeze(0)
         strict_loading = True
     else:
         # For `apple/aimv2-large-patch14-native` we don't have position_embeddings in state_dict

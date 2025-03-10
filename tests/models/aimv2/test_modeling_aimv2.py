@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,21 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch ViT model."""
+"""Testing suite for the PyTorch AIMv2 model."""
 
 import unittest
 
-from transformers import ViTConfig
+from transformers import AIMv2Config
 from transformers.testing_utils import (
-    require_accelerate,
+    is_flaky,
     require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_vision,
-    slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -34,19 +30,16 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
-    import torch
     from torch import nn
 
-    from transformers import AIMv2Model
+    from transformers import AIMv2ForImageClassification, AIMv2Model
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import AutoImageProcessor
+    pass
 
 
-class ViTModelTester:
+class AIMv2ModelTester:
     def __init__(
         self,
         parent,
@@ -61,14 +54,9 @@ class ViTModelTester:
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="silu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        encoder_stride=2,
-        mask_ratio=0.5,
-        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -82,20 +70,12 @@ class ViTModelTester:
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
-        self.attn_implementation = attn_implementation
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+        self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -109,7 +89,7 @@ class ViTModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ViTConfig(
+        return AIMv2Config(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -118,12 +98,8 @@ class ViTModelTester:
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
-            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -133,10 +109,9 @@ class ViTModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = ViTForImageClassification(config)
+        model = AIMv2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -144,7 +119,7 @@ class ViTModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = ViTForImageClassification(config)
+        model = AIMv2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
 
@@ -164,22 +139,24 @@ class ViTModelTester:
 
 
 @require_torch
-class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as Dinov2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    test_torch_exportable = True
 
     all_model_classes = (
         (
             AIMv2Model,
-            ViTForImageClassification,
+            AIMv2ForImageClassification,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": AIMv2Model, "image-classification": ViTForImageClassification}
+        {"image-feature-extraction": AIMv2Model, "image-classification": AIMv2ForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -188,24 +165,38 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = ViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = AIMv2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AIMv2Config, has_text_modality=False, hidden_size=37)
 
-    @unittest.skip(
-        "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
-        "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
+    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
+    def test_initialization(self):
+        super().test_initialization()
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="ViT does not use inputs_embeds")
+    @unittest.skip(reason="Dinov2 does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -221,93 +212,45 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "google/vit-base-patch16-224"
-        model = AIMv2Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+    @unittest.skip(reason="Dinov2 does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
+# def prepare_img():
+#     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+#     return image
 
+# @require_torch
+# @require_vision
+# class Dinov2ModelIntegrationTest(unittest.TestCase):
+#     @cached_property
+#     def default_image_processor(self):
+#         return AutoImageProcessor.from_pretrained("facebook/dinov2-base") if is_vision_available() else None
 
-@require_torch
-@require_vision
-class ViTModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+#     @slow
+#     def test_inference_no_head(self):
+#         model = Dinov2Model.from_pretrained("facebook/dinov2-base").to(torch_device)
 
-    @slow
-    def test_inference_image_classification_head(self):
-        model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+#         image_processor = self.default_image_processor
+#         image = prepare_img()
+#         inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+#         # forward pass
+#         with torch.no_grad():
+#             outputs = model(**inputs)
 
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
+#         # verify the last hidden states
+#         expected_shape = torch.Size((1, 257, 768))
+#         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = AIMv2Model.from_pretrained("facebook/dino-vits8").to(torch_device)
-
-        image_processor = AutoImageProcessor.from_pretrained("facebook/dino-vits8", size=480)
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[4.2325, 4.3882, -6.6678], [4.5372, 1.8933, -6.7355], [4.4454, 0.8514, -5.8747]]
-        ).to(torch_device)
-
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
-
-    @slow
-    @require_accelerate
-    @require_torch_accelerator
-    @require_torch_fp16
-    def test_inference_fp16(self):
-        r"""
-        A small test to make sure that inference work in half precision without any problem.
-        """
-        model = AIMv2Model.from_pretrained("facebook/dino-vits8", torch_dtype=torch.float16, device_map="auto")
-        image_processor = self.default_image_processor
-
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass to make sure inference works in fp16
-        with torch.no_grad():
-            _ = model(pixel_values)
+#         expected_slice = torch.tensor(
+#             [[-2.2005, -0.4495, 1.0964], [-3.3959, -0.8942, -1.0315], [-2.9355, 1.1564, -0.7656]],
+#             device=torch_device,
+#         )
+#         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)

@@ -15,7 +15,7 @@
 
 """Pytorch implementation of AIMv2 Model"""
 
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import torch
 from torch import nn
@@ -140,6 +140,7 @@ class AIMv2Attention(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
+        self.attention_dropout = config.attention_dropout
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
@@ -151,7 +152,7 @@ class AIMv2Attention(nn.Module):
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_out = nn.Linear(self.embed_dim,self.embed_dim,bias=config.qkv_bias)
+        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.proj_drop = nn.Dropout(config.projection_dropout)
 
     def forward(
@@ -214,7 +215,10 @@ class AIMv2EncoderLayer(nn.Module):
         self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
-        self, hidden_states: torch.Tensor, head_mask, output_attentions: Optional[bool] = False
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states = self.rms_norm1(hidden_states)
         attn_output, attn_wights = self.attention(
@@ -246,21 +250,16 @@ class AIMv2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AIMv2SwiGLUFFN"]
     _supports_sdpa = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
+    def _init_weights(self, module):
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, AIMv2Embeddings):
-            module.position_embeddings = nn.init.trunc_normal_(
-                module.position_embeddings.weight.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.weight.dtype)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class AIMv2Model(AIMv2PreTrainedModel):
@@ -307,12 +306,14 @@ class AIMv2Model(AIMv2PreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
+
 class AIMv2ForImageClassification(Dinov2ForImageClassification):
     pass
 
 
 class AIMv2Config(ViTConfig):
-    def __init__(self,
+    def __init__(
+        self,
         hidden_size: int = 1024,
         intermediate_size: int = 2816,
         num_hidden_layers: int = 24,
@@ -327,18 +328,21 @@ class AIMv2Config(ViTConfig):
         use_bias: bool = False,
         hidden_act="silu",
         initializer_range=0.02,
-        **kwargs,):
-        super().__init__(hidden_size=hidden_size,
-                         intermediate_size=intermediate_size,
-                         num_hidden_layers=num_hidden_layers,
-                         num_attention_heads=num_attention_heads,
-                         hidden_act=hidden_act,
-                         num_channels=num_channels,
-                         image_size=image_size,
-                         patch_size=patch_size,
-                         qkv_bias=qkv_bias,
-                         initializer_range=initializer_range,
-                         **kwargs,)
+        **kwargs,
+    ):
+        super().__init__(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            hidden_act=hidden_act,
+            num_channels=num_channels,
+            image_size=image_size,
+            patch_size=patch_size,
+            qkv_bias=qkv_bias,
+            initializer_range=initializer_range,
+            **kwargs,
+        )
 
         self.attention_dropout = attention_dropout
         self.rms_norm_eps = rms_norm_eps
@@ -350,4 +354,5 @@ class AIMv2Config(ViTConfig):
         del self.encoder_stride
         del self.hidden_dropout_prob
 
-__all__ = ["AIMv2Config","AIMv2Model","AIMv2ForImageClassification"]
+
+__all__ = ["AIMv2Config", "AIMv2Model", "AIMv2ForImageClassification"]
