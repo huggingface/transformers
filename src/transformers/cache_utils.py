@@ -537,7 +537,9 @@ class DynamicCache(Cache):
             self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
-
+# NOTE: This functionality relies on features introduced in torch2.6. 
+# Tested and verified against 2.6 and later. Earlier versions are not guaranteed 
+# to be compatible.
 if is_torch_greater_or_equal_than_2_6:
 
     def _flatten_dynamic_cache(
