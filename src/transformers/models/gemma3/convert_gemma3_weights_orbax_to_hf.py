@@ -60,7 +60,7 @@ _CHAT_TEMPLATE = """{{ bos_token }}
     {%- elif message['content'] is iterable -%}
         {%- for item in message['content'] -%}
             {%- if item['type'] == 'image' -%}
-                {{ '<image_soft_token>' }}
+                {{ '<start_of_image>' }}
             {%- elif item['type'] == 'text' -%}
                 {{ item['text'] | trim }}
             {%- endif -%}

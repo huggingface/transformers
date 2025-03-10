@@ -64,7 +64,7 @@ class Gemma3Processor(ProcessorMixin):
     ):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
-        self.image_token = tokenizer.image_token
+        self.boi_token = tokenizer.boi_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -104,7 +104,7 @@ class Gemma3Processor(ProcessorMixin):
 
             # Create empty text to be replaced with placeholders
             if not text:
-                text = [" ".join([self.image_token] * len(images)) for images in batched_images]
+                text = [" ".join([self.boi_token] * len(images)) for images in batched_images]
 
             if len(batched_images) != len(text):
                 raise ValueError(
@@ -115,7 +115,7 @@ class Gemma3Processor(ProcessorMixin):
             batch_num_crops = to_py_obj(image_inputs.pop("num_crops"))
             text_with_crops = text
             for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, batched_images, batch_num_crops)):
-                image_indexes = [m.start() for m in re.finditer(self.image_token, prompt)]
+                image_indexes = [m.start() for m in re.finditer(self.boi_token, prompt)]
 
                 if len(images) != len(image_indexes):
                     raise ValueError(
@@ -126,14 +126,14 @@ class Gemma3Processor(ProcessorMixin):
                 for num, idx in reversed(list(zip(num_crops, image_indexes))):
                     if num:
                         formatted_image_text = (
-                            f"Here is the original image {self.image_token} and here are some crops to help you see better "
-                            + " ".join([self.image_token] * num)
+                            f"Here is the original image {self.boi_token} and here are some crops to help you see better "
+                            + " ".join([self.boi_token] * num)
                         )
-                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.image_token) :]
+                        prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.boi_token) :]
                         text_with_crops[batch_idx] = prompt
 
             # Expand placeholder image tokens to the full image token sequence
-            text = [prompt.replace(self.image_token, self.full_image_sequence) for prompt in text]
+            text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
