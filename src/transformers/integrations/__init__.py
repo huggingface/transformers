@@ -134,9 +134,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tensor_parallel"] = (
+    _import_structure["tensor_parallel"] = [
         ["shard_and_distribute_module", "SUPPORTED_TP_STYLES", "translate_to_torch_parallel_style"],
-    )
+    ]
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
