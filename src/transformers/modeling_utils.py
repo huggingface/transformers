@@ -150,7 +150,7 @@ logger = logging.get_logger(__name__)
 _init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
-
+_torch_distributed_available = torch.distributed.is_available()
 
 def is_fsdp_enabled():
     return (
@@ -5891,7 +5891,14 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
                 param = getattr(model.get_submodule(param_name), param_type)
             else:
                 param = model.get_buffer(param_name)
-        parameter_count[device] += int(math.prod(param.shape) * allocation_factor)
+
+        param_size = int(math.prod(param.shape) * allocation_factor)
+
+        if _torch_distributed_available:
+            generic_name = re.sub(r"\d+", "*", param_name)
+            param_size //= torch.distributed.get_world_size() if not tp_plan.get(generic_name, False) else 1
+
+        parameter_count[device] += param_size
 
     dtype = dtype if dtype is not None else torch.float32
 
