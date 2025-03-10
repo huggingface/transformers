@@ -1898,7 +1898,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 )
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2371,7 +2371,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
