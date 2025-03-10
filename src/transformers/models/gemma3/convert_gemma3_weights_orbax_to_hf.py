@@ -9,7 +9,6 @@ python -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
 """
 
 import dataclasses
-import math
 from collections.abc import Iterator, Sequence
 from typing import Any
 
@@ -119,13 +118,13 @@ _VARIANTS = {
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
             hidden_size=1152,
-            intermediate_size=6912,
+            intermediate_size=6 * 1152,
             num_attention_heads=4,
             num_hidden_layers=26,
             num_key_value_heads=1,
+            head_dim=256,
             attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=512,
-            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
             rope_theta=1_000_000,  # used for global RoPE only
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -138,13 +137,15 @@ _VARIANTS = {
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
             hidden_size=2560,
-            intermediate_size=10_240,
+            intermediate_size=2560 * 8 // 2,
             num_attention_heads=8,
+            head_dim=256,
             num_hidden_layers=34,
             num_key_value_heads=4,
             attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=1024,
-            rope_global_base_freq=1_000_000,
+            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256**-0.5,
@@ -154,14 +155,16 @@ _VARIANTS = {
     _VARIANT_GEMMA_3_12B: Gemma3Config(
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
-            hidden_size=3840,
-            intermediate_size=3840 * 8 // 2,
+            hidden_size=30 * 128,
+            intermediate_size=30 * 128 * 8 // 2,
             num_attention_heads=16,
+            head_dim=256,
             num_hidden_layers=48,
             num_key_value_heads=8,
             attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=1024,
-            rope_global_base_freq=1_000_000,
+            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256**-0.5,
@@ -171,18 +174,19 @@ _VARIANTS = {
     _VARIANT_GEMMA_3_27B: Gemma3Config(
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
-            hidden_size=5376,
-            intermediate_size=5376 * 8 // 2,
+            hidden_size=42 * 128,
+            intermediate_size=42 * 128 * 8 // 2,
             num_attention_heads=32,
             num_hidden_layers=62,
             num_key_value_heads=16,
             head_dim=128,
             attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=1024,
-            rope_global_base_freq=1_000_000,
+            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=1 / math.sqrt(5376 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
+            query_pre_attn_scalar=(42 * 128 // 32) ** -0.5,  # 1 / sqrt(hidden_size // num_attention_heads)
         ),
         vision_config=_VISION_CONFIG,
     ),
