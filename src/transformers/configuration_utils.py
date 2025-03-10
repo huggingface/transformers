@@ -843,7 +843,7 @@ class PretrainedConfig(PushToHubMixin):
                 key not in default_config_dict
                 or key == "transformers_version"
                 or key == "config"  # Always keep the class-specific config attribute.
-                or value != default_config_dict.get(key)
+                or value != class_config_dict.get(key)
             ):
                 serializable_config_dict[key] = value
 
