@@ -131,28 +131,32 @@ class AlbertConfig(PretrainedConfig):
     # Not part of __init__
     model_type = "albert"
 
-    def __init__(self, **kwargs):
-        super().__init__(
-            pad_token_id=self.pad_token_id, bos_token_id=self.bos_token_id, eos_token_id=self.eos_token_id, **kwargs
-        )
-
     def __post_init__(self):
+        """Called after `__init__` from the dataclass: initializes parent classes and validates the instance."""
+        super().__init__(
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            # **kwargs  -> this is missing
+        )
         self.validate()
 
     def validate(self):
-        """Ensures the configuration is valid."""
+        """Ensures the configuration is valid by assessing combinations of arguments."""
+        # Architecture validation
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads}"
             )
 
-        # Special tokens must be in the vocabulary
+        # Token validation
         for token_name in ["pad_token_id", "bos_token_id", "eos_token_id"]:
             token_id = getattr(self, token_name)
             if token_id is not None and not 0 <= token_id < self.vocab_size:
                 raise ValueError(
-                    f"{token_name} must be in the vocabulary with size {self.vocab_size}, got {token_id}."
+                    f"{token_name} must be in the vocabulary with size {self.vocab_size}, i.e. between 0 and "
+                    f"{self.vocab_size - 1}, got {token_id}."
                 )
 
 
