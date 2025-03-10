@@ -180,8 +180,6 @@ else:
 if is_peft_available():
     from .utils import find_adapter_config_file
 
-if is_torch_greater_or_equal("2.5"):
-    pass
 
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 

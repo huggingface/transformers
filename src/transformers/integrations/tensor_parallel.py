@@ -29,24 +29,12 @@ ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
-parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
-
-is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse("2.4")
-is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
-is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
-is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
-
-# For backwards compatibility (e.g. some remote codes on Hub using those variables).
-is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
-is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
-is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
-
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Partial
+    from torch.distributed.tensor import DTensor, Placement, Replicate
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
@@ -138,7 +126,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     elif dim == 1 or dim == -2:
         size_ = empty_param.shape[-2]
         param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()),:]
-    elif dim == 2:
+    elif dim == 2 or dim==-1:
         size_ = empty_param.shape[-1]
         param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
     else:
@@ -156,11 +144,11 @@ def distribute_module(
     Copy pasted from torch's function but we remove the communications (partitionning)
     as well as buffer registering that is similarly not efficient.
     """
-    if input_fn is not None:
-        module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
-    if output_fn is not None:
-        module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
-    module._distribute_module_applied = True
+    if len(module._forward_pre_hooks) == 0:
+        if input_fn is not None:
+            module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
+        if output_fn is not None:
+            module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
     return module
 
 
@@ -168,6 +156,7 @@ class TensorParallelLayer:
     """
     General tensor parallel layer for transformers.
     """
+    use_dtensor = True
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh): ...
@@ -179,14 +168,16 @@ class TensorParallelLayer:
         raise NotImplementedError
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        distribute_module(
-            module,
-            device_mesh,
-            partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
-            partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
-        )
+        if self.use_dtensor:
+            distribute_module(
+                module,
+                device_mesh,
+                partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
+                partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
+            )
 
-
+# use_dtensor needs to be set to false for nn.Parameter when you want to view, chunk, slice
+# you name it. Whatever you want to do that is a bit unconventional, you need local tensors
 class GatherParallel(TensorParallelLayer):
     """
     Simple class used to define the hooks to add to a layer when we just want to gather the outputs
@@ -207,6 +198,8 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        if isinstance(inputs[0], DTensor):
+            inputs[0] = inputs[0].to_local()
         return inputs
 
     @staticmethod
@@ -254,12 +247,14 @@ class ColwiseParallel(TensorParallelLayer):
         input_layouts: Optional[Placement] = None,
         output_layouts: Optional[Placement] = None,
         use_local_output: bool = True,
+        use_dtensor = True
     ):
         super().__init__()
         self.input_layouts = (input_layouts or Replicate(),)
         self.output_layouts = (output_layouts or Shard(-1),)
         self.desired_input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -278,11 +273,19 @@ class ColwiseParallel(TensorParallelLayer):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+        if param_type == "bias":
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
+        else:
+            shard = [Shard(-2)]
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
+
+       
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-        parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
         return nn.Parameter(parameter)
 
     @staticmethod
@@ -303,7 +306,8 @@ class PackedColwiseParallel(ColwiseParallel):
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-        parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
         return nn.Parameter(parameter)
 
 
@@ -332,11 +336,13 @@ class RowwiseParallel(TensorParallelLayer):
         input_layouts: Optional[Placement] = None,
         output_layouts: Optional[Placement] = None,
         use_local_output: bool = True,
+        use_dtensor = True
     ):
         super().__init__()
         self.input_layouts = (input_layouts or Shard(-1),)
         self.output_layouts = (output_layouts or Replicate(),)
         self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -353,8 +359,8 @@ class RowwiseParallel(TensorParallelLayer):
         # means Rowwise as nn.Linear is input * weight^T + bias, where
         # weight would become Shard(0)
         if param_type != "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
-            shard = [Shard(-2)]
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
         else:
             shard = [Replicate()]
             parameter = param[:]
@@ -362,8 +368,8 @@ class RowwiseParallel(TensorParallelLayer):
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-
-        parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
         return nn.Parameter(parameter)
 
     @staticmethod
@@ -377,24 +383,26 @@ class RowwiseParallel(TensorParallelLayer):
         return outputs.to_local() if use_local_output else outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        if isinstance(module, nn.Linear):
-            # rowwise linear runtime sharding requires input tensor shard on last dim
-            self.desired_input_layouts: Tuple[Placement, ...] = (Shard(-1),)
-        elif isinstance(module, nn.Embedding):
-            # rowwise embedding runtime sharding requires input tensor replicated
-            self.desired_input_layouts = (Replicate(),)
-        elif isinstance(module, nn.Parameter):
-            # rowwise embedding runtime sharding requires input tensor replicated
-            self.desired_input_layouts = (Shard(-1),)
-        else:
-            raise NotImplementedError("RowwiseParallel currently only support nn.Linear and nn.Embedding!")
+        module._distribute_module_applied = True
+        if self.use_dtensor:
+            if isinstance(module, nn.Linear):
+                # rowwise linear runtime sharding requires input tensor shard on last dim
+                self.desired_input_layouts: Tuple[Placement, ...] = (Shard(-1),)
+            elif isinstance(module, nn.Embedding):
+                # rowwise embedding runtime sharding requires input tensor replicated
+                self.desired_input_layouts = (Replicate(),)
+            elif isinstance(module, nn.Parameter):
+                # rowwise embedding runtime sharding requires input tensor replicated
+                self.desired_input_layouts = (Shard(-1),)
+            else:
+                raise NotImplementedError("RowwiseParallel currently only support nn.Linear and nn.Embedding!")
 
-        distribute_module(
-            module,
-            device_mesh,
-            partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
-            partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
-        )
+            distribute_module(
+                module,
+                device_mesh,
+                partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
+                partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
+            )
 
 class PackedRowwiseParallel(RowwiseParallel):
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -405,9 +413,10 @@ class PackedRowwiseParallel(RowwiseParallel):
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-        parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
         return nn.Parameter(parameter)
- 
+
 
 @lru_cache
 def translate_to_torch_parallel_style(style: str):
@@ -428,13 +437,15 @@ def translate_to_torch_parallel_style(style: str):
     elif style == "rowwise_rep":
         return RowwiseParallel(input_layouts=Replicate())
     elif style == "local_colwise":
-        return ColwiseParallel(output_layouts=Partial())
+        return ColwiseParallel(use_dtensor=False)
+    elif style == "local_rowwise":
+        return RowwiseParallel(use_dtensor=False)
     elif style == "local":
         return IsolatedParallel()
     elif style == "gather":
         return GatherParallel()
     elif style == "local_packed_rowwise":
-        return PackedRowwiseParallel(output_layouts=Partial())
+        return PackedRowwiseParallel(use_dtensor=False)
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
 
@@ -458,7 +469,7 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
     """
 
     # 1. We add hooks to the layer being loaded:
-    if not getattr(module, "_distribute_module_applied", False) and current_module_plan is not None:
+    if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
         tp_layer.prepare_module_tp(module, device_mesh)
 
@@ -468,10 +479,9 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
         generic_name = re.sub(r"\d+", "*", parrent_layer_name)
         # The module itself needs hooks
         if module_plan := tp_plan.get(generic_name, False):
+            tp_layer = translate_to_torch_parallel_style(module_plan)
             module_to_tp_ = model.get_submodule(parrent_layer_name)
-            if not getattr(module_to_tp_, "_distribute_module_applied", False):
-                tp_layer = translate_to_torch_parallel_style(module_plan)
-                tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
+            tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
 
 
 def shard_and_distribute_module(
@@ -491,11 +501,18 @@ def shard_and_distribute_module(
     module_to_tp = model.get_submodule(param_name)
     current_module_plan = None
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
-    if generic_param_name in tp_plan:
+    if generic_param_name in tp_plan :
         current_module_plan = tp_plan[generic_param_name]
+    elif '.' in generic_param_name and generic_param_name.rsplit('.', 1)[0] in tp_plan:
+        current_module_plan = tp_plan[generic_param_name.rsplit('.', 1)[0]]
 
     # Add hooks to the module if not done yet
-    add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
+    #add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
+    if not getattr(module_to_tp, "_is_hooked", False):
+        add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
+        module_to_tp._is_hooked = True
+
+    
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
         param = tp_layer.partition_tensor(
@@ -506,7 +523,10 @@ def shard_and_distribute_module(
         if is_contiguous:
             param = param.contiguous()
 
-    # SUPER IMPORTANT we have to use load state dict
-    # to make sure partition is right, and we assign
-    module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
+    # SUPER IMPORTANT we have to use setattr
+    # otherwise loading is crazy slow
+    if not isinstance(param, torch.nn.Parameter):
+        param = torch.nn.Parameter(param)
+    setattr(module_to_tp, param_type, param)
+    # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
