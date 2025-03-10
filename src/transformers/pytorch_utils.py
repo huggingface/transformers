@@ -22,12 +22,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import (
-    is_torch_greater_or_equal,
-    is_torch_xla_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -384,8 +379,7 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
                 # check if the function is already cached, otherwise create it
                 if not hasattr(self, f"_cached_{func.__name__}"):
                     self.__setattr__(
-                        f"_cached_{func.__name__}",
-                        lru_cache(*lru_args, **lru_kwargs)(func.__get__(self)),
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
                     )
                 return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
             else:

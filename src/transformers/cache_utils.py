@@ -474,8 +474,7 @@ class DynamicCache(Cache):
 
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search.
-        """
+        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
         # In case it is negative
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -745,11 +744,7 @@ class QuantizedCache(DynamicCache):
             dequant_key = self._dequantize(self._quantized_key_cache[layer_idx])
             dequant_value = self._dequantize(self._quantized_value_cache[layer_idx])
             keys_to_return = [dequant_key, self.key_cache[layer_idx], key_states]
-            values_to_return = [
-                dequant_value,
-                self.value_cache[layer_idx],
-                value_states,
-            ]
+            values_to_return = [dequant_value, self.value_cache[layer_idx], value_states]
 
             keys_to_return = torch.cat(keys_to_return, dim=-2)
             values_to_return = torch.cat(values_to_return, dim=-2)
@@ -1080,9 +1075,7 @@ class SinkCache(Cache):
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
                 rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
-                    key_states,
-                    self._cos_cache[: self.window_length],
-                    self._sin_cache[: self.window_length],
+                    key_states, self._cos_cache[: self.window_length], self._sin_cache[: self.window_length]
                 )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
@@ -1099,9 +1092,7 @@ class SinkCache(Cache):
 
             sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
             values_to_keep = self.value_cache[layer_idx][
-                :,
-                :,
-                -self.window_length + self.num_sink_tokens + value_states.shape[-2] :,
+                :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
             ]
             self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
 
@@ -1191,12 +1182,7 @@ class StaticCache(Cache):
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
-        cache_shape = (
-            self.max_batch_size,
-            self.num_key_value_heads,
-            self.max_cache_len,
-            self.head_dim,
-        )
+        cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[idx]
@@ -1507,8 +1493,7 @@ class EncoderDecoderCache(Cache):
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
             for self_attn, cross_attn in zip(
-                self.self_attention_cache.to_legacy_cache(),
-                self.cross_attention_cache.to_legacy_cache(),
+                self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()
             ):
                 legacy_cache += (self_attn + cross_attn,)
         else:
@@ -1572,8 +1557,7 @@ class EncoderDecoderCache(Cache):
     # TODO(gante, sanchit-gandhi): move following functionality into `.generate`
     def crop(self, maximum_length: int):
         """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search.
-        """
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
 
@@ -1596,24 +1580,12 @@ class EncoderDecoderCache(Cache):
         self_attention_cache = DynamicCache()
         cross_attention_cache = DynamicCache()
         for idx in range(len(splits[0])):
-            layer_keys = torch.cat(
-                [current.self_attention_cache.key_cache[idx] for current in splits],
-                dim=0,
-            )
-            layer_values = torch.cat(
-                [current.self_attention_cache.value_cache[idx] for current in splits],
-                dim=0,
-            )
+            layer_keys = torch.cat([current.self_attention_cache.key_cache[idx] for current in splits], dim=0)
+            layer_values = torch.cat([current.self_attention_cache.value_cache[idx] for current in splits], dim=0)
             self_attention_cache.update(layer_keys, layer_values, idx)
 
-            layer_keys = torch.cat(
-                [current.cross_attention_cache.key_cache[idx] for current in splits],
-                dim=0,
-            )
-            layer_values = torch.cat(
-                [current.cross_attention_cache.value_cache[idx] for current in splits],
-                dim=0,
-            )
+            layer_keys = torch.cat([current.cross_attention_cache.key_cache[idx] for current in splits], dim=0)
+            layer_values = torch.cat([current.cross_attention_cache.value_cache[idx] for current in splits], dim=0)
             cross_attention_cache.update(layer_keys, layer_values, idx)
         return cls(self_attention_cache, cross_attention_cache)
 
@@ -1715,17 +1687,11 @@ class HybridCache(Cache):
         self.device = torch.device(device) if device is not None else torch.device("meta")
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
         self.is_sliding = torch.tensor(
-            [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)],
-            dtype=torch.bool,
+            [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (
-            self.max_batch_size,
-            self.num_key_value_heads,
-            max_cache_len,
-            self.head_dim,
-        )
+        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
         sliding_cache_shape = (
             self.max_batch_size,
             self.num_key_value_heads,
@@ -1747,16 +1713,7 @@ class HybridCache(Cache):
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
-    def _sliding_update(
-        self,
-        cache_position,
-        layer_idx,
-        key_states,
-        value_states,
-        k_out,
-        v_out,
-        max_cache_len,
-    ):
+    def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         if cache_position.shape[0] > max_cache_len:
             k_out = key_states[:, :, -max_cache_len:, :]
             v_out = value_states[:, :, -max_cache_len:, :]
@@ -1784,16 +1741,7 @@ class HybridCache(Cache):
         self.value_cache[layer_idx] += v_out
         return k_out, v_out
 
-    def _static_update(
-        self,
-        cache_position,
-        layer_idx,
-        key_states,
-        value_states,
-        k_out,
-        v_out,
-        max_cache_len,
-    ):
+    def _static_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
@@ -1967,10 +1915,7 @@ class MambaCache:
             self.ssm_states.append(ssm_state)
 
     def update_conv_state(
-        self,
-        layer_idx: int,
-        new_conv_state: torch.Tensor,
-        cache_position: torch.LongTensor,
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
     ) -> torch.Tensor:
         if self.conv_states[layer_idx].device.type == "meta":
             self.conv_states[layer_idx] = torch.zeros_like(
@@ -2097,12 +2042,7 @@ class OffloadedStaticCache(StaticCache):
             else config.num_key_value_heads
         )
 
-        cache_shape = (
-            max_batch_size,
-            num_key_value_heads,
-            self.max_cache_len,
-            head_dim,
-        )
+        cache_shape = (max_batch_size, num_key_value_heads, self.max_cache_len, head_dim)
 
         # Create offloaded CPU tensors.
         self.key_cache: List[torch.Tensor] = []
