@@ -41,7 +41,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import is_timm_config_dict
-from .integrations.tensor_parallel import SUPPORTED_TP_SYLE
+from .integrations.tensor_parallel import SUPPORTED_TP_STYLES
 
 logger = logging.get_logger(__name__)
 
@@ -319,8 +319,8 @@ class PretrainedConfig(PushToHubMixin):
             )
 
         for _, v in self.base_model_tp_plan.items():
-            if v not in SUPPORTED_TP_SYLE:
-                raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_SYLE}")
+            if v not in SUPPORTED_TP_STYLES:
+                raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}")
 
         # Additional attributes without default values
         for key, value in kwargs.items():
