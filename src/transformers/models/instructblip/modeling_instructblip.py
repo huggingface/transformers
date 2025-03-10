@@ -322,8 +322,6 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         "InstructBlipQFormerMultiHeadAttention",
         "InstructBlipQFormerSelfOutput",
     ]
-    _keep_in_fp32_modules = []
-
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1293,7 +1291,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
-
+    _keep_in_fp32_modules = ["query_tokens"]
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
 
