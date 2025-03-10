@@ -25,15 +25,13 @@ from transformers import (
     Gemma3Config,
     Gemma3TextConfig,
     is_torch_available,
-    pipeline,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
-    tooslow,
     torch_device,
 )
 
@@ -50,6 +48,7 @@ if is_torch_available():
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
         Gemma3Model,
+        Gemma3Processor,
     )
 
 
@@ -338,139 +337,166 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 @slow
 @require_torch_gpu
+# @require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
-    input_text = ["Hello I am doing", "Hi today"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
+    def setUp(self):
+        self.processor = Gemma3Processor.from_pretrained("gg-hf-g/gemma-3-4b-it-new", padding_side="left")
 
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
-    @tooslow
-    @require_read_token
-    def test_model_9b_bf16(self):
-        model_id = "google/gemma-2-9b"
-        EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        self.messages = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": url},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_model_4b_bf16(self):
+        model_id = "gg-hf-g/gemma-3-4b-it-new"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @tooslow
-    @require_read_token
-    def test_model_9b_fp16(self):
-        model_id = "google/gemma-2-9b"
-        EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
-        ]
+    def test_model_4b_batch(self):
+        model_id = "gg-hf-g/gemma-3-4b-it-new"
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        messages_2 = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                    },
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Are these images identical?"},
+                ],
+            },
+        ]
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        inputs = self.processor.apply_chat_template(
+            [self.messages, messages_2],
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(torch_device)
 
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = [""]  # fmt: skip
+        print(output_text)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
-    def test_model_2b_pipeline_bf16_flex_attention(self):
-        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma3 before this PR
-        model_id = "google/gemma-2-2b"
-        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
-            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
+    def test_model_4b_multiimage(self):
+        model_id = "gg-hf-g/gemma-3-4b-it-new"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+        ).to(torch_device)
+
+        messages = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "What do you see here?"},
+                ],
+            },
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        inputs = self.processor.apply_chat_template(
+            messages,
+            toskenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            add_generation_prompt=True,
         ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
-        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
-        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+        EXPECTED_TEXTS = [""]  # fmt: skip
+        print(output_text)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
+    def test_model_1b_text_only(self):
+        model_id = "gg-hf-g/gemma-3-1b-it"
+
+        model = Gemma3ForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = [""]  # fmt: skip
+        print(output_text)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @slow
-    @tooslow
-    def test_model_9b_flash_attn(self):
-        # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma3, especially in long context
-        model_id = "google/gemma-2-9b"
-        EXPECTED_TEXTS = [
-            '<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic consisting of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the"
-        ]  # fmt: skip
+    def test_model_4b_flash_attn(self):
+        model_id = "gg-hf-g/gemma-3-4b-it-new"
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype="float16"
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         ).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(torch_device)
 
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = [""]  # fmt: skip
+        print(output_text)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
-    @tooslow
-    def test_model_9b_bf16_flex_attention(self):
-        model_id = "google/gemma-2-9b"
-        EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
-        ).to(torch_device)
-        assert model.config._attn_implementation == "flex_attention"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
-        model_id = "google/gemma-2-2b"
-        EXPECTED_COMPLETIONS = [
-            " the people, the food, the culture, the history, the music, the art, the architecture",
-            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
-        ]
+        model_id = "gg-hf-g/gemma-3-1b-it"
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
@@ -490,4 +516,5 @@ class Gemma3IntegrationTest(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
+        EXPECTED_COMPLETIONS = [""]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

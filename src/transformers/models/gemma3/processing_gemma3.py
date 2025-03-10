@@ -142,6 +142,7 @@ class Gemma3Processor(ProcessorMixin):
         array_ids = np.array(text_inputs["input_ids"])
         mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
         mm_token_type_ids[array_ids == self.image_token_id] = 1
+        text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs
         text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
@@ -164,7 +165,7 @@ class Gemma3Processor(ProcessorMixin):
     @property
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
