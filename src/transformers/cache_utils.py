@@ -547,7 +547,7 @@ def _flatten_dynamic_cache(
 
     if not is_torch_greater_or_equal_than_2_6:
         logger.warning_once(
-            "DynamicKVCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
+            "DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
         )
 
     # NOTE it seems _seen_tokens is deprecated, so probably doesn't need tracking
