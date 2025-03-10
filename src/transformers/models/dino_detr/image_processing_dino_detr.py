@@ -1707,7 +1707,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         target_sizes,
         not_to_xyxy=False,
         test=False,
-        num_select=100,
+        num_select=300,
         conf_threshold=0.3,
         nms_iou_threshold=-1,
     ):
