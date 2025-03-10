@@ -528,7 +528,9 @@ def main(*args):
         )
 
         if INCLUDE_CHAT_TEMPLATE.value:
+            # Duplicate so multimodal instruct models can also be used for CausalLM
             processor.chat_template = _CHAT_TEMPLATE
+            tokenizer.chat_template = _CHAT_TEMPLATE
 
         processor.save_pretrained(output_path)
         logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
