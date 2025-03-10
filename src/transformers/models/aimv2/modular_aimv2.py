@@ -27,8 +27,10 @@ from ...activations import ACT2FN
 from ...utils import (
     logging,
 )
+from ..dinov2.modeling_dinov2 import Dinov2ForImageClassification
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..siglip.modeling_siglip import SiglipEncoder
+from ..vit.configuration_vit import ViTConfig
 from .configuration_aimv2 import AIMv2Config
 
 
@@ -146,10 +148,10 @@ class AIMv2Attention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
-        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.proj_out = nn.Linear(self.embed_dim,self.embed_dim,bias=config.qkv_bias)
         self.proj_drop = nn.Dropout(config.projection_dropout)
 
     def forward(
@@ -254,11 +256,11 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, AIMv2Embeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
+            module.position_embeddings = nn.init.trunc_normal_(
+                module.position_embeddings.weight.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            ).to(module.position_embeddings.weight.dtype)
 
 
 class AIMv2Model(AIMv2PreTrainedModel):
@@ -270,7 +272,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         # Initialize weights and apply final processing
-        # self.post_init()
+        self.post_init()
 
     def forward(
         self,
@@ -305,5 +307,47 @@ class AIMv2Model(AIMv2PreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
+class AIMv2ForImageClassification(Dinov2ForImageClassification):
+    pass
 
-__all__ = ["AIMv2Model"]
+
+class AIMv2Config(ViTConfig):
+    def __init__(self,
+        hidden_size: int = 1024,
+        intermediate_size: int = 2816,
+        num_hidden_layers: int = 24,
+        num_attention_heads: int = 8,
+        num_channels: int = 3,
+        image_size: int = 224,
+        patch_size: int = 14,
+        rms_norm_eps: float = 1e-5,
+        attention_dropout: float = 0.0,
+        projection_dropout: float = 0.0,
+        qkv_bias: bool = False,
+        use_bias: bool = False,
+        hidden_act="silu",
+        initializer_range=0.02,
+        **kwargs,):
+        super().__init__(hidden_size=hidden_size,
+                         intermediate_size=intermediate_size,
+                         num_hidden_layers=num_hidden_layers,
+                         num_attention_heads=num_attention_heads,
+                         hidden_act=hidden_act,
+                         num_channels=num_channels,
+                         image_size=image_size,
+                         patch_size=patch_size,
+                         qkv_bias=qkv_bias,
+                         initializer_range=initializer_range,
+                         **kwargs,)
+
+        self.attention_dropout = attention_dropout
+        self.rms_norm_eps = rms_norm_eps
+        self.projection_dropout = projection_dropout
+        self.use_bias = use_bias
+
+        del self.attention_probs_dropout_prob
+        del self.layer_norm_eps
+        del self.encoder_stride
+        del self.hidden_dropout_prob
+
+__all__ = ["AIMv2Config","AIMv2Model","AIMv2ForImageClassification"]
