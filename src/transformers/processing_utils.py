@@ -638,22 +638,51 @@ class ProcessorMixin(PushToHubMixin):
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
         output_raw_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
         output_chat_template_file = os.path.join(save_directory, "chat_template.json")
+        chat_template_dir = os.path.join(save_directory, "additional_chat_templates")
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        if self.chat_template is not None:
-            if kwargs.get("save_raw_chat_template", False):
-                with open(output_raw_chat_template_file, "w", encoding="utf-8") as writer:
-                    writer.write(self.chat_template)
-                logger.info(f"chat template saved in {output_raw_chat_template_file}")
-            else:
-                chat_template_json_string = (
-                    json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+
+        if kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, str):
+            # New format for single templates is to save them as chat_template.jinja
+            with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
+                f.write(self.chat_template)
+            logger.info(f"chat template saved in {output_raw_chat_template_file}")
+        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
+            # New format for multiple templates is to save the default as chat_template.jinja
+            # and the other templates in the chat_templates/ directory
+            for template_name, template in self.chat_template.items():
+                if template_name == "default":
+                    with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
+                        f.write(self.chat_template["default"])
+                    logger.info(f"chat template saved in {output_raw_chat_template_file}")
+                else:
+                    Path(chat_template_dir).mkdir(exist_ok=True)
+                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    with open(template_filepath, "w", encoding="utf-8") as f:
+                        f.write(template)
+                    logger.info(f"chat template saved in {template_filepath}")
+        elif isinstance(self.chat_template, dict):
+            # Legacy format for multiple templates:
+            # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
+            chat_template_json_string = (
+                json.dumps(
+                    [{"name": k, "template": v} for k, v in self.chat_template.items()], indent=2, sort_keys=True
                 )
-                with open(output_chat_template_file, "w", encoding="utf-8") as writer:
-                    writer.write(chat_template_json_string)
-                logger.info(f"chat template saved in {output_chat_template_file}")
+                + "\n"
+            )
+            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                writer.write(chat_template_json_string)
+            logger.info(f"chat template saved in {output_chat_template_file}")
+        elif self.chat_template is not None:
+            # Legacy format for single templates: Put them in chat_template.json
+            chat_template_json_string = (
+                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+            )
+            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                writer.write(chat_template_json_string)
+            logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
