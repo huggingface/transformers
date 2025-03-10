@@ -77,7 +77,7 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> Li
 
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     """
-    When weights are packed (gate_up_proj), we need to make sure each shards gets it's correct share.
+    When weights are packed (gate_up_proj), we need to make sure each shard gets its correct share.
     So if you have: gate_proj       ( 16, 5120, 8190)
     and             up_proj         ( 16, 5120, 8190)
     packed as       gate_up_proj    ( 16, 5120, 2 * 8190)
