@@ -312,7 +312,7 @@ class TFSamProcessorTest(unittest.TestCase):
         # This is shape (1, 2, 2).
         # Flattened in Fortran order -> [0, 1, 1, 1].
         # The RLE for [0,1,1,1] is [1, 3].
-        input_mask = tf.tensor([[[0, 1], [1, 1]]], dtype=tf.int64)
+        input_mask = tf.constant([[[0, 1], [1, 1]]], dtype=tf.int64)
         rle = _mask_to_rle_tf(input_mask)
 
         self.assertEqual(len(rle), 1)
