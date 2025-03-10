@@ -1280,7 +1280,7 @@ def _get_torch_dtype(
                     elif state_dict is not None:
                         torch_dtype = get_state_dict_dtype(state_dict)
                     else:
-                        state_dict = load_state_dict(checkpoint_files[0], weights_only=weights_only)
+                        state_dict = load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only)
                         torch_dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `torch_dtype` attribute can't be found in model's config object, "
@@ -4932,7 +4932,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         model_to_load, state_dict, assign_to_params_buffers
                     )
                 else:
-                    model_to_load.load_state_dict(state_dict, strict=False, assign=assign_to_params_buffers)
+                    model_to_load.load_state_dict(state_dict, strict=False, assign=False)
 
             # force memory release
             del state_dict
