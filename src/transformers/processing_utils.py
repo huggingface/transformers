@@ -1342,14 +1342,23 @@ class ProcessorMixin(PushToHubMixin):
         """
 
         if chat_template is None:
-            if self.chat_template is not None:
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
+                raise ValueError(
+                    "The processor has multiple chat templates but none of them are named \"default\". You need to specify which one to use by passing the `chat_template` argument."
+                )
+            elif self.chat_template is not None:
                 chat_template = self.chat_template
             else:
-                raise ValueError(
-                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
-                    "or provide a chat template as an argument. See "
-                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
-                )
+                raise ValueError("Cannot use apply_chat_template because this processor does not have a chat template.")
+        else:
+            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
+                # It's the name of a template, not a full template string
+                chat_template = self.chat_template[chat_template]
+            else:
+                # It's a template string, render it directly
+                chat_template = chat_template
 
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
