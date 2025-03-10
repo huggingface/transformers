@@ -20,13 +20,13 @@ import tree
 from absl import app, flags, logging
 from orbax import checkpoint as obc
 
-from ..gemma import GemmaTokenizerFast
 from ...image_utils import PILImageResampling
+from ..gemma import GemmaTokenizerFast
 from . import (
     Gemma3ForCausalLM,
     Gemma3ForConditionalGeneration,
-    Gemma3Processor,
     Gemma3ImageProcessor,
+    Gemma3Processor,
 )
 from .configuration_gemma3 import (
     DEFAULT_ATTENION_PATTERN,
@@ -38,18 +38,44 @@ from .configuration_gemma3 import (
 
 # ==== Internal Constants and Classes ====
 
-_CHAT_TEMPLATE = (
-    "{{ bos_token }}{% set system_message = '' %}{% if messages[0]['role'] == 'system' %}"
-    "{% set system_message = messages[0]['content'] | trim + '\n\n' %}{% set messages = messages[1:] %}"
-    "{% endif %}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-    "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}"
-    "{% if loop.index0 == 0 and message['role'] == 'user' %}"
-    "{{ '<start_of_turn>' + message['role'] + '\n' + system_message + message['content'] | trim + '<end_of_turn>\n' }}"
-    "{% elif (message['role'] == 'assistant') %}{% set role = 'model' %}"
-    "{{ '<start_of_turn>' + role + '\n' + message['content'] | trim + '<end_of_turn>\n' }}{% else %}"
-    "{{ '<start_of_turn>' + message['role'] + '\n' + message['content'] | trim + '<end_of_turn>\n' }}{% endif %}"
-    "{% endfor %}{% if add_generation_prompt %}{{ '<start_of_turn>model\n' }}{% endif %}"
-)
+
+_CHAT_TEMPLATE = """
+{%- if messages[0]['role'] == 'system' -%}
+    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
+    {%- set loop_messages = messages[1:] -%}
+{%- else -%}
+    {%- set first_user_prefix = "" -%}
+    {%- set loop_messages = messages -%}
+{%- endif -%}
+{%- for message in loop_messages -%}
+    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}
+        {{ raise_exception("Conversation roles must alternate user/assistant/user/assistant/...") }}
+    {%- endif -%}
+    {%- if (message['role'] == 'assistant') -%}
+        {%- set role = "model" -%}
+    {%- else -%}
+        {%- set role = message['role'] -%}
+    {%- endif -%}
+    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else "") }}
+    {%- if message['content'] is string -%}
+        {{ message['content'] | trim }}
+    {%- elif message['content'] is iterable -%}
+        {%- for item in message['content'] -%}
+            {%- if item['type'] == 'image' -%}
+                {{ '<image_soft_token>' }}
+            {%- elif item['type'] == 'text' -%}
+                {{ item['text'] | trim }}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- else -%}
+        {{ raise_exception("Invalid content type") }}
+    {%- endif -%}
+    {{ '<end_of_turn>\n' }}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+    {{'<start_of_turn>model\n'}}
+{%- endif -%}
+"""
 
 _DTYPES = {
     "float32": torch.float32,
@@ -482,9 +508,6 @@ def main(*args):
         },
     )
 
-    if INCLUDE_CHAT_TEMPLATE.value:
-        tokenizer.chat_template = _CHAT_TEMPLATE
-
     if _TEXT_ONLY.value:
         config.vision_config = None
         tokenizer.save_pretrained(output_path)
@@ -503,6 +526,10 @@ def main(*args):
             image_processor=image_processor,
             tokenizer=tokenizer,
         )
+
+        if INCLUDE_CHAT_TEMPLATE.value:
+            processor.chat_template = _CHAT_TEMPLATE
+
         processor.save_pretrained(output_path)
         logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
         del processor

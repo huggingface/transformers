@@ -359,34 +359,6 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
 
 
 def create_sliding_window_mask(
-    position_ids: torch.LongTensor,
-    cache_position: int,
-    cache_len: int,
-    sliding_window_size: int,
-) -> torch.Tensor:
-    """Creates mask for sliding window attention."""
-    total_tokens = cache_position + position_ids.shape[1]  # cached + processing tokens
-
-    def _reconstruct_rotated_cache_positions():
-        cache_positions = torch.arange(cache_len) + total_tokens - cache_len
-        rotated_cache_positions = torch.zeros_like(cache_positions)
-        rotated_cache_positions[cache_positions % cache_len] = cache_positions
-        return rotated_cache_positions
-
-    # Reconstruct position_ids for cached kv.
-    if total_tokens <= cache_len:
-        cache_positions = torch.arange(cache_len)
-    else:
-        cache_positions = _reconstruct_rotated_cache_positions()
-
-    cache_positions = cache_positions.unsqueeze(0).unsqueeze(0).to(position_ids.device)  # [1, 1, cache_len]
-    position_ids = position_ids.unsqueeze(-1)  # [B, seq_len, 1]
-    sliding_mask = cache_positions > position_ids - sliding_window_size
-    sliding_mask *= cache_positions < position_ids + sliding_window_size
-    return sliding_mask.unsqueeze(1)
-
-
-def create_sliding_window_mask(
     sliding_window_size: int,
     q_pos: torch.Tensor,
     kv_pos: torch.Tensor,
