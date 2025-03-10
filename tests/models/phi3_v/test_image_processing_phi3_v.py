@@ -54,7 +54,7 @@ class Phi3VImageProcessingTester:
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
         do_pad=True,
-        num_crops=1
+        num_crops=1,
     ):
         self.size = size if size is not None else {"longest_edge": max_resolution}
         self.parent = parent
@@ -87,7 +87,7 @@ class Phi3VImageProcessingTester:
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_pad": self.do_pad,
-            "num_crops": self.num_crops
+            "num_crops": self.num_crops,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -99,9 +99,7 @@ class Phi3VImageProcessingTester:
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
-        effective_nb_images = (
-            (self.num_crops + 1) * self.num_images
-        )
+        effective_nb_images = (self.num_crops + 1) * self.num_images
         return effective_nb_images, self.num_channels, height, width
 
     def prepare_image_inputs(
