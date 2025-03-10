@@ -24,6 +24,7 @@ import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import logging
@@ -31,8 +32,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-AudioInput = Tuple[Union[np.ndarray, torch.Tensor], int]
-AudioInputs = List[AudioInput]
+
 
 
 # Special tokens
@@ -69,7 +69,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, List[TextInput]],
         images: Optional[ImageInput] = None,
-        audios: Optional[AudioInputs] = None,
+        audios: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -101,11 +101,25 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             - **input_audio_embeds** -- Audio embeddings to be fed to a model.
             - **audio_embed_sizes** -- List of integers specifying the size of each audio in `input_audio_embeds`.
         """
+        image_kwargs = {
+            "image_mean": kwargs.pop("image_mean", None),
+            "image_std": kwargs.pop("image_std", None),
+            "return_tensors": kwargs.get("return_tensors", None),
+        }
+        audio_kwargs = {
+            "sampling_rate": kwargs.pop("sampling_rate", None),
+            "pad_to_multiple_of": kwargs.pop("pad_to_multiple_of", None),
+            "padding": kwargs.get("padding", "longest"),
+            "max_length": kwargs.get("max_length", None),
+            "truncation": kwargs.get("truncation", False),
+            "return_attention_mask": kwargs.pop("return_attention_mask", True),
+            "device": kwargs.pop("device", "cpu"),
+            "return_tensors": kwargs.get("return_tensors", None),
+        }
+        text_kwargs = kwargs
 
-        return_tensors = kwargs.get("return_tensors", None)
-
-        image_inputs = self.image_processor(images, return_tensors=return_tensors) if images is not None else {}
-        audio_inputs = self.audio_processor(audios, return_tensors=return_tensors) if audios is not None else {}
+        image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
+        audio_inputs = self.audio_processor(audios, **audio_kwargs) if audios is not None else {}
 
         # We pop here for images as we don't need it later
         num_img_tokens = image_inputs.pop("num_img_tokens", [])
@@ -143,7 +157,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             re.sub(re.escape(audio_token), lambda _: audio_token * next(audio_count_iter), t) for t in processed_text
         ]
 
-        text_inputs = self.tokenizer(processed_text, **kwargs)
+        text_inputs = self.tokenizer(processed_text, **text_kwargs)
 
         # prepare batch feature
         data = {
