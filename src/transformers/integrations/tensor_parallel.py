@@ -19,7 +19,6 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 from ..utils import is_torch_greater_or_equal, logging
 
