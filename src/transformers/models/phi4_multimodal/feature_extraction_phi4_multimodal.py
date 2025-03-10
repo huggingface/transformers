@@ -200,7 +200,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         is_batched_torch_numpy = isinstance(raw_speech, (np.ndarray, torch.Tensor)) and len(raw_speech.shape) > 1
         if is_batched_torch_numpy and len(raw_speech.shape) > 2:
             logger.warning(
-                "Only mono-channel audio is supported for input to {self}. "
+                f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
                 "We will take the mean of the channels to convert to mono."
             )
             raw_speech = raw_speech.mean(-1)
@@ -210,7 +210,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             for speech in raw_speech:
                 if len(speech.shape) > 1:
                     logger.warning(
-                        "Only mono-channel audio is supported for input to {self}. "
+                        f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
                         "We will take the mean of the channels to convert to mono."
                     )
                     speech = speech.mean(-1)
