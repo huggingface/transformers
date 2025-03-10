@@ -762,7 +762,11 @@ def fix_tensor_type_and_device(
     # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
 
     old_param = model
-    pre, last = param_name.rsplit(".", 1)
+    if "." in param_name:
+        pre, last = param_name.rsplit(".", 1)
+    else:
+        pre, last = param_name, ""
+
     old_param = model.get_submodule(pre)
     if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
         old_param = None
