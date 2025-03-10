@@ -14,7 +14,6 @@
 # limitations under the License.
 import copy
 import glob
-import itertools
 import json
 import os
 import os.path
@@ -538,7 +537,6 @@ class ModelUtilsTest(TestCasePlus):
             model = LlavaForConditionalGeneration.from_pretrained(
                 TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
-
 
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
