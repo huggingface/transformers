@@ -54,7 +54,7 @@ from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
-from .integrations.tensor_parallel import shard_and_distribute_module
+from .integrations.tensor_parallel import shard_and_distribute_module, translate_to_torch_parallel_style
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -5887,9 +5887,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         try:
             param = getattr(model, param_name)
         except AttributeError:
-            if '.' in param_name:
-                param_name, param_type = param_name.rsplit('.',1)
-                param = getattr(model.get_submodule(param_name),param_type)
+            if "." in param_name:
+                param_name, param_type = param_name.rsplit(".", 1)
+                param = getattr(model.get_submodule(param_name), param_type)
             else:
                 param = model.get_buffer(param_name)
         parameter_count[device] += int(math.prod(param.shape) * allocation_factor)

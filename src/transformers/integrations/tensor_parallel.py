@@ -18,7 +18,6 @@ from functools import lru_cache, partial
 from typing import List, Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
@@ -125,8 +124,8 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
     elif dim == 1 or dim == -2:
         size_ = empty_param.shape[-2]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()),:]
-    elif dim == 2 or dim==-1:
+        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), :]
+    elif dim == 2 or dim == -1:
         size_ = empty_param.shape[-1]
         param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
     else:
@@ -156,6 +155,7 @@ class TensorParallelLayer:
     """
     General tensor parallel layer for transformers.
     """
+
     use_dtensor = True
 
     @staticmethod
@@ -175,6 +175,7 @@ class TensorParallelLayer:
                 partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
+
 
 # use_dtensor needs to be set to false for nn.Parameter when you want to view, chunk, slice
 # you name it. Whatever you want to do that is a bit unconventional, you need local tensors
@@ -247,7 +248,7 @@ class ColwiseParallel(TensorParallelLayer):
         input_layouts: Optional[Placement] = None,
         output_layouts: Optional[Placement] = None,
         use_local_output: bool = True,
-        use_dtensor = True
+        use_dtensor=True,
     ):
         super().__init__()
         self.input_layouts = (input_layouts or Replicate(),)
@@ -280,7 +281,6 @@ class ColwiseParallel(TensorParallelLayer):
             shard = [Shard(-2)]
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
 
-       
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
@@ -336,7 +336,7 @@ class RowwiseParallel(TensorParallelLayer):
         input_layouts: Optional[Placement] = None,
         output_layouts: Optional[Placement] = None,
         use_local_output: bool = True,
-        use_dtensor = True
+        use_dtensor=True,
     ):
         super().__init__()
         self.input_layouts = (input_layouts or Shard(-1),)
@@ -403,6 +403,7 @@ class RowwiseParallel(TensorParallelLayer):
                 partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
+
 
 class PackedRowwiseParallel(RowwiseParallel):
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -501,18 +502,17 @@ def shard_and_distribute_module(
     module_to_tp = model.get_submodule(param_name)
     current_module_plan = None
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
-    if generic_param_name in tp_plan :
+    if generic_param_name in tp_plan:
         current_module_plan = tp_plan[generic_param_name]
-    elif '.' in generic_param_name and generic_param_name.rsplit('.', 1)[0] in tp_plan:
-        current_module_plan = tp_plan[generic_param_name.rsplit('.', 1)[0]]
+    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
+        current_module_plan = tp_plan[generic_param_name.rsplit(".", 1)[0]]
 
     # Add hooks to the module if not done yet
-    #add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
+    # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
     if not getattr(module_to_tp, "_is_hooked", False):
         add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
         module_to_tp._is_hooked = True
 
-    
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
         param = tp_layer.partition_tensor(
