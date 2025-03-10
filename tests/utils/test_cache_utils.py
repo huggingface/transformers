@@ -182,7 +182,7 @@ class CacheTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model = model.eval().cuda()
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         prompt = "What is the best way to debug python script?"
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs.input_ids.cuda()
