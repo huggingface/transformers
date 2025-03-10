@@ -29,17 +29,24 @@ def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img
                 i += 1
             mask[first_img_idx:i, first_img_idx:i] = 1
             first_img_idx = 0
+    
+    vertical_header = []
+    for idx, word in enumerate(words):
+        if img_token not in word:
+            vertical_header += [list(str(idx).rjust(len(str(n))))]
+        else:
+            vertical_header += [[f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]]
 
-    vertical_header = [str(idx).rjust(len(str(n))) for idx, word in enumerate(words)]
     vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
-
     # Print the vertical header
     for row in vertical_header:
-        print((max_word_length + 5) * " " + " ".join(c for c in row))
+        print((max_word_length + 5) * " " + " ".join(row))
 
     for i, word in enumerate(words):
         colored_word = f"{YELLOW}{word}{RESET}" if img_token in word else word
-        base_display = colored_word.ljust(max_word_length) + ": " + str(i).rjust(len(str(n))) + " "
+        number = str(i).rjust(len(str(n))) 
+        colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
+        base_display = colored_word.ljust(max_word_length) + ": " + colored_number + " "
         row_display = " ".join(
             f"{YELLOW}{BLACK_SQUARE}{RESET}"
             if img_token in words[j] and mask[i, j] and img_token in words[i]
