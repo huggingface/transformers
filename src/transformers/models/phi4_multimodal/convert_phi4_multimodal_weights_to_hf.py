@@ -17,6 +17,7 @@ import os
 import re
 
 import torch
+from peft import LoraConfig
 from safetensors.torch import load_file, save_file
 
 from transformers import (
@@ -26,7 +27,6 @@ from transformers import (
     Phi4MultimodalProcessor,
     Phi4MultimodalVisionConfig,
 )
-from peft import LoraConfig
 
 
 # fmt: off

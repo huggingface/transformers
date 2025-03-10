@@ -16,17 +16,17 @@
 Processor class for Phi4Multimodal
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 
-from ... import is_torch_available
-from ...audio_utils import mel_filter_bank, spectrogram_batch, window_function, AudioInput
-
 from transformers.feature_extraction_sequence_utils import SequenceFeatureExtractor
 from transformers.image_processing_utils import BatchFeature
 from transformers.utils import TensorType, logging
+
+from ... import is_torch_available
+from ...audio_utils import AudioInput, spectrogram_batch, window_function
 
 
 logger = logging.get_logger(__name__)
@@ -132,7 +132,9 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         #     triangularize_in_mel_space=True,
         #     mel_scale="kaldi",
         # )
-        self.mel_filters = speechlib_mel(self.sampling_rate, self.n_fft, self.feature_size, mel_min_frequency, mel_max_frequency).T
+        self.mel_filters = speechlib_mel(
+            self.sampling_rate, self.n_fft, self.feature_size, mel_min_frequency, mel_max_frequency
+        ).T
 
     def __call__(
         self,
@@ -150,11 +152,11 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         """
         Main method to featurize and prepare for the model one or several audio sequence(s). Implementation uses PyTorch for
         the STFT computation if available, otherwise a slower NumPy based one.
-        
+
         Args:
             raw_speech (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array or PyTorch tensor.
-                For batched inputs, sequences can be a list of numpy arrays or PyTorch tensors, or a single numpy array or 
+                For batched inputs, sequences can be a list of numpy arrays or PyTorch tensors, or a single numpy array or
                 PyTorch tensor with first dimension being the batch size.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
@@ -176,7 +178,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                 Whether to return the extracted audio input features' attention mask.
             device (`str`, *optional*, defaults to "cpu"):
                 Specifies the device for computation of the audio features. (e.g., "cpu", "cuda")
-        
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
                 - **audio_input_features** -- Audio features extracted from the raw audio input, shape (batch_size, max_feature_length, feature_size).
@@ -205,7 +207,9 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             )
             raw_speech = raw_speech.mean(-1)
 
-        is_batched_sequence = isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, torch.Tensor)))
+        is_batched_sequence = isinstance(raw_speech, (list, tuple)) and (
+            isinstance(raw_speech[0], (np.ndarray, torch.Tensor))
+        )
         if is_batched_sequence:
             for speech in raw_speech:
                 if len(speech.shape) > 1:
@@ -216,19 +220,22 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                     speech = speech.mean(-1)
 
         is_batched = is_batched_torch_numpy or is_batched_sequence
-        to_float32 = lambda x: x.astype(np.float32) if isinstance(x, np.ndarray) else x.to(torch.float32) 
+
+        def to_float32(x):
+            return x.astype(np.float32) if isinstance(x, np.ndarray) else x.to(torch.float32)
+
         if is_batched:
             raw_speech = [to_float32(speech)[:, None] for speech in raw_speech]
         else:
             raw_speech = [to_float32(raw_speech)[:, None]]
-      
+
         audio_lengths = [len(speech) for speech in raw_speech]
 
         # if torch is available, let's make sure input_features and audio_lengths are PyTorch tensors
         # if not, it necessarily means that inputs are NumPy arrays
         batched_speech = BatchFeature(
             data={"audio_input_features": raw_speech, "audio_lengths": audio_lengths},
-            tensor_type="pt" if is_torch_available() and return_tensors is None else return_tensors
+            tensor_type="pt" if is_torch_available() and return_tensors is None else return_tensors,
         )
 
         # convert into correct format for padding
@@ -247,12 +254,16 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         )
         input_features = extract_fbank_features(input_features, audio_lengths, device)
 
-        feature_lengths = (audio_lengths - self.win_length) // self.hop_length + 1 
+        feature_lengths = (audio_lengths - self.win_length) // self.hop_length + 1
         feature_lengths = feature_lengths * self.audio_feat_stride
         audio_embed_sizes = self._compute_audio_embed_size(feature_lengths)
 
-        feature_attention_mask = torch.arange(0, feature_lengths.max()) if is_torch_available() else np.arange(0, feature_lengths.max())
-        feature_attention_mask = feature_attention_mask[None, :] < feature_lengths[:, None] if len(feature_lengths) > 1 else None 
+        feature_attention_mask = (
+            torch.arange(0, feature_lengths.max()) if is_torch_available() else np.arange(0, feature_lengths.max())
+        )
+        feature_attention_mask = (
+            feature_attention_mask[None, :] < feature_lengths[:, None] if len(feature_lengths) > 1 else None
+        )
 
         data = {
             "audio_input_features": input_features,
@@ -262,25 +273,22 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             data["audio_attention_mask"] = feature_attention_mask
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-    
+
     # TODO; @eustlb, move this to audio_utils in a general spectogram_batch function that handles torch and numpy
     def _torch_extract_fbank_features(
-        self, 
-        waveform: torch.FloatTensor, 
-        audio_lengths: torch.Tensor,
-        device: str = "cpu"
+        self, waveform: torch.FloatTensor, audio_lengths: torch.Tensor, device: str = "cpu"
     ) -> torch.FloatTensor:
         """
         Compute the log mel-scaled spectrogram of batched waveforms using PyTorch's FFT implementation.
 
         Args:
             waveform (torch.FloatTensor` of shape `(batch_size, max_audio_length)`):
-                The batched waveforms. 
+                The batched waveforms.
             audio_lengths (`torch.Tensor` of shape `(batch_size,)`):
                 The lengths of the waveforms along the max_audio_length dimension.
             device (`str`, *optional*, defaults to "cpu"):
                 The device to run the computation on. (e.g., "cpu", "cuda")
-        
+
         Returns:
             `torch.FloatTensor` of shape `(batch_size, max_feature_length, feature_size)`:
                 The log mel-scaled spectrogram of the batched waveforms.
@@ -293,20 +301,19 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
 
         # ---
         # the unbatched (and unpaded) original implementation skips last few audio values that can't be included in a frame
-        # we need to ensure that the corresponding frames for the padded input also mask these values  
+        # we need to ensure that the corresponding frames for the padded input also mask these values
         if batch_size > 1:
             frames = frames.clone()
             # concerned batch indices
             to_mask_batch_idxs = torch.arange(batch_size)[audio_lengths != audio_lengths.max()]
             batch_idxs_down = (audio_lengths[to_mask_batch_idxs] - self.win_length) // self.hop_length + 1
-            batch_idxs_up =  audio_lengths[to_mask_batch_idxs] // self.hop_length + 1
+            batch_idxs_up = audio_lengths[to_mask_batch_idxs] // self.hop_length + 1
             offset_idx = batch_idxs_down.min()
             max_idx = batch_idxs_up.max()
 
             mask = torch.arange(max_idx - offset_idx, device=device).expand(to_mask_batch_idxs.shape[0], -1)
-            mask = (
-                ((batch_idxs_down - offset_idx).unsqueeze(1) <= mask) 
-                & (mask < (batch_idxs_up - offset_idx).unsqueeze(1))
+            mask = ((batch_idxs_down - offset_idx).unsqueeze(1) <= mask) & (
+                mask < (batch_idxs_up - offset_idx).unsqueeze(1)
             )
             mask = mask.unsqueeze(-1).expand(-1, -1, self.win_length)
             masked_frames = frames[to_mask_batch_idxs, offset_idx:max_idx].masked_fill_(mask, 0)
@@ -322,9 +329,9 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         S = torch.fft.rfft(fft_window * frames.view(-1, self.win_length), n=self.n_fft, dim=1)
         S = S.view(frames.shape[0], -1, S.shape[-1])
         S = S.to(torch.complex64)
-    
+
         spec = torch.abs(S)
-        spec_power = spec ** 2
+        spec_power = spec**2
 
         # apply triangular mel filter bank
         mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
@@ -332,24 +339,21 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         log_spec = torch.log(log_spec)
 
         return log_spec
-    
+
     def _np_extract_fbank_features(
-        self, 
-        waveform_batch: np.ndarray, 
-        audio_lengths: np.ndarray = None, 
-        device: str = "cpu"
+        self, waveform_batch: np.ndarray, audio_lengths: np.ndarray = None, device: str = "cpu"
     ) -> np.ndarray:
         """
         Compute the log mel-scaled spectrogram of batched waveforms using NumPy's FFT implementation.
 
         Args:
             waveform_batch (`np.ndarray` of shape `(batch_size, max_audio_length)`):
-                The batched waveforms. 
+                The batched waveforms.
             audio_lengths (`np.ndarray` of shape `(batch_size,)`):
                 The lengths of the waveforms along the max_audio_length dimension.
             device (`str`, *optional*, defaults to "cpu"):
                 The device to run the computation on. Should be "cpu" as NumPy does not support CUDA.
-        
+
         Returns:
             `np.ndarray` of shape `(batch_size, max_feature_length, feature_size)`:
                 The log mel-scaled spectrogram of the batched waveforms.
@@ -360,7 +364,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                 "devices requires torch, which is not installed. Either set `device='cpu'`, or "
                 "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
             )
-        
+
         log_specs = spectrogram_batch(
             [waveform[:audio_length] * 32768 for waveform, audio_length in zip(waveform_batch, audio_lengths)],
             window_function(self.win_length, "hamming", periodic=False),
@@ -381,7 +385,8 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         return log_spec
 
     def _compute_audio_embed_size(self, audio_frames):
-        astype = lambda x, dtype: x.astype(dtype) if isinstance(x, np.ndarray) else x.to(dtype)
+        def astype(x, dtype):
+            return x.astype(dtype) if isinstance(x, np.ndarray) else x.to(dtype)
 
         integer = audio_frames // self.audio_compression_rate
         remainder = audio_frames % self.audio_compression_rate

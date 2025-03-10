@@ -17,14 +17,11 @@ Processor class for Phi4Multimodal
 """
 
 import re
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
-import numpy as np
-import torch
-
+from ...audio_utils import AudioInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import logging
@@ -44,6 +41,7 @@ class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
             "device": "cpu",
         },
     }
+
 
 class Phi4MultimodalProcessor(ProcessorMixin):
     r"""
