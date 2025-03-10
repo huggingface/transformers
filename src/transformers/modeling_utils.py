@@ -152,6 +152,7 @@ _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
+
 def is_fsdp_enabled():
     return (
         torch.distributed.is_available()
@@ -850,7 +851,7 @@ def _load_state_dict_into_meta_model(
         if shard_file.endswith(".safetensors"):
             param = file_pointer.get_slice(serialized_param_name)
         elif shard_file.endswith(".gguf"):
-            param = empty_param # For gguf the dict is actually not empty!
+            param = empty_param  # For gguf the dict is actually not empty!
         else:
             param = bin_state_dict[serialized_param_name]
 
@@ -5896,7 +5897,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
 
         if _torch_distributed_available:
             generic_name = re.sub(r"\d+", "*", param_name)
-            param_size //= torch.distributed.get_world_size() if not tp_plan.get(generic_name, False) else 1
+            param_size //= torch.distributed.get_world_size() if not model._tp_plan.get(generic_name, False) else 1
 
         parameter_count[device] += param_size
 

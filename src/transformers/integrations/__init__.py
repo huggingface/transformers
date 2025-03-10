@@ -115,7 +115,6 @@ _import_structure = {
     "quanto": ["replace_with_quanto_layers"],
     "spqr": ["replace_with_spqr_linear"],
     "vptq": ["replace_with_vptq_linear"],
-    
 }
 
 try:
@@ -135,7 +134,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tensor_parallel"] = ["shard_and_distribute_module", "SUPPORTED_TP_STYLES",  "translate_to_torch_parallel_style" ],
+    _import_structure["tensor_parallel"] = (
+        ["shard_and_distribute_module", "SUPPORTED_TP_STYLES", "translate_to_torch_parallel_style"],
+    )
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
@@ -246,7 +247,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tensor_parallel import shard_and_distribute_module, SUPPORTED_TP_STYLES, translate_to_torch_parallel_style
+        from .tensor_parallel import (
+            SUPPORTED_TP_STYLES,
+            shard_and_distribute_module,
+            translate_to_torch_parallel_style,
+        )
 
 else:
     import sys
