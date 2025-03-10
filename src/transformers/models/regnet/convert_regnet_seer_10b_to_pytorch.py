@@ -250,7 +250,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         # load state dict
         state_dict_keys = our_model.state_dict().keys()
         state_dict = load_state_dict(save_directory / f"{model_name}.pth", weights_only=True)
-        fixed_state_dict = state_dict = {our_model._fix_state_dict_key_on_load(k): v for k,v in state_dict.items()}
+        fixed_state_dict = state_dict = {our_model._fix_state_dict_key_on_load(k): v for k, v in state_dict.items()}
         _load_state_dict_into_meta_model(
             our_model,
             fixed_state_dict,
