@@ -323,7 +323,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         "InstructBlipVideoQFormerMultiHeadAttention",
         "InstructBlipVideoQFormerSelfOutput",
     ]
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't
 
     def _init_weights(self, module):
         """Initialize the weights"""
