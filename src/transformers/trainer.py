@@ -810,6 +810,12 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
+        if (
+            hasattr(self.accelerator.state, "fsdp_plugin")
+            and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
+            and self.args.save_only_model is True
+        ):
+            raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
 
     @property
     def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
