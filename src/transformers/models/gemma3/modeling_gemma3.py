@@ -286,7 +286,7 @@ class Gemma3Attention(nn.Module):
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar
-        self.is_sliding = bool((layer_idx + 1) % 6)
+        self.is_sliding = bool((layer_idx + 1) % config.sliding_window_pattern)
         self.sliding_window = config.sliding_window
 
         self.q_proj = nn.Linear(
@@ -1099,7 +1099,7 @@ class Gemma3MultiModalProjector(nn.Module):
 
         normed_vision_outputs = self.mm_soft_emb_norm(pooled_vision_outputs)
 
-        projected_vision_outputs = torch.einsum("btm,md->btd", normed_vision_outputs, self.mm_input_projection_weight)
+        projected_vision_outputs = torch.matmul(normed_vision_outputs, self.mm_input_projection_weight)
         return projected_vision_outputs.type_as(vision_outputs)
 
 
