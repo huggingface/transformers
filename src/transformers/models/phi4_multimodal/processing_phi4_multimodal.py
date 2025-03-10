@@ -33,12 +33,18 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-
-
 # Special tokens
 COMPATIBLE_IMAGE_TOKEN_PATTERN = r"<\|image_\d+\|>"
 COMPATIBLE_AUDIO_TOKEN_PATTERN = r"<\|audio_\d+\|>"
 
+
+class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "device": "cpu",
+        },
+    }
 
 class Phi4MultimodalProcessor(ProcessorMixin):
     r"""
@@ -101,17 +107,11 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             - **input_audio_embeds** -- Audio embeddings to be fed to a model.
             - **audio_embed_sizes** -- List of integers specifying the size of each audio in `input_audio_embeds`.
         """
-        image_kwargs = {
-            "image_mean": kwargs.pop("image_mean", None),
-            "image_std": kwargs.pop("image_std", None),
-            "return_tensors": kwargs.get("return_tensors", None),
-        }
-        audio_kwargs = {
-            "sampling_rate": kwargs.pop("sampling_rate", None),
-            "device": kwargs.pop("device", "cpu"),
-            **kwargs,
-        }
-        text_kwargs = kwargs
+
+        output_kwargs = self._merge_kwargs(Phi4MultimodalProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
+        image_kwargs = output_kwargs["images_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        text_kwargs = output_kwargs["text_kwargs"]
 
         image_inputs = self.image_processor(images, **image_kwargs) if images is not None else {}
         audio_inputs = self.audio_processor(audios, **audio_kwargs) if audios is not None else {}
