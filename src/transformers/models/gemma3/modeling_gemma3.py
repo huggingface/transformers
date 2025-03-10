@@ -42,7 +42,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..auto import AutoModel
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
 
@@ -680,11 +680,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-            # normalized
-            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-            # See https://github.com/huggingface/transformers/pull/29402
-            normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds * normalizer
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
@@ -885,9 +880,11 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = Gemma3TextConfig
+    base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
+
         self.model = Gemma3Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1117,7 +1114,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         self.multi_modal_projector = Gemma3MultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
-        language_model = Gemma3ForCausalLM._from_config(config=config.text_config)
+        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         if language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]

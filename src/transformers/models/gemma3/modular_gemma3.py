@@ -644,11 +644,6 @@ class Gemma3Model(Gemma2Model):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-            # normalized
-            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-            # See https://github.com/huggingface/transformers/pull/29402
-            normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds * normalizer
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
@@ -753,6 +748,7 @@ class Gemma3Model(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config_class = Gemma3TextConfig
+    base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
