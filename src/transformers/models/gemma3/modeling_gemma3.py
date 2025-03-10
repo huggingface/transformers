@@ -21,7 +21,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -246,20 +246,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-ATTENTION_TYPE_GLOBAL = "global"
-ATTENTION_TYPE_LOCAL = "local_sliding"
-AttentionType = Literal["global", "local_sliding"]
-
-
-def create_sliding_window_mask(
-    sliding_window_size: int,
-    q_pos: torch.Tensor,
-    kv_pos: torch.Tensor,
-) -> torch.Tensor:
-    """Creates mask for sliding window attention."""
-    return q_pos < kv_pos + sliding_window_size
-
-
 def eager_attention_forward(
     module: "Gemma3Attention",
     query: torch.Tensor,
@@ -294,15 +280,14 @@ class Gemma3Attention(nn.Module):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.attention_dropout = config.attention_dropout
-        self.attention_type: AttentionType = config.attention_pattern[layer_idx % len(config.attention_pattern)]
         self.config = config
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.is_causal = True
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar
-        self.is_sliding = self.attention_type == ATTENTION_TYPE_LOCAL
-        self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.is_sliding = not bool((layer_idx + 1) % 6)
+        self.sliding_window = config.sliding_window
 
         self.q_proj = nn.Linear(
             config.hidden_size,
@@ -347,10 +332,10 @@ class Gemma3Attention(nn.Module):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        if self.attention_type == ATTENTION_TYPE_GLOBAL:
-            cos, sin = position_embeddings_global
-        else:
+        if self.is_sliding:
             cos, sin = position_embeddings_local
+        else:
+            cos, sin = position_embeddings_global
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -368,18 +353,6 @@ class Gemma3Attention(nn.Module):
             if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
                 seq_len = attention_mask.shape[-1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
-
-        if self.is_sliding and key_states.shape[-2] > self.sliding_window:
-            assert self.sliding_window is not None
-            if query_states.shape[-2] == key_states.shape[-2]:
-                sliding_window_mask = create_sliding_window_mask(
-                    sliding_window_size=self.sliding_window,
-                    q_pos=torch.arange(query_states.shape[-2]).unsqueeze(-1),
-                    kv_pos=torch.arange(key_states.shape[-2]).unsqueeze(-2),
-                )
-                attention_mask = torch.logical_and(attention_mask, sliding_window_mask)
-            else:
-                raise ValueError()
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
