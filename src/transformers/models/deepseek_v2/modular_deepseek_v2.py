@@ -13,35 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+import math
+import warnings
+from typing import Callable, Optional, Tuple
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from transformers.cache_utils import Cache
+from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import (
-    LlamaModel,
-    LlamaForCausalLM,
-    LlamaPreTrainedModel,
     LlamaDecoderLayer,
-    LlamaRMSNorm,
+    LlamaForCausalLM,
     LlamaMLP,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
     LlamaRotaryEmbedding,
     eager_attention_forward,
     rotate_half,
 )
-from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeFlashAttention2
-from transformers.models.llama.configuration_llama import LlamaConfig
-from torch import nn
-import warnings
-import torch.nn.functional as F
-import torch
-import torch.distributed as dist
-import math
 from transformers.utils import (
     logging,
 )
-from typing import Optional, Tuple
-from transformers.cache_utils import Cache
-import numpy as np
-from typing import Callable, Optional, Tuple
+
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+
 
 logger = logging.get_logger(__name__)
 
@@ -321,7 +321,6 @@ class DeepseekV2MoE(nn.Module):
         sorted_tokens = hidden_states[idxs // topk_ids.shape[1]]
 
         tokens_per_expert = tokens_per_expert.cpu().numpy()
-        
 
         # Process experts
         outputs = []
@@ -528,7 +527,7 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-    
+
     def forward(
         self,
         hidden_states: torch.Tensor,
