@@ -96,7 +96,7 @@ class Gemma3TextConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 1_000_000.0):
             The base period of the RoPE embeddings.
         rope_local_base_freq (float, *optional*, defaults to `rope_theta`):
             The base period of the RoPE embeddings for local attention.

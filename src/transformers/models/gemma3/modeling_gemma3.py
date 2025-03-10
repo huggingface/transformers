@@ -90,6 +90,19 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
+class Gemma3ScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 class Gemma3MLP(nn.Module):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__()
@@ -425,9 +438,6 @@ class Gemma3DecoderLayer(nn.Module):
         last_cache_position: int = 0,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if not isinstance(past_key_value, HybridCache):
-            raise ValueError("Gemma 3 only supports a HybridCache, required for local vs global attention")
-
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
@@ -637,7 +647,10 @@ class Gemma3Model(Gemma3PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
+        self.embed_tokens = Gemma3ScaledWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
+        )
         self.layers = nn.ModuleList(
             [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -1042,42 +1055,23 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     ):
         # Overwritten: has a special cache type, `HybridCache`
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        if past_key_values is not None:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s
-                # `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride
-                # during the decoding. Here, simply using `.contiguous()` is not sufficient as in the
-                # batch size = 1 case, `position_ids` is already contiguous but with varying stride
-                # which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-        else:
-            # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
 
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
         model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+        if logits_to_keep is None:
+            _ = model_inputs.pop("logits_to_keep", None)
 
         if (
             isinstance(past_key_values, HybridCache)
@@ -1100,19 +1094,8 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
+            model_inputs["attention_mask"] = attention_mask
 
-        if logits_to_keep is not None:
-            model_inputs["logits_to_keep"] = logits_to_keep
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
         return model_inputs
 
 
@@ -1228,6 +1211,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         causal_mask = torch.full(
             (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
         )
+
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -1235,11 +1219,12 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
 
-        if sequence_length != 1:
+        # Apply bidirectional mask on images if token type ids are provided
+        if token_type_ids is not None and sequence_length != 1:
             token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
             token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
             token_type_mask = token_type_mask.unsqueeze(1).to(causal_mask.device, dtype=torch.bool)
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            causal_mask = causal_mask.clone()
             causal_mask[:, :, :, :sequence_length] = causal_mask[:, :, :, :sequence_length].masked_fill(
                 token_type_mask, 0.0
             )
@@ -1340,16 +1325,16 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
         is_training = token_type_ids is not None and labels is not None
 
-        if inputs_embeds is None:
+        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_index
             llm_input_ids = input_ids.clone()
             llm_input_ids[special_image_mask] = 0
+        else:
+            llm_input_ids = input_ids
+
+        if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
-            # normalized
-            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-            # See https://github.com/huggingface/transformers/pull/29402
-            normalizer = torch.tensor(self.config.text_config.hidden_size**0.5, dtype=inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds * normalizer
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

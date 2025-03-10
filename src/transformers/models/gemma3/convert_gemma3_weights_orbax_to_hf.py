@@ -125,7 +125,8 @@ _VARIANTS = {
             num_key_value_heads=1,
             attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=512,
-            rope_global_base_freq=1_000_000,
+            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_theta=1_000_000,  # used for global RoPE only
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
             query_pre_attn_scalar=256**-0.5,
@@ -516,10 +517,9 @@ def main(*args):
     else:
         image_processor = Gemma3ImageProcessor(
             image_seq_length=256,
-            image_mean=(127.5,) * 3,
-            image_std=(127.5,) * 3,
+            image_mean=(0.5,) * 3,
+            image_std=(0.5,) * 3,
             size={"height": 896, "width": 896},
-            do_rescale=False,
             resample=PILImageResampling.BILINEAR,
         )
         processor = Gemma3Processor(

@@ -485,8 +485,16 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         is_training = token_type_ids is not None and labels is not None
 
+        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
+            special_image_mask = input_ids == self.config.image_token_index
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[special_image_mask] = 0
+        else:
+            llm_input_ids = input_ids
+
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

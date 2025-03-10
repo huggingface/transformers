@@ -34,6 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
+from ..bart.modeling_bart import BartScaledWordEmbedding
 from ..gemma2.modeling_gemma2 import (
     Gemma2ForCausalLM,
     Gemma2MLP,
@@ -343,6 +344,10 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
+class Gemma3ScaledWordEmbedding(BartScaledWordEmbedding):
+    pass
+
+
 class Gemma3MLP(Gemma2MLP):
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -545,9 +550,6 @@ class Gemma3DecoderLayer(nn.Module):
         last_cache_position: int = 0,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if not isinstance(past_key_value, HybridCache):
-            raise ValueError("Gemma 3 only supports a HybridCache, required for local vs global attention")
-
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
@@ -639,6 +641,11 @@ class Gemma3Model(Gemma2Model):
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
+
+        # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
+        self.embed_tokens = Gemma3ScaledWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
+        )
 
         # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas
         # when we want to create a local RoPE layer. Config defaults should hold values for global RoPE
@@ -882,6 +889,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         causal_mask = torch.full(
             (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
         )
+
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -889,11 +897,12 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
 
-        if sequence_length != 1:
+        # Apply bidirectional mask on images if token type ids are provided
+        if token_type_ids is not None and sequence_length != 1:
             token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
             token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
             token_type_mask = token_type_mask.unsqueeze(1).to(causal_mask.device, dtype=torch.bool)
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            causal_mask = causal_mask.clone()
             causal_mask[:, :, :, :sequence_length] = causal_mask[:, :, :, :sequence_length].masked_fill(
                 token_type_mask, 0.0
             )

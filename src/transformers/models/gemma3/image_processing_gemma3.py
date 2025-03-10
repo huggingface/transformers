@@ -60,7 +60,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
@@ -94,7 +94,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = False,
+        do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
