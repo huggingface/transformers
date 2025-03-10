@@ -4922,13 +4922,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         weights_only=weights_only,
                     )
             else:
-                assign_to_params_buffers = check_support_param_buffer_assignment(model_to_load, state_dict)
+                assign_params = check_support_param_buffer_assignment(model_to_load, state_dict)
                 if is_deepspeed_zero3_enabled():
-                    error_msgs += _load_state_dict_into_zero3_model(
-                        model_to_load, state_dict, assign_to_params_buffers
-                    )
+                    error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_params)
                 else:
-                    model_to_load.load_state_dict(state_dict, strict=False, assign=False)
+                    model_to_load.load_state_dict(state_dict, strict=False, assign=assign_params)
 
             # force memory release
             del state_dict
