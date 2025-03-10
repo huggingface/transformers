@@ -797,12 +797,15 @@ def _load_state_dict_into_meta_model(
         param_casting_dtype = None
         is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
         if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+            # First fp32 if part of the exception list
             if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(fixed_param_name):
                 param_casting_dtype = torch.float32
-            elif dtype is not None:
-                param_casting_dtype = dtype
+            # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
             elif old_param is not None:
                 param_casting_dtype = old_param.dtype
+            # Finally default dtype provided (base dtype for models with subconfigs/submodels)
+            elif dtype is not None:
+                param_casting_dtype = dtype
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
             module_to_tp, param_type = get_module_from_name(model, fixed_param_name)
@@ -1267,7 +1270,7 @@ def _get_torch_dtype(
                     elif state_dict is not None:
                         torch_dtype = get_state_dict_dtype(state_dict)
                     else:
-                        state_dict = load_state_dict(checkpoint_files[0], weights_only=weights_only)
+                        state_dict = load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only)
                         torch_dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `torch_dtype` attribute can't be found in model's config object, "
@@ -4907,7 +4910,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         model_to_load, state_dict, assign_to_params_buffers
                     )
                 else:
-                    model_to_load.load_state_dict(state_dict, strict=False, assign=assign_to_params_buffers)
+                    model_to_load.load_state_dict(state_dict, strict=False, assign=False)
 
             # force memory release
             del state_dict
