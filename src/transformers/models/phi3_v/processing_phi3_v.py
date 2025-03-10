@@ -43,18 +43,22 @@ class Phi3VProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
+            chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "Phi3VImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
     special_image_token = "<|image|>"
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, chat_template: str = None, **kwargs):
         self.image_processor = image_processor
         self.tokenizer = tokenizer
         self.num_img_tokens = image_processor.num_img_tokens
         self.img_tokens = [f"<|image_{i+1}|>" for i in range(1000000)]
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(
         self,
