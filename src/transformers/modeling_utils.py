@@ -4396,7 +4396,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
                 )
 
-        use_keep_in_fp32_modules = False
         from_pt = not (from_tf | from_flax)
 
         if from_pt:
@@ -4416,11 +4415,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Find the correct dtype based on current state
             config, torch_dtype, dtype_orig = _get_torch_dtype(
                 cls, torch_dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
-            )
-
-            # Check if `_keep_in_fp32_modules` is not None
-            use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
-                (torch_dtype == torch.float16) or hasattr(hf_quantizer, "use_keep_in_fp32_modules")
             )
 
         config.name_or_path = pretrained_model_name_or_path
@@ -4451,10 +4445,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Find fp32 modules if needed
         keep_in_fp32_modules = None
-        if use_keep_in_fp32_modules:
+        if model._keep_in_fp32_modules is not None or hasattr(hf_quantizer, "use_keep_in_fp32_modules"):
             if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
-            keep_in_fp32_modules = model._keep_in_fp32_modules
+            keep_in_fp32_modules = model._keep_in_fp32_modules if len(model._keep_in_fp32_modules) > 0 else None
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
