@@ -238,6 +238,15 @@ ATTENTION_TYPE_LOCAL = "local_sliding"
 AttentionType = Literal["global", "local_sliding"]
 
 
+def create_sliding_window_mask(
+    sliding_window_size: int,
+    q_pos: torch.Tensor,
+    kv_pos: torch.Tensor,
+) -> torch.Tensor:
+    """Creates mask for sliding window attention."""
+    return q_pos < kv_pos + sliding_window_size
+
+
 def eager_attention_forward(
     module: "Gemma3Attention",
     query: torch.Tensor,
@@ -347,6 +356,18 @@ class Gemma3Attention(nn.Module):
                 seq_len = attention_mask.shape[-1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
+        if self.is_sliding and key_states.shape[-2] > self.sliding_window:
+            assert self.sliding_window is not None
+            if query_states.shape[-2] == key_states.shape[-2]:
+                sliding_window_mask = create_sliding_window_mask(
+                    sliding_window_size=self.sliding_window,
+                    q_pos=torch.arange(query_states.shape[-2]).unsqueeze(-1),
+                    kv_pos=torch.arange(key_states.shape[-2]).unsqueeze(-2),
+                )
+                attention_mask = torch.logical_and(attention_mask, sliding_window_mask)
+            else:
+                raise ValueError()
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
@@ -363,7 +384,7 @@ class Gemma3Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask.to(query_states),
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
@@ -404,7 +425,9 @@ class Gemma3DecoderLayer(nn.Module):
         last_cache_position: int = 0,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        # TODO(ryanmullins):
+        if not isinstance(past_key_value, HybridCache):
+            raise ValueError("Gemma 3 only supports a HybridCache, required for local vs global attention")
+
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
@@ -671,6 +694,11 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+            # normalized
+            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
+            # See https://github.com/huggingface/transformers/pull/29402
+            normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds * normalizer
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
@@ -716,12 +744,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings_global = self.rotary_emb(hidden_states, position_ids)
         position_embeddings_local = self.rotary_emb_local(hidden_states, position_ids)
-
-        # normalized
-        # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
-        hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1319,7 +1341,15 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            special_image_mask = input_ids == self.config.image_token_index
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[special_image_mask] = 0
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+            # normalized
+            # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
+            # See https://github.com/huggingface/transformers/pull/29402
+            normalizer = torch.tensor(self.config.text_config.hidden_size**0.5, dtype=inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds * normalizer
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
