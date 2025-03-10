@@ -61,6 +61,8 @@ class AIMv2SwiGLUFFN(nn.Module):
 class AIMv2Embeddings(nn.Module):
     def __init__(self, config: AIMv2Config):
         super().__init__()
+        self.config = config
+        self.patch_size = config.patch_size
         self.patch_embed = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
@@ -71,35 +73,52 @@ class AIMv2Embeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     @staticmethod
-    def build_2d_sincos_position_embedding(height, width, embed_dim):
-        pass
+    def build_2d_sincos_position_embedding(
+        height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+    ):
+        grid_w = torch.arange(int(width), dtype=dtype, device=device)
+        grid_h = torch.arange(int(height), dtype=dtype, device=device)
+        grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
+
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
+        omega = 1.0 / (temperature**omega)
+
+        out_h = grid_h.flatten()[..., None] @ omega[None, :]
+        out_w = grid_w.flatten()[..., None] @ omega[None, :]
+
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        _, _, height, width = pixel_values.size()
         hidden_states = self.patch_embed(pixel_values).flatten(2).transpose(1, 2)
         hidden_states = self.rms_norm(hidden_states)
 
-        _, num_patches, _ = hidden_states.size()
+        if self.config.image_size != height or self.config.image_size != width:
+            pos_embed = self.build_2d_sincos_position_embedding(
+                height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
+            )
+        else:
+            pos_embed = self.position_embeddings(self.position_ids)
 
-        # added logic for native in build s2d sincos pos embed
-        hidden_states = hidden_states + self.position_embeddings(self.position_ids)
-
+        hidden_states = hidden_states + pos_embed
         return hidden_states
 
-# Replace atttn_mask with head mask
+
 def eager_attention_forward(
     module: nn.Module,
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    head_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
 
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
+    if head_mask is not None:
+        attn_weights = attn_weights + head_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
 
@@ -136,7 +155,7 @@ class AIMv2Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -167,7 +186,7 @@ class AIMv2Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            head_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scale,
             is_causal=False,
@@ -193,11 +212,11 @@ class AIMv2EncoderLayer(nn.Module):
         self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
-        self, hidden_states: torch.Tensor, attention_mask, output_attentions: Optional[bool] = False
+        self, hidden_states: torch.Tensor, head_mask, output_attentions: Optional[bool] = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states = self.rms_norm1(hidden_states)
         attn_output, attn_wights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states=norm_hidden_states, head_mask=head_mask, output_attentions=output_attentions
         )
 
         hidden_states = hidden_states + attn_output
@@ -251,12 +270,12 @@ class AIMv2Model(AIMv2PreTrainedModel):
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()
 
     def forward(
         self,
         pixel_values,
-        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -271,7 +290,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

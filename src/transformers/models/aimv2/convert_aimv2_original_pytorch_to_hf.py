@@ -100,7 +100,7 @@ def write_model(
     config = AIMv2Config.from_pretrained(hf_repo_id)
 
     # Load original model state dict
-    original_state_dict = load_original_state_dict("apple/aimv2-large-patch14-224")
+    original_state_dict = load_original_state_dict(hf_repo_id)
 
     print("Converting model...")
     state_dict = {}
@@ -117,13 +117,17 @@ def write_model(
         else:
             state_dict[new_key] = value
 
-    state_dict["embeddings.position_embeddings.weight"] = state_dict["embeddings.position_embeddings.weight"].squeeze(
-        0
-    )
+    # Check if position embeddings exist before squeezing
+    if "embeddings.position_embeddings.weight" in state_dict:
+        state_dict["embeddings.position_embeddings.weight"] = state_dict["embeddings.position_embeddings.weight"].squeeze(0)
+        strict_loading = True
+    else:
+        # For `apple/aimv2-large-patch14-native` we don't have position_embeddings in state_dict
+        strict_loading = False
 
     print("Loading the checkpoint in a DepthPro model.")
     model = AIMv2Model(config)
-    model.load_state_dict(state_dict, strict=True, assign=True)
+    model.load_state_dict(state_dict, strict=strict_loading, assign=True)
     print("Checkpoint loaded successfully.")
 
     print("Saving the model.")
