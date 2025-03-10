@@ -41,7 +41,6 @@ COMPATIBLE_AUDIO_TOKEN_PATTERN = r"<\|audio_\d+\|>"
 class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
-            "sampling_rate": 16000,
             "device": "cpu",
         },
     }
