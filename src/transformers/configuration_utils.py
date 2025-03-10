@@ -844,6 +844,7 @@ class PretrainedConfig(PushToHubMixin):
                 key not in default_config_dict
                 or key == "transformers_version"
                 or key == "vocab_file"
+                or key == "tie_word_embeddings"
                 or value != default_config_dict[key]
                 or (key in default_config_dict and value != class_config_dict.get(key, value))
             ):
