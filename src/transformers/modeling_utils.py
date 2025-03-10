@@ -768,27 +768,28 @@ def fix_tensor_type_and_device(
     old_param = model
     if "." in param_name:
         pre, _ = param_name.rsplit(".", 1)
+
+        old_param = model.get_submodule(pre)
+        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+            old_param = None
+
+        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+        # in int/uint/bool and not cast them.
+        param_casting_dtype = None
+        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
+        if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+            if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
+                param_casting_dtype = torch.float32
+            elif dtype is not None:
+                param_casting_dtype = dtype
+            elif old_param is not None:
+                param_casting_dtype = old_param.dtype
+        return old_param is not None and old_param.is_contiguous(), param_casting_dtype
     else:
-        pre = param_name
+        return False, None
 
-    old_param = model.get_submodule(pre)
-    if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-        old_param = None
-
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
-    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-    # in int/uint/bool and not cast them.
-    param_casting_dtype = None
-    is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
-    if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
-            param_casting_dtype = torch.float32
-        elif dtype is not None:
-            param_casting_dtype = dtype
-        elif old_param is not None:
-            param_casting_dtype = old_param.dtype
-
-    return old_param is not None and old_param.is_contiguous(), param_casting_dtype
+    return 
 
 
 @torch.no_grad()

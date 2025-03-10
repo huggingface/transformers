@@ -1799,7 +1799,7 @@ class Blip2Model(Blip2PreTrainedModel):
 )
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
