@@ -838,13 +838,11 @@ class PretrainedConfig(PushToHubMixin):
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
-                # if len(diff) > 0:
                 serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
                 or key == "transformers_version"
                 or key == "vocab_file"
-                or key == "tie_word_embeddings"
                 or value != default_config_dict[key]
                 or (key in default_config_dict and value != class_config_dict.get(key, value))
             ):
@@ -1195,7 +1193,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
         if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
-        elif key not in dict_b or (value != dict_b[key]  and value != default[key]):
+        elif key not in dict_b or (value != default[key]):
             diff[key] = value
     return diff
 
