@@ -145,7 +145,7 @@ class Phi3VImageProcessor(BaseImageProcessor):
 
     Args:
         num_crops (`int`, *optional*, defaults to 1): Number of different image crops to use.
-        num_img_tokens (`int`, *optional*, defaults to 144): <fill_docstring>
+        num_img_tokens (`int`, *optional*, defaults to 144): Number of tokens to generate per image
         image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
