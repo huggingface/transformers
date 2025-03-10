@@ -26,6 +26,7 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
+from .integrations.tensor_parallel import SUPPORTED_TP_STYLES
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
@@ -41,7 +42,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import is_timm_config_dict
-from .integrations.tensor_parallel import SUPPORTED_TP_STYLES
+
 
 logger = logging.get_logger(__name__)
 

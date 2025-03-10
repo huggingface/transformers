@@ -417,7 +417,18 @@ class PackedRowwiseParallel(RowwiseParallel):
             parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
         return nn.Parameter(parameter)
 
-SUPPORTED_TP_STYLES = {"colwise", "rowwise", "colwise_rep", "rowwise_rep", "local_colwise", "local_rowwise", "local", "gather", "local_packed_rowwise"}
+
+SUPPORTED_TP_STYLES = {
+    "colwise",
+    "rowwise",
+    "colwise_rep",
+    "rowwise_rep",
+    "local_colwise",
+    "local_rowwise",
+    "local",
+    "gather",
+    "local_packed_rowwise",
+}
 
 
 @lru_cache
