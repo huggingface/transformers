@@ -39,7 +39,6 @@ from .utils import (
     is_remote_url,
     is_torch_available,
     logging,
-    is_torch_greater_or_equal
 )
 from .utils.generic import is_timm_config_dict
 
