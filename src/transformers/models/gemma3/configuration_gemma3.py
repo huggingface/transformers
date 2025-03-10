@@ -34,23 +34,21 @@ class Gemma3TextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3Model`]. It is used to instantiate a Gemma3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Gemma3-7B.
+    defaults will yield a similar configuration to that of the Gemma3-4B.
     e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 256000):
+        vocab_size (`int`, *optional*, defaults to 262144):
             Vocabulary size of the Gemma3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Gemma3Model`]
-        num_hidden_layers (`int`, *optional*, defaults to 26):
-            Number of hidden layers in the Transformer decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
         hidden_size (`int`, *optional*, defaults to 2304):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 9216):
             Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 26):
+            Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 4):
@@ -63,26 +61,12 @@ class Gemma3TextConfig(PretrainedConfig):
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to
-            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
-            activation function.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_local_base_freq (float, *optional*, defaults to `rope_theta`):
-            The base period of the RoPE embeddings for local attention.
+        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
+            attention. This is the size of the sliding window.
+        query_pre_attn_scalar (`float`, *optional*):
+            The scaling factor used on the attention scores, not that
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
+            The base period of the RoPE embeddings used for global attention.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -120,26 +104,47 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_local_base_freq (float, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings for local attention.
+        sliding_window_pattern (`int`, *optional*, defaults to 6):
+            Pattern for the sliding window attention.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the decoder. Will default to
+            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
+            activation function.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            End of stream token id.
+        bos_token_id (`int`, *optional*, defaults to 2):
+            Beginning of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to None):
-            The scaling factor used on the attention scores, not that
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
-            attention. This is the size of the sliding window.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh soft-capping
-            on the attention scorexs.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
+        final_logit_softcapping (`bool`, *optional*, defaults to `True`):
+            Whether to apply logit softcapping or nor
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+            Scaling factor when applying tanh soft-capping on the attention scorexs.
+        cache_implementation (`str`, *optional*, defaults to `"hybrid"`):
+            The cache type to be used with `generate`.
 
     ```python
-    >>> from transformers import Gemma3Model, Gemma3Config
-    >>> # Initializing a Gemma3 gemma3-7b style configuration
+    >>> from transformers import Gemma3Model, Gemma3TextConfig
+    >>> # Initializing a Gemma3 gemma3-4b style configuration
     >>> configuration = Gemma3Config()
-    >>> # Initializing a model from the gemma3-7b style configuration
+    >>> # Initializing a model from the gemma3-4b style configuration
     >>> model = Gemma3Model(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -214,6 +219,53 @@ class Gemma3TextConfig(PretrainedConfig):
 
 
 class Gemma3Config(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Gemma3ForConditionalGeneration`]. It is used to instantiate an
+    Gemma3ForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
+
+    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vision_config (`Union[AutoConfig, dict]`,  *optional*):
+            Custom vision config or dict.
+        text_config (`Union[Gemma3TextConfig, dict]`, *optional*):
+            The config object of the text backbone.
+        mm_tokens_per_image (`int`, *optional*, defaults to 256):
+            The number of tokens per image embedding.
+        image_token_index (`int`, *optional*, defaults to 262_144):
+            The image token index to encode the image prompt.
+        boi_token_index (`int`, *optional*, defaults to 255_999):
+            The begin-of-image token index to wrap the image prompt.
+        eoi_token_index (`int`, *optional*, defaults to 256_000):
+            The end-of-image token index to wrap the image prompt.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import Gemma3ForConditionalGeneration, Gemma3Config, SiglipVisionConfig, Gemma3TextConfig
+
+    >>> # Initializing a Siglip-like vision config
+    >>> vision_config = SiglipVisionConfig()
+
+    >>> # Initializing a Gemma3 Text config
+    >>> text_config = Gemma3TextConfig()
+
+    >>> # Initializing a Gemma3 gemma-3-4b style configuration
+    >>> configuration = Gemma3Config(vision_config, text_config)
+
+    >>> # Initializing a model from the gemma-3-4b style configuration
+    >>> model = Gemma3TextConfig(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "gemma3"
     sub_configs = {
         "text_config": Gemma3TextConfig,

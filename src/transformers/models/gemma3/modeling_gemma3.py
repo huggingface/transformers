@@ -19,6 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -53,7 +54,7 @@ _CONFIG_FOR_DOC = "Gemma3Config"
 @dataclass
 class Gemma3CausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Gemma3causal language model (or autoregressive) outputs.
+    Base class for Gemma3 causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -78,7 +79,7 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+            A `torch.FloatTensor` of size `(batch_size, sequence_length, hidden_size)`.
             image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
@@ -633,6 +634,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas
         # when we want to create a local RoPE layer. Config defaults should hold values for global RoPE
+        config = copy.deepcopy(config)
         config.rope_theta = config.rope_local_base_freq
         config.rope_scaling = {"rope_type": "default"}
         self.rotary_emb_local = Gemma3RotaryEmbedding(config=config)
@@ -884,7 +886,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
-
         self.model = Gemma3Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1087,10 +1088,12 @@ class Gemma3MultiModalProjector(nn.Module):
         self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
     def forward(self, vision_outputs: torch.Tensor):
-        b, _, l = vision_outputs.shape
+        batch_size, _, seq_length = vision_outputs.shape
 
         reshaped_vision_outputs = vision_outputs.transpose(1, 2)
-        reshaped_vision_outputs = reshaped_vision_outputs.reshape(b, l, self.patches_per_image, self.patches_per_image)
+        reshaped_vision_outputs = reshaped_vision_outputs.reshape(
+            batch_size, seq_length, self.patches_per_image, self.patches_per_image
+        )
         reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
 
         pooled_vision_outputs = self.avg_pool(reshaped_vision_outputs)
