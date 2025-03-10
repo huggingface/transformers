@@ -850,7 +850,7 @@ def _load_state_dict_into_meta_model(
         if shard_file.endswith(".safetensors"):
             param = file_pointer.get_slice(serialized_param_name)
         elif shard_file.endswith(".gguf"):
-            param = empty_param
+            param = empty_param # For gguf the dict is actually not empty!
         else:
             param = bin_state_dict[serialized_param_name]
 
@@ -4136,7 +4136,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dummy_model = cls(config)
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
-            resolved_archive_file = gguf_file
+            resolved_archive_file = None
             is_sharded = False
         else:
             resolved_archive_file = None
@@ -4433,7 +4433,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model,
                 state_dict,
                 loaded_state_dict_keys,  # XXX: rename?
-                resolved_archive_file,
+                resolved_archive_file or gguf_file,
                 pretrained_model_name_or_path,
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
                 sharded_metadata=sharded_metadata,
@@ -4578,8 +4578,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         new_key = key
         if len(self.base_model_prefix) > 0:
-            if not hasattr(self, self.base_model_prefix) and self.base_model_prefix in key:
-                new_key = key.split(self.base_model_prefix)[1]
+            if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
+                new_key = ".".join(key.split(".")[1:])
             elif (
                 hasattr(self, self.base_model_prefix)
                 and not key.startswith(self.base_model_prefix)
