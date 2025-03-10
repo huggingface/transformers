@@ -124,7 +124,7 @@ class TorchAoHfQuantizer(HfQuantizer):
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
             from accelerate.utils import CustomDtype
-
+            return None
             map_to_target_dtype = {
                 "int4_weight_only": CustomDtype.INT4,
                 "int8_weight_only": torch.int8,
@@ -196,7 +196,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         from torchao.quantization import quantize_
 
         module, tensor_name = get_module_from_name(model, param_name)
-
         if self.pre_quantized:
             module._parameters[tensor_name] = torch.nn.Parameter(param_value.to(device=target_device))
             if isinstance(module, nn.Linear):
