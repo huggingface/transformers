@@ -23,14 +23,11 @@ from pathlib import Path
 
 def pattern_to_regex(pattern):
     start_anchor = pattern.startswith("/")
-    end_anchor = pattern.endswith("*") or "." in pattern.split("/")[-1]
     pattern = re.escape(pattern)
     # Replace `*` with "any number of non-slash characters"
     pattern = pattern.replace(r"\*", "[^/]*")
     if start_anchor:
         pattern = "^" + pattern
-    if end_anchor:
-        pattern = pattern + "$"
     return pattern
 
 def get_file_owners(file_path, codeowners_lines):
