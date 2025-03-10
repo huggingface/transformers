@@ -60,6 +60,7 @@ from . import (
     convbert,
     convnext,
     convnextv2,
+    cosmos,
     cpm,
     cpmant,
     ctrl,
