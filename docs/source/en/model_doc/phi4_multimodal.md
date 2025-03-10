@@ -54,8 +54,9 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.float16, 
 )
 
-# Load generation config
-generation_config = GenerationConfig.from_pretrained(model_path)
+# Optional: load the adapters (note that without them, the base model will very likely not work well)
+model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
+model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
 
 # Define prompt structure
 user_prompt = '<|user|>'
@@ -63,6 +64,7 @@ assistant_prompt = '<|assistant|>'
 prompt_suffix = '<|end|>'
 
 # Part 1: Image Processing
+model.set_adapter("vision") # if loaded, activate the vision adapter
 print("\n--- IMAGE PROCESSING ---")
 image_url = 'https://www.ilankelman.org/stopsigns/australia.jpg'
 prompt = f'{user_prompt}<|image_1|>What is shown in this image?{prompt_suffix}{assistant_prompt}'
@@ -76,7 +78,7 @@ inputs = processor(text=prompt, images=image, return_tensors='pt').to(device)
 generate_ids = model.generate(
     **inputs,
     max_new_tokens=1000,
-    generation_config=generation_config,
+    do_sample=False,
 )
 generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
 response = processor.batch_decode(
@@ -85,6 +87,7 @@ response = processor.batch_decode(
 print(f'>>> Response\n{response}')
 
 # Part 2: Audio Processing
+model.set_adapter("speech") # if loaded, activate the speech adapter
 print("\n--- AUDIO PROCESSING ---")
 audio_url = "https://upload.wikimedia.org/wikipedia/commons/b/b0/Barbara_Sahakian_BBC_Radio4_The_Life_Scientific_29_May_2012_b01j5j24.flac"
 speech_prompt = "Transcribe the audio to text, and then translate the audio to French. Use <sep> as a separator between the original transcript and the translation."
@@ -92,15 +95,15 @@ prompt = f'{user_prompt}<|audio_1|>{speech_prompt}{prompt_suffix}{assistant_prom
 print(f'>>> Prompt\n{prompt}')
 
 # Downlowd and open audio file
-audio, samplerate = sf.read(io.BytesIO(urlopen(audio_url).read()))
+audio, sample_rate = sf.read(io.BytesIO(urlopen(audio_url).read()))
 
 # Process with the model
-inputs = processor(text=prompt, audios=[(audio, samplerate)], return_tensors='pt').to(device)
+inputs = processor(text=prompt, audios=audio, sample_rate=sample_rate, return_tensors='pt').to(device)
 
 generate_ids = model.generate(
     **inputs,
     max_new_tokens=1000,
-    generation_config=generation_config,
+    do_sample=False,
 )
 generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
 response = processor.batch_decode(
