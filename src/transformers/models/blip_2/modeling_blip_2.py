@@ -419,7 +419,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "OPTDecoderLayer",
     ]
     _skip_keys_device_placement = "past_key_values"
-    _keep_in_fp32_modules = ["wo"]
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
