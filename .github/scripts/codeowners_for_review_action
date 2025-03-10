@@ -11,14 +11,14 @@ docs/ @stevhliu
 /src/transformers/models/*/image_processing* @qubvel
 /src/transformers/models/*/image_processing_*_fast* @yonigozlan
 
-
 # Owners of subsections of the library
 /src/transformers/generation/ @gante
 /src/transformers/pipeline/ @Rocketknight1 @yonigozlan
 /src/transformers/integrations/ @SunMarc @MekkCyber @muellerzr
 /src/transformers/quantizers/ @SunMarc @MekkCyber
-/src/transformers/tests/ @ydshieh
-/src/transformers/tests/generation/ @gante
+tests/ @ydshieh
+tests/generation/ @gante
+
 /src/transformers/models/auto/ @ArthurZucker
 /src/transformers/utils/ @ArthurZucker @Rocketknight1
 /src/transformers/loss/ @ArthurZucker
