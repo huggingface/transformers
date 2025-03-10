@@ -210,6 +210,11 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
+        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
+            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
+            tmp.flush()
+            tmp.seek(0)
+            self.audio, self.sampling_rate = soundfile.read(tmp.name)
 
     def tearDown(self):
         gc.collect()
@@ -285,14 +290,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
-        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
-            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
-            tmp.flush()
-            tmp.seek(0)
-            audio, sampling_rate = soundfile.read(tmp.name)
-
         prompt = f"{self.user_token}<|audio_1|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, audios=audio, sampling_rate=sampling_rate, return_tensors="pt").to(
+        inputs = self.processor(prompt, audios=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
             torch_device
         )
 
