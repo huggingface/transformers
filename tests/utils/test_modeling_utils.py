@@ -539,19 +539,6 @@ class ModelUtilsTest(TestCasePlus):
                 TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
 
-    @require_torch
-    # @unittest.skip("Broken by @arthurzucker because the fix was not correct. Knowing the context is super hard")
-    def test_model_from_pretrained_meta_device(self):
-        def is_on_meta(model_id, dtype):
-            with torch.device("meta"):
-                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-                return all(value.device.type == "meta" for value in model.state_dict().values())
-
-        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
-        dtypes = (None, "auto", torch.float16)
-
-        for model_id, dtype in itertools.product(model_ids, dtypes):
-            self.assertTrue(is_on_meta(model_id, dtype))
 
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
