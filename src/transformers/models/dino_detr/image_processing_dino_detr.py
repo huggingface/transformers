@@ -1708,6 +1708,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         not_to_xyxy=False,
         test=False,
         num_select=100,
+        conf_threshold=0.3,
         nms_iou_threshold=-1,
     ):
         """Perform the computation
@@ -1752,12 +1753,20 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             ]
 
             results = [
-                {"scores": s[i], "labels": l[i], "boxes": b[i]}
+                {
+                    "scores": s[i][s[i] > conf_threshold],
+                    "labels": l[i][s[i] > conf_threshold],
+                    "boxes": b[i][s[i] > conf_threshold],
+                }
                 for s, l, b, i in zip(scores, labels, boxes, item_indices)
             ]
         else:
             results = [
-                {"scores": s, "labels": l, "boxes": b}
+                {
+                    "scores": s[s > conf_threshold],
+                    "labels": l[s > conf_threshold],
+                    "boxes": b[s > conf_threshold],
+                }
                 for s, l, b in zip(scores, labels, boxes)
             ]
 
