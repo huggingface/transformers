@@ -873,6 +873,8 @@ def _load_state_dict_into_meta_model(
             if current_module_plan is not None:
                 tp_layer = translate_to_torch_parallel_style(current_module_plan)
                 rank = tensor_device
+                if rank is None:
+                    rank = torch.distributed.get_rank()
                 row, col = empty_param.shape
                 if "rowwise" == current_module_plan:
                     param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
