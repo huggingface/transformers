@@ -16,6 +16,8 @@
 import re
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
@@ -133,8 +135,15 @@ class Gemma3Processor(ProcessorMixin):
             # Expand placeholder image tokens to the full image token sequence
             text = [prompt.replace(self.image_token, self.full_image_sequence) for prompt in text]
 
-        text_input = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_input, **image_inputs})
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
+
+        # Add token type ids manually, as tokenizer can't do arbitrary position token types
+        array_ids = np.array(text_inputs["input_ids"])
+        mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+        mm_token_type_ids[array_ids == self.image_token_id] = 1
+        text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

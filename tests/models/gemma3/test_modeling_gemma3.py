@@ -222,10 +222,15 @@ class Gemma3Vision2TextModelTester:
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, :1] = config.image_token_index
+
+        token_type_ids = torch.zeros_like(input_ids)
+        token_type_ids[input_ids == config.image_token_index] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
         }
         return config, inputs_dict
 
@@ -316,19 +321,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Gemma3 doesn't support input embeds for now, until token type ids are enabled. TODO @Arhtur.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip("Gemma3 doesn't support input embeds for now, until token type ids are enabled. TODO @Arhtur.")
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @unittest.skip("Gemma3 doesn't support input embeds for now, until token type ids are enabled. TODO @Arhtur.")
-    def test_inputs_embeds(self):
         pass
 
     @unittest.skip(
