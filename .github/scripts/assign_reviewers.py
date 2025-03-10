@@ -22,14 +22,8 @@ from collections import Counter
 from pathlib import Path
 
 def pattern_to_regex(pattern):
-    if pattern.startswith("/"):
-        start_anchor = True
-    else:
-        start_anchor = False
-    if pattern.endswith(".py") or pattern.endswith("*"):
-        end_anchor = True
-    else:
-        end_anchor = False
+    start_anchor = pattern.startswith("/")
+    end_anchor = pattern.endswith("*") or "." in pattern.split("/")[-1]
     pattern = re.escape(pattern)
     # Replace `*` with "any number of non-slash characters"
     pattern = pattern.replace(r"\*", "[^/]*")
