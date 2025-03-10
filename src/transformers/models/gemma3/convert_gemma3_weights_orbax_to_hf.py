@@ -28,7 +28,6 @@ from . import (
     Gemma3Processor,
 )
 from .configuration_gemma3 import (
-    DEFAULT_ATTENION_PATTERN,
     Gemma3Config,
     Gemma3TextConfig,
     SiglipVisionConfig,
@@ -38,7 +37,7 @@ from .configuration_gemma3 import (
 # ==== Internal Constants and Classes ====
 
 
-_CHAT_TEMPLATE = """
+_CHAT_TEMPLATE = """{{ bos_token }}
 {%- if messages[0]['role'] == 'system' -%}
     {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
     {%- set loop_messages = messages[1:] -%}
@@ -123,7 +122,6 @@ _VARIANTS = {
             num_hidden_layers=26,
             num_key_value_heads=1,
             head_dim=256,
-            attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=512,
             rope_theta=1_000_000,  # used for global RoPE only
             rope_local_base_freq=10_000,
@@ -142,9 +140,8 @@ _VARIANTS = {
             head_dim=256,
             num_hidden_layers=34,
             num_key_value_heads=4,
-            attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -161,9 +158,8 @@ _VARIANTS = {
             head_dim=256,
             num_hidden_layers=48,
             num_key_value_heads=8,
-            attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -180,9 +176,8 @@ _VARIANTS = {
             num_hidden_layers=62,
             num_key_value_heads=16,
             head_dim=128,
-            attention_pattern=DEFAULT_ATTENION_PATTERN,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8},  # used for global RoPE only
+            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
