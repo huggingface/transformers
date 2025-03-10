@@ -616,6 +616,34 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     ```
 """
 
+PT_OBJECT_DETECTION_SAMPLE = """
+    Example:
+
+    ```python
+    >>> import torch
+    >>> from transformers.image_utils import load_image
+    >>> from transformers import AutoImageProcessor, {model_class}
+
+    >>> image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+
+    >>> processor = AutoImageProcessor.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = processor(images=image, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
+
+    >>> target_sizes = [(image.height, image.width)]
+    >>> results = processor.post_process_object_detection(outputs, target_sizes=target_sizes)
+
+    >>> for result in results:
+    ...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+    ...         score, label = score.item(), label_id.item()
+    ...         box = [round(i, 2) for i in box.tolist()]
+    ...         print(f"Detected '{{model.config.id2label[label]}}' ({{score:.2f}}) at {{box}}")
+    {expected_output}
+    ```
+"""
 
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
@@ -632,6 +660,7 @@ PT_SAMPLE_DOCSTRINGS = {
     "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
     "VisionBaseModel": PT_VISION_BASE_MODEL_SAMPLE,
     "ImageClassification": PT_VISION_SEQ_CLASS_SAMPLE,
+    "ObjectDetection": PT_OBJECT_DETECTION_SAMPLE,
 }
 
 
@@ -1154,6 +1183,8 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
+        elif "ObjectDetection" in model_class:
+            code_sample = sample_docstrings["ObjectDetection"]
         elif "Model" in model_class and modality == "vision":
             code_sample = sample_docstrings["VisionBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:
