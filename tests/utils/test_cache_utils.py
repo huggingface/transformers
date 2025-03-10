@@ -47,7 +47,10 @@ if is_torch_available():
         StaticCache,
         convert_and_export_with_cache,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
+    from transformers.pytorch_utils import (
+        is_torch_greater_or_equal_than_2_3,
+        is_torch_greater_or_equal_than_2_6,
+    )
 
 
 @require_torch
@@ -171,6 +174,64 @@ class CacheTest(unittest.TestCase):
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    @require_torch_gpu
+    def test_dynamic_cache_exportability(self):
+        if not is_torch_greater_or_equal_than_2_6:
+            self.skipTest(reason="This test requires torch >= 2.6 to run.")
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model = model.eval().cuda()
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        prompt = "What is the best way to debug python script?"
+        inputs = tokenizer(prompt, return_tensors="pt")
+        input_ids = inputs.input_ids.cuda()
+        attention_mask = inputs.attention_mask.cuda()
+
+        past_key_values = DynamicCache()
+        ep = torch.export.export(
+            model,
+            (),
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": True,
+            },
+            strict=False,
+        )
+        res = ep.module()(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
+        )
+        self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
+        self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        self.assertEqual(
+            3,
+            len(
+                [
+                    x
+                    for x in ep.graph_signature.input_specs
+                    if x.kind == torch.export.graph_signature.InputKind.USER_INPUT
+                ]
+            ),
+        )
+
+        past_key_values_eager = DynamicCache()
+        res_eager = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values_eager,
+            use_cache=True,
+        )
+        self.assertTrue(torch.allclose(res.logits, res_eager.logits))
+        for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
+            self.assertTrue(torch.allclose(k1, k2))
+
+        for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
+            self.assertTrue(torch.allclose(v1, v2))
 
     @slow
     @require_read_token
