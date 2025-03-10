@@ -19,10 +19,8 @@ Phi4 Multimodal is a lightweight open multimodal foundation model that leverages
 - Vision: English
 - Audio: English, Chinese, German, French, Italian, Japanese, Spanish, Portuguese
 
-Tips:
-
-- This model was contributed by [THUDM](https://huggingface.co/THUDM). The most recent code can be
-  found [here](https://github.com/thudm/GLM-4).
+This model was contributed by [Cyril Vallez](https://huggingface.co/cyrilvallez). The most recent code can be
+found [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/phi4_multimodal/modeling_phi4_multimodal.py).
 
 
 ## Usage tips
