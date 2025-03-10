@@ -178,7 +178,7 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
         )
     )
 
-    max_length = position_ids.max() + 1
+    max_length = position_ids.max().item() + 1
 
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
