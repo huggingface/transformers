@@ -1846,10 +1846,6 @@ else:
             "AIMv2ForImageClassification",
             "AIMv2Model",
             "AIMv2PreTrainedModel",
-            "AIMv2TextModel",
-            "AIMv2TextModelWithProjection",
-            "AIMv2VisionModel",
-            "AIMv2VisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(

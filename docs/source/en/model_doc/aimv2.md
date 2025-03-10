@@ -40,38 +40,15 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## AIMv2TextConfig
 
-[[autodoc]] AIMv2TextConfig
-
-## AIMv2VisionConfig
-
-[[autodoc]] AIMv2VisionConfig
-
-## AIMv2Model
 
 [[autodoc]] AIMv2Model
     - forward
-    - get_text_features
-    - get_image_features
 
 ## AIMv2TextModel
 
 [[autodoc]] AIMv2TextModel
     - forward
 
-## AIMv2TextModelWithProjection
-
-[[autodoc]] AIMv2TextModelWithProjection
-    - forward
-
-## AIMv2VisionModelWithProjection
-
-[[autodoc]] AIMv2VisionModelWithProjection
-    - forward
-
-## AIMv2VisionModel
-
-[[autodoc]] AIMv2VisionModel
-    - forward
 
 ## AIMv2ForImageClassification
 

@@ -24,16 +24,26 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
-from ...utils import logging
+from ...modeling_outputs import ImageClassifierOutput
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_aimv2 import AIMv2Config
 
 
 logger = logging.get_logger(__name__)
+
+# General docstring
+_CONFIG_FOR_DOC = "AIMv2Config"
 
 
 class AIMv2RMSNorm(nn.Module):
@@ -163,10 +173,10 @@ class AIMv2Attention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
-        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.proj_drop = nn.Dropout(config.projection_dropout)
 
     def forward(
@@ -355,11 +365,11 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, AIMv2Embeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
+            module.position_embeddings = nn.init.trunc_normal_(
+                module.position_embeddings.weight.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            ).to(module.position_embeddings.weight.dtype)
 
 
 class AIMv2Model(AIMv2PreTrainedModel):
@@ -371,7 +381,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         # Initialize weights and apply final processing
-        # self.post_init()
+        self.post_init()
 
     def forward(
         self,
@@ -407,4 +417,143 @@ class AIMv2Model(AIMv2PreTrainedModel):
         )
 
 
-__all__ = ["AIMv2Model"]
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "facebook/aimv2-small-imagenet1k-1-layer"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+
+
+AIMV2_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+AIMV2_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`BitImageProcessor.preprocess`] for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """
+    AIMv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
+    """,
+    AIMV2_START_DOCSTRING,
+)
+class AIMv2ForImageClassification(AIMv2PreTrainedModel):
+    def __init__(self, config: AIMv2Config) -> None:
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.aimv2 = AIMv2Model(config)
+
+        # Classifier head
+        self.classifier = (
+            nn.Linear(config.hidden_size * 2, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(AIMV2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=ImageClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, ImageClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.aimv2(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
+
+        cls_token = sequence_output[:, 0]
+        patch_tokens = sequence_output[:, 1:]
+
+        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+
+        logits = self.classifier(linear_input)
+
+        loss = None
+        if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = ["AIMv2Model", "AIMv2ForImageClassification"]
