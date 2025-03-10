@@ -32,7 +32,7 @@ _torch_distributed_available = torch.distributed.is_available()
 
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate
+    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
@@ -416,6 +416,8 @@ class PackedRowwiseParallel(RowwiseParallel):
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
         return nn.Parameter(parameter)
+
+SUPPORTED_TP_STYLES = {"colwise", "rowwise", "colwise_rep", "rowwise_rep", "local_colwise", "local_rowwise", "local", "gather", "local_packed_rowwise"}
 
 
 @lru_cache
