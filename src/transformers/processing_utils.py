@@ -1346,12 +1346,14 @@ class ProcessorMixin(PushToHubMixin):
                 chat_template = self.chat_template["default"]
             elif isinstance(self.chat_template, dict):
                 raise ValueError(
-                    "The processor has multiple chat templates but none of them are named \"default\". You need to specify which one to use by passing the `chat_template` argument."
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify which one to use by passing the `chat_template` argument.'
                 )
             elif self.chat_template is not None:
                 chat_template = self.chat_template
             else:
-                raise ValueError("Cannot use apply_chat_template because this processor does not have a chat template.")
+                raise ValueError(
+                    "Cannot use apply_chat_template because this processor does not have a chat template."
+                )
         else:
             if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
                 # It's the name of a template, not a full template string
