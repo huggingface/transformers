@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
+    customize_docstrings,
     group_images_by_shape,
     reorder_images,
 )
@@ -31,7 +31,6 @@ from ...image_utils import (
 )
 from ...utils import (
     TensorType,
-    add_start_docstrings,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -59,10 +58,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-@add_start_docstrings(
-    "Constructs a fast DepthPro image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@customize_docstrings("Constructs a fast DepthPro image processor.")
 class DepthProImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
