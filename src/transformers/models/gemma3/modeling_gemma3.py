@@ -287,7 +287,6 @@ class Gemma3Attention(nn.Module):
 
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
-
         self.is_sliding = bool((layer_idx + 1) % config.sliding_window_pattern)
         self.config = config
         self.layer_idx = layer_idx
