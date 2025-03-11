@@ -258,7 +258,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     valid_preprocess_kwargs = DefaultFastImageProcessorPreprocessKwargs
     # Child classes should try to support the base processing methods as much as possible.
     # If they can't, the corresponding unused kwargs should be added to this list.
-    unused_kwargs = []
+    unused_kwargs = None
 
     def __init__(
         self,
@@ -437,6 +437,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         Filter out the unused kwargs from the kwargs dictionary.
         """
+        if self.unused_kwargs is None:
+            return kwargs
+
         for kwarg_name in self.unused_kwargs:
             if kwarg_name in kwargs:
                 logger.warning_once(f"This processor does not use the `{kwarg_name}` parameter. It will be ignored.")
