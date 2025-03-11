@@ -2458,9 +2458,9 @@ else:
         [
             "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
-            "Gemma3TextModel",
             "Gemma3PreTrainedModel",
             "Gemma3Processor",
+            "Gemma3TextModel",
         ]
     )
     _import_structure["models.git"].extend(

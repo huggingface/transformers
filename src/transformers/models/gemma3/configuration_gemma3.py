@@ -39,7 +39,7 @@ class Gemma3TextConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        vocab_size (`int`, *optional*, defaults to 256000):
+        vocab_size (`int`, *optional*, defaults to 262144):
             Vocabulary size of the Gemma3Text model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Gemma3TextModel`]
         hidden_size (`int`, *optional*, defaults to 2304):
@@ -63,7 +63,7 @@ class Gemma3TextConfig(PretrainedConfig):
         hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
             if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -80,7 +80,7 @@ class Gemma3TextConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
@@ -92,6 +92,9 @@ class Gemma3TextConfig(PretrainedConfig):
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
+        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        rope_local_base_freq (`float`, *optional*, defaults to 10000.0): <fill_docstring>
+        sliding_window_pattern (`int`, *optional*, defaults to 6): <fill_docstring>
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -216,6 +219,7 @@ class Gemma3Config(PretrainedConfig):
             The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
 
     Example:
 
