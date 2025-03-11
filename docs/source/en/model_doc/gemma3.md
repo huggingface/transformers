@@ -186,9 +186,9 @@ print(text)
 
 [[autodoc]] Gemma3Config
 
-## GemmaTextModel
+## Gemma3TextModel
 
-[[autodoc]] GemmaTextModel
+[[autodoc]] Gemma3TextModel
     - forward
 
 ## Gemma3ForCausalLM
