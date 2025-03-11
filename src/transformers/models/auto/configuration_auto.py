@@ -156,6 +156,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
         ("instructblipvideo", "InstructBlipVideoConfig"),
+        ("internvl", "InternVLConfig"),
+        ("internvl_vision", "InternVLVisionConfig"),
         ("jamba", "JambaConfig"),
         ("jetmoe", "JetMoeConfig"),
         ("jukebox", "JukeboxConfig"),
@@ -492,6 +494,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
         ("instructblipvideo", "InstructBlipVideo"),
+        ("internvl", "InternVL"),
+        ("internvl_vision", "InternVLVision"),
         ("jamba", "Jamba"),
         ("jetmoe", "JetMoe"),
         ("jukebox", "Jukebox"),
@@ -754,6 +758,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
+        ("internvl_vision", "internvl"),
     ]
 )
 
