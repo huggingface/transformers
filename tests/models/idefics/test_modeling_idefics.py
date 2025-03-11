@@ -311,16 +311,27 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @require_torch_sdpa
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_generate(self):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
+    @parameterized.expand(
+        [
+            (
+                # test name for the test runner
+                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
+                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+                # parameterization
+                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+            )
+            for dtype in ("fp16", "fp32", "bf16")
+            for padding_side in ("left", "right")
+            for use_attention_mask in (True, False)
+            for output_attentions in (True, False)
+            for enable_kernels in (True, False)
+        ]
+    )
+    @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
 
 
 @require_torch
@@ -349,10 +360,26 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         return inputs_dict
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
+    @parameterized.expand(
+        [
+            (
+                # test name for the test runner
+                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
+                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+                # parameterization
+                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+            )
+            for dtype in ("fp16", "fp32", "bf16")
+            for padding_side in ("left", "right")
+            for use_attention_mask in (True, False)
+            for output_attentions in (True, False)
+            for enable_kernels in (True, False)
+        ]
+    )
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self):
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -597,10 +624,26 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
+    @parameterized.expand(
+        [
+            (
+                # test name for the test runner
+                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
+                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+                # parameterization
+                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+            )
+            for dtype in ("fp16", "fp32", "bf16")
+            for padding_side in ("left", "right")
+            for use_attention_mask in (True, False)
+            for output_attentions in (True, False)
+            for enable_kernels in (True, False)
+        ]
+    )
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self, torch_dtype):
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @pytest.mark.generate

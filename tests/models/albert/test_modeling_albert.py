@@ -289,12 +289,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = AlbertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @unittest.skip("Albert requires `head_mask` which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
