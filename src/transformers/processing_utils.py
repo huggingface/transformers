@@ -52,6 +52,8 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -636,9 +638,9 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_raw_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
-        output_chat_template_file = os.path.join(save_directory, "chat_template.json")
-        chat_template_dir = os.path.join(save_directory, "additional_chat_templates")
+        output_raw_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
+        output_chat_template_file = os.path.join(save_directory, "chat_template.json")  # Legacy filename
+        chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
