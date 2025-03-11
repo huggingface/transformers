@@ -74,6 +74,8 @@
       title: Optimizing inference
     - local: kv_cache
       title: KV cache strategies
+    - local: serving
+      title: Serving
     - local: cache_explanation
       title: Caching
     - local: llm_tutorial_optimization
