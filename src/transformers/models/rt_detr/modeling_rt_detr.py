@@ -1209,7 +1209,7 @@ class RTDetrDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.self_attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Cross-Attention
@@ -1218,17 +1218,21 @@ class RTDetrDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             num_points=config.decoder_n_points,
         )
+        self.encoder_attn_dropout = nn.Dropout(config.dropout)
         self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Feedforward
         self.fc1 = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
+        self.fc1_activation = ACT2FN[config.decoder_activation_function]
+        self.fc1_dropout = nn.Dropout(config.activation_dropout)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
+        self.fc2_dropout = nn.Dropout(config.dropout)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     # TODO: rename hidden_states -> hidden_state
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        hidden_state: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         reference_points: torch.Tensor,
         spatial_shapes: torch.Tensor,
@@ -1239,7 +1243,7 @@ class RTDetrDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.Tensor`):
+            hidden_state (`torch.Tensor`):
                 Input to the layer of shape `(batch_size, num_queries, hidden_size)`.
             encoder_hidden_states (`torch.Tensor`):
                 Flattened and concatenated encoder feature maps of shape `(batch_size, sequence_length, hidden_size)`.
@@ -1265,21 +1269,21 @@ class RTDetrDecoderLayer(nn.Module):
         """
 
         # Self-Attention
-        self_attn_residual = hidden_states
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
+        self_attn_residual = hidden_state
+        hidden_state, self_attn_weights = self.self_attn(
+            hidden_states=hidden_state,
             attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self_attn_residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_state = self.self_attn_dropout(hidden_state)
+        hidden_state = self_attn_residual + hidden_state
+        hidden_state = self.self_attn_layer_norm(hidden_state)
 
         # Cross-Attention
-        cross_attn_residual = hidden_states
-        hidden_states, cross_attn_weights = self.encoder_attn(
-            hidden_states=hidden_states,
+        cross_attn_residual = hidden_state
+        hidden_state, cross_attn_weights = self.encoder_attn(
+            hidden_states=hidden_state,
             encoder_hidden_states=encoder_hidden_states,
             position_embeddings=position_embeddings,
             reference_points=reference_points,
@@ -1287,23 +1291,24 @@ class RTDetrDecoderLayer(nn.Module):
             spatial_shapes_list=spatial_shapes_list,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = cross_attn_residual + hidden_states
-        hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        hidden_state = self.encoder_attn_dropout(hidden_state)
+        hidden_state = cross_attn_residual + hidden_state
+        hidden_state = self.encoder_attn_layer_norm(hidden_state)
 
         # Feedforward
-        fc_residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = fc_residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        ffn_residual = hidden_state
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.fc1_activation(hidden_state)
+        hidden_state = self.fc1_dropout(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        hidden_state = self.fc2_dropout(hidden_state)
+        hidden_state = ffn_residual + hidden_state
+        hidden_state = self.final_layer_norm(hidden_state)
 
         if not output_attentions:
             self_attn_weights, cross_attn_weights = None, None
 
-        return hidden_states, self_attn_weights, cross_attn_weights
+        return hidden_state, self_attn_weights, cross_attn_weights
 
 
 class RTDetrMLPPredictionHead(nn.Module):
