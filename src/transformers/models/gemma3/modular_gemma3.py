@@ -69,7 +69,7 @@ class Gemma3TextConfig(Gemma2Config):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        vocab_size (`int`, *optional*, defaults to 262144):
+        vocab_size (`int`, *optional*, defaults to 262208):
             Vocabulary size of the Gemma3Text model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Gemma3TextModel`]
         hidden_size (`int`, *optional*, defaults to 2304):
@@ -116,7 +116,7 @@ class Gemma3TextConfig(Gemma2Config):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*):
+        query_pre_attn_scalar (`float`, *optional*, defaults to 256):
             Scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
             size of the sliding window.
@@ -186,8 +186,7 @@ class Gemma3TextConfig(Gemma2Config):
 
     def __init__(
         self,
-        vocab_size=262_144,
-        query_pre_attn_scalar=256,
+        vocab_size=262_208,
         rope_theta=1_000_000.0,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
