@@ -4922,7 +4922,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # First move data to correct
                     to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_modules)
                     shard_and_distribute_module(
-                        model, param.to(tp_device), param, name, casting_dtype, to_contiguous, tp_device.index, device_mesh
+                        model,
+                        param.to(tp_device),
+                        param,
+                        name,
+                        casting_dtype,
+                        to_contiguous,
+                        tp_device.index,
+                        device_mesh,
                     )
 
         # All potential warnings/infos
