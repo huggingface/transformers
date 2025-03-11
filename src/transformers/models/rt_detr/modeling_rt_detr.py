@@ -146,7 +146,6 @@ class RTDetrModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
     class_outputs: torch.FloatTensor = None
     bbox_outputs: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -225,7 +224,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
     class_outputs: torch.FloatTensor = None
     bbox_outputs: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
