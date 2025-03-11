@@ -112,7 +112,7 @@ def get_concat_dim(key):
 
 
 def convert_state_dict_sharded(loaded_shards: list[dict], config: MistralConfig):
-    """Convert the state dict, when a single `nn.Module` is sharded accross different files."""
+    """Convert the state dict, when a single `nn.Module` is sharded across different files."""
     new_dict = {}
 
     num_shards = len(loaded_shards)
