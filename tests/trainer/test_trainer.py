@@ -822,11 +822,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        state_dict = model.state_dict()
-
-        base_loss_callback = StoreLossCallback()
-
         args_kwargs = {
             "report_to": "none",
             "logging_steps": 1,
@@ -840,6 +835,10 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir,
                 **args_kwargs,
             )
+            # train with base loss
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
@@ -850,16 +849,17 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             assert trainer.model_accepts_loss_kwargs
             trainer.train()
 
-        grad_accum_loss_callback = StoreLossCallback()
-        with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 tmp_dir,
                 **args_kwargs,
                 gradient_accumulation_steps=2,
                 per_device_train_batch_size=4,
             )
+
+            # train with gradient accumulation
             set_seed(42)
             model = AutoModelForCausalLM.from_pretrained(model_name)
+            grad_accum_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
@@ -867,10 +867,12 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 callbacks=[grad_accum_loss_callback],
                 data_collator=data_collator,
             )
+            assert trainer.model_accepts_loss_kwargs
             trainer.train()
 
+            # train with broken loss
             set_seed(42)
-            model.load_state_dict(state_dict)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
             broken_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
@@ -879,30 +881,28 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 callbacks=[broken_loss_callback],
                 data_collator=data_collator,
             )
-            # disable model_accepts_loss_kwargs
+            # disable model_accepts_loss_kwargs so that "num_items_in_batch" is not passed to the model
             trainer.model_accepts_loss_kwargs = False
             trainer.train()
 
-            # Calculate the difference between the base loss and the grad_accum loss
-            diff_truth = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-            ]
-            diff_broken = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
-            ]
+        # Calculate the difference between the base loss and the grad_accum loss
+        diff_truth = [
+            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
+        ]
+        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
 
-            # all diff truth should be quite close
-            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
+        # all diff truth should be quite close
+        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
-            # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 1.3, f"Difference {max(diff_broken)} is not greater than 1.3")
+        # max diff broken should be very off
+        self.assertGreater(max(diff_broken), 1.3, f"Difference {max(diff_broken)} is not greater than 1.3")
 
-            loss_base = sum(base_loss_callback.losses)
-            loss_broken = sum(broken_loss_callback.losses)
+        loss_base = sum(base_loss_callback.losses)
+        loss_broken = sum(broken_loss_callback.losses)
 
-            # mean/sum loss should not vary too much.
-            relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
-            self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
+        # mean/sum loss should not vary too much.
+        relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
+        self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
 
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
