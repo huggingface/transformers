@@ -848,14 +848,13 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        spatial_shapes: torch.Tensor,
+        spatial_shapes_list: List[Tuple[int, int]],
+        level_start_index: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
         output_attentions: bool = False,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
@@ -939,6 +938,9 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
                     value, spatial_shapes_list, sampling_locations, attention_weights
                 )
         output = self.output_proj(output)
+
+        if not output_attentions:
+            attention_weights = None
 
         return output, attention_weights
 
