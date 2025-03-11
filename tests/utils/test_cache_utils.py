@@ -47,10 +47,7 @@ if is_torch_available():
         StaticCache,
         convert_and_export_with_cache,
     )
-    from transformers.pytorch_utils import (
-        is_torch_greater_or_equal_than_2_3,
-        is_torch_greater_or_equal_than_2_6,
-    )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
 
 
 @require_torch
