@@ -873,6 +873,8 @@ def _load_state_dict_into_meta_model(
             if current_module_plan is not None:
                 tp_layer = translate_to_torch_parallel_style(current_module_plan)
                 rank = tensor_device
+                if rank is None:
+                    rank = torch.distributed.get_rank()
                 row, col = empty_param.shape
                 if "rowwise" == current_module_plan:
                     param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
@@ -3642,7 +3644,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_type = torch._C._get_accelerator().type
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            index = None if device_type == "cpu" else torch.distributed.get_rank() % device_module.device_count()
+            tp_device = torch.device(device_type, index)
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
 
