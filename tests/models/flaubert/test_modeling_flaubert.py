@@ -377,6 +377,8 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
+    # Doesn't run generation tests. Outdated custom `prepare_inputs_for_generation` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FlaubertModel,
