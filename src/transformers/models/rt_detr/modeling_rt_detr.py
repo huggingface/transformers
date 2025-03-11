@@ -560,8 +560,8 @@ class RTDetrConvEncoder(nn.Module):
             replace_batch_norm(self.model)
 
     def forward(self, pixel_values: torch.Tensor) -> List[torch.Tensor]:
-        features = self.model(pixel_values).feature_maps
-        return features
+        feature_maps = self.model(pixel_values).feature_maps
+        return feature_maps
 
 
 class RTDetrConvNormLayer(nn.Module):
@@ -587,11 +587,12 @@ class RTDetrConvNormLayer(nn.Module):
         self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        """Feature map of shape (batch_size, embed_dim, height, width)"""
+        feature_map = self.conv(feature_map)
+        feature_map = self.norm(feature_map)
+        feature_map = self.activation(feature_map)
+        return feature_map
 
 
 class RTDetrEncoderLayer(nn.Module):
