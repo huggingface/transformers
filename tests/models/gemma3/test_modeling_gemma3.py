@@ -47,21 +47,21 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
-        Gemma3Model,
         Gemma3Processor,
+        Gemma3TextModel,
     )
 
 
 class Gemma3ModelTester(GemmaModelTester):
     if is_torch_available():
         config_class = Gemma3TextConfig
-        model_class = Gemma3Model
+        model_class = Gemma3TextModel
         for_causal_lm_class = Gemma3ForCausalLM
 
 
 @require_torch
 class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3Model, Gemma3ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (Gemma3TextModel, Gemma3ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False

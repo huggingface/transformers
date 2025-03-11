@@ -92,9 +92,47 @@ class Gemma3TextConfig(PretrainedConfig):
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
-        rope_local_base_freq (`float`, *optional*, defaults to 10000.0): <fill_docstring>
-        sliding_window_pattern (`int`, *optional*, defaults to 6): <fill_docstring>
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_local_base_freq (float, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings for local attention.
+        sliding_window_pattern (`int`, *optional*, defaults to 6):
+            Pattern for the sliding window attention.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -131,29 +169,29 @@ class Gemma3TextConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size: int = 262_144,
-        hidden_size: int = 2304,
-        intermediate_size: int = 9216,
-        num_hidden_layers: int = 26,
-        num_attention_heads: int = 8,
-        num_key_value_heads: int = 4,
-        head_dim: int = 256,
-        hidden_activation: str = "gelu_pytorch_tanh",
+        hidden_size=2304,
+        intermediate_size=9216,
+        num_hidden_layers=26,
+        num_attention_heads=8,
+        num_key_value_heads=4,
+        head_dim=256,
+        hidden_activation="gelu_pytorch_tanh",
         max_position_embeddings: int = 131_072,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-6,
-        use_cache: bool = True,
-        pad_token_id: int = 0,
-        eos_token_id: int = 1,
-        bos_token_id: int = 2,
-        tie_word_embeddings: bool = True,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=0,
+        eos_token_id=1,
+        bos_token_id=2,
+        tie_word_embeddings=True,
         rope_theta: float = 1_000_000.0,
-        attention_bias: bool = False,
-        attention_dropout: float = 0.0,
+        attention_bias=False,
+        attention_dropout=0.0,
         query_pre_attn_scalar: Optional[float] = None,
-        sliding_window: int = 4096,
+        sliding_window=4096,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
-        cache_implementation: str = "hybrid",
+        cache_implementation="hybrid",
         rope_scaling=None,
         rope_local_base_freq: float = 10_000.0,
         sliding_window_pattern: int = 6,
@@ -190,6 +228,7 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rope_local_base_freq = rope_local_base_freq
         # For configuring HybridCache to work with 5:1 attention pattern
         self.sliding_window_pattern = sliding_window_pattern
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
 
