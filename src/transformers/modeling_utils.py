@@ -57,7 +57,6 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     shard_and_distribute_module,
-    translate_to_torch_parallel_style,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -709,23 +708,23 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def fix_tensor_type_and_device(
+def _infer_parameter_dtype(
     model: "PreTrainedModel", param_name: str, empty_param, keep_in_fp32_modules=None
 ) -> Union[bool, Optional[torch.dtype]]:
     old_param = model.get_parameter_or_buffer(param_name)
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
     # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
     # in int/uint/bool and not cast them.
-    param_casting_dtype = None
+    casting_dtype = None
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
         # First fp32 if part of the exception list
         if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
-            param_casting_dtype = torch.float32
+            casting_dtype = torch.float32
         # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
         else:
-            param_casting_dtype = old_param.dtype
-    return old_param is not None and old_param.is_contiguous(), param_casting_dtype
+            casting_dtype = old_param.dtype
+    return old_param is not None and old_param.is_contiguous(), casting_dtype
 
 
 @torch.no_grad()
@@ -790,11 +789,11 @@ def _load_state_dict_into_meta_model(
         else:
             param = full_state_dict[serialized_param_name]
 
-        to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
+        to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
-            param_name=param_name,
-            empty_param=empty_param,
-            keep_in_fp32_modules=keep_in_fp32_modules,
+            param_name,
+            empty_param,
+            keep_in_fp32_modules,
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
@@ -803,15 +802,15 @@ def _load_state_dict_into_meta_model(
                 param,
                 empty_param,
                 param_name,
-                param_casting_dtype,
+                casting_dtype,
                 to_contiguous,
                 tensor_device,  # the rank
                 device_mesh,
             )
         else:
             param = param[:]
-            if param_casting_dtype is not None:
-                param = param.to(param_casting_dtype)
+            if casting_dtype is not None:
+                param = param.to(casting_dtype)
             if to_contiguous:
                 param = param.contiguous()
 
@@ -4916,17 +4915,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
             if loading_task_model_from_base_state_dict:
-                tp_plan = getattr(model, "_tp_plan", {})
-                modules_to_initialize = {name: module for name, module in model.named_children() if name != prefix}
-                for name, module in modules_to_initialize.items():
-                    # Push to device
-                    module.to(tp_device)
-                    if name in tp_plan:
-                        torch.distributed.tensor.parallel.parallelize_module(
-                            module,
-                            device_mesh=device_mesh,
-                            parallelize_plan=translate_to_torch_parallel_style(tp_plan[name]),
-                        )
+                parameters_to_initialize = {
+                    name: param for name, param in model.named_parameters() if not name.startswith(prefix)
+                }
+                for name, param in parameters_to_initialize.items():
+                    # First move data to correct
+                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_modules)
+                    shard_and_distribute_module(
+                        model, param.to(tp_device), param, name, casting_dtype, to_contiguous, tp_device, device_mesh
+                    )
 
         # All potential warnings/infos
         if len(error_msgs) > 0:
