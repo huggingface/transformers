@@ -891,8 +891,7 @@ def _load_state_dict_into_meta_model(
                 device_mesh,
             )
         else:
-            if is_safetensors_shard:
-                param = param[:]
+            param = param[...]
             if param_casting_dtype is not None:
                 param = param.to(param_casting_dtype)
             if to_contiguous:
