@@ -30,7 +30,7 @@ def topological_sort(dependencies: dict):
 
 # Function to extract class and import info from a file
 def extract_classes_and_imports(file_path):
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=file_path)
     imports = set()
 
