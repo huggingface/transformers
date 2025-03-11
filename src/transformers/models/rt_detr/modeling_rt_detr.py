@@ -29,7 +29,6 @@ from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
@@ -1358,82 +1357,75 @@ class RTDetrHybridEncoder(nn.Module):
 
     def forward(
         self,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        feature_maps: List[torch.Tensor],
+        output_hidden_states: bool = False,
+        output_attentions: bool = False,
     ):
         r"""
+        Apply the transformer encoder to the feature maps. Then apply the FPN and PAN to the feature maps.
+
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
+            feature_maps (`List[torch.FloatTensor]` of shape `(batch_size, embed_dim, height, width)`):
+                List of feature maps from different stages of the backbone. For example, for RT-DETR-R50
+                `[torch.Size([1, 256, 80, 80]), torch.Size([1, 256, 40, 40]), torch.Size([1, 256, 20, 20])]`.
+            output_hidden_states (`bool`, default `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            output_attentions (`bool`, default `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = inputs_embeds
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        encoder_intermediates = () if output_hidden_states else None
+        encoder_attentions = () if output_attentions else None
 
         # Step 1: Apply transformer encoder
-        if self.config.encoder_layers > 0:
-            for i, enc_ind in enumerate(self.encode_proj_layers):
-                if output_hidden_states:
-                    encoder_states = encoder_states + (hidden_states[enc_ind],)
-
-                # 1. flatten [batch, channel, height, width] to [batch, height * width, channel]
-                hidden_state = hidden_states[enc_ind]
-                height, width = hidden_state.shape[2:]
-                hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
-
-                # build position embeddings
-                if self.training or self.eval_size is None:
-                    position_embeddings = self.build_2d_sincos_position_embedding(
-                        width,
-                        height,
-                        self.encoder_hidden_dim,
-                        self.positional_encoding_temperature,
-                        device=hidden_state.device,
-                        dtype=hidden_state.dtype,
-                    )
-                else:
-                    position_embeddings = None
-
-                # 2. Apply transformer encoder layer
-                layer_outputs = self.encoder[i](
-                    hidden_state,
-                    position_embeddings=position_embeddings,
-                    output_attentions=output_attentions,
-                )
-                hidden_state = layer_outputs[0]
-
-                # 3. Reshape back to [batch, height, width, channel]
-                hidden_state = hidden_state.permute(0, 2, 1)
-                hidden_state = hidden_state.reshape(-1, self.encoder_hidden_dim, height, width)
-                hidden_states[enc_ind] = hidden_state.contiguous()
-
-                if output_attentions:
-                    all_attentions = all_attentions + (layer_outputs[1],)
+        for i, feature_map_idx in enumerate(self.encode_proj_layers):
+            feature_map = feature_maps[feature_map_idx]
 
             if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states[enc_ind],)
+                encoder_intermediates = encoder_intermediates + (feature_map,)
+
+            # 1. flatten [batch, channel, height, width] to [batch, height * width, channel]
+            height, width = feature_map.shape[2:]
+            hidden_state = feature_map.flatten(2).permute(0, 2, 1)
+
+            # build position embeddings
+            if self.training or self.eval_size is None:
+                position_embeddings = self.build_2d_sincos_position_embedding(
+                    width,
+                    height,
+                    self.encoder_hidden_dim,
+                    self.positional_encoding_temperature,
+                    device=hidden_state.device,
+                    dtype=hidden_state.dtype,
+                )
+            else:
+                position_embeddings = None
+
+            # 2. Apply transformer encoder layer
+            layer_outputs = self.encoder[i](
+                hidden_state,
+                position_embeddings=position_embeddings,
+                output_attentions=output_attentions,
+            )
+            hidden_state = layer_outputs[0]
+
+            # 3. Reshape back to [batch, height, width, channel]
+            hidden_state = hidden_state.permute(0, 2, 1)
+            feature_map = hidden_state.reshape(-1, self.encoder_hidden_dim, height, width)
+            feature_maps[feature_map_idx] = feature_map.contiguous()
+
+            if output_attentions:
+                encoder_attentions += (layer_outputs[1],)
+
+        if output_hidden_states:
+            encoder_intermediates += (feature_maps[feature_map_idx],)
 
         # Step 2: Apply FPN (conv part)
-        fpn_feature_maps = [hidden_states[-1]]
+        fpn_feature_maps = [feature_maps[-1]]
         for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
-            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            backbone_feature_map = feature_maps[self.num_fpn_stages - idx - 1]
             top_fpn_feature_map = fpn_feature_maps[-1]
             # apply lateral block
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
@@ -1456,11 +1448,7 @@ class RTDetrHybridEncoder(nn.Module):
             new_pan_feature_map = pan_block(fused_feature_map)
             pan_feature_maps.append(new_pan_feature_map)
 
-        if not return_dict:
-            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return pan_feature_maps, encoder_intermediates, encoder_attentions
 
 
 class RTDetrDecoder(nn.Module):
@@ -1807,7 +1795,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             projected_feature_maps,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         feature_maps = encoder_outputs[0]
@@ -1914,6 +1901,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 value for value in [topk_logits, topk_bboxes, class_logits, bboxes_logits] if value is not None
             )
             dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
+            encoder_outputs = tuple([value for value in encoder_outputs if value is not None])
             tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
 
             return tuple_outputs
@@ -1926,9 +1914,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs[1],
+            encoder_attentions=encoder_outputs[2],
             init_reference_points=init_reference_points,
             enc_topk_logits=topk_logits,
             enc_topk_bboxes=topk_bboxes,
