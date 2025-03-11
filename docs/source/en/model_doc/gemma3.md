@@ -165,13 +165,30 @@ print(text)
 
 ```
 
+
+## Gemma3ImageProcessor
+
+[[autodoc]] Gemma3ImageProcessor
+
+## Gemma3ImageProcessorFast
+
+[[autodoc]] Gemma3ImageProcessorFast
+
+## Gemma3Processor
+
+[[autodoc]] Gemma3Processor
+
+## Gemma3TextConfig
+
+[[autodoc]] Gemma3TextConfig
+
 ## Gemma3Config
 
 [[autodoc]] Gemma3Config
 
-## Gemma3Model
+## GemmaTextModel
 
-[[autodoc]] Gemma3Model
+[[autodoc]] GemmaTextModel
     - forward
 
 ## Gemma3ForCausalLM
@@ -179,12 +196,8 @@ print(text)
 [[autodoc]] Gemma3ForCausalLM
     - forward
 
-## Gemma3ForSequenceClassification
+## Gemma3ForConditionalGeneration
 
-[[autodoc]] Gemma3ForSequenceClassification
+[[autodoc]] Gemma3ForConditionalGeneration
     - forward
 
-## Gemma3ForTokenClassification
-
-[[autodoc]] Gemma3ForTokenClassification
-    - forward
