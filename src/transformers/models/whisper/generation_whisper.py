@@ -786,10 +786,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
-                batch_idx_map=batch_idx_map,
-                seek=seek,
-                num_segment_frames=num_segment_frames,
-                max_frames=max_frames,
+                seek_num_frames=seek_num_frames,
                 temperatures=temperatures,
                 generation_config=generation_config,
                 logits_processor=logits_processor,
@@ -904,10 +901,7 @@ class WhisperGenerationMixin(GenerationMixin):
         segment_input,
         decoder_input_ids,
         cur_bsz,
-        batch_idx_map,
-        seek,
-        num_segment_frames,
-        max_frames,
+        seek_num_frames,
         temperatures,
         generation_config,
         logits_processor,
@@ -979,6 +973,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
                 is_shortform=is_shortform,
+                seek_num_frames=seek_num_frames,
             )
 
             if cur_bsz < batch_size:
@@ -1065,6 +1060,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_token_timestamps,
         generation_config,
         is_shortform,
+        seek_num_frames,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
@@ -1075,6 +1071,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
+            if num_frames is None:
+                num_frames = seek_num_frames
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs,
                 generation_config.alignment_heads,
