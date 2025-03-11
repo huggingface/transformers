@@ -32,7 +32,7 @@ Transformers supports loading models stored in the GGUF format for further train
 Add the `gguf_file` parameter to [`~PreTrainedModel.from_pretrained`] to specify the GGUF file to load.
 
 ```py
-# pip install gguf_py
+# pip install gguf
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
