@@ -212,10 +212,10 @@ class QuantizedCacheConfig(CacheConfig):
             Size of the quantization group, should be a divisor of the model's hidden dimension.
             Defaults to 64.
         residual_length (`Optional[int]`, *optional*, defaults to 128):
-            Length of the residual cache which will always be stored in original presicion.
+            Length of the residual cache which will always be stored in original precision.
             Defaults to 128.
         compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
-            The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
+            The default dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
         device (`str`, *optional*, defaults to `"cpu"`):
             Device on which to perform computations, should be same as the model's device.
     """
@@ -1074,7 +1074,7 @@ class StaticCache(Cache):
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
 
@@ -1267,7 +1267,7 @@ class SlidingWindowCache(StaticCache):
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
@@ -1579,7 +1579,7 @@ class HybridCache(Cache):
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
@@ -1602,7 +1602,9 @@ class HybridCache(Cache):
         ```
     """
 
-    is_compileable = True
+    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
+    # ALL changes from the PR that commented the line below when reactivating it.
+    # is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
@@ -1929,7 +1931,7 @@ class OffloadedStaticCache(StaticCache):
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
         layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Attributes:

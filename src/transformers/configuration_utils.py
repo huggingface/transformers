@@ -191,7 +191,7 @@ class PretrainedConfig(PushToHubMixin):
             v5.
         loss_type (`str`, *optional*):
             The type of loss that the model should use. It should be in `LOSS_MAPPING`'s keys, otherwise the loss will
-            be automatically infered from the model architecture.
+            be automatically inferred from the model architecture.
     """
 
     model_type: str = ""
@@ -254,7 +254,7 @@ class PretrainedConfig(PushToHubMixin):
             if num_labels is not None and len(self.id2label) != num_labels:
                 logger.warning(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
-                    f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
+                    f"{self.id2label}. The number of labels will be overwritten to {self.num_labels}."
                 )
             self.id2label = {int(key): value for key, value in self.id2label.items()}
             # Keys are always strings in JSON so convert ids to int here.
@@ -824,25 +824,27 @@ class PretrainedConfig(PushToHubMixin):
 
         serializable_config_dict = {}
 
-        # only serialize values that differ from the default config
+        # Only serialize values that differ from the default config,
+        # except always keep the 'config' attribute.
         for key, value in config_dict.items():
             if (
                 isinstance(getattr(self, key, None), PretrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
+                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, class_config_dict[key], config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
-                if len(diff) > 0:
-                    serializable_config_dict[key] = diff
+                serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
                 or key == "transformers_version"
+                or key == "vocab_file"
                 or value != default_config_dict[key]
-                or (key in class_config_dict and value != class_config_dict[key])
+                or (key in default_config_dict and value != class_config_dict.get(key, value))
             ):
                 serializable_config_dict[key] = value
 
@@ -866,6 +868,9 @@ class PretrainedConfig(PushToHubMixin):
         # Do not serialize `base_model_pp_plan` for now
         if "base_model_pp_plan" in serializable_config_dict:
             del serializable_config_dict["base_model_pp_plan"]
+
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
 
         return serializable_config_dict
 
@@ -1094,7 +1099,7 @@ class PretrainedConfig(PushToHubMixin):
                 is_default_in_config = is_default_generation_value = None
                 parameter_value = getattr(self_decoder_config, parameter_name)
                 # Three cases in which is okay for the model config to hold generation config parameters:
-                # 1. The parameter is set to `None`, effectivelly delegating its value to the generation config
+                # 1. The parameter is set to `None`, effectively delegating its value to the generation config
                 if parameter_value is None:
                     continue
                 # 2. If we have a default config, then the instance should hold the same generation defaults
@@ -1178,6 +1183,8 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     """
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.
+
+    dict_b : the default config dictionnary. We want to remove values that are in this one
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
@@ -1185,9 +1192,8 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
         obj_value = getattr(config_obj, str(key), None)
         if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
-            if len(diff_value) > 0:
-                diff[key] = diff_value
-        elif key not in dict_b or value != dict_b[key] or key not in default or value != default[key]:
+            diff[key] = diff_value
+        elif key not in dict_b or (value != default[key]):
             diff[key] = value
     return diff
 
