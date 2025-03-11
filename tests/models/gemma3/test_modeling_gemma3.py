@@ -473,7 +473,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "gg-hf-g/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -487,8 +487,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [""]  # fmt: skip
-        print(output_text)
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nPlease look out that you are what Grammy and Vi- ||.xfairesr--ith alerts themselves are||ِّ\n\n**General Note:**']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
@@ -518,4 +517,5 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [""]  # fmt: skip
+        print(output_text)
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
