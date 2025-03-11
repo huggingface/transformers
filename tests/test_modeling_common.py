@@ -3624,7 +3624,11 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             set_config_for_less_flaky_test(config)
             model = model_class(config)
-            is_encoder_decoder = model.config.is_encoder_decoder
+            # TODO: standardize the interfaces for musicgen models, see other todo in this test
+            if model.__class__.__name__ == "MusicgenMelodyForConditionalGeneration":
+                is_encoder_decoder = True
+            else:
+                is_encoder_decoder = model.config.is_encoder_decoder
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -3656,16 +3660,22 @@ class ModelTesterMixin:
 
                 # TODO: if we can also check with `batch_size=1` without being flaky?
                 for batch_size in [7]:
+                    # musicgen decoder models; TODO: find better abstraction
+                    if hasattr(self.model_tester, "num_codebooks") and not hasattr(model_eager, "text_encoder"):
+                        input_data_batch_size = batch_size * self.model_tester.num_codebooks
+                    else:
+                        input_data_batch_size = batch_size
+
                     dummy_input = inputs_dict[model.main_input_name]
 
                     if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
                         dummy_input = dummy_input.to(torch_dtype)
 
-                    dummy_input = dummy_input[:batch_size]
-                    if dummy_input.shape[0] != batch_size:
+                    dummy_input = dummy_input[:input_data_batch_size]
+                    if dummy_input.shape[0] != input_data_batch_size:
                         if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
                             extension = torch.rand(
-                                batch_size - dummy_input.shape[0],
+                                input_data_batch_size - dummy_input.shape[0],
                                 *dummy_input.shape[1:],
                                 dtype=torch_dtype,
                                 device=torch_device,
@@ -3674,7 +3684,7 @@ class ModelTesterMixin:
                         else:
                             extension = torch.randint(
                                 high=5,
-                                size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
+                                size=(input_data_batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
                                 dtype=dummy_input.dtype,
                                 device=torch_device,
                             )
@@ -3711,10 +3721,16 @@ class ModelTesterMixin:
                             dummy_attention_mask[-1, :-2] = 1
 
                     if is_encoder_decoder:
-                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:batch_size]
-                        if decoder_input_ids.shape[0] != batch_size:
+                        # musicgen encoder-decoder models; TODO: find better abstraction
+                        if hasattr(self.model_tester, "num_codebooks"):
+                            input_data_batch_size = batch_size * self.model_tester.num_codebooks
+                        else:
+                            input_data_batch_size = batch_size
+
+                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:input_data_batch_size]
+                        if decoder_input_ids.shape[0] != input_data_batch_size:
                             extension = torch.ones(
-                                batch_size - decoder_input_ids.shape[0],
+                                input_data_batch_size - decoder_input_ids.shape[0],
                                 *decoder_input_ids.shape[1:],
                                 dtype=decoder_input_ids.dtype,
                                 device=torch_device,
@@ -3782,14 +3798,14 @@ class ModelTesterMixin:
                         logits_sdpa = outputs_sdpa.audio_values
                     else:
                         logits_eager = (
-                            outputs_eager.hidden_states[-1]
-                            if not is_encoder_decoder
-                            else outputs_eager.decoder_hidden_states[-1]
+                            outputs_eager.decoder_hidden_states[-1]
+                            if hasattr(outputs_eager, "decoder_hidden_states")
+                            else outputs_eager.hidden_states[-1]
                         )
                         logits_sdpa = (
-                            outputs_sdpa.hidden_states[-1]
-                            if not is_encoder_decoder
-                            else outputs_sdpa.decoder_hidden_states[-1]
+                            outputs_sdpa.decoder_hidden_states[-1]
+                            if hasattr(outputs_sdpa, "decoder_hidden_states")
+                            else outputs_sdpa.hidden_states[-1]
                         )
 
                     if torch_device in ["cpu", "cuda"]:
