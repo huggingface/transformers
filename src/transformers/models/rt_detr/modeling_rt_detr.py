@@ -1064,31 +1064,37 @@ class RTDetrDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        spatial_shapes: torch.Tensor,
+        spatial_shapes_list: List[Tuple[int, int]],
         position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input to the layer of shape `(batch_size, num_queries, hidden_size)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer of
-                shape `(batch_size, num_queries, hidden_size)`.
-            reference_points (`torch.FloatTensor`, *optional*):
+            encoder_hidden_states (`torch.Tensor`):
+                Flattened and concatenated encoder feature maps of shape `(batch_size, sequence_length, hidden_size)`.
+                Where `sequence_length` is the sum of the product of all spatial shapes of the encoder feature maps.
+                For example, spatial_shapes = [(80, 80), (40, 40), (20, 20)] ->
+                sequence_length = 80 * 80 + 40 * 40 + 20 * 20 = 6400 + 1600 + 400 = 8400.
+            reference_points (`torch.Tensor`, *optional*):
                 Reference points of shape `(batch_size, num_queries, 1, 2)`.
             spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes of shape `(num_feature_levels, 2)`.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            output_attentions (`bool`, *optional*):
+                Spatial shapes of encoder feature maps of shape `(num_feature_levels, 2)`.
+            spatial_shapes_list (`List[Tuple[int, int]]`, *optional*):
+                Spatial shapes of encoder feature maps of shape `(num_feature_levels, 2)`.
+                Same as `spatial_shapes` but as a list of tuples for `torch.compile` compatibility.
+            position_embeddings (`torch.Tensor`, *optional*):
+                Position embeddings that are added to the queries and keys in the self-attention layer of
+                shape `(batch_size, num_queries, hidden_size)`.
+            encoder_attention_mask (`torch.Tensor`):
+                4d encoder attention mask of size `(batch, 1, target_len, source_len)` where padding elements
+                are indicated by very large negative values.
+            output_attentions (`bool`, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
