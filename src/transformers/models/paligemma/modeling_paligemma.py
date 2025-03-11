@@ -77,7 +77,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         dtype (`torch.dtype`):
             The dtype to use for the 4D attention mask.
         device (`torch.device`):
-            The device to plcae the 4D attention mask on.
+            The device to place the 4D attention mask on.
         min_dtype (`float`):
             The minimum value representable with the dtype `dtype`.
         cache_position (`torch.Tensor`):
