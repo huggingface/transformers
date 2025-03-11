@@ -756,7 +756,7 @@ def _load_state_dict_into_meta_model(
     if device_map is not None and device_map.get("", None) is not None:
         tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
     if device_map is not None:
-        device_map_regex = "|".join(sorted(device_map.keys(), reverse=True))
+        device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
 
@@ -4828,7 +4828,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             map_location = "meta" if low_cpu_mem_usage else "cpu"
 
-            # If shard_fileis None, we use the existing state_dict instead of loading it
+            # If shard_file is None, we use the existing state_dict instead of loading it
             if shard_file is not None:
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
