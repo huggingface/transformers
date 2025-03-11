@@ -38,6 +38,9 @@ on the encoder, decoder, or reconstructing parts of the text.
 
 This model was contributed by [valhalla](https://huggingface.co/valhalla). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/mbart)
 
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
+
 ### Training of MBart
 
 MBart is a multilingual encoder-decoder (sequence-to-sequence) model primarily intended for translation task. As the
