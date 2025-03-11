@@ -896,17 +896,19 @@ def is_ipex_available(min_version: str = ""):
 @lru_cache
 def is_torch_xpu_available(check_device=False):
     """
-    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
-    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
+    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
+    if a XPU is in the environment.
     """
     if not is_torch_available():
         return False
 
     torch_version = version.parse(_torch_version)
-    if is_ipex_available():
-        import intel_extension_for_pytorch  # noqa: F401
-    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
-        return False
+    if torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 6):
+        if is_ipex_available():
+            import intel_extension_for_pytorch  # noqa: F401
+        elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+            return False
 
     import torch
 
@@ -956,6 +958,11 @@ def is_flash_attn_2_available():
     import torch
 
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
+        return False
+
+    # Ascend does not support "flash_attn".
+    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
+    if is_torch_npu_available():
         return False
 
     if torch.version.cuda:
