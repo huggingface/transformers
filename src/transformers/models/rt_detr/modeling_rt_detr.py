@@ -853,7 +853,6 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         reference_points: torch.Tensor,
         spatial_shapes: torch.Tensor,
         spatial_shapes_list: List[Tuple[int, int]],
-        level_start_index: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -925,6 +924,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
                 kernel_sampling_locations = sampling_locations.view(
                     batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
                 )
+                level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
                 output = MultiScaleDeformableAttentionFunction.apply(
                     value,
                     spatial_shapes,
@@ -1068,7 +1068,6 @@ class RTDetrDecoderLayer(nn.Module):
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
-        level_start_index=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -1076,15 +1075,14 @@ class RTDetrDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
+                Input to the layer of shape `(batch_size, num_queries, hidden_size)`.
             position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
+                Position embeddings that are added to the queries and keys in the self-attention layer of
+                shape `(batch_size, num_queries, hidden_size)`.
             reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
+                Reference points of shape `(batch_size, num_queries, 1, 2)`.
             spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
+                Spatial shapes of shape `(num_feature_levels, 2)`.
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
@@ -1116,7 +1114,6 @@ class RTDetrDecoderLayer(nn.Module):
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1471,7 +1468,6 @@ class RTDetrDecoder(nn.Module):
         reference_points: torch.Tensor,
         spatial_shapes: torch.Tensor,
         spatial_shapes_list: List[Tuple[int, int]],
-        level_start_index: torch.Tensor,
         encoder_attention_mask: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1493,8 +1489,6 @@ class RTDetrDecoder(nn.Module):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1528,7 +1522,6 @@ class RTDetrDecoder(nn.Module):
                 reference_points=reference_points_input,
                 spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
@@ -1817,8 +1810,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             spatial_shapes[level, 0] = height
             spatial_shapes[level, 1] = width
 
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-
         # prepare denoising training
         if self.training and self.config.num_denoising > 0 and labels is not None:
             (
@@ -1889,7 +1880,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             reference_points=topk_bboxes,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
