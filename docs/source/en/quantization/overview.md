@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,46 +14,36 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Quantization
+# Overview
 
-Quantization techniques focus on representing data with less information while also trying to not lose too much accuracy. This often means converting a data type to represent the same information with fewer bits. For example, if your model weights are stored as 32-bit floating points and they're quantized to 16-bit floating points, this halves the model size which makes it easier to store and reduces memory-usage. Lower precision can also speedup inference because it takes less time to perform calculations with fewer bits.
+Quantization lowers the memory requirements of loading and using a model by storing the weights in a lower precision while trying to preserve as much accuracy as possible. Weights are typically stored in full-precision (fp32) floating point representations, but half-precision (fp16 or bf16) are increasingly popular data types given the large size of models today. Some quantization methods can reduce the precision even further to integer representations, like int8 or int4.
 
-<Tip>
+Transformers supports many quantization methods, each with their pros and cons, so you can pick the best one for your specific use case. Some methods require calibration for greater accuracy and extreme compression (1-2 bits), while other methods work out of the box with on-the-fly quantization.
 
-Interested in adding a new quantization method to Transformers? Read the [HfQuantizer](./contribute) guide to learn how!
+Use the Space below to help you pick a quantization method depending on your hardware and number of bits to quantize to.
 
-</Tip>
+| Quantization Method                           | On the fly quantization | CPU             | CUDA GPU | ROCm GPU  | Metal (Apple Silicon)              | Intel GPU       | Torch compile() | Bits          | PEFT Fine Tuning | Serializable with 🤗Transformers | 🤗Transformers Support  | Link to library                             |
+|-----------------------------------------------|----------------------|-----------------|----------|-----------|------------------------------------|-----------------|-----------------|---------------|------------------|-----------------------------|-------------------------|---------------------------------------------|
+| [AQLM](./aqlm)                             | 🔴                   | 🟢              |     🟢     | 🔴        | 🔴                                 | 🔴              | 🟢              | 1/2         | 🟢               | 🟢                          | 🟢                      | https://github.com/Vahe1994/AQLM            |
+| [AWQ](./awq)                               | 🔴                   | 🟢              | 🟢        | 🟢        | 🔴                                 | 🟢              | ?               | 4             | 🟢               | 🟢                          | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
+| [bitsandbytes](./bitsandbytes)             | 🟢                   | 🟡 |     🟢     | 🟡 | 🔴                    | 🟡 | 🔴 | 4/8         | 🟢               | 🟢                          | 🟢                      | https://github.com/bitsandbytes-foundation/bitsandbytes |
+| [compressed-tensors](./compressed_tensors) | 🔴                   | 🟢              |     🟢     | 🟢        | 🔴                                 | 🔴              | 🔴              | 1/8         | 🟢               | 🟢                          | 🟢                      | https://github.com/neuralmagic/compressed-tensors |
+| [EETQ](./eetq)                             | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | ?               | 8             | 🟢               | 🟢                          | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
+| [GGUF / GGML (llama.cpp)](../gguf)         | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🔴              | 🔴              | 1/8         | 🔴               | [See Notes](../gguf)     | [See Notes](../gguf) | https://github.com/ggerganov/llama.cpp      |
+| [GPTQModel](./gptq)                        | 🔴                   | 🟢 | 🟢        | 🟢        | 🟢                                 | 🟢 | 🔴              | 2/3/4/8 | 🟢               | 🟢                          | 🟢                      | https://github.com/ModelCloud/GPTQModel        |
+| [AutoGPTQ](./gptq)                         | 🔴                   | 🔴              | 🟢        | 🟢        | 🔴                                 | 🔴              | 🔴              | 2/3/4/8 | 🟢               | 🟢                          | 🟢                      | https://github.com/AutoGPTQ/AutoGPTQ        |
+| [HIGGS](./higgs)                           | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 2/4         | 🔴               | 🟢                          | 🟢                      | https://github.com/HanGuo97/flute           |       
+| [HQQ](./hqq)                               | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 1/8         | 🟢               | 🔴                          | 🟢                      | https://github.com/mobiusml/hqq/            |
+| [optimum-quanto](./quanto)                 | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🔴              | 🟢              | 2/4/8     | 🔴               | 🔴                          | 🟢                      | https://github.com/huggingface/optimum-quanto       |
+| [FBGEMM_FP8](./fbgemm_fp8)                 | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8             | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
+| [torchao](./torchao)                       | 🟢                   | 🟢               | 🟢        | 🔴        | 🟡 | 🔴              |                 | 4/8         |                  | 🟢🔴                        | 🟢                      | https://github.com/pytorch/ao       |
+| [VPTQ](./vptq)                             | 🔴                   | 🔴              |     🟢     | 🟡        | 🔴                                 | 🔴              | 🟢              | 1/8         | 🔴               | 🟢                          | 🟢                      | https://github.com/microsoft/VPTQ            |
+| [FINEGRAINED_FP8](./finegrained_fp8)                 | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8             | 🔴               | 🟢                          | 🟢                      |        |
+| [SpQR](./spqr)                          | 🔴                       |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3              |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 
-<Tip>
+## Resources
 
-If you are new to the quantization field, we recommend you to check out these beginner-friendly courses about quantization in collaboration with DeepLearning.AI:
+If you are new to quantization, we recommend checking out these beginner-friendly quantization courses in collaboration with DeepLearning.AI.
 
 * [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
-* [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth/)
-
-</Tip>
-
-## When to use what?
-
-The community has developed many quantization methods for various use cases. With Transformers, you can run any of these integrated methods depending on your use case because each method has their own pros and cons.
-
-For example, some quantization methods require calibrating the model with a dataset for more accurate and "extreme" compression (up to 1-2 bits quantization), while other methods work out of the box with on-the-fly quantization.
-
-Another parameter to consider is compatibility with your target device. Do you want to quantize on a CPU, GPU, or Apple silicon?
-
-In short, supporting a wide range of quantization methods allows you to pick the best quantization method for your specific use case.
-
-Use the table below to help you decide which quantization method to use.
-
-| Quantization method                 | On the fly quantization | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() support | Number of bits | Supports fine-tuning (through PEFT) | Serializable with 🤗 transformers | 🤗 transformers support | Link to library                             |
-|-------------------------------------|-------------------------|-----|----------|----------------|-----------------------|-------------------------|----------------|-------------------------------------|--------------|------------------------|---------------------------------------------|
-| [AQLM](./aqlm)                                | 🔴                       |  🟢   |     🟢     | 🔴              | 🔴                     | 🟢                      | 1 / 2          | 🟢                                   | 🟢            | 🟢                      | https://github.com/Vahe1994/AQLM            |
-| [AWQ](./awq) | 🔴                       | 🔴   | 🟢        | 🟢              | 🔴                     | ?                       | 4              | 🟢                                   | 🟢            | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
-| [bitsandbytes](./bitsandbytes)                        | 🟢                       | 🔴   |     🟢     | 🔴              | 🔴                     | 🔴                       | 4 / 8          | 🟢                                   | 🟢            | 🟢                      | https://github.com/TimDettmers/bitsandbytes |
-| [EETQ](./eetq)                                | 🟢                       | 🔴   | 🟢        | 🔴              | 🔴                     | ?                       | 8              | 🟢                                   | 🟢            | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
-| GGUF / GGML (llama.cpp)             | 🟢                       | 🟢   | 🟢        | 🔴              | 🟢                     | 🔴                       | 1 - 8          | 🔴                                   | [See GGUF section](../gguf)                | [See GGUF section](../gguf)                      | https://github.com/ggerganov/llama.cpp      |
-| [GPTQ](./gptq)                                | 🔴                       | 🔴   | 🟢        | 🟢              | 🔴                     | 🔴                       | 2 - 3 - 4 - 8          | 🟢                                   | 🟢            | 🟢                      | https://github.com/AutoGPTQ/AutoGPTQ        |
-| [HQQ](./hqq)                                 | 🟢                       | 🟢    | 🟢        | 🔴              | 🔴                     | 🟢                       | 1 - 8          | 🟢                                   | 🔴            | 🟢                      | https://github.com/mobiusml/hqq/            |
-| [Quanto](./quanto)                              | 🟢                       | 🟢   | 🟢        | 🔴              | 🟢                     | 🟢                       | 2 / 4 / 8      | 🔴                                   | 🔴            | 🟢                      | https://github.com/huggingface/quanto       |
-| [FBGEMM_FP8](./fbgemm_fp8.md)                              | 🟢                       | 🔴    | 🟢        | 🔴              | 🔴                      | 🔴                        | 8      | 🔴                                   | 🟢            | 🟢                      | https://github.com/pytorch/FBGEMM       |
-
+* [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth

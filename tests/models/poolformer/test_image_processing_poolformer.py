@@ -25,7 +25,7 @@ if is_vision_available():
     from transformers import PoolFormerImageProcessor
 
 
-class PoolFormerImageProcessingTester(unittest.TestCase):
+class PoolFormerImageProcessingTester:
     def __init__(
         self,
         parent,

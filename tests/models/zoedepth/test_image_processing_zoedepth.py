@@ -28,7 +28,7 @@ if is_vision_available():
     from transformers import ZoeDepthImageProcessor
 
 
-class ZoeDepthImageProcessingTester(unittest.TestCase):
+class ZoeDepthImageProcessingTester:
     def __init__(
         self,
         parent,

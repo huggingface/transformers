@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team
+# Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,19 +16,22 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
+import torch
+from torch import nn
+from torch.nn import BCELoss
 
-from ..configuration_utils import PretrainedConfig
-from ..utils import is_torch_available, logging
-from .configuration_utils import WatermarkingConfig
+from ..modeling_utils import PreTrainedModel
+from ..utils import ModelOutput, is_torch_available, logging
+from .configuration_utils import PretrainedConfig, WatermarkingConfig
 
 
 if is_torch_available():
     import torch
 
-    from .logits_process import WatermarkLogitsProcessor
+    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -237,3 +240,310 @@ class WatermarkDetector:
                 confidence=confidence,
             )
         return prediction
+
+
+class BayesianDetectorConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`BayesianDetectorModel`]. It is used to
+    instantiate a Bayesian Detector model according to the specified arguments.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        watermarking_depth (`int`, *optional*):
+            The number of tournament layers.
+        base_rate (`float1`, *optional*, defaults to 0.5):
+            Prior probability P(w) that a text is watermarked.
+    """
+
+    def __init__(self, watermarking_depth: int = None, base_rate: float = 0.5, **kwargs):
+        self.watermarking_depth = watermarking_depth
+        self.base_rate = base_rate
+        # These can be set later to store information about this detector.
+        self.model_name = None
+        self.watermarking_config = None
+
+        super().__init__(**kwargs)
+
+    def set_detector_information(self, model_name, watermarking_config):
+        self.model_name = model_name
+        self.watermarking_config = watermarking_config
+
+
+@dataclass
+class BayesianWatermarkDetectorModelOutput(ModelOutput):
+    """
+    Base class for outputs of models predicting if the text is watermarked.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss.
+        posterior_probabilities (`torch.FloatTensor` of shape `(1,)`):
+            Multiple choice classification loss.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    posterior_probabilities: Optional[torch.FloatTensor] = None
+
+
+class BayesianDetectorWatermarkedLikelihood(nn.Module):
+    """Watermarked likelihood model for binary-valued g-values.
+
+    This takes in g-values and returns p(g_values|watermarked).
+    """
+
+    def __init__(self, watermarking_depth: int):
+        """Initializes the model parameters."""
+        super().__init__()
+        self.watermarking_depth = watermarking_depth
+        self.beta = torch.nn.Parameter(-2.5 + 0.001 * torch.randn(1, 1, watermarking_depth))
+        self.delta = torch.nn.Parameter(0.001 * torch.randn(1, 1, self.watermarking_depth, watermarking_depth))
+
+    def _compute_latents(self, g_values: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Computes the unique token probability distribution given g-values.
+
+        Args:
+            g_values (`torch.Tensor` of shape `(batch_size, seq_len, watermarking_depth)`):
+                PRF values.
+
+        Returns:
+            p_one_unique_token and p_two_unique_tokens, both of shape
+            [batch_size, seq_len, watermarking_depth]. p_one_unique_token[i,t,l]
+            gives the probability of there being one unique token in a tournament
+            match on layer l, on timestep t, for batch item i.
+            p_one_unique_token[i,t,l] + p_two_unique_token[i,t,l] = 1.
+        """
+        # Tile g-values to produce feature vectors for predicting the latents
+        # for each layer in the tournament; our model for the latents psi is a
+        # logistic regression model psi = sigmoid(delta * x + beta).
+
+        # [batch_size, seq_len, watermarking_depth, watermarking_depth]
+        x = torch.repeat_interleave(torch.unsqueeze(g_values, dim=-2), self.watermarking_depth, axis=-2)
+
+        # mask all elements above -1 diagonal for autoregressive factorization
+        x = torch.tril(x, diagonal=-1)
+
+        # [batch_size, seq_len, watermarking_depth]
+        # (i, j, k, l) x (i, j, k, l) -> (i, j, k) einsum equivalent
+        logits = (self.delta[..., None, :] @ x.type(self.delta.dtype)[..., None]).squeeze() + self.beta
+
+        p_two_unique_tokens = torch.sigmoid(logits)
+        p_one_unique_token = 1 - p_two_unique_tokens
+        return p_one_unique_token, p_two_unique_tokens
+
+    def forward(self, g_values: torch.Tensor) -> torch.Tensor:
+        """Computes the likelihoods P(g_values|watermarked).
+
+        Args:
+            g_values (`torch.Tensor` of shape `(batch_size, seq_len, watermarking_depth)`):
+                g-values (values 0 or 1)
+
+        Returns:
+            p(g_values|watermarked) of shape [batch_size, seq_len, watermarking_depth].
+        """
+        p_one_unique_token, p_two_unique_tokens = self._compute_latents(g_values)
+
+        # P(g_tl | watermarked) is equal to
+        # 0.5 * [ (g_tl+0.5) * p_two_unique_tokens + p_one_unique_token].
+        return 0.5 * ((g_values + 0.5) * p_two_unique_tokens + p_one_unique_token)
+
+
+class BayesianDetectorModel(PreTrainedModel):
+    r"""
+    Bayesian classifier for watermark detection.
+
+    This detector uses Bayes' rule to compute a watermarking score, which is the sigmoid of the log of ratio of the
+    posterior probabilities P(watermarked|g_values) and P(unwatermarked|g_values). Please see the section on
+    BayesianScore in the paper for further details.
+    Paper URL: https://www.nature.com/articles/s41586-024-08025-4
+
+    Note that this detector only works with non-distortionary Tournament-based watermarking using the Bernoulli(0.5)
+    g-value distribution.
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`BayesianDetectorConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    """
+
+    config_class = BayesianDetectorConfig
+    base_model_prefix = "model"
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.watermarking_depth = config.watermarking_depth
+        self.base_rate = config.base_rate
+        self.likelihood_model_watermarked = BayesianDetectorWatermarkedLikelihood(
+            watermarking_depth=self.watermarking_depth
+        )
+        self.prior = torch.nn.Parameter(torch.tensor([self.base_rate]))
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, nn.Parameter):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+
+    def _compute_posterior(
+        self,
+        likelihoods_watermarked: torch.Tensor,
+        likelihoods_unwatermarked: torch.Tensor,
+        mask: torch.Tensor,
+        prior: float,
+    ) -> torch.Tensor:
+        """
+        Compute posterior P(w|g) given likelihoods, mask and prior.
+
+        Args:
+            likelihoods_watermarked (`torch.Tensor` of shape `(batch, length, depth)`):
+                Likelihoods P(g_values|watermarked) of g-values under watermarked model.
+            likelihoods_unwatermarked (`torch.Tensor` of shape `(batch, length, depth)`):
+                Likelihoods P(g_values|unwatermarked) of g-values under unwatermarked model.
+            mask (`torch.Tensor` of shape `(batch, length)`):
+                A binary array indicating which g-values should be used. g-values with mask value 0 are discarded.
+            prior (`float`):
+                the prior probability P(w) that the text is watermarked.
+
+        Returns:
+            Posterior probability P(watermarked|g_values), shape [batch].
+        """
+        mask = torch.unsqueeze(mask, dim=-1)
+        prior = torch.clamp(prior, min=1e-5, max=1 - 1e-5)
+        log_likelihoods_watermarked = torch.log(torch.clamp(likelihoods_watermarked, min=1e-30, max=float("inf")))
+        log_likelihoods_unwatermarked = torch.log(torch.clamp(likelihoods_unwatermarked, min=1e-30, max=float("inf")))
+        log_odds = log_likelihoods_watermarked - log_likelihoods_unwatermarked
+
+        # Sum relative surprisals (log odds) across all token positions and layers.
+        relative_surprisal_likelihood = torch.einsum("i...->i", log_odds * mask)
+
+        # Compute the relative surprisal prior
+        relative_surprisal_prior = torch.log(prior) - torch.log(1 - prior)
+
+        # Combine prior and likelihood.
+        # [batch_size]
+        relative_surprisal = relative_surprisal_prior + relative_surprisal_likelihood
+
+        # Compute the posterior probability P(w|g) = sigmoid(relative_surprisal).
+        return torch.sigmoid(relative_surprisal)
+
+    def forward(
+        self,
+        g_values: torch.Tensor,
+        mask: torch.Tensor,
+        labels: Optional[torch.Tensor] = None,
+        loss_batch_weight=1,
+        return_dict=False,
+    ) -> BayesianWatermarkDetectorModelOutput:
+        """
+        Computes the watermarked posterior P(watermarked|g_values).
+
+        Args:
+            g_values (`torch.Tensor` of shape `(batch_size, seq_len, watermarking_depth, ...)`):
+                g-values (with values 0 or 1)
+            mask:
+                A binary array shape [batch_size, seq_len] indicating which g-values should be used. g-values with mask
+                value 0 are discarded.
+
+        Returns:
+            p(watermarked | g_values), of shape [batch_size].
+        """
+
+        likelihoods_watermarked = self.likelihood_model_watermarked(g_values)
+        likelihoods_unwatermarked = 0.5 * torch.ones_like(g_values)
+        out = self._compute_posterior(
+            likelihoods_watermarked=likelihoods_watermarked,
+            likelihoods_unwatermarked=likelihoods_unwatermarked,
+            mask=mask,
+            prior=self.prior,
+        )
+
+        loss = None
+        if labels is not None:
+            loss_fct = BCELoss()
+            loss_unwweight = torch.sum(self.likelihood_model_watermarked.delta**2)
+            loss_weight = loss_unwweight * loss_batch_weight
+            loss = loss_fct(torch.clamp(out, 1e-5, 1 - 1e-5), labels) + loss_weight
+
+        if not return_dict:
+            return (out,) if loss is None else (out, loss)
+
+        return BayesianWatermarkDetectorModelOutput(loss=loss, posterior_probabilities=out)
+
+
+class SynthIDTextWatermarkDetector:
+    r"""
+    SynthID text watermark detector class.
+
+    This class has to be initialized with the trained bayesian detector module check script
+    in examples/synthid_text/detector_training.py for example in training/saving/loading this
+    detector module. The folder also showcases example use case of this detector.
+
+    Parameters:
+        detector_module ([`BayesianDetectorModel`]):
+            Bayesian detector module object initialized with parameters.
+            Check examples/research_projects/synthid_text/detector_training.py for usage.
+        logits_processor (`SynthIDTextWatermarkLogitsProcessor`):
+            The logits processor used for watermarking.
+        tokenizer (`Any`):
+            The tokenizer used for the model.
+
+    Examples:
+    ```python
+    >>> from transformers import (
+    ...     AutoTokenizer, BayesianDetectorModel, SynthIDTextWatermarkLogitsProcessor, SynthIDTextWatermarkDetector
+    ... )
+
+    >>> # Load the detector. See examples/research_projects/synthid_text for training a detector.
+    >>> detector_model = BayesianDetectorModel.from_pretrained("joaogante/dummy_synthid_detector")
+    >>> logits_processor = SynthIDTextWatermarkLogitsProcessor(
+    ...     **detector_model.config.watermarking_config, device="cpu"
+    ... )
+    >>> tokenizer = AutoTokenizer.from_pretrained(detector_model.config.model_name)
+    >>> detector = SynthIDTextWatermarkDetector(detector_model, logits_processor, tokenizer)
+
+    >>> # Test whether a certain string is watermarked
+    >>> test_input = tokenizer(["This is a test input"], return_tensors="pt")
+    >>> is_watermarked = detector(test_input.input_ids)
+    ```
+    """
+
+    def __init__(
+        self,
+        detector_module: BayesianDetectorModel,
+        logits_processor: SynthIDTextWatermarkLogitsProcessor,
+        tokenizer: Any,
+    ):
+        self.detector_module = detector_module
+        self.logits_processor = logits_processor
+        self.tokenizer = tokenizer
+
+    def __call__(self, tokenized_outputs: torch.Tensor):
+        # eos mask is computed, skip first ngram_len - 1 tokens
+        # eos_mask will be of shape [batch_size, output_len]
+        eos_token_mask = self.logits_processor.compute_eos_token_mask(
+            input_ids=tokenized_outputs,
+            eos_token_id=self.tokenizer.eos_token_id,
+        )[:, self.logits_processor.ngram_len - 1 :]
+
+        # context repetition mask is computed
+        context_repetition_mask = self.logits_processor.compute_context_repetition_mask(
+            input_ids=tokenized_outputs,
+        )
+        # context repitition mask shape [batch_size, output_len - (ngram_len - 1)]
+
+        combined_mask = context_repetition_mask * eos_token_mask
+
+        g_values = self.logits_processor.compute_g_values(
+            input_ids=tokenized_outputs,
+        )
+        # g values shape [batch_size, output_len - (ngram_len - 1), depth]
+        return self.detector_module(g_values, combined_mask)

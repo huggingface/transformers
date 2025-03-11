@@ -62,7 +62,7 @@ class HqqHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not (is_hqq_available()):
             raise ImportError(
-                "HQQ is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`"
+                "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
@@ -91,6 +91,65 @@ class HqqHfQuantizer(HfQuantizer):
             else:
                 self.using_multi_gpu = len(set(device_map.values())) > 1
 
+    def update_missing_keys(
+        self, model: "PreTrainedModel", missing_keys: List[str], prefix: str, **kwargs
+    ) -> List[str]:
+        if self.pre_quantized:
+            return [key for key in missing_keys if ("weight" not in key)]
+        else:
+            return missing_keys
+
+    # Adds missing keys for HQQLinear modules that are loaded but the model with initialized with torch.nn.Linear
+    def update_expected_keys(
+        self, model: "PreTrainedModel", expected_keys: List[str], loaded_keys: List[str]
+    ) -> List[str]:
+        if not self.pre_quantized:
+            return expected_keys
+
+        # Collects all quantizable (linear) layers
+        def _find_hqq_quantizable_layers(model, layers):
+            for name, module in model.named_children():
+                if isinstance(module, (torch.nn.Linear)):
+                    layers.add(module.name)
+                _find_hqq_quantizable_layers(module, layers)
+
+        new_keys = set(expected_keys)
+        if is_hqq_available():
+            from hqq.core.quantize import HQQLinear
+
+            # Name modules
+            for name, module in model.named_modules():
+                module.name = name
+
+            # valid modules are Linear layers that have HQQLinear state_dict. We ignore skip_modules and any layers with Linear state_dict() params
+            _valid_modules = set()
+            _find_hqq_quantizable_layers(model, _valid_modules)
+            _valid_modules -= set(model.config.quantization_config["skip_modules"])
+
+            # Append new expected layers based on _ref_keys
+            _ref_keys = HQQLinear(
+                linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
+            ).state_dict_keys() - {"bias"}
+
+            # Clean-up
+            _rm_keys = set()
+            for key in new_keys:
+                if any(_module in key for _module in _valid_modules):
+                    _rm_keys.add(key)
+            new_keys -= _rm_keys
+            # At this point, new_keys contains all the keys of the layers that are NOT HQQLinear or torch.nn.Linear
+
+            # Re-populate Linear/HQQLinear
+            for _module in _valid_modules:
+                if _module + ".weight" in loaded_keys:
+                    new_keys.add(_module + ".weight")
+                else:
+                    new_keys.update({_module + "." + _ref_key for _ref_key in _ref_keys})
+                if _module + ".bias" in loaded_keys:
+                    new_keys.add(_module + ".bias")
+
+        return list(new_keys)
+
     def check_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -99,9 +158,18 @@ class HqqHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ) -> bool:
+        if is_hqq_available():
+            from hqq.core.quantize import HQQLinear
         module, tensor_name = get_module_from_name(model, param_name)
 
-        return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+        if self.pre_quantized:
+            return (
+                (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear))
+                and tensor_name != "weight"
+                and tensor_name != "bias"
+            )
+        else:
+            return isinstance(module, torch.nn.Linear) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -122,13 +190,43 @@ class HqqHfQuantizer(HfQuantizer):
             from hqq.core.quantize import HQQLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-
-        layer_name = param_name.replace(".weight", "").replace(".bias", "")
+        layer_name = ".".join(param_name.split(".")[:-1])
         parent_module = find_parent(model, layer_name)
         node = layer_name.split(".")[-1]
 
-        # Step 0: set module state_dict
-        module_state_dict = {key.split(".")[-1]: state_dict[key] for key in state_dict if layer_name in key}
+        # set module state_dict
+        module_state_dict = {}
+        for k, v in state_dict.items():
+            if layer_name + "." in k:
+                module_state_dict[k.split(".")[-1]] = v
+                if unexpected_keys is not None and k in unexpected_keys:
+                    unexpected_keys.remove(k)
+
+        if self.pre_quantized:
+            if isinstance(module, HQQLinear):
+                return
+            else:
+                hqq_layer = HQQLinear(
+                    linear_layer=None,
+                    quant_config=None,
+                    compute_dtype=self.torch_dtype,
+                    device=target_device,
+                )
+
+            hqq_layer.load_state_dict(module_state_dict)
+
+            if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+                hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+
+            if self.using_multi_gpu:
+                hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
+
+            setattr(parent_module, node, hqq_layer)
+
+            # cleanup
+            del module.__dict__, module
+            torch.cuda.empty_cache()
+            return
 
         # Step 1: populate module with weight/bias from module state dict
         for key in module_state_dict:
@@ -136,7 +234,6 @@ class HqqHfQuantizer(HfQuantizer):
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.
-
         if hasattr(module, "quant_config"):
             hqq_layer = HQQLinear(
                 module,
@@ -188,12 +285,11 @@ class HqqHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_hqq_quantized = True
-        model.is_hqq_serializable = self.is_serializable
+        model.is_hqq_serializable = self.is_serializable()
         return model
 
-    @property
-    def is_serializable(self):
-        return False
+    def is_serializable(self, safe_serialization=None):
+        return True
 
     @property
     def is_trainable(self) -> bool:

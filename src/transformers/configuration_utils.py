@@ -40,6 +40,7 @@ from .utils import (
     is_torch_available,
     logging,
 )
+from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
@@ -71,6 +72,10 @@ class PretrainedConfig(PushToHubMixin):
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
       naming of attributes.
+    - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
+      parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_pp_plan** (`Dict[str, Tuple[List[str]]]`) -- A dict that maps child-modules of a base model to a
+      pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
     Common attributes (present in all subclasses):
 
@@ -80,6 +85,15 @@ class PretrainedConfig(PushToHubMixin):
     - **num_attention_heads** (`int`) -- The number of attention heads used in the multi-head attention layers of the
       model.
     - **num_hidden_layers** (`int`) -- The number of blocks in the model.
+
+    <Tip warning={true}>
+
+    Setting parameters for sequence generation in the model config is deprecated. For backward compatibility, loading
+    some of them will still be possible, but attempting to overwrite them will throw an exception -- you should set
+    them in a [~transformers.GenerationConfig]. Check the documentation of [~transformers.GenerationConfig] for more
+    information about the individual parameters.
+
+    </Tip>
 
     Arg:
         name_or_path (`str`, *optional*, defaults to `""`):
@@ -116,77 +130,6 @@ class PretrainedConfig(PushToHubMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
-
-        > Parameters for sequence generation
-
-        max_length (`int`, *optional*, defaults to 20):
-            Maximum length that will be used by default in the `generate` method of the model.
-        min_length (`int`, *optional*, defaults to 0):
-            Minimum length that will be used by default in the `generate` method of the model.
-        do_sample (`bool`, *optional*, defaults to `False`):
-            Flag that will be used by default in the `generate` method of the model. Whether or not to use sampling ;
-            use greedy decoding otherwise.
-        early_stopping (`bool`, *optional*, defaults to `False`):
-            Flag that will be used by default in the `generate` method of the model. Whether to stop the beam search
-            when at least `num_beams` sentences are finished per batch or not.
-        num_beams (`int`, *optional*, defaults to 1):
-            Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
-            no beam search.
-        num_beam_groups (`int`, *optional*, defaults to 1):
-            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams
-            that will be used by default in the `generate` method of the model. 1 means no group beam search.
-        diversity_penalty (`float`, *optional*, defaults to 0.0):
-            Value to control diversity for group beam search. that will be used by default in the `generate` method of
-            the model. 0 means no diversity penalty. The higher the penalty, the more diverse are the outputs.
-        temperature (`float`, *optional*, defaults to 1.0):
-            The value used to module the next token probabilities that will be used by default in the `generate` method
-            of the model. Must be strictly positive.
-        top_k (`int`, *optional*, defaults to 50):
-            Number of highest probability vocabulary tokens to keep for top-k-filtering that will be used by default in
-            the `generate` method of the model.
-        top_p (`float`, *optional*, defaults to 1):
-            Value that will be used by default in the `generate` method of the model for `top_p`. If set to float < 1,
-            only the most probable tokens with probabilities that add up to `top_p` or higher are kept for generation.
-        typical_p (`float`, *optional*, defaults to 1):
-            Local typicality measures how similar the conditional probability of predicting a target token next is to
-            the expected conditional probability of predicting a random token next, given the partial text already
-            generated. If set to float < 1, the smallest set of the most locally typical tokens with probabilities that
-            add up to `typical_p` or higher are kept for generation. See [this
-            paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
-        repetition_penalty (`float`, *optional*, defaults to 1):
-            Parameter for repetition penalty that will be used by default in the `generate` method of the model. 1.0
-            means no penalty.
-        length_penalty (`float`, *optional*, defaults to 1):
-            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
-            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
-            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
-            `length_penalty` < 0.0 encourages shorter sequences.
-        no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by default in the
-            `generate` method of the model for `no_repeat_ngram_size`. If set to int > 0, all ngrams of that size can
-            only occur once.
-        encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by
-            default in the `generate` method of the model for `encoder_no_repeat_ngram_size`. If set to int > 0, all
-            ngrams of that size that occur in the `encoder_input_ids` cannot occur in the `decoder_input_ids`.
-        bad_words_ids (`List[int]`, *optional*):
-            List of token ids that are not allowed to be generated that will be used by default in the `generate`
-            method of the model. In order to get the tokens of the words that should not appear in the generated text,
-            use `tokenizer.encode(bad_word, add_prefix_space=True)`.
-        num_return_sequences (`int`, *optional*, defaults to 1):
-            Number of independently computed returned sequences for each element in the batch that will be used by
-            default in the `generate` method of the model.
-        output_scores (`bool`, *optional*, defaults to `False`):
-            Whether the model should return the logits when used for generation.
-        return_dict_in_generate (`bool`, *optional*, defaults to `False`):
-            Whether the model should return a [`~transformers.utils.ModelOutput`] instead of a `torch.LongTensor`.
-        forced_bos_token_id (`int`, *optional*):
-            The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
-            multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
-            language token.
-        forced_eos_token_id (`int`, *optional*):
-            The id of the token to force as the last generated token when `max_length` is reached.
-        remove_invalid_values (`bool`, *optional*):
-            Whether to remove possible _nan_ and _inf_ outputs of the model to prevent the generation method to crash.
-            Note that using `remove_invalid_values` can slow down generation.
 
         > Parameters for fine-tuning tasks
 
@@ -246,11 +189,18 @@ class PretrainedConfig(PushToHubMixin):
             Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
+        loss_type (`str`, *optional*):
+            The type of loss that the model should use. It should be in `LOSS_MAPPING`'s keys, otherwise the loss will
+            be automatically inferred from the model architecture.
     """
 
     model_type: str = ""
+    base_config_key: str = ""
+    sub_configs: Dict[str, "PretrainedConfig"] = {}
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
+    base_model_tp_plan: Optional[Dict[str, Any]] = None
+    base_model_pp_plan: Optional[Dict[str, Tuple[List[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -287,7 +237,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
         # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
-        for parameter_name, default_value in self._get_generation_defaults().items():
+        for parameter_name, default_value in self._get_global_generation_defaults().items():
             setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
 
         # Fine-tuning task arguments
@@ -304,7 +254,7 @@ class PretrainedConfig(PushToHubMixin):
             if num_labels is not None and len(self.id2label) != num_labels:
                 logger.warning(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
-                    f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
+                    f"{self.id2label}. The number of labels will be overwritten to {self.num_labels}."
                 )
             self.id2label = {int(key): value for key, value in self.id2label.items()}
             # Keys are always strings in JSON so convert ids to int here.
@@ -355,6 +305,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Attention implementation to use, if relevant.
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
+        self._attn_implementation_autoset = False
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -440,16 +391,16 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
-        non_default_generation_parameters = {}
-        for parameter_name, default_value in self._get_generation_defaults().items():
-            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
-                non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
+        non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
-            logger.warning(
-                "Some non-default generation parameters are set in the model config. These should go into a "
-                "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
-                "instead. This warning will be raised to an exception in v4.41.\n"
-                f"Non-default generation parameters: {str(non_default_generation_parameters)}"
+            # TODO (joao): this should be an exception if the user has modified the loaded config. See #33886
+            warnings.warn(
+                "Some non-default generation parameters are set in the model config. These should go into either a) "
+                "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
+                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
+                "This warning will become an exception in the future."
+                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
+                UserWarning,
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -552,7 +503,7 @@ class PretrainedConfig(PushToHubMixin):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
@@ -601,11 +552,22 @@ class PretrainedConfig(PushToHubMixin):
         cls._set_token_in_kwargs(kwargs, token)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if cls.base_config_key and cls.base_config_key in config_dict:
+            config_dict = config_dict[cls.base_config_key]
+
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
+            # sometimes the config has no `base_config_key` if the config is used in several composite models
+            # e.g. LlamaConfig. In that case we try to see if there is match in `model_type` before raising a warning
+            for k, v in config_dict.items():
+                if isinstance(v, dict) and v.get("model_type") == cls.model_type:
+                    config_dict = v
+
+            # raise warning only if we still can't see a match in `model_type`
+            if config_dict["model_type"] != cls.model_type:
+                logger.warning(
+                    f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                    f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+                )
 
         return cls.from_dict(config_dict, **kwargs)
 
@@ -630,6 +592,8 @@ class PretrainedConfig(PushToHubMixin):
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict is None:
+            return {}, kwargs
         if "_commit_hash" in config_dict:
             original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
@@ -700,6 +664,8 @@ class PretrainedConfig(PushToHubMixin):
                     subfolder=subfolder,
                     _commit_hash=commit_hash,
                 )
+                if resolved_config_file is None:
+                    return None, kwargs
                 commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -740,6 +706,11 @@ class PretrainedConfig(PushToHubMixin):
             config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
                 config_dict["custom_pipelines"], pretrained_model_name_or_path
             )
+
+        # timm models are not saved with the model_type in the config file
+        if "model_type" not in config_dict and is_timm_config_dict(config_dict):
+            config_dict["model_type"] = "timm_wrapper"
+
         return config_dict, kwargs
 
     @classmethod
@@ -780,7 +751,7 @@ class PretrainedConfig(PushToHubMixin):
             id2label = kwargs["id2label"] if kwargs["id2label"] is not None else []
             if len(id2label) != num_labels:
                 raise ValueError(
-                    f"You passed along `num_labels={num_labels }` with an incompatible id to label map: "
+                    f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
                     "one of them."
                 )
@@ -831,6 +802,10 @@ class PretrainedConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+    def __iter__(self):
+        for attr in self.__dict__:
+            yield attr
+
     def to_diff_dict(self) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
@@ -849,25 +824,27 @@ class PretrainedConfig(PushToHubMixin):
 
         serializable_config_dict = {}
 
-        # only serialize values that differ from the default config
+        # Only serialize values that differ from the default config,
+        # except always keep the 'config' attribute.
         for key, value in config_dict.items():
             if (
                 isinstance(getattr(self, key, None), PretrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
+                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, class_config_dict[key], config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
-                if len(diff) > 0:
-                    serializable_config_dict[key] = diff
+                serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
                 or key == "transformers_version"
+                or key == "vocab_file"
                 or value != default_config_dict[key]
-                or (key in class_config_dict and value != class_config_dict[key])
+                or (key in default_config_dict and value != class_config_dict.get(key, value))
             ):
                 serializable_config_dict[key] = value
 
@@ -885,6 +862,15 @@ class PretrainedConfig(PushToHubMixin):
 
         if "_attn_implementation_internal" in serializable_config_dict:
             del serializable_config_dict["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_pp_plan"]
+
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
 
         return serializable_config_dict
 
@@ -904,6 +890,12 @@ class PretrainedConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_attn_implementation_internal" in output:
             del output["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in output:
+            del output["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in output:
+            del output["base_model_pp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -1016,8 +1008,11 @@ class PretrainedConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("torch_dtype", None) is not None:
+            if isinstance(d["torch_dtype"], dict):
+                d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
+            elif not isinstance(d["torch_dtype"], str):
+                d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)
@@ -1049,7 +1044,7 @@ class PretrainedConfig(PushToHubMixin):
         cls._auto_class = auto_class
 
     @staticmethod
-    def _get_generation_defaults() -> Dict[str, Any]:
+    def _get_global_generation_defaults() -> Dict[str, Any]:
         return {
             "max_length": 20,
             "min_length": 0,
@@ -1078,14 +1073,79 @@ class PretrainedConfig(PushToHubMixin):
             "begin_suppress_tokens": None,
         }
 
-    def _has_non_default_generation_parameters(self) -> bool:
+    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
         """
-        Whether or not this instance holds non-default generation parameters.
+        Gets the non-default generation parameters on the PretrainedConfig instance
         """
-        for parameter_name, default_value in self._get_generation_defaults().items():
-            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
-                return True
-        return False
+        non_default_generation_parameters = {}
+        decoder_attribute_name = None
+
+        # Composite models don't have a default config, use their decoder config as a fallback for default values
+        # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
+        try:
+            default_config = self.__class__()
+        except ValueError:
+            decoder_config = self.get_text_config(decoder=True)
+            if decoder_config is not self:
+                default_config = decoder_config.__class__()
+            else:
+                default_config = None
+
+        # If it is a composite model, we want to check the subconfig that will be used for generation
+        self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
+
+        for parameter_name, default_global_value in self._get_global_generation_defaults().items():
+            if hasattr(self_decoder_config, parameter_name):
+                is_default_in_config = is_default_generation_value = None
+                parameter_value = getattr(self_decoder_config, parameter_name)
+                # Three cases in which is okay for the model config to hold generation config parameters:
+                # 1. The parameter is set to `None`, effectively delegating its value to the generation config
+                if parameter_value is None:
+                    continue
+                # 2. If we have a default config, then the instance should hold the same generation defaults
+                if default_config is not None:
+                    is_default_in_config = parameter_value == getattr(default_config, parameter_name)
+                # 3. if we don't have a default config, then the instance should hold the global generation defaults
+                else:
+                    is_default_generation_value = parameter_value == default_global_value
+
+                is_non_default = (is_default_in_config is False) or (
+                    is_default_in_config is None and is_default_generation_value is False
+                )
+                if is_non_default:
+                    non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
+
+        return non_default_generation_parameters
+
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        """
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it is under a set of valid names.
+
+        If `decoder` is set to `True`, then only search for decoder config names.
+        """
+        decoder_possible_text_config_names = ("decoder", "generator", "text_config")
+        encoder_possible_text_config_names = ("text_encoder",)
+        if decoder:
+            possible_text_config_names = decoder_possible_text_config_names
+        else:
+            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+
+        valid_text_config_names = []
+        for text_config_name in possible_text_config_names:
+            if hasattr(self, text_config_name):
+                text_config = getattr(self, text_config_name, None)
+                if text_config is not None:
+                    valid_text_config_names += [text_config_name]
+
+        if len(valid_text_config_names) > 1:
+            raise ValueError(
+                f"Multiple valid text configs were found in the model config: {valid_text_config_names}. In this "
+                "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
+            )
+        elif len(valid_text_config_names) == 1:
+            return getattr(self, valid_text_config_names[0])
+        return self
 
 
 def get_configuration_file(configuration_files: List[str]) -> str:
@@ -1123,6 +1183,8 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     """
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.
+
+    dict_b : the default config dictionnary. We want to remove values that are in this one
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
@@ -1130,9 +1192,8 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
         obj_value = getattr(config_obj, str(key), None)
         if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
-            if len(diff_value) > 0:
-                diff[key] = diff_value
-        elif key not in dict_b or value != dict_b[key] or key not in default or value != default[key]:
+            diff[key] = diff_value
+        elif key not in dict_b or (value != default[key]):
             diff[key] = value
     return diff
 

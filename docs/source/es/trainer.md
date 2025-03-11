@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# El Trainer 
+# El Trainer
 
 El [`Trainer`] es un bucle completo de entrenamiento y evaluación para modelos de PyTorch implementado en la biblioteca Transformers. Solo necesitas pasarle las piezas necesarias para el entrenamiento (modelo, tokenizador, conjunto de datos, función de evaluación, hiperparámetros de entrenamiento, etc.), y la clase [`Trainer`] se encarga del resto. Esto facilita comenzar a entrenar más rápido sin tener que escribir manualmente tu propio bucle de entrenamiento. Pero al mismo tiempo, [`Trainer`] es muy personalizable y ofrece una gran cantidad de opciones de entrenamiento para que puedas adaptarlo a tus necesidades exactas de entrenamiento.
 
@@ -79,7 +79,7 @@ trainer = Trainer(
     args=training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
@@ -151,7 +151,7 @@ from transformers import TrainerCallback
 class EarlyStoppingCallback(TrainerCallback):
     def __init__(self, num_steps=10):
         self.num_steps = num_steps
-    
+
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step >= self.num_steps:
             return {"should_training_stop": True}
@@ -169,7 +169,7 @@ trainer = Trainer(
     args=training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
     callback=[EarlyStoppingCallback()],
@@ -265,8 +265,8 @@ Para usar Accelerate con [`Trainer`], ejecuta el comando [`accelerate.config`](h
 <hfoption id="DistributedDataParallel">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-distributed_type: MULTI_GPU                                                                                                    
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
 downcast_bf16: 'no'
 gpu_ids: all
 machine_rank: 0 #change rank as per the node
@@ -337,8 +337,8 @@ use_cpu: false
 <hfoption id="DeepSpeed with Accelerate plugin">
 
 ```yml
-compute_environment: LOCAL_MACHINE                                                                                             
-deepspeed_config:                                                                                                              
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
   gradient_accumulation_steps: 1
   gradient_clipping: 0.7
   offload_optimizer_device: cpu
@@ -350,6 +350,30 @@ downcast_bf16: 'no'
 machine_rank: 0
 main_training_function: main
 mixed_precision: bf16
+num_machines: 1
+num_processes: 4
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+
+```
+
+</hfoption>
+
+<hfoption id="Tensor Parallelism with PyTorch 2">
+
+```yml
+compute_environment: LOCAL_MACHINE
+tp_config:
+  tp_size: 4
+distributed_type: TP
+downcast_bf16: 'no'
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
 num_machines: 1
 num_processes: 4
 rdzv_backend: static

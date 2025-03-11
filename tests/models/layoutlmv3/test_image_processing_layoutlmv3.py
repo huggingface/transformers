@@ -28,7 +28,7 @@ if is_pytesseract_available():
     from transformers import LayoutLMv3ImageProcessor
 
 
-class LayoutLMv3ImageProcessingTester(unittest.TestCase):
+class LayoutLMv3ImageProcessingTester:
     def __init__(
         self,
         parent,

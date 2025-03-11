@@ -101,7 +101,8 @@ def _configure_library_root_logger() -> None:
             formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
             _default_handler.setFormatter(formatter)
 
-        library_root_logger.propagate = False
+        is_ci = os.getenv("CI") is not None and os.getenv("CI").upper() in {"1", "ON", "YES", "TRUE"}
+        library_root_logger.propagate = True if is_ci else False
 
 
 def _reset_library_root_logger() -> None:
@@ -329,6 +330,21 @@ def warning_once(self, *args, **kwargs):
 
 
 logging.Logger.warning_once = warning_once
+
+
+@functools.lru_cache(None)
+def info_once(self, *args, **kwargs):
+    """
+    This method is identical to `logger.info()`, but will emit the info with the same message only once
+
+    Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
+    The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
+    another type of cache that includes the caller frame information in the hashing function.
+    """
+    self.info(*args, **kwargs)
+
+
+logging.Logger.info_once = info_once
 
 
 class EmptyTqdm:

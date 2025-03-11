@@ -20,7 +20,6 @@ import unittest
 from transformers import DecisionTransformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -41,7 +40,6 @@ class DecisionTransformerModelTester:
         act_dim=6,
         state_dim=17,
         hidden_size=23,
-        max_length=11,
         is_training=True,
     ):
         self.parent = parent
@@ -50,7 +48,6 @@ class DecisionTransformerModelTester:
         self.act_dim = act_dim
         self.state_dim = state_dim
         self.hidden_size = hidden_size
-        self.max_length = max_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -80,7 +77,6 @@ class DecisionTransformerModelTester:
             act_dim=self.act_dim,
             state_dim=self.state_dim,
             hidden_size=self.hidden_size,
-            max_length=self.max_length,
         )
 
     def create_and_check_model(
@@ -128,9 +124,8 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
@@ -234,7 +229,7 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
                 )
 
             self.assertEqual(action_pred.shape, actions.shape)
-            self.assertTrue(torch.allclose(action_pred[0, -1], expected_outputs[step], atol=1e-4))
+            torch.testing.assert_close(action_pred[0, -1], expected_outputs[step], rtol=1e-4, atol=1e-4)
             state, reward, _, _ = (  # env.step(action)
                 torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32),
                 1.0,

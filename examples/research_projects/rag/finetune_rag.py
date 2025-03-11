@@ -458,7 +458,7 @@ class GenerativeQAModule(BaseTransformer):
             default=None,
             help=(
                 "Name of the index to use: 'hf' for a canonical dataset from the datasets library (default), 'custom'"
-                " for a local index, or 'legacy' for the orignal one)"
+                " for a local index, or 'legacy' for the original one)"
             ),
         )
         parser.add_argument(

@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import GLPNImageProcessor
 
 
-class GLPNImageProcessingTester(unittest.TestCase):
+class GLPNImageProcessingTester:
     def __init__(
         self,
         parent,

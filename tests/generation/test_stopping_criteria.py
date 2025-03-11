@@ -26,9 +26,9 @@ if is_torch_available():
     import torch
 
     from transformers.generation import (
+        ConfidenceCriteria,
         EosTokenCriteria,
         MaxLengthCriteria,
-        MaxNewTokensCriteria,
         MaxTimeCriteria,
         StoppingCriteriaList,
         StopStringCriteria,
@@ -76,21 +76,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         input_ids, scores = self._get_tensors(10)
         self.assertTrue(all(criteria(input_ids, scores)))
 
-    def test_max_new_tokens_criteria(self):
-        criteria = MaxNewTokensCriteria(start_length=5, max_new_tokens=5)
-
-        input_ids, scores = self._get_tensors(5)
-        self.assertFalse(all(criteria(input_ids, scores)))
-
-        input_ids, scores = self._get_tensors(9)
-        self.assertFalse(all(criteria(input_ids, scores)))
-
-        input_ids, scores = self._get_tensors(10)
-        self.assertTrue(all(criteria(input_ids, scores)))
-
-        criteria_list = StoppingCriteriaList([criteria])
-        self.assertEqual(criteria_list.max_length, 10)
-
     def test_max_time_criteria(self):
         input_ids, scores = self._get_tensors(5)
 
@@ -115,6 +100,23 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         input_ids, scores = self._get_tensors(5)
         input_ids[:, -1] = 1
         self.assertListEqual(criteria(input_ids, scores).tolist(), [False, False, False])
+
+    def test_confidence_criteria(self):
+        criteria = ConfidenceCriteria(assistant_confidence_threshold=0.5)
+
+        vocab_size = 250
+        length = 5
+
+        input_ids = ids_tensor((1, length), vocab_size)
+        scores = (torch.randn((1, vocab_size)),)
+
+        # Simulate high confidence by setting the probability of the last token to be high
+        scores[0][0, input_ids[0, -1]] = 10.0  # Logits before softmax
+        self.assertFalse(criteria(input_ids, scores))
+
+        # Simulate low confidence by setting the probability of the last token to be low
+        scores[0][0, input_ids[0, -1]] = -10.0  # Logits before softmax
+        self.assertTrue(criteria(input_ids, scores))
 
     def test_validate_stopping_criteria(self):
         validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 10)
@@ -174,6 +176,18 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         for i in range(len(false_strings)):
             self.assertFalse(criteria(false_input_ids["input_ids"][i : i + 1], scores))
 
+    def test_stop_string_criteria_vocab_size_mismatch(self):
+        """Test that StopStringCriteria handles tokens above len(tokenizer) correctly."""
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        # Create input_ids with tokens above len(tokenizer)
+        input_ids = torch.tensor([[len(tokenizer) + 1024, 1, 2]], device=torch_device)
+        scores = None
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["test"])
+
+        # This should not raise an error and should return False since no stop string is matched
+        self.assertFalse(criteria(input_ids, scores))
+
     def test_stop_string_matching_positions(self):
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
@@ -198,14 +212,14 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # Positions inside the stop string where the token matches (excluding end overlaps)
         valid_positions = embedding_vec[:, 0].tolist()
-        self.assertEqual(valid_positions, [2, -1, -1, 3, -1])
+        self.assertEqual(valid_positions, [2, -1, -1, 3, -1, -1])
 
         # Overlap lengths between end of stop string and start of token
         end_overlaps = embedding_vec[:, 1].tolist()
-        self.assertEqual(end_overlaps, [-1, 3, 3, -1, 1])
+        self.assertEqual(end_overlaps, [-1, 3, 3, -1, 1, -1])
 
         # Length of each token
-        token_lengths = embedding_vec[:, 2].tolist()
+        token_lengths = embedding_vec[:-1, 2].tolist()
         self.assertEqual(token_lengths, [len(token) for token in token_list])
 
     def test_single_letter_stop_string(self):

@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
 
-class Owlv2ImageProcessingTester(unittest.TestCase):
+class Owlv2ImageProcessingTester:
     def __init__(
         self,
         parent,

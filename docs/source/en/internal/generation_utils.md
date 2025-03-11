@@ -140,9 +140,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
@@ -156,9 +153,6 @@ generation.
     - __call__
 
 [[autodoc]] LogitsProcessorList
-    - __call__
-
-[[autodoc]] LogitsWarper
     - __call__
 
 [[autodoc]] MinLengthLogitsProcessor
@@ -189,6 +183,9 @@ generation.
     - __call__
 
 [[autodoc]] SuppressTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] SynthIDTextWatermarkLogitsProcessor
     - __call__
 
 [[autodoc]] TemperatureLogitsWarper
@@ -355,6 +352,8 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] TextIteratorStreamer
 
+[[autodoc]] AsyncTextIteratorStreamer
+
 ## Caches
 
 [[autodoc]] Cache
@@ -386,9 +385,28 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - get_seq_length
     - reorder_cache
 
+[[autodoc]] OffloadedCache
+    - update
+    - prefetch_layer
+    - evict_previous_layer
+
 [[autodoc]] StaticCache
     - update
     - get_seq_length
+    - reset
+
+[[autodoc]] OffloadedStaticCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] HybridCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] SlidingWindowCache
+    - update
     - reset
 
 [[autodoc]] EncoderDecoderCache
@@ -398,8 +416,31 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - reset
     - reorder_cache
 
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
+
 ## Watermark Utils
 
+[[autodoc]] WatermarkingConfig
+    - __call__
+
 [[autodoc]] WatermarkDetector
+    - __call__
+
+[[autodoc]] BayesianDetectorConfig
+
+[[autodoc]] BayesianDetectorModel
+    - forward
+
+[[autodoc]] SynthIDTextWatermarkingConfig
+
+[[autodoc]] SynthIDTextWatermarkDetector
+    - __call__
+
+## Compile Utils
+
+[[autodoc]] CompileConfig
     - __call__
 

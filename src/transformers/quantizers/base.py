@@ -109,6 +109,39 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
+    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `unexpected_keys`.
+
+        Args:
+            unexpected_keys (`List[str]`, *optional*):
+                The list of unexpected keys in the checkpoint compared to the state dict of the model
+        """
+        return unexpected_keys
+
+    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `missing_keys` after loading the model params,
+        but before the model is post-processed.
+
+        Args:
+            missing_keys (`List[str]`, *optional*):
+                The list of missing keys in the checkpoint compared to the state dict of the model
+        """
+        return missing_keys
+
+    def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
+        """
+        Override this method if you want to adjust the `update_expected_keys`.
+
+        Args:
+            expected_keys (`List[str]`, *optional*):
+                The list of the expected keys in the initialized model.
+            loaded_keys (`List[str]`, *optional*):
+                The list of the loaded keys in the checkpoint.
+        """
+        return expected_keys
+
     def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
@@ -203,6 +236,9 @@ class HfQuantizer(ABC):
 
         # Delete quantizer and quantization config
         del model.hf_quantizer
+        del model.config.quantization_config
+        del model.config._pre_quantization_dtype
+        model.is_quantized = False
 
         return model
 
@@ -211,15 +247,19 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
+    @property
+    def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return False
+
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs): ...
 
     @abstractmethod
     def _process_model_after_weight_loading(self, model, **kwargs): ...
 
-    @property
     @abstractmethod
-    def is_serializable(self): ...
+    def is_serializable(self, safe_serialization=None): ...
 
     @property
     @abstractmethod

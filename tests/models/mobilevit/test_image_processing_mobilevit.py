@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import MobileViTImageProcessor
 
 
-class MobileViTImageProcessingTester(unittest.TestCase):
+class MobileViTImageProcessingTester:
     def __init__(
         self,
         parent,

@@ -936,35 +936,6 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
-    ):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
-
     # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
@@ -1321,3 +1292,12 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MarkupLMForQuestionAnswering",
+    "MarkupLMForSequenceClassification",
+    "MarkupLMForTokenClassification",
+    "MarkupLMModel",
+    "MarkupLMPreTrainedModel",
+]

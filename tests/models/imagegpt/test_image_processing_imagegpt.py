@@ -38,7 +38,7 @@ if is_vision_available():
     from transformers import ImageGPTImageProcessor
 
 
-class ImageGPTImageProcessingTester(unittest.TestCase):
+class ImageGPTImageProcessingTester:
     def __init__(
         self,
         parent,

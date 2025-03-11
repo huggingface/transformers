@@ -14,5 +14,5 @@ jobs:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
       package: transformers
-      languages: de en es fr hi it ko pt tr zh ja te
+      languages: ar de en es fr hi it ko pt tr zh ja te
       custom_container: huggingface/transformers-doc-builder

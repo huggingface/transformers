@@ -32,7 +32,7 @@ if is_vision_available():
     from transformers import ChameleonImageProcessor
 
 
-class ChameleonImageProcessingTester(unittest.TestCase):
+class ChameleonImageProcessingTester:
     def __init__(
         self,
         parent,

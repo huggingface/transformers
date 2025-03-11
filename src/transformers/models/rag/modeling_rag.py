@@ -232,6 +232,8 @@ class RagPreTrainedModel(PreTrainedModel):
 
     config_class = RagConfig
     base_model_prefix = "rag"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
@@ -506,16 +508,12 @@ class RagModel(RagPreTrainedModel):
         if question_encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            question_encoder = AutoModel.from_config(
-                config.question_encoder, attn_implementation=config._attn_implementation
-            )
+            question_encoder = AutoModel.from_config(config.question_encoder)
 
         if generator is None:
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
 
-            generator = AutoModelForSeq2SeqLM.from_config(
-                config.generator, attn_implementation=config._attn_implementation
-            )
+            generator = AutoModelForSeq2SeqLM.from_config(config.generator)
 
         self.retriever = retriever
         if self.retriever is not None:
@@ -1172,6 +1170,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs=None,
         **kwargs,
     ):
+        # Overwritten -- `do_marginalize` is explicitly set in the output
+
         if past_key_values is not None:
             # if past is defined use only last decoder_input_ids
             decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1558,7 +1558,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 generation_config=generation_config,
                 synced_gpus=False,
                 streamer=None,
-                logits_warper=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
@@ -1580,7 +1579,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=False,
-                logits_warper=None,
                 **model_kwargs,
             )
         else:
@@ -1641,3 +1639,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
         eps_i = epsilon / rag_logprobs.size(-1)
         loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
         return loss
+
+
+__all__ = ["RagModel", "RagPreTrainedModel", "RagSequenceForGeneration", "RagTokenForGeneration"]

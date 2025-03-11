@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import VivitImageProcessor
 
 
-class VivitImageProcessingTester(unittest.TestCase):
+class VivitImageProcessingTester:
     def __init__(
         self,
         parent,

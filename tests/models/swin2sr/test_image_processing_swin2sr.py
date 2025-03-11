@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers.image_transforms import get_image_size
 
 
-class Swin2SRImageProcessingTester(unittest.TestCase):
+class Swin2SRImageProcessingTester:
     def __init__(
         self,
         parent,

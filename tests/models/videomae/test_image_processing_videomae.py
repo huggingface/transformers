@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import VideoMAEImageProcessor
 
 
-class VideoMAEImageProcessingTester(unittest.TestCase):
+class VideoMAEImageProcessingTester:
     def __init__(
         self,
         parent,

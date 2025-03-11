@@ -31,7 +31,7 @@ if is_vision_available():
     from transformers import BridgeTowerImageProcessor
 
 
-class BridgeTowerImageProcessingTester(unittest.TestCase):
+class BridgeTowerImageProcessingTester:
     def __init__(
         self,
         parent,

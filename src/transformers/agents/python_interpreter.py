@@ -32,7 +32,7 @@ if is_pandas_available():
 
 class InterpreterError(ValueError):
     """
-    An error raised when the interpretor cannot evaluate a Python expression, due to syntax error or unsupported
+    An error raised when the interpreter cannot evaluate a Python expression, due to syntax error or unsupported
     operations.
     """
 
@@ -434,7 +434,7 @@ def evaluate_call(call, state, static_tools, custom_tools):
                 global PRINT_OUTPUTS
                 PRINT_OUTPUTS += output + "\n"
                 # cap the number of lines
-                return output
+                return None
             else:  # Assume it's a callable object
                 output = func(*args, **kwargs)
                 return output
@@ -444,6 +444,8 @@ def evaluate_subscript(subscript, state, static_tools, custom_tools):
     index = evaluate_ast(subscript.slice, state, static_tools, custom_tools)
     value = evaluate_ast(subscript.value, state, static_tools, custom_tools)
 
+    if isinstance(value, str) and isinstance(index, str):
+        raise InterpreterError("You're trying to subscript a string with a string index, which is impossible")
     if isinstance(value, pd.core.indexing._LocIndexer):
         parent_object = value.obj
         return parent_object.loc[index]
@@ -711,14 +713,14 @@ def evaluate_ast(
     Evaluate an abstract syntax tree using the content of the variables stored in a state and only evaluating a given
     set of functions.
 
-    This function will recurse trough the nodes of the tree provided.
+    This function will recurse through the nodes of the tree provided.
 
     Args:
         expression (`ast.AST`):
             The code to evaluate, as an abstract syntax tree.
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` is updated if need be when the evaluation
-            encounters assignements.
+            encounters assignments.
         static_tools (`Dict[str, Callable]`):
             Functions that may be called during the evaluation. Trying to change one of these static_tools will raise an error.
         custom_tools (`Dict[str, Callable]`):
@@ -734,7 +736,7 @@ def evaluate_ast(
         )
     OPERATIONS_COUNT += 1
     if isinstance(expression, ast.Assign):
-        # Assignement -> we evaluate the assignment which should update the state
+        # Assignment -> we evaluate the assignment which should update the state
         # We return the variable assigned as it may be used to determine the final result.
         return evaluate_assign(expression, state, static_tools, custom_tools)
     elif isinstance(expression, ast.AugAssign):
@@ -846,6 +848,13 @@ def evaluate_ast(
         raise InterpreterError(f"{expression.__class__.__name__} is not supported.")
 
 
+def truncate_print_outputs(print_outputs: str, max_len_outputs: int = MAX_LEN_OUTPUT) -> str:
+    if len(print_outputs) < max_len_outputs:
+        return print_outputs
+    else:
+        return f"Print outputs:\n{print_outputs[:max_len_outputs]}\n_Print outputs have been truncated over the limit of {max_len_outputs} characters._\n"
+
+
 def evaluate_python_code(
     code: str,
     static_tools: Optional[Dict[str, Callable]] = None,
@@ -888,25 +897,12 @@ def evaluate_python_code(
     PRINT_OUTPUTS = ""
     global OPERATIONS_COUNT
     OPERATIONS_COUNT = 0
-    for node in expression.body:
-        try:
+    try:
+        for node in expression.body:
             result = evaluate_ast(node, state, static_tools, custom_tools, authorized_imports)
-        except InterpreterError as e:
-            msg = ""
-            if len(PRINT_OUTPUTS) > 0:
-                if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
-                    msg += f"Print outputs:\n{PRINT_OUTPUTS}\n====\n"
-                else:
-                    msg += f"Print outputs:\n{PRINT_OUTPUTS[:MAX_LEN_OUTPUT]}\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._\n====\n"
-            msg += f"EXECUTION FAILED:\nEvaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
-            raise InterpreterError(msg)
-        finally:
-            if len(PRINT_OUTPUTS) < MAX_LEN_OUTPUT:
-                state["print_outputs"] = PRINT_OUTPUTS
-            else:
-                state["print_outputs"] = (
-                    PRINT_OUTPUTS[:MAX_LEN_OUTPUT]
-                    + f"\n_Print outputs were over {MAX_LEN_OUTPUT} characters, so they have been truncated._"
-                )
-
-    return result
+        state["print_outputs"] = truncate_print_outputs(PRINT_OUTPUTS, max_len_outputs=MAX_LEN_OUTPUT)
+        return result
+    except InterpreterError as e:
+        msg = truncate_print_outputs(PRINT_OUTPUTS, max_len_outputs=MAX_LEN_OUTPUT)
+        msg += f"EXECUTION FAILED:\nEvaluation stopped at line '{ast.get_source_segment(code, node)}' because of the following error:\n{e}"
+        raise InterpreterError(msg)

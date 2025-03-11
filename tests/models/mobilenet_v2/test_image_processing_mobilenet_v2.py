@@ -26,7 +26,7 @@ if is_vision_available():
     from transformers import MobileNetV2ImageProcessor
 
 
-class MobileNetV2ImageProcessingTester(unittest.TestCase):
+class MobileNetV2ImageProcessingTester:
     def __init__(
         self,
         parent,

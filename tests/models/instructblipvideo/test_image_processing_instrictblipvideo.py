@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import InstructBlipVideoImageProcessor
 
 
-class InstructBlipVideoProcessingTester(unittest.TestCase):
+class InstructBlipVideoProcessingTester:
     def __init__(
         self,
         parent,

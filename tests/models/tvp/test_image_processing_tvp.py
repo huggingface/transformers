@@ -35,7 +35,7 @@ if is_vision_available():
     from transformers import TvpImageProcessor
 
 
-class TvpImageProcessingTester(unittest.TestCase):
+class TvpImageProcessingTester:
     def __init__(
         self,
         parent,

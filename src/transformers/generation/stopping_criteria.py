@@ -9,8 +9,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
-
+from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
 
@@ -82,36 +81,6 @@ class MaxLengthCriteria(StoppingCriteria):
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
-
-
-class MaxNewTokensCriteria(StoppingCriteria):
-    """
-    This class can be used to stop generation whenever the generated number of tokens exceeds `max_new_tokens`. Keep in
-    mind for decoder-only type of transformers, this will **not** include the initial prompted tokens. This is very
-    close to `MaxLengthCriteria` but ignores the number of initial tokens.
-
-    Args:
-        start_length (`int`):
-            The number of initial tokens.
-        max_new_tokens (`int`):
-            The maximum number of tokens to generate.
-    """
-
-    def __init__(self, start_length: int, max_new_tokens: int):
-        warnings.warn(
-            "The class `MaxNewTokensCriteria` is deprecated and will be removed in v4.43. "
-            f"Please use `MaxLengthCriteria(max_length={start_length + max_new_tokens})` "
-            "with `max_length = start_length + max_new_tokens` instead.",
-            FutureWarning,
-        )
-        self.start_length = start_length
-        self.max_new_tokens = max_new_tokens
-        self.max_length = start_length + max_new_tokens
-
-    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = input_ids.shape[-1] >= self.max_length
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
 
@@ -276,26 +245,26 @@ class StopStringCriteria(StoppingCriteria):
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
-            token_list, token_indices, self.stop_strings, tokenizer
+            token_list, token_indices, tokenizer
         )
 
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
-    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, stop_strings, tokenizer):
+    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
-        if (token_list, token_indices, stop_strings) in STOP_STRING_EMBEDDING_CACHE:
+        if (token_list, token_indices, self.stop_strings) in STOP_STRING_EMBEDDING_CACHE:
             embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[
                 (token_list, token_indices, self.stop_strings)
             ]
-            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, stop_strings))
+            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, self.stop_strings))
         else:
             clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(tokenizer)
             embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
-                clean_token_list, clean_token_indices, stop_strings
+                clean_token_list, clean_token_indices, self.stop_strings
             )
-            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, stop_strings)] = (
+            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, self.stop_strings)] = (
                 embedding_vec,
                 max_valid_positions,
                 max_valid_end_lens,
@@ -379,9 +348,18 @@ class StopStringCriteria(StoppingCriteria):
         # we need a fallback to handle this case
         max_valid_positions = max(all_valid_positions) if all_valid_positions else 1
         # There should always be at least one valid end_len, however, so no fallback needed here
-        max_valid_end_lens = max(len(val) for positions in token_end_overlaps.values() for val in positions.values())
+        valid_end_lens = [len(val) for positions in token_end_overlaps.values() for val in positions.values()]
+        if not valid_end_lens:
+            raise ValueError(
+                "Stop string preprocessing was unable to identify tokens matching one or more of the "
+                "supplied stop string(s). This is most often caused by the stop "
+                "strings containing unusual characters that are not in the tokenizer vocabulary."
+            )
+        max_valid_end_lens = max(valid_end_lens)
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
-        gather_vec = np.full((len(token_list), vec_size), dtype=np.int32, fill_value=-1)
+        # We use +2 instead of +1 so we can have a dummy entry at the end. We will clamp all token values
+        # over the max to this, ensuring they do not contribute to stop string matching.
+        gather_vec = np.full((max(token_indices) + 2, vec_size), dtype=np.int32, fill_value=-1)
 
         for i, stop_string in enumerate(stop_strings):
             positions = token_valid_positions[stop_string]
@@ -418,6 +396,9 @@ class StopStringCriteria(StoppingCriteria):
 
         # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
+
+        # Clip out-of-vocab values to the dummy value at the end of the embedding vector
+        flipped_ids = torch.clamp(flipped_ids, max=self.embedding_vec.size(0) - 1)
 
         # Size of the vector of positions a single token can match
         max_valid_positions = self.max_valid_positions
@@ -487,20 +468,29 @@ class EosTokenCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        if input_ids.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
-            # TODO: remove this workaround when we stop supporting torch<=2.3
-            # https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
-            is_done = (
-                input_ids[:, -1]
-                .tile(self.eos_token_id.shape[0], 1)
-                .eq(self.eos_token_id.unsqueeze(1))
-                .sum(dim=0)
-                .bool()
-                .squeeze()
-            )
-        else:
-            is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
+        is_done = isin_mps_friendly(input_ids[:, -1], self.eos_token_id)
         return is_done
+
+
+class ConfidenceCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever assistant model's confidence in its prediction for the current token is lower than the threshold
+        `model.generation_config.assistant_confidence_threshold` even if the number of speculative tokens (defined by `num_assistant_tokens`) is not yet reached.
+
+    Args:
+        assistant_confidence_threshold (`float`):
+            The value of the threshold.
+    """
+
+    def __init__(self, assistant_confidence_threshold):
+        self.assistant_confidence_threshold = assistant_confidence_threshold
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        probs = scores[-1].softmax(-1)
+        p = probs[0, input_ids[0, -1]].item()
+        if p < self.assistant_confidence_threshold:
+            return True
+        return False
 
 
 class StoppingCriteriaList(list):
@@ -515,8 +505,6 @@ class StoppingCriteriaList(list):
     def max_length(self) -> Optional[int]:
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
-                return stopping_criterium.max_length
-            elif isinstance(stopping_criterium, MaxNewTokensCriteria):
                 return stopping_criterium.max_length
         return None
 

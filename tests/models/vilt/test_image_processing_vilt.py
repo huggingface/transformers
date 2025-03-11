@@ -30,7 +30,7 @@ if is_vision_available():
     from transformers import ViltImageProcessor
 
 
-class ViltImageProcessingTester(unittest.TestCase):
+class ViltImageProcessingTester:
     def __init__(
         self,
         parent,

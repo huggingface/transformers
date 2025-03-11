@@ -140,6 +140,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     def test_use_fast_selection(self):
         checkpoint = "hf-internal-testing/tiny-random-vit"
 
+        # TODO: @yoni, change in v4.48 (when use_fast set to True by default)
         # Slow image processor is selected by default
         image_processor = AutoImageProcessor.from_pretrained(checkpoint)
         self.assertIsInstance(image_processor, ViTImageProcessor)
@@ -167,11 +168,28 @@ class AutoImageProcessorTest(unittest.TestCase):
         )
         self.assertEqual(image_processor.__class__.__name__, "NewImageProcessor")
 
+        # Test the dynamic module is loaded only once.
+        reloaded_image_processor = AutoImageProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True
+        )
+        self.assertIs(image_processor.__class__, reloaded_image_processor.__class__)
+
         # Test image processor can be reloaded.
         with tempfile.TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
+
+        # The image processor file is cached in the snapshot directory. So the module file is not changed after dumping
+        # to a temp dir. Because the revision of the module file is not changed.
+        # Test the dynamic module is loaded only once if the module file is not changed.
+        self.assertIs(image_processor.__class__, reloaded_image_processor.__class__)
+
+        # Test the dynamic module is reloaded if we force it.
+        reloaded_image_processor = AutoImageProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True, force_download=True
+        )
+        self.assertIsNot(image_processor.__class__, reloaded_image_processor.__class__)
 
     def test_new_image_processor_registration(self):
         try:

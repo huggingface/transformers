@@ -761,7 +761,12 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
     else:
         tokenizer_class = None
-    image_processor_class = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
+    image_processor_classes = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
+    if isinstance(image_processor_classes, tuple):
+        image_processor_class = image_processor_classes[0]  # we take the slow image processor class.
+    else:
+        image_processor_class = image_processor_classes
+
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
@@ -1518,7 +1523,7 @@ def get_user_field(
         is_valid_answer (`Callable`, *optional*):
             If set, the question will be asked until this function returns `True` on the provided answer.
         convert_to (`Callable`, *optional*):
-            If set, the answer will be passed to this function. If this function raises an error on the procided
+            If set, the answer will be passed to this function. If this function raises an error on the provided
             answer, the question will be asked again.
         fallback_message (`str`, *optional*):
             A message that will be displayed each time the question is asked again to the user.
@@ -1705,7 +1710,7 @@ def get_user_input():
         frameworks = None
     else:
         frameworks = get_user_field(
-            "Please enter the list of framworks you want (pt, tf, flax) separated by spaces",
+            "Please enter the list of frameworks you want (pt, tf, flax) separated by spaces",
             is_valid_answer=lambda x: all(p in ["pt", "tf", "flax"] for p in x.split(" ")),
         )
         frameworks = list(set(frameworks.split(" ")))

@@ -26,7 +26,7 @@ if is_vision_available():
     from transformers import OwlViTImageProcessor
 
 
-class OwlViTImageProcessingTester(unittest.TestCase):
+class OwlViTImageProcessingTester:
     def __init__(
         self,
         parent,

@@ -137,9 +137,19 @@ class BatchFeature(UserDict):
             import torch  # noqa
 
             def as_tensor(value):
-                if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
-                    value = np.array(value)
-                return torch.tensor(value)
+                if isinstance(value, (list, tuple)) and len(value) > 0:
+                    if isinstance(value[0], np.ndarray):
+                        value = np.array(value)
+                    elif (
+                        isinstance(value[0], (list, tuple))
+                        and len(value[0]) > 0
+                        and isinstance(value[0][0], np.ndarray)
+                    ):
+                        value = np.array(value)
+                if isinstance(value, np.ndarray):
+                    return torch.from_numpy(value)
+                else:
+                    return torch.tensor(value)
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
@@ -203,6 +213,7 @@ class BatchFeature(UserDict):
                 Will be passed to the `to(...)` function of the tensors.
             kwargs (`Dict`, *optional*):
                 Will be passed to the `to(...)` function of the tensors.
+                To enable asynchronous data transfer, set the `non_blocking` flag in `kwargs` (defaults to `False`).
 
         Returns:
             [`BatchFeature`]: The same instance after modification.
@@ -212,6 +223,7 @@ class BatchFeature(UserDict):
 
         new_data = {}
         device = kwargs.get("device")
+        non_blocking = kwargs.get("non_blocking", False)
         # Check if the args are a device or a dtype
         if device is None and len(args) > 0:
             # device should be always the first argument
@@ -227,11 +239,11 @@ class BatchFeature(UserDict):
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             # check if v is a floating point
-            if torch.is_floating_point(v):
+            if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
-                new_data[k] = v.to(device=device)
+            elif isinstance(v, torch.Tensor) and device is not None:
+                new_data[k] = v.to(device=device, non_blocking=non_blocking)
             else:
                 new_data[k] = v
         self.data = new_data
@@ -311,7 +323,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 

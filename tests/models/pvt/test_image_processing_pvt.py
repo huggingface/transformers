@@ -26,7 +26,7 @@ if is_vision_available():
     from transformers import PvtImageProcessor
 
 
-class PvtImageProcessingTester(unittest.TestCase):
+class PvtImageProcessingTester:
     def __init__(
         self,
         parent,

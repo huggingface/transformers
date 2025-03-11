@@ -42,7 +42,7 @@ else:
     FLAVA_IMAGE_MEAN = FLAVA_IMAGE_STD = FLAVA_CODEBOOK_MEAN = FLAVA_CODEBOOK_STD = None
 
 
-class FlavaImageProcessingTester(unittest.TestCase):
+class FlavaImageProcessingTester:
     def __init__(
         self,
         parent,

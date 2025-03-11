@@ -26,7 +26,7 @@ if is_vision_available():
     from transformers import ChineseCLIPImageProcessor
 
 
-class ChineseCLIPImageProcessingTester(unittest.TestCase):
+class ChineseCLIPImageProcessingTester:
     def __init__(
         self,
         parent,

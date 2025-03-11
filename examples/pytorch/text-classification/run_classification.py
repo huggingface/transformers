@@ -47,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.44.0.dev0")
+check_min_version("4.50.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -429,7 +429,7 @@ def main():
     if is_regression:
         label_list = None
         num_labels = 1
-        # regession requires float as label type, let's cast it if needed
+        # regression requires float as label type, let's cast it if needed
         for split in raw_datasets.keys():
             if raw_datasets[split].features["label"].dtype not in ["float32", "float64"]:
                 logger.warning(
@@ -674,7 +674,7 @@ def main():
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
     )
 

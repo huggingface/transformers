@@ -1718,7 +1718,7 @@
         "model_classes": [
             "EfficientNetForImageClassification"
         ],
-        "sha": "6ed195ee636d2c0b885139da8c7b45d57ebaeee0"
+        "sha": "993d088cf937b8a90b61f68677cd8f261321c745"
     },
     "EfficientNetModel": {
         "tokenizer_classes": [],
@@ -2896,7 +2896,7 @@
         "model_classes": [
             "IdeficsForVisionText2Text"
         ],
-        "sha": "2c2f2e2cd6b02a77d0cdd8c3767ba9a6267dbd20"
+        "sha": "a6be81294ff7a3d44f3aef0ed18e42b97c426831"
     },
     "IdeficsModel": {
         "tokenizer_classes": [

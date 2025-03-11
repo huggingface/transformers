@@ -28,7 +28,7 @@ if is_vision_available():
     from transformers import EfficientNetImageProcessor
 
 
-class EfficientNetImageProcessorTester(unittest.TestCase):
+class EfficientNetImageProcessorTester:
     def __init__(
         self,
         parent,

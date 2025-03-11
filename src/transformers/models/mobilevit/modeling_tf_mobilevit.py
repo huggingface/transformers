@@ -262,7 +262,7 @@ class TFMobileViTSelfAttention(keras.layers.Layer):
 
         if hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -1368,3 +1368,11 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         if getattr(self, "segmentation_head", None) is not None:
             with tf.name_scope(self.segmentation_head.name):
                 self.segmentation_head.build(None)
+
+
+__all__ = [
+    "TFMobileViTForImageClassification",
+    "TFMobileViTForSemanticSegmentation",
+    "TFMobileViTModel",
+    "TFMobileViTPreTrainedModel",
+]

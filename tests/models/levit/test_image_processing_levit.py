@@ -26,7 +26,7 @@ if is_vision_available():
     from transformers import LevitImageProcessor
 
 
-class LevitImageProcessingTester(unittest.TestCase):
+class LevitImageProcessingTester:
     def __init__(
         self,
         parent,

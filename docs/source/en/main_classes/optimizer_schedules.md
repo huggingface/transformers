@@ -38,7 +38,7 @@ The `.optimization` module provides:
 
 ## Schedules
 
-### Learning Rate Schedules (Pytorch)
+### Learning Rate Schedules (PyTorch)
 
 [[autodoc]] SchedulerType
 
