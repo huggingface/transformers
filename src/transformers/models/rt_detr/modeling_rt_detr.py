@@ -59,87 +59,9 @@ _DETECTION_OUTPUT_FOR_DOC = """
     Detected 'remote' (0.92) at [333.73, 76.58, 369.97, 186.99]
 """
 
+# Global module placeholder for custom cuda kernel, will be loaded lazily in DeformableAttention
+# in case of first usage (if no disabled in config).
 MultiScaleDeformableAttention = None
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global MultiScaleDeformableAttention
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
-    src_files = [
-        root / filename
-        for filename in [
-            "vision.cpp",
-            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
-            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
-        ]
-    ]
-
-    MultiScaleDeformableAttention = load(
-        "MultiScaleDeformableAttention",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cflags=["-DWITH_CUDA=1"],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=1",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
-class MultiScaleDeformableAttentionFunction(Function):
-    @staticmethod
-    def forward(
-        context,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
-    ):
-        context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            context.im2col_step,
-        )
-        context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
-        )
-        return output
-
-    @staticmethod
-    @once_differentiable
-    def backward(context, grad_output):
-        (
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-        ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
-        )
-
-        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
 @dataclass
@@ -344,6 +266,285 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     denoising_meta_values: Optional[Dict] = None
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    global MultiScaleDeformableAttention
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
+    src_files = [
+        root / filename
+        for filename in [
+            "vision.cpp",
+            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
+            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
+        ]
+    ]
+
+    MultiScaleDeformableAttention = load(
+        "MultiScaleDeformableAttention",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cflags=["-DWITH_CUDA=1"],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
+class MultiScaleDeformableAttentionFunction(Function):
+    @staticmethod
+    def forward(
+        context,
+        value,
+        value_spatial_shapes,
+        value_level_start_index,
+        sampling_locations,
+        attention_weights,
+        im2col_step,
+    ):
+        context.im2col_step = im2col_step
+        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            context.im2col_step,
+        )
+        context.save_for_backward(
+            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
+        )
+        return output
+
+    @staticmethod
+    @once_differentiable
+    def backward(context, grad_output):
+        (
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+        ) = context.saved_tensors
+        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            grad_output,
+            context.im2col_step,
+        )
+
+        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
+def multi_scale_deformable_attention(
+    value: Tensor,
+    value_spatial_shapes: Union[Tensor, List[Tuple]],
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    batched_num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    num_queries = batched_num_queries // batch_size
+
+    sampling_grids = 2 * sampling_locations - 1
+    value_levels = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+
+    sampled_values = []
+    for idx, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height * width, num_heads, hidden_dim
+        # -> batch_size, num_heads * hidden_dim, height * width
+        # -> batch_size * num_heads, hidden_dim, height, width
+        value_i = value_levels[idx]
+        value_i = value_i.flatten(2).transpose(1, 2)
+        value_i = value_i.reshape(batch_size * num_heads, hidden_dim, height, width)
+
+        # batch_size * num_queries, num_heads, num_points, 2
+        # -> batch_size * num_heads, num_queries, num_points, 2
+        sampling_grid_i = sampling_grids[:, :, idx]
+        sampling_grid_i = sampling_grid_i.view(batch_size, num_queries, num_heads, num_points, 2)
+        sampling_grid_i = sampling_grid_i.transpose(1, 2).flatten(0, 1)
+
+        # batch_size * num_heads, hidden_dim, num_queries, num_points
+        sampled_value_i = nn.functional.grid_sample(
+            value_i, sampling_grid_i, mode="bilinear", padding_mode="zeros", align_corners=False
+        )
+        sampled_values.append(sampled_value_i)
+    sampled_values = torch.stack(sampled_values, dim=-2)
+
+    # (batch_size, num_queries, num_heads, ...) -> (batch_size, num_heads, num_queries, ...)
+    attention_weights = attention_weights.transpose(1, 2)
+    attention_weights = attention_weights.reshape(batch_size * num_heads, 1, num_queries, num_levels * num_points)
+
+    output = attention_weights * sampled_values.flatten(-2)
+    output = output.sum(-1)
+
+    output = output.view(batch_size, num_heads * hidden_dim, num_queries)
+    output = output.transpose(1, 2).contiguous()
+
+    return output
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
+class RTDetrMultiscaleDeformableAttention(nn.Module):
+    """
+    Multiscale deformable attention as proposed in Deformable DETR.
+    """
+
+    def __init__(self, config: RTDetrConfig, num_heads: int, num_points: int):
+        super().__init__()
+
+        # Doing basic sanity checks
+        if config.hidden_size % num_heads != 0:
+            raise ValueError(
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.hidden_size} and {num_heads}"
+            )
+
+        # check if head_dim is power of 2
+        head_dim = config.hidden_size // num_heads
+        if not ((head_dim & (head_dim - 1) == 0) and head_dim != 0):
+            warnings.warn(
+                "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
+                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
+                " implementation."
+            )
+
+        self.im2col_step = 64
+        self.hidden_size = config.hidden_size
+        self.num_levels = config.num_feature_levels
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.num_points = num_points
+        self.disable_custom_kernels = config.disable_custom_kernels
+
+        # Load custom deformable attention kernel if needed,
+        # otherwise use the pytorch implementation would be used
+        if (
+            not config.disable_custom_kernels  # manually disabled in config
+            and is_torch_cuda_available()  # only CUDA is supported for now
+            and is_ninja_available()  # we need Ninja to compile the kernel
+            and MultiScaleDeformableAttention is not None  # only if the kernel is previously loaded
+        ):
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
+        self.sampling_offsets = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points * 2)
+        self.attention_weights = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points)
+        self.value_proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.output_proj = nn.Linear(self.hidden_size, self.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        spatial_shapes: torch.Tensor,
+        spatial_shapes_list: List[Tuple[int, int]],
+        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ):
+        # add position embeddings to the hidden states before projecting to queries and keys
+        if position_embeddings is not None:
+            hidden_states = hidden_states + position_embeddings
+
+        batch_size, num_queries, _ = hidden_states.shape
+        batch_size, sequence_length, _ = encoder_hidden_states.shape
+
+        total_elements = sum(height * width for height, width in spatial_shapes_list)
+        if total_elements != sequence_length:
+            raise ValueError(
+                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
+            )
+
+        value = self.value_proj(encoder_hidden_states)
+        if attention_mask is not None:
+            # we invert the attention_mask
+            value = value.masked_fill(~attention_mask[..., None], 0.0)
+
+        value = value.view(batch_size, sequence_length, self.num_heads, self.head_dim)
+
+        attention_weights = self.attention_weights(hidden_states).view(
+            batch_size, num_queries, self.num_heads, self.num_levels * self.num_points
+        )
+        attention_weights = F.softmax(attention_weights, -1)
+        attention_weights = attention_weights.view(
+            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points
+        )
+
+        sampling_offsets = self.sampling_offsets(hidden_states)
+        sampling_offsets = sampling_offsets.view(
+            batch_size * num_queries, self.num_heads, self.num_levels, self.num_points, 2
+        )
+
+        batch_size, num_reference_points, _, num_coordinates = reference_points.shape
+        reference_points = reference_points.view(batch_size * num_reference_points, 1, -1, 1, num_coordinates)
+
+        if num_coordinates == 2:
+            height, width = spatial_shapes[..., 0], spatial_shapes[..., 1]
+            offset_normalizer = torch.stack([width, height], -1)
+            normalized_sampling_offsets = sampling_offsets / offset_normalizer[None, None, :, None, :]
+            sampling_locations = reference_points + normalized_sampling_offsets
+
+        elif num_coordinates == 4:
+            reference_points_xy = reference_points[..., :2]
+            offset = sampling_offsets / self.num_points * reference_points[..., 2:] * 0.5
+            sampling_locations = reference_points_xy + offset
+
+        else:
+            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {num_coordinates}")
+
+        if (
+            self.disable_custom_kernels  # manually disabled in config
+            or MultiScaleDeformableAttention is None  # error while loading the kernel
+            or is_torchdynamo_compiling()  # torch.compile / torch.export mode
+        ):
+            # PyTorch implementation
+            output = multi_scale_deformable_attention(
+                value, spatial_shapes_list, sampling_locations, attention_weights
+            )
+        else:
+            try:
+                # Calling custom kernel
+                # Note: for custom kernel we pass sampling locations as 6D tensor,
+                #       but for torch implementation we keep it as 5D tensor (for CoreML compat)
+                kernel_sampling_locations = sampling_locations.view(
+                    batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+                )
+                level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+                output = MultiScaleDeformableAttentionFunction.apply(
+                    value,
+                    spatial_shapes,
+                    level_start_index,
+                    kernel_sampling_locations,
+                    attention_weights,
+                    self.im2col_step,
+                )
+            except Exception:
+                # PyTorch implementation
+                output = multi_scale_deformable_attention(
+                    value, spatial_shapes_list, sampling_locations, attention_weights
+                )
+        output = self.output_proj(output)
+
+        if not output_attentions:
+            attention_weights = None
+
+        return output, attention_weights
 
 
 # Copied from transformers.models.conditional_detr.modeling_conditional_detr.inverse_sigmoid
@@ -595,96 +796,6 @@ class RTDetrConvNormLayer(nn.Module):
         return feature_map
 
 
-class RTDetrEncoderLayer(nn.Module):
-    def __init__(self, config: RTDetrConfig):
-        super().__init__()
-        self.normalize_before = config.normalize_before
-
-        # self-attention
-        self.self_attn = RTDetrMultiheadAttention(
-            embed_dim=config.encoder_hidden_dim,
-            num_heads=config.num_attention_heads,
-            dropout=config.dropout,
-        )
-        self.self_attn_dropout = nn.Dropout(config.dropout)
-
-        # feed-forward
-        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
-        self.fc1_activation = ACT2FN[config.encoder_activation_function]
-        self.fc1_dropout = nn.Dropout(config.activation_dropout)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
-        self.fc2_dropout = nn.Dropout(config.dropout)
-
-        # norms
-        self.identity = nn.Identity()
-        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
-        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Object queries (also called content embeddings), to be added to the hidden states.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        if self.normalize_before:
-            norm1 = self.self_attn_layer_norm
-            norm2 = self.final_layer_norm
-            norm3 = self.identity
-        else:
-            norm1 = self.identity
-            norm2 = self.self_attn_layer_norm
-            norm3 = self.final_layer_norm
-
-        # self-attention step
-        residual = hidden_states
-        hidden_states = norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
-        )
-        hidden_states = self.self_attn_dropout(hidden_states)
-        hidden_states = residual + hidden_states
-        hidden_states = norm2(hidden_states)
-
-        # feed-forward step
-        residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.fc1_activation(hidden_states)
-        hidden_states = self.fc1_dropout(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.fc2_dropout(hidden_states)
-        hidden_states = residual + hidden_states
-        hidden_states = norm3(hidden_states)
-
-        # clamp values if training
-        if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
 class RTDetrRepVggBlock(nn.Module):
     """
     RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
@@ -745,205 +856,6 @@ class RTDetrCSPRepLayer(nn.Module):
         feature_map = self.conv3(feature_map_1 + feature_map_2)
 
         return feature_map
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
-def multi_scale_deformable_attention(
-    value: Tensor,
-    value_spatial_shapes: Union[Tensor, List[Tuple]],
-    sampling_locations: Tensor,
-    attention_weights: Tensor,
-) -> Tensor:
-    batch_size, _, num_heads, hidden_dim = value.shape
-    batched_num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    num_queries = batched_num_queries // batch_size
-
-    sampling_grids = 2 * sampling_locations - 1
-    value_levels = value.split([height * width for height, width in value_spatial_shapes], dim=1)
-
-    sampled_values = []
-    for idx, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height * width, num_heads, hidden_dim
-        # -> batch_size, num_heads * hidden_dim, height * width
-        # -> batch_size * num_heads, hidden_dim, height, width
-        value_i = value_levels[idx]
-        value_i = value_i.flatten(2).transpose(1, 2)
-        value_i = value_i.reshape(batch_size * num_heads, hidden_dim, height, width)
-
-        # batch_size * num_queries, num_heads, num_points, 2
-        # -> batch_size * num_heads, num_queries, num_points, 2
-        sampling_grid_i = sampling_grids[:, :, idx]
-        sampling_grid_i = sampling_grid_i.view(batch_size, num_queries, num_heads, num_points, 2)
-        sampling_grid_i = sampling_grid_i.transpose(1, 2).flatten(0, 1)
-
-        # batch_size * num_heads, hidden_dim, num_queries, num_points
-        sampled_value_i = nn.functional.grid_sample(
-            value_i, sampling_grid_i, mode="bilinear", padding_mode="zeros", align_corners=False
-        )
-        sampled_values.append(sampled_value_i)
-    sampled_values = torch.stack(sampled_values, dim=-2)
-
-    # (batch_size, num_queries, num_heads, ...) -> (batch_size, num_heads, num_queries, ...)
-    attention_weights = attention_weights.transpose(1, 2)
-    attention_weights = attention_weights.reshape(batch_size * num_heads, 1, num_queries, num_levels * num_points)
-
-    output = attention_weights * sampled_values.flatten(-2)
-    output = output.sum(-1)
-
-    output = output.view(batch_size, num_heads * hidden_dim, num_queries)
-    output = output.transpose(1, 2).contiguous()
-
-    return output
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
-class RTDetrMultiscaleDeformableAttention(nn.Module):
-    """
-    Multiscale deformable attention as proposed in Deformable DETR.
-    """
-
-    def __init__(self, config: RTDetrConfig, num_heads: int, num_points: int):
-        super().__init__()
-
-        # Doing basic sanity checks
-        if config.hidden_size % num_heads != 0:
-            raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {config.hidden_size} and {num_heads}"
-            )
-
-        # check if head_dim is power of 2
-        head_dim = config.hidden_size // num_heads
-        if not ((head_dim & (head_dim - 1) == 0) and head_dim != 0):
-            warnings.warn(
-                "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
-                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
-                " implementation."
-            )
-
-        self.im2col_step = 64
-        self.hidden_size = config.hidden_size
-        self.num_levels = config.num_feature_levels
-        self.num_heads = num_heads
-        self.head_dim = head_dim
-        self.num_points = num_points
-        self.disable_custom_kernels = config.disable_custom_kernels
-
-        # Load custom deformable attention kernel if needed,
-        # otherwise use the pytorch implementation would be used
-        if (
-            not config.disable_custom_kernels  # manually disabled in config
-            and is_torch_cuda_available()  # only CUDA is supported for now
-            and is_ninja_available()  # we need Ninja to compile the kernel
-            and MultiScaleDeformableAttention is not None  # only if the kernel is previously loaded
-        ):
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-
-        self.sampling_offsets = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points * 2)
-        self.attention_weights = nn.Linear(self.hidden_size, self.num_heads * self.num_levels * self.num_points)
-        self.value_proj = nn.Linear(self.hidden_size, self.hidden_size)
-        self.output_proj = nn.Linear(self.hidden_size, self.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        reference_points: torch.Tensor,
-        spatial_shapes: torch.Tensor,
-        spatial_shapes_list: List[Tuple[int, int]],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ):
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states = hidden_states + position_embeddings
-
-        batch_size, num_queries, _ = hidden_states.shape
-        batch_size, sequence_length, _ = encoder_hidden_states.shape
-
-        total_elements = sum(height * width for height, width in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
-
-        value = self.value_proj(encoder_hidden_states)
-        if attention_mask is not None:
-            # we invert the attention_mask
-            value = value.masked_fill(~attention_mask[..., None], 0.0)
-
-        value = value.view(batch_size, sequence_length, self.num_heads, self.head_dim)
-
-        attention_weights = self.attention_weights(hidden_states).view(
-            batch_size, num_queries, self.num_heads, self.num_levels * self.num_points
-        )
-        attention_weights = F.softmax(attention_weights, -1)
-        attention_weights = attention_weights.view(
-            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points
-        )
-
-        sampling_offsets = self.sampling_offsets(hidden_states)
-        sampling_offsets = sampling_offsets.view(
-            batch_size * num_queries, self.num_heads, self.num_levels, self.num_points, 2
-        )
-
-        batch_size, num_reference_points, _, num_coordinates = reference_points.shape
-        reference_points = reference_points.view(batch_size * num_reference_points, 1, -1, 1, num_coordinates)
-
-        if num_coordinates == 2:
-            height, width = spatial_shapes[..., 0], spatial_shapes[..., 1]
-            offset_normalizer = torch.stack([width, height], -1)
-            normalized_sampling_offsets = sampling_offsets / offset_normalizer[None, None, :, None, :]
-            sampling_locations = reference_points + normalized_sampling_offsets
-
-        elif num_coordinates == 4:
-            reference_points_xy = reference_points[..., :2]
-            offset = sampling_offsets / self.num_points * reference_points[..., 2:] * 0.5
-            sampling_locations = reference_points_xy + offset
-
-        else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {num_coordinates}")
-
-        if (
-            self.disable_custom_kernels  # manually disabled in config
-            or MultiScaleDeformableAttention is None  # error while loading the kernel
-            or is_torchdynamo_compiling()  # torch.compile / torch.export mode
-        ):
-            # PyTorch implementation
-            output = multi_scale_deformable_attention(
-                value, spatial_shapes_list, sampling_locations, attention_weights
-            )
-        else:
-            try:
-                # Calling custom kernel
-                # Note: for custom kernel we pass sampling locations as 6D tensor,
-                #       but for torch implementation we keep it as 5D tensor (for CoreML compat)
-                kernel_sampling_locations = sampling_locations.view(
-                    batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
-                )
-                level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-                output = MultiScaleDeformableAttentionFunction.apply(
-                    value,
-                    spatial_shapes,
-                    level_start_index,
-                    kernel_sampling_locations,
-                    attention_weights,
-                    self.im2col_step,
-                )
-            except Exception:
-                # PyTorch implementation
-                output = multi_scale_deformable_attention(
-                    value, spatial_shapes_list, sampling_locations, attention_weights
-                )
-        output = self.output_proj(output)
-
-        if not output_attentions:
-            attention_weights = None
-
-        return output, attention_weights
 
 
 class RTDetrMultiheadAttention(nn.Module):
@@ -1032,113 +944,92 @@ class RTDetrMultiheadAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class RTDetrDecoderLayer(nn.Module):
+class RTDetrEncoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
+        self.normalize_before = config.normalize_before
 
-        self.dropout = config.dropout
-        self.activation_dropout = config.activation_dropout
-
-        # Self-Attention
+        # self-attention
         self.self_attn = RTDetrMultiheadAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
+            embed_dim=config.encoder_hidden_dim,
+            num_heads=config.num_attention_heads,
+            dropout=config.dropout,
         )
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn_dropout = nn.Dropout(config.dropout)
 
-        # Cross-Attention
-        self.encoder_attn = RTDetrMultiscaleDeformableAttention(
-            config,
-            num_heads=config.decoder_attention_heads,
-            num_points=config.decoder_n_points,
-        )
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # feed-forward
+        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
+        self.fc1_activation = ACT2FN[config.encoder_activation_function]
+        self.fc1_dropout = nn.Dropout(config.activation_dropout)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
+        self.fc2_dropout = nn.Dropout(config.dropout)
 
-        # Feedforward
-        self.fc1 = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # norms
+        self.identity = nn.Identity()
+        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        reference_points: torch.Tensor,
-        spatial_shapes: torch.Tensor,
-        spatial_shapes_list: List[Tuple[int, int]],
+        attention_mask: torch.Tensor,
         position_embeddings: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         """
         Args:
-            hidden_states (`torch.Tensor`):
-                Input to the layer of shape `(batch_size, num_queries, hidden_size)`.
-            encoder_hidden_states (`torch.Tensor`):
-                Flattened and concatenated encoder feature maps of shape `(batch_size, sequence_length, hidden_size)`.
-                Where `sequence_length` is the sum of the product of all spatial shapes of the encoder feature maps.
-                For example, spatial_shapes = [(80, 80), (40, 40), (20, 20)] ->
-                sequence_length = 80 * 80 + 40 * 40 + 20 * 20 = 6400 + 1600 + 400 = 8400.
-            reference_points (`torch.Tensor`, *optional*):
-                Reference points of shape `(batch_size, num_queries, 1, 2)`.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes of encoder feature maps of shape `(num_feature_levels, 2)`.
-            spatial_shapes_list (`List[Tuple[int, int]]`, *optional*):
-                Spatial shapes of encoder feature maps of shape `(num_feature_levels, 2)`.
-                Same as `spatial_shapes` but as a list of tuples for `torch.compile` compatibility.
-            position_embeddings (`torch.Tensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer of
-                shape `(batch_size, num_queries, hidden_size)`.
-            encoder_attention_mask (`torch.Tensor`):
-                4d encoder attention mask of size `(batch, 1, target_len, source_len)` where padding elements
-                are indicated by very large negative values.
-            output_attentions (`bool`, defaults to `False`):
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                values.
+            position_embeddings (`torch.FloatTensor`, *optional*):
+                Object queries (also called content embeddings), to be added to the hidden states.
+            output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        if self.normalize_before:
+            norm1 = self.self_attn_layer_norm
+            norm2 = self.final_layer_norm
+            norm3 = self.identity
+        else:
+            norm1 = self.identity
+            norm2 = self.self_attn_layer_norm
+            norm3 = self.final_layer_norm
 
-        # Self-Attention
-        self_attn_residual = hidden_states
-        hidden_states, self_attn_weights = self.self_attn(
+        # self-attention step
+        residual = hidden_states
+        hidden_states = norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
+            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self_attn_residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_dropout(hidden_states)
+        hidden_states = residual + hidden_states
+        hidden_states = norm2(hidden_states)
 
-        # Cross-Attention
-        cross_attn_residual = hidden_states
-        hidden_states, cross_attn_weights = self.encoder_attn(
-            hidden_states=hidden_states,
-            encoder_hidden_states=encoder_hidden_states,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            output_attentions=output_attentions,
-        )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = cross_attn_residual + hidden_states
-        hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-        # Feedforward
-        fc_residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        # feed-forward step
+        residual = hidden_states
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.fc1_activation(hidden_states)
+        hidden_states = self.fc1_dropout(hidden_states)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = fc_residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.fc2_dropout(hidden_states)
+        hidden_states = residual + hidden_states
+        hidden_states = norm3(hidden_states)
+
+        # clamp values if training
+        if self.training:
+            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
+            outputs += (attn_weights,)
 
         return outputs
 
@@ -1336,6 +1227,138 @@ class RTDetrHybridEncoder(nn.Module):
         return pan_feature_maps, encoder_intermediates, encoder_attentions
 
 
+class RTDetrDecoderLayer(nn.Module):
+    def __init__(self, config: RTDetrConfig):
+        super().__init__()
+
+        self.dropout = config.dropout
+        self.activation_dropout = config.activation_dropout
+
+        # Self-Attention
+        self.self_attn = RTDetrMultiheadAttention(
+            embed_dim=config.hidden_size,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        # Cross-Attention
+        self.encoder_attn = RTDetrMultiscaleDeformableAttention(
+            config,
+            num_heads=config.decoder_attention_heads,
+            num_points=config.decoder_n_points,
+        )
+        self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        # Feedforward
+        self.fc1 = nn.Linear(config.hidden_size, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.hidden_size)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        spatial_shapes: torch.Tensor,
+        spatial_shapes_list: List[Tuple[int, int]],
+        position_embeddings: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ):
+        """
+        Args:
+            hidden_states (`torch.Tensor`):
+                Input to the layer of shape `(batch_size, num_queries, hidden_size)`.
+            encoder_hidden_states (`torch.Tensor`):
+                Flattened and concatenated encoder feature maps of shape `(batch_size, sequence_length, hidden_size)`.
+                Where `sequence_length` is the sum of the product of all spatial shapes of the encoder feature maps.
+                For example, spatial_shapes = [(80, 80), (40, 40), (20, 20)] ->
+                sequence_length = 80 * 80 + 40 * 40 + 20 * 20 = 6400 + 1600 + 400 = 8400.
+            reference_points (`torch.Tensor`, *optional*):
+                Reference points of shape `(batch_size, num_queries, 1, 2)`.
+            spatial_shapes (`torch.LongTensor`, *optional*):
+                Spatial shapes of encoder feature maps of shape `(num_feature_levels, 2)`.
+            spatial_shapes_list (`List[Tuple[int, int]]`, *optional*):
+                Spatial shapes of encoder feature maps of shape `(num_feature_levels, 2)`.
+                Same as `spatial_shapes` but as a list of tuples for `torch.compile` compatibility.
+            position_embeddings (`torch.Tensor`, *optional*):
+                Position embeddings that are added to the queries and keys in the self-attention layer of
+                shape `(batch_size, num_queries, hidden_size)`.
+            encoder_attention_mask (`torch.Tensor`):
+                4d encoder attention mask of size `(batch, 1, target_len, source_len)` where padding elements
+                are indicated by very large negative values.
+            output_attentions (`bool`, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+
+        # Self-Attention
+        self_attn_residual = hidden_states
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=encoder_attention_mask,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self_attn_residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        # Cross-Attention
+        cross_attn_residual = hidden_states
+        hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            position_embeddings=position_embeddings,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            output_attentions=output_attentions,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = cross_attn_residual + hidden_states
+        hidden_states = self.encoder_attn_layer_norm(hidden_states)
+
+        # Feedforward
+        fc_residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = fc_residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
+
+        return outputs
+
+
+class RTDetrMLPPredictionHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+    """
+
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
+        super().__init__()
+        self.num_layers = num_layers
+        input_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
+        output_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
+        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i < self.num_layers - 1:
+                x = nn.functional.relu(x)
+        return x
+
+
 class RTDetrDecoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
@@ -1471,27 +1494,6 @@ class RTDetrDecoder(nn.Module):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-
-class RTDetrMLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-    """
-
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
-        super().__init__()
-        self.num_layers = num_layers
-        input_dims = [input_dim] + [hidden_dim] * (num_layers - 1)
-        output_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
-        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = layer(x)
-            if i < self.num_layers - 1:
-                x = nn.functional.relu(x)
-        return x
 
 
 class RTDetrPreTrainedModel(PreTrainedModel):
