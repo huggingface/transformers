@@ -253,10 +253,29 @@ def get_docstring_indent(docstring):
     return 0
 
 
+def is_full_docstring(new_docstring: str) -> bool:
+    """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
+    be merged with the existing old one.
+    """
+    # libcst returns the docstrinbgs with litteral `r"""` quotes in front
+    new_docstring = new_docstring.split('"""', 1)[1]
+    # The docstring contains Args definition, so it is self-contained
+    if re.search(r"\n\s*Args:\n", new_docstring):
+        return True
+    # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
+    # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
+    match_object = re.search(r"\n([^\S\n]*)Returns:\n", new_docstring)
+    if match_object is not None:
+        full_indent = match_object.group(1)
+        striped_doc = new_docstring.strip("\n")
+        if striped_doc.startswith(full_indent + " " * 4) or striped_doc.startswith(full_indent + "\t"):
+            return True
+    return False
+
+
 def merge_docstrings(original_docstring, updated_docstring):
-    # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    if not re.findall(r"\n\s*Args:\n", updated_docstring):
+    if not is_full_docstring(updated_docstring):
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
@@ -649,9 +668,11 @@ class ModuleMapper(CSTVisitor, ABC):
             self.current_function = None
 
     def visit_If(self, node):
-        for stmt in node.body.body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports.append(node)
+        # If we are inside a function, do not add the import to the list of imports
+        if self.current_function is None:
+            for stmt in node.body.body:
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                    self.imports.append(node)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
