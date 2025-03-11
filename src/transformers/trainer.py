@@ -1421,7 +1421,7 @@ class Trainer:
         if args.optim == OptimizerNames.ADAFACTOR:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
-        elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED, OptimizerNames.ADAMW_HF]:
+        elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED]:
             from torch.optim import AdamW
 
             optimizer_cls = AdamW

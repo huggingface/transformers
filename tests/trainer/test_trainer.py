@@ -5377,16 +5377,6 @@ if is_torch_available():
 
     optim_test_params = [
         (
-            OptimizerNames.ADAMW_HF,
-            torch.optim.AdamW,
-            default_adam_kwargs,
-        ),
-        (
-            OptimizerNames.ADAMW_HF.value,
-            torch.optim.AdamW,
-            default_adam_kwargs,
-        ),
-        (
             OptimizerNames.ADAMW_TORCH,
             torch.optim.AdamW,
             default_adam_kwargs,
