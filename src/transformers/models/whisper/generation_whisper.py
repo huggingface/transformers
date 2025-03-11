@@ -299,6 +299,11 @@ class WhisperGenerationMixin(GenerationMixin):
                 num_frames = num_frames.cpu() if isinstance(num_frames, (torch.Tensor)) else num_frames
                 num_frames = np.repeat(num_frames, repeat_time)
 
+        # let's ignore decoder_input_ids that can negatively impact the DTW while we know they have timestamps 0.0s
+        # (they are not taken into account for the DTW in OAI implementation)
+        if num_input_ids is not None:
+            weights = weights[:, :, num_input_ids:, :]
+
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
             std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
@@ -329,9 +334,12 @@ class WhisperGenerationMixin(GenerationMixin):
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
 
-            # each token has a corresponding timestamp, expect the eos token for which we don't retrieve cross attentions
-            # for the eos token, we simply duplicate the timestamp of the last non-eos token
-            timestamps[batch_idx] = torch.cat([torch.tensor(jump_times), torch.tensor([jump_times[-1]])])
+            # each predicted token has a corresponding timestamp, expect the eos token for which we don't retrieve cross attentions
+            # 1. for decoder_input_ids, we set the timestamps to 0.0
+            # 2. for the eos token, we simply duplicate the timestamp of the last non-eos token
+            timestamps[batch_idx] = torch.cat(
+                [torch.zeros(num_input_ids), torch.tensor(jump_times), torch.tensor([jump_times[-1]])]
+            )
 
         return timestamps
 
