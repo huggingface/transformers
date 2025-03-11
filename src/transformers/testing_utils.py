@@ -2958,7 +2958,6 @@ class Properties:
 
     type: Union[str, None] = None
     cap_major: Union[int, None] = None
-    cap_minor: Union[int, None] = None
 
     @staticmethod
     def default():
@@ -2969,21 +2968,17 @@ class Properties:
         Returns score indicating how similar two instances of `Properties` are.
         If the compared device types are "cuda" and "hip" they get half marks as they are similar, but not equal.
         """
-        score = 0b00000
+        score = 0b0000
         if self.type == other.type:
-            score |= 0b10000
-        elif (self.type == "cuda" and other.type == "rocm") or (self.type == "rocm" and other.type == "cuda"):
-            score |= 0b01000
+            score |= 0b1000
+        elif self.type in ["cuda", "rocm"] and other.type in ["cuda", "rocm"]:
+            score |= 0b0100
 
         if self.cap_major == other.cap_major and self.cap_major is not None:
-            score |= 0b00100
-
-            # Minor versions are only better if major already matches
-            if self.cap_minor == other.cap_minor and self.cap_minor is not None:
-                score |= 0b00010
+            score |= 0b0010
 
         if self == Properties.default():
-            score |= 0b00001
+            score |= 0b0001
 
         return int(score)
 
@@ -3055,11 +3050,11 @@ class Expectations:
         if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
             import torch
 
-            major, minor = torch.cuda.get_device_capability()
+            major, _ = torch.cuda.get_device_capability()
             if IS_ROCM_SYSTEM:
-                return Properties("rocm", major, minor)
+                return Properties("rocm", major)
             else:
-                return Properties("cuda", major, minor)
+                return Properties("cuda", major)
         else:
             return Properties(torch_device)
 
