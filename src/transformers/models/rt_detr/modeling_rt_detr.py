@@ -698,9 +698,10 @@ class RTDetrRepVggBlock(nn.Module):
         self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, x):
-        y = self.conv1(x) + self.conv2(x)
-        return self.activation(y)
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        """Feature map of shape (batch_size, embed_dim, height, width)"""
+        feature_map = self.conv1(feature_map) + self.conv2(feature_map)
+        return self.activation(feature_map)
 
 
 class RTDetrCSPRepLayer(nn.Module):
