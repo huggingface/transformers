@@ -86,11 +86,14 @@ class Gemma3TextConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
+        query_pre_attn_scalar (`float`, *optional*):
+            Scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
             size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        final_logit_softcapping (`float`, *optional*):
+            Scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*):
+            Scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -168,7 +171,7 @@ class Gemma3TextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int = 262_144,
+        vocab_size=262_144,
         hidden_size=2304,
         intermediate_size=9216,
         num_hidden_layers=26,
@@ -176,7 +179,7 @@ class Gemma3TextConfig(PretrainedConfig):
         num_key_value_heads=4,
         head_dim=256,
         hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings: int = 131_072,
+        max_position_embeddings=131_072,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
@@ -184,17 +187,17 @@ class Gemma3TextConfig(PretrainedConfig):
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta: float = 1_000_000.0,
+        rope_theta=1_000_000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        query_pre_attn_scalar: Optional[float] = None,
+        query_pre_attn_scalar=256,
         sliding_window=4096,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
         cache_implementation="hybrid",
         rope_scaling=None,
-        rope_local_base_freq: float = 10_000.0,
-        sliding_window_pattern: int = 6,
+        rope_local_base_freq=10_000.0,
+        sliding_window_pattern=6,
         **kwargs,
     ):
         super().__init__(

@@ -287,6 +287,8 @@ class Gemma3Attention(nn.Module):
 
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
+
+        self.is_sliding = bool((layer_idx + 1) % config.sliding_window_pattern)
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -309,7 +311,6 @@ class Gemma3Attention(nn.Module):
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if self.is_sliding else None
-        self.is_sliding = bool((layer_idx + 1) % config.sliding_window_pattern)
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)

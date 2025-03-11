@@ -116,11 +116,14 @@ class Gemma3TextConfig(Gemma2Config):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
+        query_pre_attn_scalar (`float`, *optional*):
+            Scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
             size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        final_logit_softcapping (`float`, *optional*):
+            Scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*):
+            Scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -183,13 +186,13 @@ class Gemma3TextConfig(Gemma2Config):
 
     def __init__(
         self,
-        vocab_size: int = 262_144,
-        query_pre_attn_scalar: Optional[float] = None,
-        rope_theta: float = 1_000_000.0,
+        vocab_size=262_144,
+        query_pre_attn_scalar=256,
+        rope_theta=1_000_000.0,
         rope_scaling=None,
-        rope_local_base_freq: float = 10_000.0,
-        sliding_window_pattern: int = 6,
-        max_position_embeddings: int = 131_072,
+        rope_local_base_freq=10_000.0,
+        sliding_window_pattern=6,
+        max_position_embeddings=131_072,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
         **super_kwargs,
@@ -354,10 +357,12 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         super().__init__(config)
 
 
+# Weird way to inherit but otherwise the sliding window gets defined first and can't access `is_sliding`
 class Gemma3Attention(Gemma2Attention):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
-        super().__init__()
         self.is_sliding = bool((layer_idx + 1) % config.sliding_window_pattern)
+
+        super().__init__()
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
