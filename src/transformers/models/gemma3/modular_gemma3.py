@@ -121,20 +121,21 @@ class Gemma3Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*):
-            Custom vision config or dict.
         text_config (`Union[Gemma3TextConfig, dict]`, *optional*):
             The config object of the text backbone.
+        vision_config (`Union[AutoConfig, dict]`,  *optional*):
+            Custom vision config or dict.
         mm_tokens_per_image (`int`, *optional*, defaults to 256):
             The number of tokens per image embedding.
-        image_token_index (`int`, *optional*, defaults to 262_144):
-            The image token index to encode the image prompt.
-        boi_token_index (`int`, *optional*, defaults to 255_999):
+        boi_token_index (`int`, *optional*, defaults to 255999):
             The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 256_000):
+        eoi_token_index (`int`, *optional*, defaults to 256000):
             The end-of-image token index to wrap the image prompt.
+        image_token_index (`int`, *optional*, defaults to 262144):
+            The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
 
     Example:
 

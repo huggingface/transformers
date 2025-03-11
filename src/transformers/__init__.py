@@ -2458,7 +2458,7 @@ else:
         [
             "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
-            "Gemma3Model",
+            "Gemma3TextModel",
             "Gemma3PreTrainedModel",
             "Gemma3Processor",
         ]
@@ -7478,9 +7478,9 @@ if TYPE_CHECKING:
         from .models.gemma3 import (
             Gemma3ForCausalLM,
             Gemma3ForConditionalGeneration,
-            Gemma3Model,
             Gemma3PreTrainedModel,
             Gemma3Processor,
+            Gemma3TextModel,
         )
         from .models.git import (
             GitForCausalLM,
