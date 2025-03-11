@@ -161,7 +161,7 @@ class Gemma3TextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        final_logit_softcapping (`bool`, *optional*, defaults to `True`):
+        final_logit_softcapping (`float`, *optional*, defaults to `None`):
             Whether to apply logit softcapping or nor
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             Scaling factor when applying tanh soft-capping on the attention scorexs.
