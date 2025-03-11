@@ -47,21 +47,21 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
-        Gemma3Model,
         Gemma3Processor,
+        Gemma3TextModel,
     )
 
 
 class Gemma3ModelTester(GemmaModelTester):
     if is_torch_available():
         config_class = Gemma3TextConfig
-        model_class = Gemma3Model
+        model_class = Gemma3TextModel
         for_causal_lm_class = Gemma3ForCausalLM
 
 
 @require_torch
 class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3Model, Gemma3ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (Gemma3TextModel, Gemma3ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
@@ -340,7 +340,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 # @require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = Gemma3Processor.from_pretrained("gg-hf-g/gemma-3-4b-it-new", padding_side="left")
+        self.processor = Gemma3Processor.from_pretrained("gg-hf-g/gemma-3-4b-it", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self.messages = [
@@ -358,7 +358,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_4b_bf16(self):
-        model_id = "gg-hf-g/gemma-3-4b-it-new"
+        model_id = "gg-hf-g/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -379,7 +379,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_batch(self):
-        model_id = "gg-hf-g/gemma-3-4b-it-new"
+        model_id = "gg-hf-g/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -405,18 +405,21 @@ class Gemma3IntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            padding=True,
             add_generation_prompt=True,
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [""]  # fmt: skip
-        print(output_text)
+        EXPECTED_TEXTS = [
+            'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
+            "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
+        ]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_multiimage(self):
-        model_id = "gg-hf-g/gemma-3-4b-it-new"
+        model_id = "gg-hf-g/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -435,7 +438,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         inputs = self.processor.apply_chat_template(
             messages,
-            toskenize=True,
+            tokenize=True,
             return_dict=True,
             return_tensors="pt",
             padding=True,
@@ -445,8 +448,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [""]  # fmt: skip
-        print(output_text)
+        EXPECTED_TEXTS = ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_1b_text_only(self):
@@ -461,18 +463,17 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [""]  # fmt: skip
-        print(output_text)
+        EXPECTED_TEXTS = ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
     def test_model_4b_flash_attn(self):
-        model_id = "gg-hf-g/gemma-3-4b-it-new"
+        model_id = "gg-hf-g/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -486,8 +487,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = [""]  # fmt: skip
-        print(output_text)
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nPlease look out that you are what Grammy and Vi- ||.xfairesr--ith alerts themselves are||ِّ\n\n**General Note:**']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
@@ -517,4 +517,5 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [""]  # fmt: skip
+        print(output_text)
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

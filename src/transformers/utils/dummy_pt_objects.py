@@ -4623,13 +4623,6 @@ class Gemma3ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Gemma3Model(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Gemma3PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4638,6 +4631,13 @@ class Gemma3PreTrainedModel(metaclass=DummyObject):
 
 
 class Gemma3Processor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Gemma3TextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

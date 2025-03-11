@@ -198,12 +198,20 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         crop_positions_w = [crop_size_w * i for i in range(num_crops_w)]
         crop_positions_h = [crop_size_h * i for i in range(num_crops_h)]
 
-        return [
-            image[pos_h : pos_h + crop_size_h, pos_w : pos_w + crop_size_w]
-            for pos_h, pos_w in itertools.product(crop_positions_h, crop_positions_w)
-        ]
+        if input_data_format == ChannelDimension.LAST:
+            image_crops = [
+                image[pos_h : pos_h + crop_size_h, pos_w : pos_w + crop_size_w]
+                for pos_h, pos_w in itertools.product(crop_positions_h, crop_positions_w)
+            ]
+        else:
+            image_crops = [
+                image[:, pos_h : pos_h + crop_size_h, pos_w : pos_w + crop_size_w]
+                for pos_h, pos_w in itertools.product(crop_positions_h, crop_positions_w)
+            ]
 
-    def _process_images_for_pas(
+        return image_crops
+
+    def _process_images_for_pan_and_scan(
         self,
         images: List[np.ndarray],
         do_pan_and_scan: bool,
@@ -362,7 +370,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
         if do_pan_and_scan:
             images_list_and_num_crops = [
-                self._process_images_for_pas(
+                self._process_images_for_pan_and_scan(
                     images=images,
                     do_pan_and_scan=do_pan_and_scan,
                     pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
@@ -378,41 +386,27 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         else:
             num_crops = [[0] for images in images_list]
 
-        if do_resize:
-            height, width = size["height"], size["width"]
-            images_list = [
-                [
-                    resize(image=image, size=(height, width), resample=resample, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
+        processed_images = []
+        for images in images_list:
+            for image in images:
+                if do_resize:
+                    height, width = size["height"], size["width"]
+                    image = resize(
+                        image=image, size=(height, width), resample=resample, input_data_format=input_data_format
+                    )
 
-        if do_rescale:
-            images_list = [
-                [
-                    self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
+                if do_rescale:
+                    image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images_list = [
-                [
-                    self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                    for image in images
-                ]
-                for images in images_list
-            ]
+                if do_normalize:
+                    image = self.normalize(
+                        image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    )
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for images in images_list
-            for image in images
-        ]
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                processed_images.append(image)
 
-        data = {"pixel_values": images, "num_crops": num_crops}
+        data = {"pixel_values": processed_images, "num_crops": num_crops}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 

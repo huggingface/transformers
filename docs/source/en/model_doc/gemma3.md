@@ -26,11 +26,49 @@ This model was contributed by [INSERT](INSERT).
 
 ## Usage tips
 
+
 - For image+text and image-only inputs use `Gemma3ForConditionalGeneration`.
 - For text-only inputs use `Gemma3ForCausalLM` for generation to avoid loading the vision tower.
 - Each sample can contain multiple images, and the number of images can vary between samples. However make sure to pass correctly batched images to the processor, where each batch is a list of one or more images.
 - The text passed to the processor should have the `"<start_of_image_>"` token where the images should be inserted.
 - The processor has its own `apply_chat_template` method to convert chat messages to text that can then be passed as text to the processor. You can also get a vectorized output from `apply_chat_template`. See the examples below for more details on how to use it.
+
+
+### Image cropping for high resolution images
+
+`do_pan_and_scan`
+
+The model supports cropping images into smaller patches when the image aspect ratio exceeds a certain value. By default the images are not cropped and only the base image is forwarded to the model. Users can set `do_pan_and_scan=True` to obtain several crops per image along with the base image to improve the quality in DocVQA or similar tasks requiring higher resolution images,
+
+```python
+
+processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
+
+url = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
+messages = [
+    {
+        "role": "system",
+        "content": [
+            {"type": "text", "text": "You are a helpful assistant."}
+        ]
+    },
+    {
+        "role": "user", "content": [
+            {"type": "image", "url": url},
+            {"type": "text", "text": "What is shown in this image?"},
+        ]
+    },
+]
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    add_generation_prompt=True,
+    do_pan_and_scan=True,
+).to(model.device)
+
+```
 
 
 ## Usage Example

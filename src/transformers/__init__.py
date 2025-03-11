@@ -1260,7 +1260,7 @@ else:
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
-    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
+    _import_structure["models.gemma3"].extend(("Gemma3ImageProcessor", "Gemma3ImageProcessorFast"))
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -2458,9 +2458,9 @@ else:
         [
             "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
-            "Gemma3Model",
             "Gemma3PreTrainedModel",
             "Gemma3Processor",
+            "Gemma3TextModel",
         ]
     )
     _import_structure["models.git"].extend(
@@ -6548,6 +6548,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
@@ -7477,9 +7478,9 @@ if TYPE_CHECKING:
         from .models.gemma3 import (
             Gemma3ForCausalLM,
             Gemma3ForConditionalGeneration,
-            Gemma3Model,
             Gemma3PreTrainedModel,
             Gemma3Processor,
+            Gemma3TextModel,
         )
         from .models.git import (
             GitForCausalLM,

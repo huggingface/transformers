@@ -51,7 +51,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma3Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "image_seq_length"]
-    image_processor_class = "Gemma3ImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
@@ -163,7 +163,6 @@ class Gemma3Processor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
         image_processor_input_names = self.image_processor.model_input_names

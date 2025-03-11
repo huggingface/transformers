@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
 python -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
@@ -126,14 +142,14 @@ _VARIANTS = {
             rope_theta=1_000_000,  # used for global RoPE only
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=256**-0.5,
+            query_pre_attn_scalar=256,
             max_position_embeddings=32_768,
         ),
         vision_config=None,
     ),
     _VARIANT_GEMMA_3_4B: Gemma3Config(
         text_config=Gemma3TextConfig(
-            vocab_size=262_144,
+            vocab_size=262_208,
             hidden_size=2560,
             intermediate_size=2560 * 8 // 2,
             num_attention_heads=8,
@@ -145,13 +161,13 @@ _VARIANTS = {
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=256**-0.5,
+            query_pre_attn_scalar=256,
         ),
         vision_config=_VISION_CONFIG,
     ),
     _VARIANT_GEMMA_3_12B: Gemma3Config(
         text_config=Gemma3TextConfig(
-            vocab_size=262_144,
+            vocab_size=262_208,
             hidden_size=30 * 128,
             intermediate_size=30 * 128 * 8 // 2,
             num_attention_heads=16,
@@ -163,13 +179,13 @@ _VARIANTS = {
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=256**-0.5,
+            query_pre_attn_scalar=256,
         ),
         vision_config=_VISION_CONFIG,
     ),
     _VARIANT_GEMMA_3_27B: Gemma3Config(
         text_config=Gemma3TextConfig(
-            vocab_size=262_144,
+            vocab_size=262_208,
             hidden_size=42 * 128,
             intermediate_size=42 * 128 * 8 // 2,
             num_attention_heads=32,
@@ -181,7 +197,7 @@ _VARIANTS = {
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=(42 * 128 // 32) ** -0.5,  # 1 / sqrt(hidden_size // num_attention_heads)
+            query_pre_attn_scalar=(42 * 128 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
         ),
         vision_config=_VISION_CONFIG,
     ),
@@ -348,6 +364,15 @@ def convert_transformer_weights(
         if prop == "input_embedding":
             # Tied to language_model.lm_head.weight, assigned at the end.
             converted_paths = ["language_model.model.embed_tokens.weight"]
+
+            if not _TEXT_ONLY.value:
+                # Gemma3 model doesn't have image soft token in input and output embeddings, resize to avoid bugs we had with Mllama
+                pre_expansion_embeddings = weights
+                mu = np.mean(pre_expansion_embeddings, axis=0)
+                sigma = np.cov(pre_expansion_embeddings, rowvar=False, bias=True)
+                new_embeddings = np.random.multivariate_normal(mu, 1e-5 * sigma, size=64)
+                weights = np.vstack([pre_expansion_embeddings, new_embeddings])
+
             converted_weights = [weights]
         elif _TEXT_ONLY.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
             return zip([], [])
@@ -432,11 +457,6 @@ def convert_transformer_weights(
         )
 
     return zip(converted_paths, converted_weights)
-
-
-def transpose_reshape(x: torch.Tensor) -> torch.Tensor:
-    x = x.transpose(1, 2)
-    return x.reshape(x.shape[0] * x.shape[1], x.shape[2]).contiguous()
 
 
 @dataclasses.dataclass(frozen=True)

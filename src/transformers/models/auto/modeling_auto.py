@@ -118,7 +118,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("gemma", "GemmaModel"),
         ("gemma2", "Gemma2Model"),
-        ("gemma3_text", "Gemma3Model"),
+        ("gemma3_text", "Gemma3TextModel"),
         ("git", "GitModel"),
         ("glm", "GlmModel"),
         ("glpn", "GLPNModel"),
