@@ -139,6 +139,15 @@ else:
         "SUPPORTED_TP_STYLES",
         "translate_to_torch_parallel_style",
     ]
+try:
+    if not is_torch_greater_or_equal("2.5"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["flex_attention"] = [
+        "make_flex_block_causal_mask",
+    ]
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
@@ -255,6 +264,13 @@ if TYPE_CHECKING:
             translate_to_torch_parallel_style,
         )
 
+    try:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .flex_attention import make_flex_block_causal_mask
 else:
     import sys
 
