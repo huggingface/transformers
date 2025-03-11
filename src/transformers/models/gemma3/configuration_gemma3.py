@@ -32,17 +32,16 @@ logger = logging.get_logger(__name__)
 
 class Gemma3TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3Model`]. It is used to instantiate a Gemma3
+    This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Gemma3-4B.
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
+    defaults will yield a similar configuration to that of the Gemma3Text-7B.
+    e.g. [google/gemma3_text-7b](https://huggingface.co/google/gemma3_text-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
     Args:
-        vocab_size (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the Gemma3 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Gemma3Model`]
+        vocab_size (`int`, *optional*, defaults to 256000):
+            Vocabulary size of the Gemma3Text model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Gemma3TextModel`]
         hidden_size (`int`, *optional*, defaults to 2304):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 9216):
@@ -61,59 +60,18 @@ class Gemma3TextConfig(PretrainedConfig):
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
-            attention. This is the size of the sliding window.
-        query_pre_attn_scalar (`float`, *optional*):
-            The scaling factor used on the attention scores, not that
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings used for global attention.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        rope_local_base_freq (float, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings for local attention.
-        sliding_window_pattern (`int`, *optional*, defaults to 6):
-            Pattern for the sliding window attention.
+        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
+            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to
-            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
-            activation function.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         eos_token_id (`int`, *optional*, defaults to 1):
@@ -122,35 +80,50 @@ class Gemma3TextConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        attention_bias (`bool`, *optional*, defaults to `False`):
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        final_logit_softcapping (`bool`, *optional*, defaults to `True`):
-            Whether to apply logit softcapping or nor
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-            Scaling factor when applying tanh soft-capping on the attention scorexs.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`):
-            The cache type to be used with `generate`.
+        query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
+        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
+            size of the sliding window.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
 
     ```python
-    >>> from transformers import Gemma3Model, Gemma3TextConfig
-    >>> # Initializing a Gemma3 gemma3-4b style configuration
-    >>> configuration = Gemma3Config()
-    >>> # Initializing a model from the gemma3-4b style configuration
-    >>> model = Gemma3Model(configuration)
+    >>> from transformers import Gemma3TextModel, Gemma3TextConfig
+    >>> # Initializing a Gemma3Text gemma3_text-7b style configuration
+    >>> configuration = Gemma3TextConfig()
+    >>> # Initializing a model from the gemma3_text-7b style configuration
+    >>> model = Gemma3TextModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+        rope_local_base_freq (float, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings for local attention.
+        sliding_window_pattern (`int`, *optional*, defaults to 6):
+            Pattern for the sliding window attention.
+    """
 
     model_type = "gemma3_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -161,26 +134,26 @@ class Gemma3TextConfig(PretrainedConfig):
         num_attention_heads: int = 8,
         num_key_value_heads: int = 4,
         head_dim: int = 256,
-        sliding_window: int = 4096,
-        query_pre_attn_scalar: Optional[float] = None,
-        rope_theta: float = 1_000_000.0,
-        rope_scaling=None,
-        rope_local_base_freq: float = 10_000.0,
-        sliding_window_pattern: int = 6,
-        rms_norm_eps: float = 1e-6,
         hidden_activation: str = "gelu_pytorch_tanh",
+        max_position_embeddings: int = 131_072,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-6,
+        use_cache: bool = True,
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
         tie_word_embeddings: bool = True,
-        max_position_embeddings: int = 131_072,
-        initializer_range: float = 0.02,
+        rope_theta: float = 1_000_000.0,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
-        use_cache: bool = True,
+        query_pre_attn_scalar: Optional[float] = None,
+        sliding_window: int = 4096,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
         cache_implementation: str = "hybrid",
+        rope_scaling=None,
+        rope_local_base_freq: float = 10_000.0,
+        sliding_window_pattern: int = 6,
         **kwargs,
     ):
         super().__init__(
@@ -190,7 +163,6 @@ class Gemma3TextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -203,10 +175,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.rope_local_base_freq = rope_local_base_freq
-        # For configuring HybridCache to work with 5:1 attention pattern
-        self.sliding_window_pattern = sliding_window_pattern
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -215,6 +183,10 @@ class Gemma3TextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+
+        self.rope_local_base_freq = rope_local_base_freq
+        # For configuring HybridCache to work with 5:1 attention pattern
+        self.sliding_window_pattern = sliding_window_pattern
         rope_config_validation(self)
 
 
@@ -230,18 +202,18 @@ class Gemma3Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`Union[Gemma3TextConfig, dict]`, *optional*):
-            The config object of the text backbone.
         vision_config (`Union[AutoConfig, dict]`,  *optional*):
             Custom vision config or dict.
+        text_config (`Union[Gemma3TextConfig, dict]`, *optional*):
+            The config object of the text backbone.
         mm_tokens_per_image (`int`, *optional*, defaults to 256):
             The number of tokens per image embedding.
-        boi_token_index (`int`, *optional*, defaults to 255999):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 256000):
-            The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 262144):
+        image_token_index (`int`, *optional*, defaults to 262_144):
             The image token index to encode the image prompt.
+        boi_token_index (`int`, *optional*, defaults to 255_999):
+            The begin-of-image token index to wrap the image prompt.
+        eoi_token_index (`int`, *optional*, defaults to 256_000):
+            The end-of-image token index to wrap the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
