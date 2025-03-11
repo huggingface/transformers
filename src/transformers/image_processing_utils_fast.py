@@ -40,8 +40,8 @@ from .image_utils import (
     get_image_type,
     infer_channel_dimension_format,
     make_flat_list_of_images,
-    validate_fast_preprocess_arguments,
     validate_kwargs,
+    validate_preprocess_arguments,
 )
 from .processing_utils import Unpack
 from .utils import (
@@ -70,6 +70,49 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
+
+
+@lru_cache(maxsize=10)
+def validate_fast_preprocess_arguments(
+    do_rescale: Optional[bool] = None,
+    rescale_factor: Optional[float] = None,
+    do_normalize: Optional[bool] = None,
+    image_mean: Optional[Union[float, List[float]]] = None,
+    image_std: Optional[Union[float, List[float]]] = None,
+    do_pad: Optional[bool] = None,
+    size_divisibility: Optional[int] = None,
+    do_center_crop: Optional[bool] = None,
+    crop_size: Optional[SizeDict] = None,
+    do_resize: Optional[bool] = None,
+    size: Optional[SizeDict] = None,
+    resample: Optional["PILImageResampling"] = None,
+    return_tensors: Optional[Union[str, TensorType]] = None,
+    data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+):
+    """
+    Checks validity of typically used arguments in an `ImageProcessorFast` `preprocess` method.
+    Raises `ValueError` if arguments incompatibility is caught.
+    """
+    validate_preprocess_arguments(
+        do_rescale=do_rescale,
+        rescale_factor=rescale_factor,
+        do_normalize=do_normalize,
+        image_mean=image_mean,
+        image_std=image_std,
+        do_pad=do_pad,
+        size_divisibility=size_divisibility,
+        do_center_crop=do_center_crop,
+        crop_size=crop_size,
+        do_resize=do_resize,
+        size=size,
+        resample=resample,
+    )
+    # Extra checks for ImageProcessorFast
+    if return_tensors is not None and return_tensors != "pt":
+        raise ValueError("Only returning PyTorch tensors is currently supported.")
+
+    if data_format != ChannelDimension.FIRST:
+        raise ValueError("Only channel first data format is currently supported.")
 
 
 def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
@@ -527,7 +570,34 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         return processed_images
 
-    @lru_cache(maxsize=10)
+    def _further_process_kwargs(
+        size: Optional[SizeDict] = None,
+        crop_size: Optional[SizeDict] = None,
+        default_to_square: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional[ChannelDimension] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if kwargs is None:
+            kwargs = {}
+        if size is not None:
+            kwargs["size"] = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if crop_size is not None:
+            kwargs["crop_size"] = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+        if isinstance(image_mean, list):
+            kwargs["image_mean"] = tuple(image_mean)
+        if isinstance(image_std, list):
+            kwargs["image_std"] = tuple(image_std)
+        if data_format is None:
+            kwargs["data_format"] = ChannelDimension.FIRST
+
+        return kwargs
+
     def _validate_preprocess_kwargs(
         self,
         do_rescale: Optional[bool] = None,
@@ -542,6 +612,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
+        **kwargs,
     ):
         """
         validate the kwargs for the preprocess method.
@@ -559,14 +630,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
             resample=resample,
             return_tensors=return_tensors,
             data_format=data_format,
-        )
-
-    def _set_interpolation(
-        self,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-    ) -> "F.InterpolationMode":
-        return (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
     @add_start_docstrings(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS)
@@ -591,41 +654,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
 
         # Update kwargs that need further processing before being validated
-        size = kwargs.get("size")
-        default_to_square = kwargs.get("default_to_square")
-        crop_size = kwargs.get("crop_size")
-        image_mean = kwargs.get("image_mean")
-        image_std = kwargs.get("image_std")
-        data_format = kwargs.get("data_format")
-        if size is not None:
-            kwargs["size"] = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if crop_size is not None:
-            kwargs["crop_size"] = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
-        if isinstance(image_mean, list):
-            kwargs["image_mean"] = tuple(image_mean)
-        if isinstance(image_std, list):
-            kwargs["image_std"] = tuple(image_std)
-        if data_format is None:
-            kwargs["data_format"] = ChannelDimension.FIRST
+        kwargs = self._further_process_kwargs(**kwargs)
 
         # Validate kwargs
-        self._validate_preprocess_kwargs(
-            do_rescale=kwargs.get("do_rescale"),
-            rescale_factor=kwargs.get("rescale_factor"),
-            do_normalize=kwargs.get("do_normalize"),
-            image_mean=kwargs.get("image_mean"),
-            image_std=kwargs.get("image_std"),
-            do_resize=kwargs.get("do_resize"),
-            size=kwargs.get("size"),
-            do_center_crop=kwargs.get("do_center_crop"),
-            crop_size=kwargs.get("crop_size"),
-            resample=kwargs.get("resample"),
-            return_tensors=kwargs.get("return_tensors"),
-            data_format=kwargs.get("data_format"),
-        )
+        self._validate_preprocess_kwargs(**kwargs)
 
         # torch resize uses interpolation instead of resample
-        kwargs["interpolation"] = self._set_interpolation(kwargs.pop("resample"))
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         # Pop kwargs that are not needed in _preprocess
         kwargs.pop("default_to_square")
