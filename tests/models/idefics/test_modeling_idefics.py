@@ -33,7 +33,13 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -310,22 +316,7 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @parameterized.expand(
-        [
-            (
-                # test name for the test runner
-                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
-                # parameterization
-                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
-            )
-            for dtype in ("fp16", "fp32", "bf16")
-            for padding_side in ("left", "right")
-            for use_attention_mask in (True, False)
-            for output_attentions in (True, False)
-            for enable_kernels in (True, False)
-        ]
-    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
@@ -359,22 +350,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         return inputs_dict
 
-    @parameterized.expand(
-        [
-            (
-                # test name for the test runner
-                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
-                # parameterization
-                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
-            )
-            for dtype in ("fp16", "fp32", "bf16")
-            for padding_side in ("left", "right")
-            for use_attention_mask in (True, False)
-            for output_attentions in (True, False)
-            for enable_kernels in (True, False)
-        ]
-    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
@@ -623,22 +599,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
-    @parameterized.expand(
-        [
-            (
-                # test name for the test runner
-                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
-                # parameterization
-                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
-            )
-            for dtype in ("fp16", "fp32", "bf16")
-            for padding_side in ("left", "right")
-            for use_attention_mask in (True, False)
-            for output_attentions in (True, False)
-            for enable_kernels in (True, False)
-        ]
-    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels

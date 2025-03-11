@@ -133,6 +133,23 @@ if is_deepspeed_available():
     import deepspeed
 
 
+# used in other test files e.g. when overwriting the test
+TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
+    (
+        # test name for the test runner
+        f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
+        f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+        # parameterization
+        *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+    )
+    for dtype in ("fp16", "fp32", "bf16")
+    for padding_side in ("left", "right")
+    for use_attention_mask in (True, False)
+    for output_attentions in (True, False)
+    for enable_kernels in (True, False)
+]
+
+
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
@@ -3546,22 +3563,7 @@ class ModelTesterMixin:
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    @parameterized.expand(
-        [
-            (
-                # test name for the test runner
-                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
-                # parameterization
-                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
-            )
-            for dtype in ("fp16", "fp32", "bf16")
-            for padding_side in ("left", "right")
-            for use_attention_mask in (True, False)
-            for output_attentions in (True, False)
-            for enable_kernels in (True, False)
-        ]
-    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels

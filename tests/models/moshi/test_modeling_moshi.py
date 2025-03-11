@@ -44,7 +44,12 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -188,22 +193,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
-    @parameterized.expand(
-        [
-            (
-                # test name for the test runner
-                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
-                # parameterization
-                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
-            )
-            for dtype in ("fp16", "fp32", "bf16")
-            for padding_side in ("left", "right")
-            for use_attention_mask in (True, False)
-            for output_attentions in (True, False)
-            for enable_kernels in (True, False)
-        ]
-    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
@@ -639,22 +629,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    @parameterized.expand(
-        [
-            (
-                # test name for the test runner
-                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
-                # parameterization
-                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
-            )
-            for dtype in ("fp16", "fp32", "bf16")
-            for padding_side in ("left", "right")
-            for use_attention_mask in (True, False)
-            for output_attentions in (True, False)
-            for enable_kernels in (True, False)
-        ]
-    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
