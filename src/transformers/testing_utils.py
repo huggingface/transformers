@@ -3004,10 +3004,17 @@ class Expectations:
 
     def __init__(self, *args: Expectation):
         self._inner = list(args)
+
+        # Guarantee at least one expectation is set
+        if len(self._inner) == 0:
+            raise ValueError("Expectations must have atleast one expectation")
+
+        # Guarantee the properties are unique
         unique_properties = {e.properties for e in self._inner}
         if len(unique_properties) != len(self._inner):
             raise ValueError("Expectation properties must be unique")
 
+        # Find default if exists
         self._default = None
         default_properties = Properties.default()
         for expectation in self._inner:
@@ -3026,12 +3033,17 @@ class Expectations:
         """
         Find best matching expectation based on provided device properties.
         """
+        # Sort expectations based on how well their properties match witht he provided properties.
         result = sorted(self._inner, key=lambda x: -x.properties.cmp(properties))
+
+        # First one is the best candidate
         best = result[0]
-        print(best.properties.cmp(properties))
-        print(self._default)
-        if best.properties.cmp(properties) == 0 and self._default is not None:
-            return self._default
+        # If it the best candidate has a score of 0 we want to return the default expectation (if it exists).
+        if best.properties.cmp(properties) == 0:
+            if self._default is None:
+                raise ValueError(f"No matching expectation found for properties {properties}")
+            else:
+                return self._default
 
         return best
 

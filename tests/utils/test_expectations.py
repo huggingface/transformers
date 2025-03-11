@@ -27,3 +27,10 @@ class ExpectationsTest(unittest.TestCase):
         check(Properties("rocm", 9, 1), 4)
         check(Properties("rocm", None, 0), 4)
         check(Properties("cuda", 2), 2)
+
+        with self.assertRaises(ValueError):
+            expectations = Expectations()
+
+        expectations = Expectations(Expectation(Properties("cuda", 8, 0), 2))
+        with self.assertRaises(ValueError):
+            expectations.find_expectation(Properties("xpu"))
