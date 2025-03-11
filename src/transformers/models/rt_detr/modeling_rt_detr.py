@@ -49,6 +49,16 @@ from .configuration_rt_detr import RTDetrConfig
 
 logger = logging.get_logger(__name__)
 
+_CONFIG_FOR_DOC = "RTDetrConfig"
+_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
+_DETECTION_OUTPUT_FOR_DOC = """
+    Detected 'sofa' (0.97) at [0.14, 0.38, 640.13, 476.21]
+    Detected 'cat' (0.96) at [343.38, 24.28, 640.14, 371.5]
+    Detected 'cat' (0.96) at [13.23, 54.18, 318.98, 472.22]
+    Detected 'remote' (0.95) at [40.11, 73.44, 175.96, 118.48]
+    Detected 'remote' (0.92) at [333.73, 76.58, 369.97, 186.99]
+"""
+
 MultiScaleDeformableAttention = None
 
 
@@ -130,19 +140,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "RTDetrConfig"
-_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
-_DETECTION_OUTPUT_FOR_DOC = """
-    Detected 'sofa' (0.97) at [0.14, 0.38, 640.13, 476.21]
-    Detected 'cat' (0.96) at [343.38, 24.28, 640.14, 371.5]
-    Detected 'cat' (0.96) at [13.23, 54.18, 318.98, 472.22]
-    Detected 'remote' (0.95) at [40.11, 73.44, 175.96, 118.48]
-    Detected 'remote' (0.92) at [333.73, 76.58, 369.97, 186.99]
-"""
 
 
 @dataclass
@@ -600,8 +597,6 @@ class RTDetrConvNormLayer(nn.Module):
 class RTDetrEncoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.activation_dropout = config.activation_dropout
-        self.dropout = config.dropout
         self.normalize_before = config.normalize_before
 
         # self-attention
@@ -610,11 +605,14 @@ class RTDetrEncoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
+        self.self_attn_dropout = nn.Dropout(config.dropout)
 
         # feed-forward
-        self.activation_fn = ACT2FN[config.encoder_activation_function]
         self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
+        self.fc1_activation = ACT2FN[config.encoder_activation_function]
+        self.fc1_dropout = nn.Dropout(config.activation_dropout)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
+        self.fc2_dropout = nn.Dropout(config.dropout)
 
         # norms
         self.identity = nn.Identity()
@@ -658,17 +656,17 @@ class RTDetrEncoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = norm2(hidden_states)
 
         # feed-forward step
         residual = hidden_states
         hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc1_activation(hidden_states)
+        hidden_states = self.fc1_dropout(hidden_states)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.fc2_dropout(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = norm3(hidden_states)
 
@@ -1338,7 +1336,7 @@ class RTDetrHybridEncoder(nn.Module):
 
     @compile_compatible_method_lru_cache(maxsize=32)
     def build_2d_sincos_position_embedding(
-        self,width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+        self, width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
