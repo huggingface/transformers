@@ -19,7 +19,7 @@ import numpy as np
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,6 +31,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import Gemma3ImageProcessor
+
+    if is_torchvision_available():
+        from transformers import Gemma3ImageProcessorFast
 
 
 class Gemma3ImageProcessingTester:
@@ -106,6 +109,7 @@ class Gemma3ImageProcessingTester:
 @require_vision
 class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Gemma3ImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Gemma3ImageProcessorFast if is_torchvision_available() else None
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Gemma3
     def setUp(self):

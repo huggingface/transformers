@@ -23,16 +23,14 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    BatchFeature,
     DefaultFastImageProcessorInitKwargs,
     DefaultFastImageProcessorPreprocessKwargs,
+    get_size_dict,
     group_images_by_shape,
     reorder_images,
 )
-from .image_processing_utils import (
-    BatchFeature,
-    get_size_dict,
-)
-from .image_utils import (
+from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
@@ -42,8 +40,8 @@ from .image_utils import (
     make_nested_list_of_images,
     validate_kwargs,
 )
-from .processing_utils import Unpack
-from .utils import (
+from ...processing_utils import Unpack
+from ...utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
@@ -55,7 +53,7 @@ from .utils import (
 
 
 if is_vision_available():
-    from .image_utils import PILImageResampling
+    from ...image_utils import PILImageResampling
 
 if is_torch_available():
     import torch
