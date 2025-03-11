@@ -126,36 +126,6 @@ if is_torch_available():
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
-    # Dictionary of tolerances for eager <> sdpa tests. Key = (device, sdpa_kernels_enabled, dtype)
-    TORCH_SDPA_ATOLS = {
-        ("cpu", False, torch.float32): 1e-6,
-        ("cpu", False, torch.float16): 5e-3,
-        ("cpu", False, torch.bfloat16): 1e-2,
-        ("cpu", True, torch.float32): 1e-6,
-        ("cpu", True, torch.float16): 5e-3,
-        ("cpu", True, torch.bfloat16): 1e-2,
-        ("cuda", False, torch.float32): 1e-6,
-        ("cuda", False, torch.bfloat16): 1e-2,
-        ("cuda", False, torch.float16): 5e-3,
-        ("cuda", True, torch.float32): 1e-6,
-        ("cuda", True, torch.bfloat16): 1e-2,
-        ("cuda", True, torch.float16): 5e-3,
-    }
-    TORCH_SDPA_RTOLS = {
-        ("cpu", False, torch.float32): 1e-4,
-        ("cpu", False, torch.float16): 5e-3,
-        ("cpu", False, torch.bfloat16): 1e-2,
-        ("cpu", True, torch.float32): 1e-4,
-        ("cpu", True, torch.float16): 5e-3,
-        ("cpu", True, torch.bfloat16): 1e-2,
-        ("cuda", False, torch.float32): 1e-4,
-        ("cuda", False, torch.bfloat16): 1e-2,
-        ("cuda", False, torch.float16): 5e-3,
-        ("cuda", True, torch.float32): 1e-4,
-        ("cuda", True, torch.bfloat16): 3e-2,
-        ("cuda", True, torch.float16): 5e-3,
-    }
-
 if is_torch_fx_available():
     from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
 
@@ -3623,6 +3593,36 @@ class ModelTesterMixin:
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
 
+        # Dictionary of tolerances for eager <> sdpa tests. Key = (device, sdpa_kernels_enabled, dtype)
+        atols = {
+            ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-6,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-6,
+            ("cuda", True, torch.bfloat16): 1e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        rtols = {
+            ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-4,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-4,
+            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+
         set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_model_classes:
@@ -3814,14 +3814,14 @@ class ModelTesterMixin:
                         )
 
                     if torch_device in ["cpu", "cuda"]:
-                        atol = TORCH_SDPA_ATOLS[torch_device, enable_kernels, torch_dtype]
-                        rtol = TORCH_SDPA_RTOLS[torch_device, enable_kernels, torch_dtype]
+                        atol = atols[torch_device, enable_kernels, torch_dtype]
+                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
                     elif torch_device == "xpu":
                         # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                         # which is implemented on PyTorch level using aten operators and is
                         # device agnostic with respect to implementation of each aten operator.
-                        atol = TORCH_SDPA_ATOLS["cuda", False, torch_dtype]
-                        rtol = TORCH_SDPA_RTOLS["cuda", False, torch_dtype]
+                        atol = atols["cuda", False, torch_dtype]
+                        rtol = rtols["cuda", False, torch_dtype]
                     else:
                         atol = 1e-7
                         rtol = 1e-4
