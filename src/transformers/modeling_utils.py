@@ -5781,6 +5781,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     if not len(accelerator_device_map):
         return
 
+    tp_plan_regex = (
+        re.compile("|".join([re.escape(plan) for plan in model._tp_plan]))
+        if _torch_distributed_available and torch.distributed.is_initialized()
+        else None
+    )
+
     parameter_count = defaultdict(lambda: 0)
     allocation_factor = 1
     if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
@@ -5790,9 +5796,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         param = model.get_parameter_or_buffer(param_name)
         param_size = int(math.prod(param.shape) * allocation_factor)
 
-        if _torch_distributed_available and torch.distributed.is_initialized():
-            generic_name = re.sub(r"\d+", "*", param_name)
-            param_size //= torch.distributed.get_world_size() if not model._tp_plan.get(generic_name, False) else 1
+        if tp_plan_regex is not None:
+            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
+            param_size //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
 
         parameter_count[device] += param_size
 
