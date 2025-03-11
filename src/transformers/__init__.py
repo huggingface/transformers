@@ -5640,7 +5640,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
-    from .models.gemma3 import Gemma3Config, Gemma3TextConfig, Gemma3Processor
+    from .models.gemma3 import Gemma3Config, Gemma3Processor, Gemma3TextConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
