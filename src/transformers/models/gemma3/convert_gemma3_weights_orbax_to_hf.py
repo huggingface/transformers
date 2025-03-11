@@ -500,7 +500,6 @@ def main(*args):
 
     tokenizer = GemmaTokenizerFast(
         TOKENIZER_PATH.value,
-        add_bos_token=True,
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
