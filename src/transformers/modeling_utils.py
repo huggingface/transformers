@@ -4890,6 +4890,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ]
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, modified_keys)
 
+        if device_map is not None:
+            expanded_device_map = expand_device_map(device_map, expected_keys, start_prefix_to_remove)
+            if hf_quantizer is None:
+                caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
+
         error_msgs = []
         mismatched_keys = []
         # Iterate on all the shards to load the weights
@@ -5825,6 +5830,58 @@ def expand_device_map(device_map, param_names, start_prefix):
             {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
         )
     return new_device_map
+
+
+def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, dtype: torch.dtype) -> Dict:
+    """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
+    device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
+    the model, which is actually the loading speed botteneck.
+    Calling this function allows to cut the model loading time by a very large margin.
+    """
+    # Remove disk and cpu devices, and cast to proper torch.device
+    accelerator_device_map = {
+        param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
+    }
+    if not len(accelerator_device_map):
+        return
+    
+    import math
+    from collections import defaultdict
+
+    full_plan = model.config.base_model_tp_plan
+    full_plan.update(getattr(model, "_tp_plan", {}))
+
+    tp_plan_regex = (
+        re.compile("|".join([re.escape(plan) for plan in full_plan]))
+        if torch.distributed.is_initialized()
+        else None
+    )
+
+
+    parameter_count = defaultdict(lambda: 0)
+    allocation_factor = 1
+    if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
+        allocation_factor = 2
+
+    for param_name, device in accelerator_device_map.items():
+        try:
+            param = model.get_parameter(param_name)
+        except AttributeError:
+            param = model.get_buffer(param_name)
+
+        param_size = int(math.prod(param.shape) * allocation_factor)
+
+        if tp_plan_regex is not None:
+            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
+            param_size //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
+
+        parameter_count[device] += param_size
+
+    dtype = dtype if dtype is not None else torch.float32
+
+    # This will kick off the caching allocator to avoid having to Malloc afterwards
+    for device, param_count in parameter_count.items():
+        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
