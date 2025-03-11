@@ -1336,9 +1336,9 @@ class RTDetrHybridEncoder(nn.Module):
             self.downsample_convs.append(downsample_conv)
             self.pan_blocks.append(pan_block)
 
-    @staticmethod
+    @compile_compatible_method_lru_cache(maxsize=32)
     def build_2d_sincos_position_embedding(
-        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+        self,width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
@@ -1391,17 +1391,14 @@ class RTDetrHybridEncoder(nn.Module):
             hidden_state = feature_map.flatten(2).permute(0, 2, 1)
 
             # build position embeddings
-            if self.training or self.eval_size is None:
-                position_embeddings = self.build_2d_sincos_position_embedding(
-                    width,
-                    height,
-                    self.encoder_hidden_dim,
-                    self.positional_encoding_temperature,
-                    device=hidden_state.device,
-                    dtype=hidden_state.dtype,
-                )
-            else:
-                position_embeddings = None
+            position_embeddings = self.build_2d_sincos_position_embedding(
+                width,
+                height,
+                self.encoder_hidden_dim,
+                self.positional_encoding_temperature,
+                device=hidden_state.device,
+                dtype=hidden_state.dtype,
+            )
 
             # 2. Apply transformer encoder layer
             layer_outputs = self.encoder[i](
