@@ -37,7 +37,8 @@ from .configuration_gemma3 import (
 # ==== Internal Constants and Classes ====
 
 
-_CHAT_TEMPLATE = """{%- if messages[0]['role'] == 'system' -%}
+_CHAT_TEMPLATE = """{{ bos_token }}
+{%- if messages[0]['role'] == 'system' -%}
     {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
     {%- set loop_messages = messages[1:] -%}
 {%- else -%}
