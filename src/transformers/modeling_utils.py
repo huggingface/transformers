@@ -793,7 +793,7 @@ def _load_state_dict_into_meta_model(
         to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
             model,
             param_name=param_name,
-            param=empty_param,
+            empty_param=empty_param,
             keep_in_fp32_modules=keep_in_fp32_modules,
         )
 
