@@ -48,6 +48,7 @@ from ..utils import (
     is_hqq_available,
     is_optimum_quanto_available,
     is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
     logging,
 )
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
