@@ -328,7 +328,10 @@ class WhisperGenerationMixin(GenerationMixin):
             text_indices, time_indices = _dynamic_time_warping(-matrix.cpu().double().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
-            timestamps[batch_idx, 1:] = torch.tensor(jump_times)
+
+            # each token has a corresponding timestamp, expect the eos token for which we don't retrieve cross attentions
+            # for the eos token, we simply duplicate the timestamp of the last non-eos token
+            timestamps[batch_idx] = torch.cat([torch.tensor(jump_times), torch.tensor([jump_times[-1]])])
 
         return timestamps
 
