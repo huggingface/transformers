@@ -1383,7 +1383,7 @@ class RTDetrDecoder(nn.Module):
         encoder_attention_mask: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = False,
+        return_dict: bool = True,
     ):
         r"""
         Args:
@@ -1401,13 +1401,13 @@ class RTDetrDecoder(nn.Module):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
-            output_attentions (`bool`, *optional*):
+            output_attentions (`bool`, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
+            output_hidden_states (`bool`, defaults to `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (`bool`, *optional*):
+            return_dict (`bool`, defaults to `True`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
 
@@ -1471,21 +1471,7 @@ class RTDetrDecoder(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    intermediate,
-                    intermediate_logits,
-                    intermediate_reference_points,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return RTDetrDecoderOutput(
+        outputs = RTDetrDecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
@@ -1494,6 +1480,10 @@ class RTDetrDecoder(nn.Module):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+
+        if not return_dict:
+            outputs = outputs.to_tuple()
+        return outputs
 
 
 class RTDetrPreTrainedModel(PreTrainedModel):
@@ -1878,20 +1868,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
             spatial_shapes_list=spatial_shapes_list,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        if not return_dict:
-            enc_outputs = tuple(
-                value for value in [topk_logits, topk_bboxes, class_logits, bboxes_logits] if value is not None
-            )
-            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
-            encoder_outputs = tuple([value for value in encoder_outputs if value is not None])
-            tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
-
-            return tuple_outputs
-
-        return RTDetrModelOutput(
+        outputs = RTDetrModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
@@ -1909,6 +1889,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
             enc_outputs_coord_logits=bboxes_logits,
             denoising_meta_values=denoising_meta_values,
         )
+
+        if not return_dict:
+            outputs = outputs.to_tuple()
+        return outputs
 
 
 @add_start_docstrings(
@@ -1987,67 +1971,47 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        denoising_meta_values = (
-            outputs.denoising_meta_values if return_dict else outputs[-1] if self.training else None
-        )
-
-        outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
-        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+        denoising_meta_values = outputs.denoising_meta_values if self.training else None
+        outputs_class = outputs.intermediate_logits
+        outputs_coord = outputs.intermediate_reference_points
 
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
 
+        # Conpute loss if labels are provided
         loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = None, None, None, None, None
         if labels is not None:
-            enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
-            enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
+            enc_topk_logits = outputs.enc_topk_logits
+            enc_topk_bboxes = outputs.enc_topk_bboxes
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits,
-                labels,
-                self.device,
-                pred_boxes,
-                self.config,
-                outputs_class,
-                outputs_coord,
+                logits=logits,
+                labels=labels,
+                pred_boxes=pred_boxes,
+                config=self.config,
+                outputs_class=outputs_class,
+                outputs_coord=outputs_coord,
                 enc_topk_logits=enc_topk_logits,
                 enc_topk_bboxes=enc_topk_bboxes,
                 denoising_meta_values=denoising_meta_values,
+                device=self.device,
                 **loss_kwargs,
             )
 
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + (auxiliary_outputs,) + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
-
-        return RTDetrObjectDetectionOutput(
+        detection_outputs = RTDetrObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=outputs.last_hidden_state,
-            intermediate_hidden_states=outputs.intermediate_hidden_states,
-            intermediate_logits=outputs.intermediate_logits,
-            intermediate_reference_points=outputs.intermediate_reference_points,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-            init_reference_points=outputs.init_reference_points,
-            enc_topk_logits=outputs.enc_topk_logits,
-            enc_topk_bboxes=outputs.enc_topk_bboxes,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            denoising_meta_values=outputs.denoising_meta_values,
+            **outputs,
         )
+
+        if not return_dict:
+            detection_outputs = detection_outputs.to_tuple()
+        return detection_outputs
 
 
 __all__ = [
