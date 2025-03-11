@@ -27,7 +27,7 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
-from ...activations import ACT2CLS, ACT2FN
+from ...activations import ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -786,7 +786,7 @@ class RTDetrConvNormLayer(nn.Module):
             bias=False,
         )
         self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
     def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
         """Feature map of shape (batch_size, embed_dim, height, width)"""
@@ -808,7 +808,7 @@ class RTDetrRepVggBlock(nn.Module):
         hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
         self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1)
         self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, kernel_size=1, stride=1, padding=0)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
     def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
         """Feature map of shape (batch_size, embed_dim, height, width)"""
