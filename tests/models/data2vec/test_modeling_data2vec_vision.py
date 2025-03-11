@@ -14,18 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Data2VecVision model."""
 
-import inspect
-import tempfile
 import unittest
-
-import numpy as np
-from parameterized import parameterized
 
 from transformers import Data2VecVisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_multi_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -33,13 +27,11 @@ from transformers.testing_utils import (
 from transformers.utils import (
     cached_property,
     is_torch_available,
-    is_torch_bf16_available_on_device,
-    is_torch_fp16_available_on_device,
     is_vision_available,
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, sdpa_kernel
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 

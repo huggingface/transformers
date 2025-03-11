@@ -188,11 +188,30 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
+    @parameterized.expand(
+        [
+            (
+                # test name for the test runner
+                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
+                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+                # parameterization
+                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+            )
+            for dtype in ("fp16", "fp32", "bf16")
+            for padding_side in ("left", "right")
+            for use_attention_mask in (True, False)
+            for output_attentions in (True, False)
+            for enable_kernels in (True, False)
+        ]
+    )
     @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Moshi has no strict equivalence between two modes, skipping this test.")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        if torch_dtype == "fp32" and not use_attention_mask and not output_attentions:
+            self.skipTest("Test is failing, fix me :) ")
+        parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
+        parent_parameterized_test(self)
 
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):
@@ -620,11 +639,26 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+    @parameterized.expand(
+        [
+            (
+                # test name for the test runner
+                f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
+                f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+                # parameterization
+                *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+            )
+            for dtype in ("fp16", "fp32", "bf16")
+            for padding_side in ("left", "right")
+            for use_attention_mask in (True, False)
+            for output_attentions in (True, False)
+            for enable_kernels in (True, False)
+        ]
+    )
+    @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @unittest.skip(reason="The Moshi model does not have support dynamic compile yet")

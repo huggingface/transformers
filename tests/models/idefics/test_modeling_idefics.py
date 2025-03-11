@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,

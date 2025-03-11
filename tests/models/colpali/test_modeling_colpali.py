@@ -20,7 +20,6 @@ from typing import ClassVar
 
 import torch
 from datasets import load_dataset
-from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -32,7 +31,6 @@ from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, Co
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import (
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,

@@ -3773,9 +3773,13 @@ class ModelTesterMixin:
                             outputs_eager = model_eager(**prepared_inputs)
                             outputs_sdpa = model_sdpa(**prepared_inputs)
 
+                    # TODO: rename logits -> hidden_states
                     if hasattr(outputs_eager, "vision_hidden_states"):
                         logits_eager = outputs_eager.vision_hidden_states[-1]
                         logits_sdpa = outputs_sdpa.vision_hidden_states[-1]
+                    elif hasattr(outputs_eager, "audio_values"):
+                        logits_eager = outputs_eager.audio_values
+                        logits_sdpa = outputs_sdpa.audio_values
                     else:
                         logits_eager = (
                             outputs_eager.hidden_states[-1]
