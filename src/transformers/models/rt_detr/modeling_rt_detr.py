@@ -730,18 +730,20 @@ class RTDetrCSPRepLayer(nn.Module):
         else:
             self.conv3 = nn.Identity()
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        """Feature map of shape (batch_size, embed_dim, height, width)"""
+
         # branch 1
-        hidden_state_1 = self.conv1(hidden_state)
-        hidden_state_1 = self.bottlenecks(hidden_state_1)
+        feature_map_1 = self.conv1(feature_map)
+        feature_map_1 = self.bottlenecks(feature_map_1)
 
         # branch 2
-        hidden_state_2 = self.conv2(hidden_state)
+        feature_map_2 = self.conv2(feature_map)
 
         # fuse step
-        hidden_state = self.conv3(hidden_state_1 + hidden_state_2)
+        feature_map = self.conv3(feature_map_1 + feature_map_2)
 
-        return hidden_state
+        return feature_map
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
