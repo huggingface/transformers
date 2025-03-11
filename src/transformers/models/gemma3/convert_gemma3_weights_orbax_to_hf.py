@@ -509,8 +509,9 @@ def main(*args):
     )
 
     if INCLUDE_CHAT_TEMPLATE.value:
-        # Include chat temaplate for CausalLM models
+        # Include chat template for CausalLM models
         tokenizer.chat_template = _CHAT_TEMPLATE
+        config.eos_token_id = [1, 106]
 
     if _TEXT_ONLY.value:
         config.vision_config = None
