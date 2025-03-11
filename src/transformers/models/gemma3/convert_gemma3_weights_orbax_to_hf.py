@@ -37,8 +37,7 @@ from .configuration_gemma3 import (
 # ==== Internal Constants and Classes ====
 
 
-_CHAT_TEMPLATE = """{{ bos_token }}
-{%- if messages[0]['role'] == 'system' -%}
+_CHAT_TEMPLATE = """{%- if messages[0]['role'] == 'system' -%}
     {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
     {%- set loop_messages = messages[1:] -%}
 {%- else -%}
@@ -500,6 +499,7 @@ def main(*args):
 
     tokenizer = GemmaTokenizerFast(
         TOKENIZER_PATH.value,
+        add_bos_token=True,
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
