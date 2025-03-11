@@ -402,7 +402,10 @@ class GenerationMixin:
                 inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
             elif (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or (
+                    (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+                    or cache_position[-1] >= input_ids.shape[1]
+                )  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -1571,7 +1574,8 @@ class GenerationMixin:
         # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
         # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled -- an
         # exception will be raised in `_validate_model_kwargs`
-        if not is_torchdynamo_compiling():
+        # This can still be exported if strict=False (torch.export.export(..., strict=False)).
+        if not is_torchdynamo_compiling() or is_torchdynamo_exporting():
             generation_config = copy.deepcopy(generation_config)
             model_kwargs = generation_config.update(**kwargs)
             # If `generation_config` is provided, let's fallback ALL special tokens to the default values for the model
@@ -1612,7 +1616,7 @@ class GenerationMixin:
 
             # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
             # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
-            if not is_torchdynamo_compiling():
+            if not is_torchdynamo_compiling() or is_torchdynamo_exporting():
                 cache_position = cache_position[past_length:]
 
         model_kwargs["cache_position"] = cache_position
