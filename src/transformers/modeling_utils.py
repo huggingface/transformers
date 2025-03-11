@@ -709,68 +709,31 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def find_submodule_and_param_name(model, long_key, start_prefix=""):
-    """
-    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
-    from the start of the key
-    """
-
-    if len(start_prefix) > 0 and long_key.startswith(start_prefix):
-        long_key = ".".join(long_key.split(".")[1:])
-
-    split_key = long_key.split(".")
-    submodule = model
-    while len(split_key) > 1:
-        if hasattr(submodule, split_key[0]):
-            submodule = getattr(submodule, split_key[0])
-            del split_key[0]
-        else:
-            submodule = None
-            break
-    if submodule == model:
-        submodule = None
-    return submodule, split_key[0]
-
-
 def fix_tensor_type_and_device(
-    model, param_name, param, dtype=None, keep_in_fp32_modules=None
-) -> Union[str, torch.dtype]:
-    # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-    # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-    # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+    model: "PreTrainedModel", param_name: str, empty_param, keep_in_fp32_modules=None
+) -> Union[bool, Optional[torch.dtype]]:
 
-    old_param = model
-    if "." in param_name:
-        pre, _ = param_name.rsplit(".", 1)
-
-        old_param = model.get_submodule(pre)
-        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-            old_param = None
-
-        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
-        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-        # in int/uint/bool and not cast them.
-        param_casting_dtype = None
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
-        if param.dtype.is_floating_point and not is_param_float8_e4m3fn:
-            # First fp32 if part of the exception list
-            if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
-                param_casting_dtype = torch.float32
-            # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
-            elif old_param is not None:
-                param_casting_dtype = old_param.dtype
-            # Finally default dtype provided (base dtype for models with subconfigs/submodels)
-            elif dtype is not None:
-                param_casting_dtype = dtype
-        return old_param is not None and old_param.is_contiguous(), param_casting_dtype
-    else:
-        return False, None
+    old_param = model.get_parameter_or_buffer(param_name)
+    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+    # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+    # in int/uint/bool and not cast them.
+    param_casting_dtype = None
+    is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+        # First fp32 if part of the exception list
+        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
+            param_casting_dtype = torch.float32
+        # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
+        else:
+            param_casting_dtype = old_param.dtype
+    return old_param is not None and old_param.is_contiguous(), param_casting_dtype
 
 
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
-    state_dict: Dict,
+    meta_state_dict: Dict,
+    shard_file: str,
     expected_keys: List[str],
     reverse_renaming_mapping: Dict[str, str],
     device_map: Optional[Dict] = None,
@@ -778,19 +741,17 @@ def _load_state_dict_into_meta_model(
     disk_offload_index: Optional[Dict] = None,
     cpu_offload_folder: Optional[str] = None,
     cpu_offload_index: Optional[Dict] = None,
-    dtype: Optional[torch.dtype] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
     is_safetensors: bool = False,
     keep_in_fp32_modules: Optional[List[str]] = None,
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
-    shard_file=None,
     weights_only=True,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
-    """
-    This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
-    params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
-    params back to the normal device, but only for `loaded_state_dict_keys`.
+    """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
+    device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
+    from `shard_file`, which is the actual state dict file on disk.
+    This function takes care of correctly casting dtypes, devices, and sharding tensors in case of tensor parallelism.
     """
     tensor_device = "cpu"
     if device_map is not None and device_map.get("", None) is not None:
@@ -798,11 +759,13 @@ def _load_state_dict_into_meta_model(
     if device_map is not None:
         device_map_regex = "|".join(sorted(device_map.keys(), reverse=True))
 
+    is_quantized = hf_quantizer is not None
+
     file_pointer = None
-    bin_state_dict = None
-    if shard_file.endswith(".safetensors"):
+    full_state_dict = None
+    if shard_file.endswith(".safetensors") and not is_quantized:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
-    elif shard_file.endswith(".bin"):
+    else:
         map_location = "cpu"
         if (
             device_map is not None
@@ -811,40 +774,27 @@ def _load_state_dict_into_meta_model(
             and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
         ):
             map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-        bin_state_dict = load_state_dict(shard_file, map_location=map_location, weights_only=weights_only)
+        full_state_dict = load_state_dict(shard_file, map_location=map_location, weights_only=weights_only)
 
-    is_quantized = hf_quantizer is not None
-
-    # get full state dict
-    if is_quantized:
-        if shard_file.endswith(".safetensors"):
-            full_state_dict = load_state_dict(shard_file, map_location="cpu")
-        elif shard_file.endswith(".bin"):
-            full_state_dict = bin_state_dict
-
-    for fixed_param_name, empty_param in state_dict.items():
-        if fixed_param_name not in expected_keys:
+    for param_name, empty_param in meta_state_dict.items():
+        if param_name not in expected_keys:
             continue
 
         # This is the name of the parameter as it appears on disk file
-        serialized_param_name = reverse_renaming_mapping[fixed_param_name]
-
-        if fixed_param_name not in expected_keys:
-            continue
+        serialized_param_name = reverse_renaming_mapping[param_name]
 
         # we need to use serialized_param_name as file pointer is untouched
-        if shard_file.endswith(".safetensors"):
+        if full_state_dict is None:
             param = file_pointer.get_slice(serialized_param_name)
         elif shard_file.endswith(".gguf"):
             param = empty_param  # For gguf the dict is actually not empty!
         else:
-            param = bin_state_dict[serialized_param_name]
+            param = full_state_dict[serialized_param_name]
 
         to_contiguous, param_casting_dtype = fix_tensor_type_and_device(
             model,
-            param_name=fixed_param_name,
+            param_name=param_name,
             param=empty_param,
-            dtype=dtype,
             keep_in_fp32_modules=keep_in_fp32_modules,
         )
 
@@ -853,7 +803,7 @@ def _load_state_dict_into_meta_model(
                 model,
                 param,
                 empty_param,
-                fixed_param_name,
+                param_name,
                 param_casting_dtype,
                 to_contiguous,
                 tensor_device,  # the rank
@@ -869,19 +819,19 @@ def _load_state_dict_into_meta_model(
             if device_map is None:
                 param_device = "cpu"
             else:
-                module_layer = re.search(device_map_regex, fixed_param_name)
+                module_layer = re.search(device_map_regex, param_name)
                 if not module_layer:
-                    raise ValueError(f"{fixed_param_name} doesn't have any device set.")
+                    raise ValueError(f"{param_name} doesn't have any device set.")
                 else:
                     param_device = device_map[module_layer.group()]
 
             if param_device == "disk":
                 if not is_safetensors:
                     disk_offload_index = offload_weight(
-                        param, fixed_param_name, disk_offload_folder, disk_offload_index
+                        param, param_name, disk_offload_folder, disk_offload_index
                     )
             elif param_device == "cpu" and cpu_offload_index is not None:
-                cpu_offload_index = offload_weight(param, fixed_param_name, cpu_offload_folder, cpu_offload_index)
+                cpu_offload_index = offload_weight(param, param_name, cpu_offload_folder, cpu_offload_index)
             elif (
                 not is_quantized
                 or (not hf_quantizer.requires_parameters_quantization)
@@ -889,7 +839,7 @@ def _load_state_dict_into_meta_model(
                     not hf_quantizer.check_quantized_param(
                         model,
                         param,
-                        fixed_param_name,
+                        param_name,
                         full_state_dict,
                         param_device=param_device,
                         device_map=device_map,
@@ -898,7 +848,7 @@ def _load_state_dict_into_meta_model(
             ):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                module, param_type = get_module_from_name(model, fixed_param_name)
+                module, param_type = get_module_from_name(model, param_name)
                 module.load_state_dict(
                     {param_type: param.to(param_device)},
                     strict=False,
@@ -906,13 +856,13 @@ def _load_state_dict_into_meta_model(
                 )
             else:
                 hf_quantizer.create_quantized_param(
-                    model, param, fixed_param_name, param_device, full_state_dict, unexpected_keys
+                    model, param, param_name, param_device, full_state_dict, unexpected_keys
                 )
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    module, param_type = get_module_from_name(model, fixed_param_name)
+                    module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
@@ -4893,10 +4843,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
             mismatched_keys += _find_mismatched_keys(
-                model_to_load,
-                state_dict,
-                ignore_mismatched_sizes,
-                model.base_model_prefix if loading_base_model_from_task_state_dict else "",
+                model_to_load, state_dict, ignore_mismatched_sizes, prefix if loading_base_model_from_task_state_dict else "",
             )
 
             if low_cpu_mem_usage and shard_file is not None:
@@ -4905,6 +4852,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                         model_to_load,
                         state_dict,
+                        shard_file,
                         expected_keys,
                         reverse_key_renaming_mapping,
                         device_map=device_map,
@@ -4912,13 +4860,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         disk_offload_index=disk_offload_index,
                         cpu_offload_folder=cpu_offload_folder,
                         cpu_offload_index=cpu_offload_index,
-                        dtype=dtype,
                         hf_quantizer=hf_quantizer,
                         is_safetensors=is_offloaded_safetensors,
                         keep_in_fp32_modules=keep_in_fp32_modules,
                         unexpected_keys=unexpected_keys,
                         device_mesh=device_mesh,
-                        shard_file=shard_file,
                         weights_only=weights_only,
                     )
             else:
@@ -5332,6 +5278,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self.apply(self._initialize_weights)
         else:
             self.apply(self._initialize_weights)
+
+    def get_parameter_or_buffer(self, target: str):
+        """
+        Return the parameter or buffer given by `target` if it exists, otherwise throw an error. This combines
+        `get_parameter()` and `get_buffer()` in a single handy function. Note that it only work if `target` is a
+        leaf of the model.
+        """
+        try:
+            return self.get_parameter(target)
+        except AttributeError:
+            pass
+        try:
+            return self.get_buffer(target)
+        except AttributeError:
+            pass
+        raise AttributeError(f"`{target}` is neither a parameter nor a buffer.")
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
@@ -5821,15 +5783,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         allocation_factor = 2
 
     for param_name, device in accelerator_device_map.items():
-        try:
-            param = getattr(model, param_name)
-        except AttributeError:
-            if "." in param_name:
-                param_name, param_type = param_name.rsplit(".", 1)
-                param = getattr(model.get_submodule(param_name), param_type)
-            else:
-                param = model.get_buffer(param_name)
-
+        param = model.get_parameter_or_buffer(param_name)
         param_size = int(math.prod(param.shape) * allocation_factor)
 
         if _torch_distributed_available and torch.distributed.is_initialized():
