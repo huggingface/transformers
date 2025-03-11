@@ -3596,6 +3596,11 @@ class ModelTesterMixin:
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
+        # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
+        # models have a custom mixin, which we detect to skip this test.
+        if not any(".ModelTesterMixin" in str(base) for base in self.__class__.__bases__):
+            self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
