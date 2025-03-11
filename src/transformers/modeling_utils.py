@@ -712,7 +712,6 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
 def fix_tensor_type_and_device(
     model: "PreTrainedModel", param_name: str, empty_param, keep_in_fp32_modules=None
 ) -> Union[bool, Optional[torch.dtype]]:
-
     old_param = model.get_parameter_or_buffer(param_name)
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
     # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
@@ -827,9 +826,7 @@ def _load_state_dict_into_meta_model(
 
             if param_device == "disk":
                 if not is_safetensors:
-                    disk_offload_index = offload_weight(
-                        param, param_name, disk_offload_folder, disk_offload_index
-                    )
+                    disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
             elif param_device == "cpu" and cpu_offload_index is not None:
                 cpu_offload_index = offload_weight(param, param_name, cpu_offload_folder, cpu_offload_index)
             elif (
@@ -4843,7 +4840,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
             mismatched_keys += _find_mismatched_keys(
-                model_to_load, state_dict, ignore_mismatched_sizes, prefix if loading_base_model_from_task_state_dict else "",
+                model_to_load,
+                state_dict,
+                ignore_mismatched_sizes,
+                prefix if loading_base_model_from_task_state_dict else "",
             )
 
             if low_cpu_mem_usage and shard_file is not None:
