@@ -3574,7 +3574,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        _ = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -3665,11 +3665,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
-        if trust_remote_code is True:
-            logger.warning(
-                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
-                " ignored."
-            )
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
