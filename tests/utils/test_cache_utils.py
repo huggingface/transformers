@@ -181,8 +181,8 @@ class CacheTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         prompt = "What is the best way to debug python script?"
         inputs = tokenizer(prompt, return_tensors="pt")
-        input_ids = inputs.input_ids.cuda()
-        attention_mask = inputs.attention_mask.cuda()
+        attention_mask = inputs.attention_mask
+        input_ids = inputs.input_ids
 
         past_key_values = DynamicCache()
         ep = torch.export.export(
