@@ -521,8 +521,6 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
         if layer_idx >= config.first_k_dense_replace:
             self.mlp = DeepseekV2MoE(config)
-        else:
-            self.mlp = DeepseekV2MLP(config)
 
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -555,6 +553,7 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states

@@ -507,8 +507,6 @@ class DeepseekV2DecoderLayer(nn.Module):
 
         if layer_idx >= config.first_k_dense_replace:
             self.mlp = DeepseekV2MoE(config)
-        else:
-            self.mlp = DeepseekV2MLP(config)
 
     def forward(
         self,
@@ -538,6 +536,7 @@ class DeepseekV2DecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
