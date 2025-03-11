@@ -146,7 +146,7 @@ print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 
 ## Schema
 
-[`~PreTrainedTokenizerBase.apply_chat_template`] converts functions into a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) which is passed to the chat template. A LLM never sees the code inside the function. In other words, a LLM doesn't care how the model works technically, it only cares about function **definition** and **arguments**.
+[`~PreTrainedTokenizerBase.apply_chat_template`] converts functions into a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) which is passed to the chat template. A LLM never sees the code inside the function. In other words, a LLM doesn't care how the function works technically, it only cares about function **definition** and **arguments**.
 
 The JSON schema is automatically generated behind the scenes as long as your function follows the [rules](#tools) listed earlier above. But you can use [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) to manually convert a schema for more visibility or debugging.
 
