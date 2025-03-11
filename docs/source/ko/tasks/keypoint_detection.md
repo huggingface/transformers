@@ -33,7 +33,7 @@ from transformers import AutoImageProcessor, SuperPointForKeypointDetection
 processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
 model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
 ```
-아래의 이미지에서 모델을 테스트 해보겠습니다.
+아래의 이미지로 모델을 테스트 해보겠습니다.
 
 <div style="display: flex; align-items: center;">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
@@ -60,7 +60,7 @@ image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
 images = [image_1, image_2]
 ```
 
-이제 우리는 입력을 처리하고 추론을 할 수 있습니다.
+이제 입력을 처리하고 추론을 할 수 있습니다.
 
 
 ```python
@@ -93,7 +93,7 @@ image_sizes = [(image.size[1], image.size[0]) for image in images]
 outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 ```
 
-위 코드를 통해 결과값은 딕셔너리를 갖는 리스트가 되고, 각 딕셔너리 내부는 후처리된 키포인트, 점수 및 설명자로 이루어져있습니다.
+위 코드를 통해 결과값은 딕셔너리를 갖는 리스트가 되고, 각 딕셔너리들은 후처리된 키포인트, 점수 및 설명자로 이루어져있습니다.
 
 
 ```python
@@ -115,7 +115,7 @@ outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
           [-0.0525,  0.0726,  0.0270,  ...,  0.0389, -0.0189, -0.0211]}]
 ```
 
-이제 위 딕셔너리를사용하여 키 포인트를 그릴 수 있습니다.
+이제 위 딕셔너리를 사용하여 키 포인트를 그릴 수 있습니다.
 
 ```python
 import matplotlib.pyplot as plt
