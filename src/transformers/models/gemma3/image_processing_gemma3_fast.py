@@ -343,16 +343,11 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         processed_images = []
         batch_num_crops = []
-        # Determine the size tuple
-        if size and size.height and size.width:
-            size = (size.height, size.width)
-        else:
-            size = (size.shortest_edge, size.shortest_edge)
 
         for image_list in images:
             if do_pan_and_scan:
                 images_list, num_crops = self._process_images_for_pan_and_scan(
-                    images=images,
+                    images=image_list,
                     do_pan_and_scan=do_pan_and_scan,
                     pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
                     pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
@@ -380,8 +375,8 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
             processed_image_patches = (
                 torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
             )
-            processed_images.append(processed_image_patches)
-            batch_num_crops.append(num_crops)
+            processed_images.extend(processed_image_patches)
+            batch_num_crops.extend(num_crops)
 
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
