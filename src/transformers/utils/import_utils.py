@@ -792,21 +792,49 @@ def is_torch_hpu_available():
     ):
         return False
 
-    import habana_frameworks.torch  # noqa: F401
+    torch_hpu_min_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+        return False
+
     import torch
 
-    return hasattr(torch, "hpu") and torch.hpu.is_available()
+    if not hasattr(torch, "hpu") or not torch.hpu.is_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
+    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
+    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
+    # dl1.24xlarge Gaudi1 instances on AWS for testing.
+    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
+    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+        original_masked_fill_ = torch.Tensor.masked_fill_
+
+        def patched_masked_fill_(self, mask, value):
+            if self.dtype == torch.int64:
+                logger.warning(
+                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
+                    "This operation will be performed out-of-place using tensor[mask] = value."
+                )
+                self[mask] = value
+            else:
+                original_masked_fill_(self, mask, value)
+
+        torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    return True
 
 
 @lru_cache
 def is_habana_gaudi1():
-    if is_torch_hpu_available():
-        import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+    if not is_torch_hpu_available():
+        return False
 
-        if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
-            return True
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
 
-    return False
+    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
+    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
 
 
 def is_torchdynamo_available():

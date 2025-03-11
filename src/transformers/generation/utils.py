@@ -45,7 +45,6 @@ from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     is_accelerate_available,
-    is_habana_gaudi1,
     is_hqq_available,
     is_optimum_quanto_available,
     is_torchdynamo_compiling,
@@ -436,12 +435,6 @@ class GenerationMixin:
             and position_ids_key in set(inspect.signature(self.forward).parameters.keys())
         ):
             position_ids = attention_mask.long().cumsum(-1) - 1
-
-            if is_habana_gaudi1():
-                # On Gaudi1, masked_fill_ is not supported for int64 tensors
-                # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
-                position_ids = position_ids.to(torch.int32)
-
             position_ids.masked_fill_(attention_mask == 0, 1)
             kwargs[position_ids_key] = position_ids  # placed in kwargs for further processing (see below)
 
