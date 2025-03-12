@@ -283,6 +283,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextConfig"),
         ("speech_to_text_2", "Speech2Text2Config"),
         ("speecht5", "SpeechT5Config"),
+        ("shieldgemma2", "ShieldGemma2Config"),
         ("splinter", "SplinterConfig"),
         ("squeezebert", "SqueezeBertConfig"),
         ("stablelm", "StableLmConfig"),

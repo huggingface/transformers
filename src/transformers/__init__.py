@@ -8351,11 +8351,7 @@ if TYPE_CHECKING:
             SEWDPreTrainedModel,
         )
         from .models.shieldgemma2 import (
-            Shieldgemma2ForCausalLM,
-            Shieldgemma2ForConditionalGeneration,
-            Shieldgemma2Model,
-            Shieldgemma2PreTrainedModel,
-            ShieldGemma2Processor,
+            ShieldGemma2ForImageClassification,
         )
         from .models.siglip import (
             SiglipForImageClassification,

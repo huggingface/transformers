@@ -27,11 +27,11 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModelForImageTextToText
-from ..gemma3 import Gemma3Config
+from .configuration_shieldgemma2 import ShieldGemma2Config
 
 
 _CHECKPOINT_FOR_DOC = "google/shieldgemma-2-4b-it"
-_CONFIG_FOR_DOC = "Gemma3Config"
+_CONFIG_FOR_DOC = "ShieldGemma2Config"
 
 logger = logging.get_logger(__name__)
 
@@ -120,9 +120,9 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 
 class ShieldGemma2ForImageClassification(PreTrainedModel):
 
-    config_class = Gemma3Config
+    config_class = ShieldGemma2Config
 
-    def __init__(self, config: Gemma3Config):
+    def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
         self.yes_token_index = getattr(config, "yes_token_index", 10_784)
         self.no_token_index = getattr(config, "no_token_index", 3771)
