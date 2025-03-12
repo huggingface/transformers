@@ -511,7 +511,16 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
 
 # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrConvNormLayer with RTDetr->OmDetTurbo
 class OmDetTurboConvNormLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
+    def __init__(
+        self,
+        config: OmDetTurboConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        padding: Optional[int] = None,
+        activation: Optional[str] = None,
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
@@ -522,13 +531,14 @@ class OmDetTurboConvNormLayer(nn.Module):
             bias=False,
         )
         self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        """Feature map of shape (batch_size, embed_dim, height, width)"""
+        feature_map = self.conv(feature_map)
+        feature_map = self.norm(feature_map)
+        feature_map = self.activation(feature_map)
+        return feature_map
 
 
 # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrRepVggBlock with RTDetr->OmDetTurbo, activation_function->csp_activation
@@ -542,13 +552,18 @@ class OmDetTurboRepVggBlock(nn.Module):
 
         activation = config.csp_activation
         hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
-        self.conv1 = OmDetTurboConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
-        self.conv2 = OmDetTurboConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
+        self.conv1 = OmDetTurboConvNormLayer(
+            config, hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1
+        )
+        self.conv2 = OmDetTurboConvNormLayer(
+            config, hidden_channels, hidden_channels, kernel_size=1, stride=1, padding=0
+        )
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, x):
-        y = self.conv1(x) + self.conv2(x)
-        return self.activation(y)
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        """Feature map of shape (batch_size, embed_dim, height, width)"""
+        feature_map = self.conv1(feature_map) + self.conv2(feature_map)
+        return self.activation(feature_map)
 
 
 # Copied from transformers.models.rt_detr.modeling_rt_detr.RTDetrCSPRepLayer with RTDetr->OmDetTurbo, activation_function->csp_activation
@@ -562,23 +577,36 @@ class OmDetTurboCSPRepLayer(nn.Module):
 
         in_channels = config.encoder_hidden_dim * 2
         out_channels = config.encoder_hidden_dim
-        num_blocks = 3
-        activation = config.csp_activation
-
         hidden_channels = int(out_channels * config.hidden_expansion)
-        self.conv1 = OmDetTurboConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.conv2 = OmDetTurboConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.Sequential(*[OmDetTurboRepVggBlock(config) for _ in range(num_blocks)])
+        params = {"kernel_size": 1, "stride": 1, "activation": config.csp_activation}
+
+        # branch 1
+        self.conv1 = OmDetTurboConvNormLayer(config, in_channels, hidden_channels, **params)
+        self.bottlenecks = nn.Sequential(*[OmDetTurboRepVggBlock(config) for _ in range(3)])
+
+        # branch 2
+        self.conv2 = OmDetTurboConvNormLayer(config, in_channels, hidden_channels, **params)
+
+        # fuse step
         if hidden_channels != out_channels:
-            self.conv3 = OmDetTurboConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+            self.conv3 = OmDetTurboConvNormLayer(config, hidden_channels, out_channels, **params)
         else:
             self.conv3 = nn.Identity()
 
-    def forward(self, hidden_state):
-        hidden_state_1 = self.conv1(hidden_state)
-        hidden_state_1 = self.bottlenecks(hidden_state_1)
-        hidden_state_2 = self.conv2(hidden_state)
-        return self.conv3(hidden_state_1 + hidden_state_2)
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        """Feature map of shape (batch_size, embed_dim, height, width)"""
+
+        # branch 1
+        feature_map_1 = self.conv1(feature_map)
+        feature_map_1 = self.bottlenecks(feature_map_1)
+
+        # branch 2
+        feature_map_2 = self.conv2(feature_map)
+
+        # fuse step
+        feature_map = self.conv3(feature_map_1 + feature_map_2)
+
+        return feature_map
 
 
 class OmDetTurboMultiheadAttention(nn.Module):

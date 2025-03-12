@@ -216,6 +216,7 @@ def multi_scale_deformable_attention_v2(
     return output
 
 
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetrV2
 class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
@@ -1125,7 +1126,6 @@ class RTDetrV2DecoderLayer(nn.Module):
         self.fc2_dropout = nn.Dropout(config.dropout)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    # TODO: rename hidden_states -> hidden_state
     def forward(
         self,
         hidden_state: torch.Tensor,
