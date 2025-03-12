@@ -700,8 +700,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
             The padding indicator of the time series.
         """
         # Reshape into patches (using view for efficiency)
-        bsize = input_ts.shape[0]
-        patched_inputs = input_ts.view(bsize, -1, self.config.patch_length)
+        bsize = past_values.shape[0]
+        patched_inputs = past_values.view(bsize, -1, self.config.patch_length)
         patched_pads = input_padding.view(bsize, -1, self.config.patch_length)
 
         patched_inputs = torch.where(
