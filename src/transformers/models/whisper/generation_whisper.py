@@ -612,7 +612,10 @@ class WhisperGenerationMixin(GenerationMixin):
             language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config
         )
         self._set_num_frames(
-            return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs
+            return_token_timestamps=return_token_timestamps,
+            generation_config=generation_config,
+            attention_mask=attention_mask,
+            kwargs=kwargs,
         )
         self._set_thresholds_and_condition(
             generation_config=generation_config,
@@ -786,7 +789,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
-                seek_num_frames=seek_num_frames,
+                seek=seek,
                 temperatures=temperatures,
                 generation_config=generation_config,
                 logits_processor=logits_processor,
@@ -901,7 +904,7 @@ class WhisperGenerationMixin(GenerationMixin):
         segment_input,
         decoder_input_ids,
         cur_bsz,
-        seek_num_frames,
+        seek,
         temperatures,
         generation_config,
         logits_processor,
@@ -973,7 +976,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
                 is_shortform=is_shortform,
-                seek_num_frames=seek_num_frames,
+                seek=seek,
             )
 
             if cur_bsz < batch_size:
@@ -1060,7 +1063,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_token_timestamps,
         generation_config,
         is_shortform,
-        seek_num_frames,
+        seek,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
@@ -1071,12 +1074,10 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
-            if num_frames is None:
-                num_frames = seek_num_frames
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs,
                 generation_config.alignment_heads,
-                num_frames=num_frames,
+                num_frames=num_frames - seek if num_frames is not None else None,
                 num_input_ids=decoder_input_ids.shape[-1],
             )
 
@@ -1601,7 +1602,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
     @staticmethod
-    def _set_num_frames(return_token_timestamps, generation_config, kwargs):
+    def _set_num_frames(return_token_timestamps, generation_config, attention_mask, kwargs):
         if return_token_timestamps:
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -1610,7 +1611,18 @@ class WhisperGenerationMixin(GenerationMixin):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
-            generation_config.num_frames = kwargs.pop("num_frames", None)
+            if "num_frames" in kwargs:
+                generation_config.num_frames = kwargs.pop("num_frames").cpu()
+                warnings.warn(
+                    "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
+                    "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
+                )
+            elif attention_mask is not None:
+                generation_config.num_frames = attention_mask.sum(-1).cpu()
+            else:
+                raise ValueError(
+                    "When setting `return_token_timestamps` to `True`, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
+                )
 
     @staticmethod
     def _set_thresholds_and_condition(
