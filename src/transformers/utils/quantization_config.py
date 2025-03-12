@@ -902,7 +902,8 @@ class AwqConfig(QuantizationConfigMixin):
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
-            compute_capability = torch.cuda.get_device_capability()
+            # Only cuda device can run this function
+            compute_capability = torch.cuda.get_device_capability() if torch.cuda.is_available() else (-1, -1)
             major, minor = compute_capability
             if major < 8:
                 raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")

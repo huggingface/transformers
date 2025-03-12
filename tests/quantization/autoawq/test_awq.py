@@ -59,7 +59,8 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        compute_capability = torch.cuda.get_device_capability()
+        # Only cuda device can run this function
+        compute_capability = torch.cuda.get_device_capability() if torch.cuda.is_available() else (-1, -1)
         major, minor = compute_capability
 
         if major < 8:
