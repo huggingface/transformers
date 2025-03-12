@@ -751,6 +751,10 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+
+    def tie_weights(self):
+        return self.language_model.tie_weights()
+
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.

@@ -1444,5 +1444,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
         return model_inputs
 
+    def tie_weights(self):
+        return self.language_model.tie_weights()
+
 
 __all__ = ["Gemma3PreTrainedModel", "Gemma3TextModel", "Gemma3ForCausalLM", "Gemma3ForConditionalGeneration"]
