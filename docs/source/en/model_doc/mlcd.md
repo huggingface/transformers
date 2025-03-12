@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -15,6 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 
 # MLCD
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
@@ -46,7 +51,6 @@ Result:
 from transformers import AutoProcessor, MLCDVisionModel
 from PIL import Image
 import requests
-import torch
 
 # Load model and processor
 model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-336")
