@@ -2028,9 +2028,9 @@ else:
     _import_structure["models.deepseek_v2"].extend(
         [
             "DeepseekV2ForCausalLM",
+            "DeepseekV2ForSequenceClassification",
             "DeepseekV2Model",
             "DeepseekV2PreTrainedModel",
-            "DeepseekV2ForSequenceClassification",
         ]
     )
     _import_structure["models.deepseek_v3"].extend(
