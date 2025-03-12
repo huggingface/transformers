@@ -34,10 +34,7 @@ RUN python3 -m pip install --no-cache-dir einops
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-# Add auto-gptq for gtpq quantization testing, installed from source for pytorch==2.5.1 compatibility
-# TORCH_CUDA_ARCH_LIST="7.5+PTX" is added to make the package compile for Tesla T4 gpus available for the CI.
-# RUN pip install gekko
-# RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && TORCH_CUDA_ARCH_LIST="7.5+PTX" python3 setup.py install
+# Add gptqmodel for gtpq quantization testing, installed from source for pytorch==2.6.0 compatibility
 RUN python3 -m pip install lm_eval
 RUN git clone https://github.com/ModelCloud/GPTQModel.git && cd GPTQModel && pip install -v . --no-build-isolation
 
@@ -74,8 +71,9 @@ RUN python3 -m pip install --no-cache-dir optimum-quanto
 RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submodule update --init --recursive && pip install .
 
 # # Add flute-kernel and fast_hadamard_transform for quantization testing
+# # Commented for now as they cause issues with the build
+# # TODO: create a new workflow to test them
 # RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
-# # RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
 # RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
 
 # Add compressed-tensors for quantization testing
