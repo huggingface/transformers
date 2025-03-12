@@ -4367,7 +4367,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
-            # config.torch_dtype=None
             model = cls(config, *model_args, **model_kwargs)
 
         # Make sure to tie the weights correctly
