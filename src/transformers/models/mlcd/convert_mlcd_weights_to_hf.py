@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,161 +14,133 @@
 # limitations under the License.
 """Convert MLCD checkpoints from the original repository.
 
-Usage:
-    python convert_mlcd_weights_to_hf.py \
-        --pytorch_dump_folder_path mlcd-vit-bigG-patch14-336 \
-        --checkpoint_path MLCD_ViT_bigG_14_336px_pytorch.pt \
-        --config_path mlcd-vit-bigG-patch14-336/config.json
-
-URL: https://github.com/deepglint/unicom/tree/main"""
+URL: https://github.com/deepglint/unicom/tree/main
+"""
 
 import argparse
+import collections
+import os
+import re
 
+import numpy as np
 import requests
 import torch
-from clip.clip import _transform
 from PIL import Image
 
-from transformers import (
-    CLIPImageProcessor,
-    MLCDVisionConfig,
-    MLCDVisionModel,
-)
-from transformers.modeling_outputs import BaseModelOutputWithPooling
+from transformers import CLIPImageProcessor
 
-from .original_vit_rope2d import RoPE2d_ViT_bigG_14_1024
+from ...utils import logging
+from .configuration_mlcd import MLCDVisionConfig
+from .modeling_mlcd import MLCDVisionModel
 
 
-def copy_attn_layer(hf_attn_layer, pt_attn_layer):
-    # self.in_proj = nn.Linear(dim, dim * 3, bias=True)
-    # self.out_proj = nn.Linear(dim, dim)
-
-    q_proj, k_proj, v_proj = pt_attn_layer.in_proj.weight.data.chunk(3, dim=0)
-    q_proj_bias, k_proj_bias, v_proj_bias = pt_attn_layer.in_proj.bias.data.chunk(3, dim=0)
-
-    out_proj_weights = pt_attn_layer.out_proj.weight
-    out_proj_bias = pt_attn_layer.out_proj.bias
-
-    hf_attn_layer.q_proj.weight.data = q_proj
-    hf_attn_layer.q_proj.bias.data = q_proj_bias
-
-    hf_attn_layer.k_proj.weight.data = k_proj
-    hf_attn_layer.k_proj.bias.data = k_proj_bias
-
-    hf_attn_layer.v_proj.weight.data = v_proj
-    hf_attn_layer.v_proj.bias.data = v_proj_bias
-
-    hf_attn_layer.out_proj.weight.data = out_proj_weights.data
-    hf_attn_layer.out_proj.bias.data = out_proj_bias.data
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 
-def copy_mlp(hf_mlp, pt_mlp):
-    copy_linear(hf_mlp.fc1, pt_mlp.c_fc)
-    copy_linear(hf_mlp.fc2, pt_mlp.c_proj)
+COMMON_CONFIG_PARAMS = {
+    "mlcd-vit-bigG-patch14-336": {
+        "hidden_size": 1664,
+        "image_size": 336,
+        "intermediate_size": 8192,
+        "num_attention_heads": 16,
+        "num_hidden_layers": 48,
+        "patch_size": 14,
+        "projection_dim": 1024,
+    },
+    "mlcd-vit-bigG-patch14-448": {
+        "hidden_size": 1664,
+        "image_size": 448,
+        "intermediate_size": 8192,
+        "num_attention_heads": 16,
+        "num_hidden_layers": 48,
+        "patch_size": 14,
+        "projection_dim": 1024,
+    },
+}
+
+MODEL_NAME_TO_CHECKPOINT_PATH = {
+    # base checkpoints
+    "mlcd-vit-bigG-patch14-336": "MLCD_ViT_bigG_14_336px_pytorch.pt",
+    "mlcd-vit-bigG-patch14-448": "MLCD_ViT_bigG_14_448px_pytorch.pt",
+}
+
+# fmt: off
+EXPECTED_OUTPUTS = {
+    "mlcd-vit-bigG-patch14-336": torch.tensor([
+        [-0.8921, -0.1069,  0.2989,  0.6018, -0.5892],
+        [ 0.4093, -1.4592,  0.6048, -0.5147, -0.5929],
+        [ 0.7796, -0.7133, -0.5649, -0.7843, -0.5548],
+        [ 0.0041,  0.0286,  0.4310, -0.1403, -0.2399],
+        [ 0.0839,  0.2152, -0.3822, -0.1668, -0.7886]
+    ]),
+    "mlcd-vit-bigG-patch14-448": torch.tensor([
+        [-0.8978, -0.1181,  0.4769,  0.4761, -0.5779],
+        [ 0.2640, -2.6150,  0.4853,  0.5743, -1.1003],
+        [ 0.3314, -0.3328, -0.4305, -0.1874, -0.7701],
+        [-1.5174, -1.0238, -1.1854,  0.1749, -0.8786],
+        [ 0.2323, -0.8346, -0.9680, -0.2951,  0.0867],
+    ]),
+}
+# fmt: on
+
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Vision embeddings
+    r"conv1.weight":                                                r"vision_model.embeddings.patch_embedding.weight",
+    r"class_embedding":                                             r"vision_model.embeddings.class_embedding",
+    r"vision_rotary_embedding":                                     r"vision_model.vision_rotary_embedding",
+    r"class_pos_emb":                                               r"vision_model.class_pos_emb",
+    # Vision encoder
+    r"transformer.resblocks_(\d+).ln_1.weight":                     r"vision_model.encoder.layers.\1.layer_norm1.weight",
+    r"transformer.resblocks_(\d+).ln_1.bias":                       r"vision_model.encoder.layers.\1.layer_norm1.bias",
+    r"transformer.resblocks_(\d+).ln_2.weight":                     r"vision_model.encoder.layers.\1.layer_norm2.weight",
+    r"transformer.resblocks_(\d+).ln_2.bias":                       r"vision_model.encoder.layers.\1.layer_norm2.bias",
+    r"transformer.resblocks_(\d+).mlp.c_fc.weight":                 r"vision_model.encoder.layers.\1.mlp.fc1.weight",
+    r"transformer.resblocks_(\d+).mlp.c_fc.bias":                   r"vision_model.encoder.layers.\1.mlp.fc1.bias",
+    r"transformer.resblocks_(\d+).mlp.c_proj.weight":               r"vision_model.encoder.layers.\1.mlp.fc2.weight",
+    r"transformer.resblocks_(\d+).mlp.c_proj.bias":                 r"vision_model.encoder.layers.\1.mlp.fc2.bias",
+    r"transformer.resblocks_(\d+).attn.(q|k|v|out)_proj.weight":    r"vision_model.encoder.layers.\1.self_attn.\2_proj.weight",
+    r"transformer.resblocks_(\d+).attn.(q|k|v|out)_proj.bias":      r"vision_model.encoder.layers.\1.self_attn.\2_proj.bias",
+    # Vision norm
+    r"ln_post.weight":                                              r"vision_model.post_layernorm.weight",
+    r"ln_post.bias":                                                r"vision_model.post_layernorm.bias",
+    r"ln_pre.weight":                                               r"vision_model.pre_layernorm.weight",
+    r"ln_pre.bias":                                                 r"vision_model.pre_layernorm.bias",
+}
+# fmt: on
 
 
-def copy_linear(hf_linear, pt_linear):
-    hf_linear.weight.data = pt_linear.weight.data
-    hf_linear.bias.data = pt_linear.bias.data
+# --------------------------------------------------------------------------------------------
+# Model objects: configuration, image processor
+# --------------------------------------------------------------------------------------------
 
 
-def copy_layer(hf_layer, pt_layer):
-    # copy layer norms
-    copy_linear(hf_layer.layer_norm1, pt_layer.ln_1)
-    copy_linear(hf_layer.layer_norm2, pt_layer.ln_2)
-
-    # copy MLP
-    copy_mlp(hf_layer.mlp, pt_layer.mlp)
-
-    # copy attn
-    copy_attn_layer(hf_layer.self_attn, pt_layer.attn)
-
-
-def copy_layers(hf_layers, pt_layers):
-    for hf_layer, pt_layer in zip(hf_layers, pt_layers):
-        copy_layer(hf_layer, pt_layer)
-
-
-def copy_encoder(hf_encoder, pt_model):
-    # copy  embeds
-    hf_encoder.embeddings.token_embedding.weight = pt_model.token_embedding.weight
-    hf_encoder.embeddings.position_embedding.weight.data = pt_model.positional_embedding
-
-    # copy layer norm
-    copy_linear(hf_encoder.final_layer_norm, pt_model.ln_final)
-
-    # copy hidden layers
-    copy_layers(hf_encoder.encoder.layers, pt_model.transformer.resblocks)
-
-
-def copy_text_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.text_projection.weight.data = pt_model.text_projection.data.T.contiguous()
-
-    # copy text encoder
-    copy_encoder(hf_model.text_model, pt_model)
-
-
-def copy_vison_model(hf_model, pt_model):
-    # copy projection
-    # hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T.contiguous()
-
-    # copy layer norms
-    copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.ln_pre)
-    copy_linear(hf_model.vision_model.post_layernorm, pt_model.ln_post)
-
-    # copy embeds
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.conv1.weight.data
-    hf_model.vision_model.embeddings.class_embedding = pt_model.class_embedding
-
-    # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_model.transformer.resblocks)
-
-    # copy rope2d
-    hf_model.vision_model.vision_rotary_embedding = pt_model.vision_rotary_embedding
-    hf_model.vision_model.class_pos_emb.data = pt_model.class_pos_emb.data
-
-
-@torch.no_grad()
-def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def get_mlcd_config(model_name: str) -> MLCDVisionConfig:
     """
-    Copy/paste/tweak model's weights to transformers design.
+    Create a configuration for the MLCD model based on the model name.
     """
+    assert model_name in COMMON_CONFIG_PARAMS, f"Model {model_name} not found in the list of COMMON_CONFIG_PARAMS."
+    config_params = COMMON_CONFIG_PARAMS[model_name]
+    config = MLCDVisionConfig(
+        hidden_size=config_params["hidden_size"],
+        image_size=config_params["image_size"],
+        intermediate_size=config_params["intermediate_size"],
+        num_attention_heads=config_params["num_attention_heads"],
+        num_hidden_layers=config_params["num_hidden_layers"],
+        patch_size=config_params["patch_size"],
+        projection_dim=config_params["projection_dim"],
+    )
+    return config
 
-    if config_path is not None:
-        config = MLCDVisionConfig.from_pretrained(config_path)
-    else:
-        config = MLCDVisionConfig(
-            hidden_size=1664,
-            intermediate_size=8192,
-            projection_dim=1024,
-            num_hidden_layers=48,
-            num_attention_heads=16,
-            num_channels=3,
-            image_size=336,
-            patch_size=14,
-            hidden_act="gelu",
-            layer_norm_eps=1e-5,
-            attention_dropout=0.0,
-            initializer_range=0.02,
-            initializer_factor=1.0,
-        )
 
-    hf_model = MLCDVisionModel(config).eval()
-
-    state_dict = torch.load(checkpoint_path, "cpu")
-    state_dict = {k.replace("_orig_mod.", ""): v for k, v in state_dict.items()}
-    if "positional_embedding" in state_dict:
-        state_dict.pop("positional_embedding")
-
-    model_native = RoPE2d_ViT_bigG_14_1024().eval()
-    model_native.load_state_dict(state_dict, strict=False)
-    model_native = model_native.eval()
-
-    copy_vison_model(hf_model, model_native)
-    hf_model.save_pretrained(pytorch_dump_folder_path)
-
-    mlcd_image_processor = CLIPImageProcessor(
+def get_mlcd_image_processor(model_name: str) -> CLIPImageProcessor:
+    """
+    Create an image processor for the MLCD model based on the model name.
+    """
+    assert model_name in COMMON_CONFIG_PARAMS, f"Model {model_name} not found in the list of COMMON_CONFIG_PARAMS."
+    config_params = COMMON_CONFIG_PARAMS[model_name]
+    image_processor = CLIPImageProcessor(
         do_center_crop=True,
         do_normalize=True,
         do_resize=True,
@@ -176,40 +148,187 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
         image_mean=[0.48145466, 0.4578275, 0.40821073],
         image_std=[0.26862954, 0.26130258, 0.27577711],
         resample=3,
-        size=config.image_size,
-        crop_size=config.image_size,
+        size=config_params["image_size"],
+        crop_size=config_params["image_size"],
     )
-    mlcd_image_processor.save_pretrained(pytorch_dump_folder_path)
+    return image_processor
 
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    hf_image = mlcd_image_processor(image, return_tensors="pt")
 
-    result = hf_model(hf_image.pixel_values, output_hidden_states=True)
-    result: BaseModelOutputWithPooling
+# --------------------------------------------------------------------------------------------
+# Helper functions for state dict conversion
+# --------------------------------------------------------------------------------------------
 
-    # naive
-    pt_image = _transform(config.image_size)(image)
-    pt_image = pt_image.unsqueeze(0)
-    list_hidden_states = model_native.forward_hidden_states(pt_image)
 
-    assert torch.allclose(pt_image, hf_image.pixel_values, atol=1e-4)
-    assert torch.allclose(result.hidden_states[-1], list_hidden_states[-1], atol=1e-4)
+def flatten_nested_dict(params: dict, parent_key: str = "", sep: str = ".") -> dict:
+    """
+    Flatten a nested original checkpoint dictionary into a flat dictionary.
+    """
+    items = []
+    for k, v in params.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.abc.MutableMapping):
+            items.extend(flatten_nested_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
-    # cosine
-    for i in range(49):
-        cosine = torch.nn.functional.cosine_similarity(
-            result.hidden_states[i][:, 0].reshape(-1), list_hidden_states[i][:, 0].reshape(-1), dim=-1
-        )
-        cosine = cosine.item()
-        assert cosine > 0.9999, f"cosine: {cosine} at layer {i}"
+
+def split_resblocks_layers(state_dict: dict) -> dict:
+    """
+    Split the resblocks weight into layers. In some cases they are concatenated in
+    the original checkpoints.
+    """
+    # Make shallow copy
+    state_dict = state_dict.copy()
+    # Split resblocks weight into layers
+    keys = list(state_dict.keys())
+    for key in keys:
+        if ".resblocks." in key:
+            weight = state_dict.pop(key)
+            for i, weight_i in enumerate(weight):
+                new_name = key.replace("resblocks", f"resblocks_{i}")
+                state_dict[new_name] = weight_i
+    return state_dict
+
+
+def chunk_qkv_for_attn(state_dict: dict) -> dict:
+    """
+    Chunk the q/k/v weights and biases for the attention layers.
+    """
+    # Make shallow copy
+    state_dict = state_dict.copy()
+    # Read and process q/k/v weights and biases
+    keys = list(state_dict.keys())
+    for key in keys:
+        if ".in_proj." in key:
+            weight = state_dict.pop(key)
+            qkv_weights = weight.chunk(3, dim=0)
+            for name, weight_i in zip(["q_proj", "k_proj", "v_proj"], qkv_weights):
+                new_name = key.replace("in_proj", name)
+                state_dict[new_name] = weight_i
+    return state_dict
+
+
+def convert_old_keys_to_new_keys(state_dict_keys: list) -> dict:
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
+
+
+# --------------------------------------------------------------------------------------------
+# Convert model
+# --------------------------------------------------------------------------------------------
+
+
+@torch.no_grad()
+def convert_mlcd_checkpoint(model_name, input_dir, output_dir, verify_hidden_state=True, push_to_hub=False):
+    """
+    Copy/paste/tweak model's weights to our MLCD structure.
+    """
+
+    # Define MLCD configuration
+    config = get_mlcd_config(model_name)
+
+    checkpoint = MODEL_NAME_TO_CHECKPOINT_PATH[model_name]
+    checkpoint_path = os.path.join(input_dir, checkpoint)
+    assert os.path.exists(checkpoint_path), f"Checkpoint path ({checkpoint_path}) not found."
+
+    # Load original checkpoint
+    print(f"Loading checkpoint from {checkpoint_path}...")
+    state_dict = torch.load(checkpoint_path, "cpu")
+
+    # Flatten nested dictionary
+    print("Flattening nested dictionary...")
+    state_dict = {k.replace("_orig_mod.", ""): v for k, v in state_dict.items()}
+    if "positional_embedding" in state_dict:
+        state_dict.pop("positional_embedding")
+    state_dict = flatten_nested_dict(state_dict)
+    state_dict = split_resblocks_layers(state_dict)
+    state_dict = chunk_qkv_for_attn(state_dict)
+
+    # Rename and transform weights
+    print("Renaming and transforming weights...")
+    original_keys = list(state_dict.keys())
+    hf_keys = convert_old_keys_to_new_keys(original_keys)
+    new_state_dict = {}
+    for original_key in original_keys:
+        new_key = hf_keys[original_key]
+        parameter = state_dict.pop(original_key)
+        new_state_dict[new_key] = torch.from_numpy(parameter)
+
+    # load HuggingFace model
+    print("Loading HuggingFace model...")
+    model = MLCDVisionModel(config).eval()
+    model.load_state_dict(new_state_dict)
+
+    # Create processor
+    print("Creating processor...")
+    image_processor = get_mlcd_image_processor(model_name)
+
+    # Verify hidden state
+    if verify_hidden_state:
+        print("Verifying hidden state for {model_name}...")
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+        pixel_values = image_processor(image, return_tensors="pt")["pixel_values"]
+        last_hidden_state = model(pixel_values, output_hidden_states=True).last_hidden_state[0, :5, :5]
+        expected_hidden_state = EXPECTED_OUTPUTS[model_name]
+        np.testing.assert_allclose(last_hidden_state.cpu().numpy(), expected_hidden_state.numpy(), atol=1e-4)
+
+    # Save model
+    if output_dir is not None:
+        dst_dir = os.path.join(output_dir, model_name)
+        print(f"Saving model {model_name} to {dst_dir}...")
+        model.save_pretrained(dst_dir)
+        print(f"Saving processor to {dst_dir}...")
+        image_processor.save_pretrained(dst_dir)
+
+    if push_to_hub:
+        print(f"Pushing model and processor for {model_name} to the HuggingFace Hub...")
+        model.push_to_hub(f"deepglint-hf/{model_name}", private=True)
+        image_processor.push_to_hub(f"deepglint-hf/{model_name}", private=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    args = parser.parse_args()
+    # Required parameters
+    parser.add_argument(
+        "--model_name",
+        default="mlcd-vit-bigG-patch14-448",
+        type=str,
+        choices=MODEL_NAME_TO_CHECKPOINT_PATH.keys(),
+        help="Name of the model you'd like to convert.",
+    )
+    parser.add_argument(
+        "--input_dir",
+        default="mlcd/original",
+        help="Location of MLCD original weights",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default="mlcd/checkpoint",
+        help="Location to write HF model and processor",
+    )
+    parser.add_argument(
+        "--verify_hidden_state",
+        action="store_true",
+        help="Whether to verify hidden_state against the original implementation.",
+    )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
-    convert_clip_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    args = parser.parse_args()
+    convert_mlcd_checkpoint(args.model_name, args.input_dir, args.output_dir, args.verify_hidden_state, args.push_to_hub)
