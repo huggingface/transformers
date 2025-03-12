@@ -277,7 +277,7 @@ def make_nested_list_of_images(
     if (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and all(is_valid_list_of_images(images_i) for images_i in images)
+        and any(is_valid_list_of_images(images_i) for images_i in images)
     ):
         return images
 
