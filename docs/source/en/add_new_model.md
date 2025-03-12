@@ -541,6 +541,21 @@ input_ids = tokenizer(input_str).input_ids
 
 When both implementations have the same `input_ids`, add a tokenizer test file. This file is analogous to the modeling test files. The tokenizer test files should contain a couple of hardcoded integration tests.
 
+## Implement image processor
+
+> [!TIP]
+> We recommend adding a fast image processor (inheriting from [`BaseImageProcessorFast`]) in addition to the 'slow' image processor ([`BaseImageProcessor`]) to give users the best performance. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for help on how to add [`BaseImageProcessorFast`].
+> Fast image processors uses the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU, resulting in much faster processing times.
+
+While this example doesn't include an image processor, you may need to implement one if the model requires image inputs. The image processor should be able to process images and return the processed images in a format that the model can understand.
+Before you start implementing the image processor, make sure that you can't use an existing image processor in Transformers, as lots of models use very similar image processing techniques, and you may be able to reuse an existing image processor.
+
+If you do need to implement a new image processor, you can look at others 
+
+## Implement processor
+
+If the model you are adding needs to process more than one modalities (e.g. text and images), you'll need to implement a processor. The processor is responsible for processing the inputs and outputs of the model.
+
 ## Integration tests
 
 Now that you have a model and tokenizer, add end-to-end integration tests for the model and tokenizer to `tests/models/brand_new_llama/test_modeling_brand_new_llama.py`.
