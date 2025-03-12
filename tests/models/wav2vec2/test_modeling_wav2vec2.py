@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     cleanup,
     is_flaky,
-    is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
     require_flash_attn,
@@ -567,16 +566,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
-    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -1403,7 +1392,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         sequence = torch.div(
             torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
         )
-        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # sample negative indices
@@ -1433,7 +1422,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         sequence = torch.div(
             torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
         )
-        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # replace masked feature vectors with -100 to test that those are not sampled

@@ -130,8 +130,9 @@ _deps = [
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "librosa",
-    "nltk<=3.8.1",
     "natten>=0.14.6,<0.15.0",
+    "nltk<=3.8.1",
+    "num2words",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -151,6 +152,7 @@ _deps = [
     "pytest-asyncio",
     "pytest-timeout",
     "pytest-xdist",
+    "pytest-order",
     "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
@@ -314,7 +316,7 @@ extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("av")
-
+extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
@@ -323,6 +325,7 @@ extras["testing"] = (
         "pytest-asyncio",
         "pytest-rich",
         "pytest-xdist",
+        "pytest-order",
         "timeout-decorator",
         "parameterized",
         "psutil",
@@ -364,6 +367,7 @@ extras["all"] = (
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
+    + extras["num2words"]
 )
 
 
@@ -383,6 +387,7 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["num2words"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
@@ -473,8 +478,6 @@ setup(
 extras["tests_torch"] = deps_list()
 extras["tests_tf"] = deps_list()
 extras["tests_flax"] = deps_list()
-extras["tests_torch_and_tf"] = deps_list()
-extras["tests_torch_and_flax"] = deps_list()
 extras["tests_hub"] = deps_list()
 extras["tests_pipelines_torch"] = deps_list()
 extras["tests_pipelines_tf"] = deps_list()
