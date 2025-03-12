@@ -4393,7 +4393,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Find fp32 modules if needed
         keep_in_fp32_modules = None
-        if model._keep_in_fp32_modules is not None or hasattr(hf_quantizer, "use_keep_in_fp32_modules"):
+        if model._keep_in_fp32_modules is not None:
             if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
             keep_in_fp32_modules = model._keep_in_fp32_modules if len(model._keep_in_fp32_modules) > 0 else None
