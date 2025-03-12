@@ -9,9 +9,9 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
+from .pytorch_utils import is_torch_greater_or_equal_than_2_7
 from .utils import is_hqq_available, is_optimum_quanto_available, logging
 from .utils.deprecation import deprecate_kwarg
-from .pytorch_utils import is_torch_greater_or_equal_than_2_7
 
 
 if is_hqq_available():
@@ -569,7 +569,9 @@ class OffloadedCache(DynamicCache):
     def prefetch_layer(self, layer_idx: int):
         "Starts prefetching the next layer cache"
         if layer_idx < len(self):
-            with self.prefetch_stream if is_torch_greater_or_equal_than_2_7 else torch.cuda.stream(self.prefetch_stream):
+            with (
+                self.prefetch_stream if is_torch_greater_or_equal_than_2_7 else torch.cuda.stream(self.prefetch_stream)
+            ):
                 # Prefetch next layer tensors to GPU
                 device = self.original_device[layer_idx]
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device, non_blocking=True)
