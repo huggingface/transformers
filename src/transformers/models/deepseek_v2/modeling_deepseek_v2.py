@@ -35,7 +35,7 @@ from ...cache_utils import DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -67,10 +67,10 @@ class DeepseekV2MoEGate(nn.Module):
         self.gating_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
 
-    def forward(self, hidden_states):
-        bsz, seq_len, h = hidden_states.shape
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, hidden_dim = hidden_states.shape
         ### compute gating score
-        hidden_states = hidden_states.view(-1, h)
+        hidden_states = hidden_states.view(-1, hidden_dim)
         logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
         if self.scoring_func == "softmax":
             scores = logits.softmax(dim=-1, dtype=torch.float32)
@@ -81,14 +81,14 @@ class DeepseekV2MoEGate(nn.Module):
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(bsz * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
+            group_scores = scores.view(batch_size * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
             group_mask = torch.zeros_like(group_scores)  # [n, n_group]
             group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group)
-                .reshape(bsz * seq_len, -1)
+                .expand(batch_size * seq_len, self.n_group, self.n_routed_experts // self.n_group)
+                .reshape(batch_size * seq_len, -1)
             )  # [n, e]
             tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
@@ -126,12 +126,12 @@ class DeepseekV2MoE(nn.Module):
         self.ep_rank = 0
         self.experts_per_rank = config.n_routed_experts
 
-    def moe(self, hidden_states, topk_ids, topk_weight):
+    def moe(self, hidden_states: torch.Tensor, topk_ids: torch.Tensor, topk_weight: torch.Tensor) -> torch.Tensor:
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
         cnts.scatter_(1, topk_ids, 1)
         tokens_per_expert = cnts.sum(dim=0)
-        idxs = topk_ids.view(-1).argsort()
-        sorted_tokens = hidden_states[idxs // topk_ids.shape[1]]
+        indicies = topk_ids.view(-1).argsort()
+        sorted_tokens = hidden_states[indicies // topk_ids.shape[1]]
 
         tokens_per_expert = tokens_per_expert.cpu().numpy()
 
@@ -152,7 +152,7 @@ class DeepseekV2MoE(nn.Module):
 
         # Reorder and combine outputs
         new_x = torch.empty_like(outs)
-        new_x[idxs] = outs
+        new_x[indicies] = outs
         hidden_states = (
             new_x.view(*topk_ids.shape, -1)
             .type(topk_weight.dtype)
@@ -162,7 +162,7 @@ class DeepseekV2MoE(nn.Module):
         )
         return hidden_states
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
         topk_indices, topk_weights = self.gate(hidden_states)
@@ -320,12 +320,14 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(
+    query: torch.Tensor, key: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
+) -> torch.Tensor:
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
+        query (`torch.Tensor`): The query tensor.
+        key (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
         position_ids (`torch.Tensor`, *optional*):
@@ -343,14 +345,22 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    b, h, s, d = q.shape
-    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+    batch, heads, seq_length, head_dim = query.shape
+    query = (
+        query.view(batch, heads, seq_length, head_dim // 2, 2)
+        .transpose(4, 3)
+        .reshape(batch, heads, seq_length, head_dim)
+    )
 
-    b, h, s, d = k.shape
-    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+    batch, heads, seq_length, head_dim = key.shape
+    key = (
+        key.view(batch, heads, seq_length, head_dim // 2, 2)
+        .transpose(4, 3)
+        .reshape(batch, heads, seq_length, head_dim)
+    )
 
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = (query * cos) + (rotate_half(query) * sin)
+    k_embed = (key * cos) + (rotate_half(key) * sin)
     return q_embed, k_embed
 
 
@@ -424,7 +434,7 @@ class DeepseekV2Attention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
-        position_ids=None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if "padding_mask" in kwargs:
@@ -450,7 +460,7 @@ class DeepseekV2Attention(nn.Module):
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids=position_ids)
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
         query_states = torch.cat((q_nope, q_pe), dim=-1)
@@ -1065,4 +1075,117 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["DeepseekV2PreTrainedModel", "DeepseekV2Model", "DeepseekV2ForCausalLM"]
+@add_start_docstrings(
+    """
+    The DeepseekV2 Model transformer with a sequence classification head on top (linear layer).
+
+    [`DeepseekV2ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """,
+    DEEPSEEK_V2_START_DOCSTRING,
+)
+class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = DeepseekV2Model(config)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(DEEPSEEK_V2_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+
+        if input_ids is not None:
+            batch_size = input_ids.shape[0]
+        else:
+            batch_size = inputs_embeds.shape[0]
+
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+        if self.config.pad_token_id is None:
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
+        else:
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+
+        if not return_dict:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+__all__ = [
+    "DeepseekV2PreTrainedModel",
+    "DeepseekV2Model",
+    "DeepseekV2ForCausalLM",
+    "DeepseekV2ForSequenceClassification",
+    "DeepseekV2RotaryEmbedding",
+]
