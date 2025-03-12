@@ -29,7 +29,7 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
-from ...activations import ACT2CLS, ACT2FN
+from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
