@@ -751,7 +751,6 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
-
     def tie_weights(self):
         return self.language_model.tie_weights()
 
