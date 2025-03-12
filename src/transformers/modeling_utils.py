@@ -730,7 +730,7 @@ def _infer_parameter_dtype(
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
-    meta_state_dict: Dict,
+    state_dict: Dict,
     shard_file: str,
     expected_keys: List[str],
     reverse_renaming_mapping: Dict[str, str],
@@ -758,36 +758,23 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_quantized
 
     file_pointer = None
-    full_state_dict = None
-    if shard_file.endswith(".safetensors") and not is_quantized:
+    if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
-    else:
-        map_location = "cpu"
-        if (
-            device_map is not None
-            and hf_quantizer is not None
-            and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-            and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-        ):
-            map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-        full_state_dict = load_state_dict(shard_file, map_location=map_location, weights_only=weights_only)
 
-    for param_name, empty_param in meta_state_dict.items():
+    for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
 
-        # This is the name of the parameter as it appears on disk file
-        serialized_param_name = reverse_renaming_mapping[param_name]
-
         # we need to use serialized_param_name as file pointer is untouched
-        if full_state_dict is None:
+        if is_meta_state_dict:
+            # This is the name of the parameter as it appears on disk file
+            serialized_param_name = reverse_renaming_mapping[param_name]
             param = file_pointer.get_slice(serialized_param_name)
-        elif shard_file.endswith(".gguf"):
-            param = empty_param  # For gguf the dict is actually not empty!
         else:
-            param = full_state_dict[serialized_param_name]
+            param = empty_param  # It is actually not empty!
 
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
@@ -836,7 +823,7 @@ def _load_state_dict_into_meta_model(
                         model,
                         param,
                         param_name,
-                        full_state_dict,
+                        state_dict,
                         param_device=param_device,
                         device_map=device_map,
                     )
@@ -852,7 +839,7 @@ def _load_state_dict_into_meta_model(
                 )
             else:
                 hf_quantizer.create_quantized_param(
-                    model, param, param_name, param_device, full_state_dict, unexpected_keys
+                    model, param, param_name, param_device, state_dict, unexpected_keys
                 )
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
@@ -4807,8 +4794,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if checkpoint_files is not None and len(checkpoint_files) > 1:
             checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
         # To be able to iterate, even if we don't use it if the state_dict is already provided
-        elif checkpoint_files is None:
-            checkpoint_files = [None]
+        elif state_dict is not None:
+            checkpoint_files = [""]
 
         # Compute expected model keys
         expected_keys = list(model_to_load.state_dict().keys())
@@ -4828,10 +4815,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if shard_file in disk_only_shard_files:
                 continue
 
-            map_location = "meta" if low_cpu_mem_usage else "cpu"
+            map_location = "cpu"
+            if low_cpu_mem_usage:
+                if shard_file.endswith(".safetensors") and not is_quantized:
+                    map_location = "meta"
+                elif (
+                    device_map is not None
+                    and hf_quantizer is not None
+                    and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+                    and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                ):
+                    map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
-            # If shard_file is None, we use the existing state_dict instead of loading it
-            if shard_file is not None:
+            # If shard_file is""", we use the existing state_dict instead of loading it
+            if shard_file != "":
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
