@@ -849,12 +849,12 @@ def _load_state_dict_into_meta_model(
     is_quantized = hf_quantizer is not None
 
     for serialized_param_name, empty_param in state_dict.items():
+        if serialized_param_name not in expected_keys:
+            continue
+
         # serialized_param_name is the raw, serialized name
         # fixed_param_name is the model's equivalent
         fixed_param_name, _ = model.rename_key(serialized_param_name)
-
-        if fixed_param_name not in expected_keys:
-            continue
 
         # we need to use serialized_param_name as file pointer is untouched
         if shard_file.endswith(".safetensors"):
@@ -3574,7 +3574,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        _ = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -3665,11 +3665,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
-        if trust_remote_code is True:
-            logger.warning(
-                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
-                " ignored."
-            )
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
