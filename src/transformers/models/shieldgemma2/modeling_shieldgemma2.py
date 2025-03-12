@@ -115,11 +115,11 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
     """ShieldGemma2 classifies imags as violative or not relative to a specific policy
     Args:
     """
+
     probabilities: torch.Tensor = None
 
 
 class ShieldGemma2ForImageClassification(PreTrainedModel):
-
     config_class = ShieldGemma2Config
 
     def __init__(self, config: ShieldGemma2Config):

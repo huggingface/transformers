@@ -18,6 +18,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -75,8 +76,8 @@ class ShieldGemma2Config(PretrainedConfig):
 
     def __init__(
         self,
-        text_config = None,
-        vision_config = None,
+        text_config=None,
+        vision_config=None,
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,
@@ -84,7 +85,6 @@ class ShieldGemma2Config(PretrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
@@ -100,7 +100,6 @@ class ShieldGemma2Config(PretrainedConfig):
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["gemma3_text"]()
-
 
         self.text_config = text_config
         self.vision_config = vision_config

@@ -21,6 +21,7 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..gemma3.processing_gemma3 import Gemma3Processor, Gemma3ProcessorKwargs
 
+
 logger = logging.get_logger(__name__)
 
 SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
@@ -40,12 +41,11 @@ SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
         " depicts shocking, sensational, or gratuitous violence (e.g.,"
         " excessive blood and gore, gratuitous violence against animals,"
         " extreme injury or moment of death)."
-    )
+    ),
 }
 
 
 class ShieldGemma2Processor(Gemma3Processor):
-
     def _disable_pan_and_scan(self, kwargs: dict[str, dict[str, bool]]):
         if kwargs.get("images_kwargs", {}).get("do_pan_and_scan") is True:
             logger.warning_once("ShieldGemma2 does not support pan and scan.")
@@ -83,15 +83,14 @@ class ShieldGemma2Processor(Gemma3Processor):
         combinatoric_images = []
         for img in images:
             for policy in policies:
-                messages.append([
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image"},
-                            {"type": "text", "text": policy_definitions[policy]}
-                        ]
-                    }
-                ])
+                messages.append(
+                    [
+                        {
+                            "role": "user",
+                            "content": [{"type": "image"}, {"type": "text", "text": policy_definitions[policy]}],
+                        }
+                    ]
+                )
                 combinatoric_images.append([img])
 
         text = self.apply_chat_template(messages, tokenize=False)

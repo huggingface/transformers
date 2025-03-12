@@ -21,7 +21,7 @@ from orbax import checkpoint as obc
 
 from ...image_utils import PILImageResampling
 from ..gemma import GemmaTokenizerFast
-from ..gemma3 import Gemma3Config, Gemma3TextConfig, Gemma3ImageProcessor
+from ..gemma3 import Gemma3Config, Gemma3ImageProcessor, Gemma3TextConfig
 from ..siglip import SiglipVisionConfig
 from . import ShieldGemma2ForImageClassification, ShieldGemma2Processor
 
@@ -345,9 +345,7 @@ def convert(
 
     for paths, value in tree.flatten_with_path(g3_ckpt):
         if paths[0].startswith("SigLiPFromPatches_"):
-            path, weights = convert_siglip_weight(
-                config=config.vision_config, paths=paths, weights=value
-            )
+            path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
             update_tree(path, weights)
 
     for paths, value in tree.flatten_with_path(sg2_ckpt):
@@ -432,12 +430,7 @@ def main(*args):
     del tokenizer
 
     logging.info("Converting Shieldgemma2 @ %s", dtype)
-    result = convert(
-        _SHIELDGEMMA_CHECKPOINT_PATH.value,
-        _GEMMA_CHECKPOINT_PATH.value,
-        config,
-        dtype
-    )
+    result = convert(_SHIELDGEMMA_CHECKPOINT_PATH.value, _GEMMA_CHECKPOINT_PATH.value, config, dtype)
     logging.info("Converted Shieldgemma2 state tree from Orbax to Hugging Face.")
 
     with accelerate.init_empty_weights():
