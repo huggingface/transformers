@@ -689,6 +689,15 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
+    @unittest.skip(
+        reason=(
+            "MusicGen has a custom set of generation tests that rely on `GenerationTesterMixin`, controlled by "
+            "`greedy_sample_model_classes`"
+        )
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
+
 
 def prepare_musicgen_melody_inputs_dict(
     config,
@@ -1740,6 +1749,15 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             self.assertTrue(all(audio_encoder_grads))
             self.assertFalse(all(text_encoder_grads))
+
+    @unittest.skip(
+        reason=(
+            "MusicGen has a custom set of generation tests that rely on `GenerationTesterMixin`, controlled by "
+            "`greedy_sample_model_classes`"
+        )
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
 
 # Copied from tests.models.musicgen.test_modeling_musicgen.get_bip_bip
