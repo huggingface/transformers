@@ -148,6 +148,7 @@ print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.sha
 
 ### Text-only inference
 
+You can use the VLMs for text-only generation by omitting images in your input. However, you can also load the models in text-only mode as shown below. This will skip loading the vision tower and will save resources when you just need the LLM capabilities.
 ```python
 from transformers import AutoTokenizer, Gemma3ForCausalLM
 
