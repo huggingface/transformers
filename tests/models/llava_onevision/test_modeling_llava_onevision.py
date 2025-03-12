@@ -319,19 +319,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model(**input_dict)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass

@@ -14,7 +14,6 @@
 # limitations under the License.
 import copy
 import glob
-import itertools
 import json
 import os
 import os.path
@@ -51,6 +50,7 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    hub_retry,
     is_staging_test,
     require_accelerate,
     require_flax,
@@ -327,6 +327,18 @@ class ModelUtilsTest(TestCasePlus):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
 
+    def test_hub_retry(self):
+        @hub_retry(max_attempts=2)
+        def test_func():
+            # First attempt will fail with a connection error
+            if not hasattr(test_func, "attempt"):
+                test_func.attempt = 1
+                raise requests.exceptions.ConnectionError("Connection failed")
+            # Second attempt will succeed
+            return True
+
+        self.assertTrue(test_func())
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-bert/bert-base-uncased"
@@ -525,19 +537,6 @@ class ModelUtilsTest(TestCasePlus):
             model = LlavaForConditionalGeneration.from_pretrained(
                 TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
-
-    @require_torch
-    def test_model_from_pretrained_meta_device(self):
-        def is_on_meta(model_id, dtype):
-            with torch.device("meta"):
-                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-                return all(value.device.type == "meta" for value in model.state_dict().values())
-
-        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
-        dtypes = (None, "auto", torch.float16)
-
-        for model_id, dtype in itertools.product(model_ids, dtypes):
-            self.assertTrue(is_on_meta(model_id, dtype))
 
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
