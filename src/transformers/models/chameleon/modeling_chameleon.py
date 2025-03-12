@@ -1292,7 +1292,11 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            if not is_torchdynamo_compiling() and inputs_embeds is not None and inputs_embeds[special_image_mask].numel() != image_tokens.numel():
+            if (
+                not is_torchdynamo_compiling()
+                and inputs_embeds is not None
+                and inputs_embeds[special_image_mask].numel() != image_tokens.numel()
+            ):
                 n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum()
                 n_image_features = image_tokens.shape[0] * image_tokens.shape[1]
                 raise ValueError(
