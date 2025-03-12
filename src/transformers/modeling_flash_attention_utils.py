@@ -20,7 +20,7 @@ from typing import Optional, Tuple, TypedDict
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal, logging
+from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal, is_torch_npu_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -29,6 +29,15 @@ logger = logging.get_logger(__name__)
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
+
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+
+
+# patch functions in package `flash-attn` when using FlashAttention2 on Ascend NPU.
+if is_torch_npu_available():
+    from .utils.npu_flash_attention_utils import index_first_axis, pad_input, unpad_input
+    from .utils.npu_flash_attention_utils import npu_flash_attn_func as flash_attn_func
+    from .utils.npu_flash_attention_utils import npu_flash_attn_varlen_func as flash_attn_varlen_func
 
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
