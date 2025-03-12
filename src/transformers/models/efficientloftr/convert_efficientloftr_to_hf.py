@@ -181,7 +181,7 @@ def write_model(
     model = EfficientLoFTRForKeypointMatching.from_pretrained(model_path)
     print("Model reloaded successfully.")
 
-    model_name = "efficient_loftr"
+    model_name = "efficientloftr"
     if model_repo == DEFAULT_MODEL_REPO:
         print("Checking the model outputs...")
         verify_model_outputs(model, device)
