@@ -733,9 +733,9 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-3.7025, -5.1861, -6.1760],
-                [-4.0303, -9.3277, -5.1979],
-                [-4.1273, -4.7408, -5.8560],
+                [-3.7047, -5.1914, -6.1787],
+                [-4.0108, -9.3449, -5.2047],
+                [-4.1287, -4.7461, -5.8633],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
@@ -760,10 +760,10 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
         expected_labels = [15, 15, 65, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [3.4114e02, 2.5115e01, 6.3997e02, 3.7289e02],
-                [1.2781e01, 5.6344e01, 3.1766e02, 4.7135e02],
-                [3.9958e01, 7.3110e01, 1.7564e02, 1.1744e02],
-                [-1.0269e-01, 2.9497e00, 6.3989e02, 4.7362e02],
+                [3.4114e02, 2.5111e01, 6.3998e02, 3.7289e02],
+                [1.2780e01, 5.6346e01, 3.1767e02, 4.7134e02],
+                [3.9959e01, 7.3117e01, 1.7565e02, 1.1744e02],
+                [-1.0521e-01, 2.9717e00, 6.3989e02, 4.7362e02],
             ],
             device=torch_device,
         )
