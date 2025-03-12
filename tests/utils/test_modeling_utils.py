@@ -24,6 +24,7 @@ import unittest
 import unittest.mock as mock
 import uuid
 import warnings
+import time
 from pathlib import Path
 
 import requests
@@ -58,7 +59,9 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
+    run_test_using_subprocess,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -1890,6 +1893,26 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmpdir)
             self.assertEqual(len(cm.records), 1)
             self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
+
+    @require_torch_gpu
+    @run_test_using_subprocess
+    def test_loading_is_fast_on_gpu(self):
+        """Note that we run this test in a subprocess, to ensure that cuda is not already initialized."""
+        model_id = "Qwen/Qwen2.5-7B-Instruct"
+        # First download the weights if not already on disk
+        _ = AutoModelForCausalLM.from_pretrained(model_id)
+
+        # Now start timing the loading time
+        torch.cuda.synchronize(torch_device)
+        t0 = time.time()
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map=torch_device)
+        torch.cuda.synchronize(torch_device)
+        dt = time.time() - t0
+        
+        # Assert loading is faster than 6s
+        self.assertLess(dt, 6)
+        # Ensure everything is correctly loaded on gpu
+        self.assertTrue(all(p.device == torch_device for p in model.parameters()))
 
 
 @slow
