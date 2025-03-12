@@ -1318,12 +1318,12 @@ class RTDetrMLPPredictionHead(nn.Module):
         output_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
         self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
 
-    def forward(self, x):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
-            x = layer(x)
+            hidden_state = layer(hidden_state)
             if i < self.num_layers - 1:
-                x = nn.functional.relu(x)
-        return x
+                hidden_state = nn.functional.relu(hidden_state)
+        return hidden_state
 
 
 class RTDetrDecoder(nn.Module):

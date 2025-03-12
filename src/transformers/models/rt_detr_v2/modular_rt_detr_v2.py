@@ -36,6 +36,15 @@ from ..rt_detr.modeling_rt_detr import (
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_v2_r50vd"
+_DETECTION_OUTPUT_FOR_DOC = """
+    Detected 'cat' (0.96) at [13.71, 54.12, 317.53, 472.65]
+    Detected 'cat' (0.95) at [343.73, 23.68, 640.28, 373.05]
+    Detected 'sofa' (0.94) at [0.2, 1.32, 640.17, 474.38]
+    Detected 'remote' (0.93) at [40.6, 73.21, 175.74, 118.33]
+    Detected 'remote' (0.89) at [333.51, 76.79, 370.17, 188.13]
+"""
+
 
 class RTDetrV2Config(PretrainedConfig):
     r"""

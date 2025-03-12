@@ -52,7 +52,8 @@ from .configuration_rt_detr_v2 import RTDetrV2Config
 
 
 logger = logging.get_logger(__name__)
-_CHECKPOINT_FOR_DOC = "PekingU/RTDetrV2_r50vd"
+
+_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_v2_r50vd"
 
 _CONFIG_FOR_DOC = "RTDetrV2Config"
 
@@ -1220,12 +1221,12 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         output_dims = [hidden_dim] * (num_layers - 1) + [output_dim]
         self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
 
-    def forward(self, x):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
-            x = layer(x)
+            hidden_state = layer(hidden_state)
             if i < self.num_layers - 1:
-                x = nn.functional.relu(x)
-        return x
+                hidden_state = nn.functional.relu(hidden_state)
+        return hidden_state
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -1519,11 +1520,11 @@ RTDetrV2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 _DETECTION_OUTPUT_FOR_DOC = """
-    Detected 'sofa' (0.97) at [0.14, 0.38, 640.13, 476.21]
-    Detected 'cat' (0.96) at [343.38, 24.28, 640.14, 371.5]
-    Detected 'cat' (0.96) at [13.23, 54.18, 318.98, 472.22]
-    Detected 'remote' (0.95) at [40.11, 73.44, 175.96, 118.48]
-    Detected 'remote' (0.92) at [333.73, 76.58, 369.97, 186.99]
+    Detected 'cat' (0.96) at [13.71, 54.12, 317.53, 472.65]
+    Detected 'cat' (0.95) at [343.73, 23.68, 640.28, 373.05]
+    Detected 'sofa' (0.94) at [0.2, 1.32, 640.17, 474.38]
+    Detected 'remote' (0.93) at [40.6, 73.21, 175.74, 118.33]
+    Detected 'remote' (0.89) at [333.51, 76.79, 370.17, 188.13]
 """
 
 
