@@ -177,7 +177,7 @@ _deps = [
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
     "tensorflow-cpu>2.9,<2.16",
     "tensorflow>2.9,<2.16",
-    "tensorflow-text<2.18",
+    "tensorflow-text<=2.17",
     "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
