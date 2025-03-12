@@ -437,7 +437,7 @@ class DynamicCache(Cache):
                 self.key_cache.append(key_states)
                 self.value_cache.append(value_states)
             elif (
-                len(self.key_cache[layer_idx]) == 0
+                not self.key_cache[layer_idx].numel()  # prefers not t.numel() to len(t) == 0 to export the model
             ):  # fills previously skipped layers; checking for tensor causes errors
                 self.key_cache[layer_idx] = key_states
                 self.value_cache[layer_idx] = value_states
@@ -453,10 +453,10 @@ class DynamicCache(Cache):
         is_empty_layer = (
             len(self.key_cache) == 0  # no cache in any layer
             or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
-            or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
+            or not self.key_cache[layer_idx].numel()  # the layer has no cache
         )
-        layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
-        return layer_seq_length
+        return self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
+        # return layer_seq_length
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
