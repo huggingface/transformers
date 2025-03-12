@@ -321,9 +321,6 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFBlipTextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
 
 class TFBlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -429,9 +426,6 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model_name = "Salesforce/blip-vqa-base"
         model = TFBlipModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
     @unittest.skip("Matt: Re-enable this test when we have a proper export function for TF models.")
     def test_saved_model_creation(self):

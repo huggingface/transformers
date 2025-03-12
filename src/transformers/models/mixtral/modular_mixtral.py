@@ -45,7 +45,9 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
+    MistralPreTrainedModel,
     MistralRMSNorm,
+    MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -313,6 +315,14 @@ class MixtralDecoderLayer(nn.Module):
         return outputs
 
 
+class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+    pass
+
+
+class MixtralPreTrainedModel(MistralPreTrainedModel):
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+
 class MixtralModel(MistralModel):
     def __init__(self, config: MixtralConfig):
         super().__init__(config)
@@ -470,7 +480,6 @@ class MixtralForCausalLM(MistralForCausalLM):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored

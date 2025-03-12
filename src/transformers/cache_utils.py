@@ -3,18 +3,13 @@ import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import (
-    is_hqq_available,
-    is_optimum_quanto_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from .utils import is_hqq_available, is_optimum_quanto_available, logging
 from .utils.deprecation import deprecate_kwarg
 
 
@@ -24,10 +19,12 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-class Cache(torch.nn.Module):
+class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
+
+    is_compileable = False
 
     def __init__(self):
         super().__init__()
@@ -215,10 +212,10 @@ class QuantizedCacheConfig(CacheConfig):
             Size of the quantization group, should be a divisor of the model's hidden dimension.
             Defaults to 64.
         residual_length (`Optional[int]`, *optional*, defaults to 128):
-            Length of the residual cache which will always be stored in original presicion.
+            Length of the residual cache which will always be stored in original precision.
             Defaults to 128.
         compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
-            The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
+            The default dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
         device (`str`, *optional*, defaults to `"cpu"`):
             Device on which to perform computations, should be same as the model's device.
     """
@@ -361,12 +358,22 @@ class DynamicCache(Cache):
         ```
     """
 
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def __init__(self, num_hidden_layers: Optional[int] = None) -> None:
+    def __init__(self, _distributed_cache_data: Iterable = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+
+        # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
+        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
+        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
+        # (shape=[global batch size, num_heads, seq_len, head_dim]).
+        # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
+        # compatibility. The name of the argument doesn't matter.
+        if _distributed_cache_data is not None:
+            for key_states, value_states in _distributed_cache_data:
+                self.key_cache.append(key_states)
+                self.value_cache.append(value_states)
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -464,10 +471,7 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
-    ) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
         cache = cls()
@@ -493,10 +497,7 @@ class DynamicCache(Cache):
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def batch_split(
-        self, full_batch_size: int, split_size: int, num_hidden_layers: int = None
-    ) -> List["DynamicCache"]:
+    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         out = []
@@ -509,8 +510,7 @@ class DynamicCache(Cache):
         return out
 
     @classmethod
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_batch_splits(cls, splits: List["DynamicCache"], num_hidden_layers: int = None) -> "DynamicCache":
+    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls()
@@ -1074,7 +1074,7 @@ class StaticCache(Cache):
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
 
@@ -1097,6 +1097,8 @@ class StaticCache(Cache):
         StaticCache()
         ```
     """
+
+    is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
@@ -1144,18 +1146,10 @@ class StaticCache(Cache):
                 layer_device = self.device
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
-            # Notes:
-            # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
-            #     it is not needed anyway)
-            # 2. `torch.export()` requires mutations to be registered as buffers.
-            if not is_torchdynamo_compiling():
-                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
-                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
-                new_layer_key_cache = getattr(self, f"key_cache_{idx}")
-                new_layer_value_cache = getattr(self, f"value_cache_{idx}")
-                torch._dynamo.mark_static_address(new_layer_key_cache)
-                torch._dynamo.mark_static_address(new_layer_value_cache)
+            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
+            # preventing compiled graph breaks when updating the cache.
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
@@ -1273,7 +1267,7 @@ class SlidingWindowCache(StaticCache):
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
@@ -1297,6 +1291,7 @@ class SlidingWindowCache(StaticCache):
     """
 
     is_sliding = True
+    is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
@@ -1421,6 +1416,7 @@ class EncoderDecoderCache(Cache):
         super().__init__()
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
+        self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache.key_cache)):
@@ -1521,10 +1517,7 @@ class EncoderDecoderCache(Cache):
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
 
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def batch_split(
-        self, full_batch_size: int, split_size: int, num_hidden_layers: int = None
-    ) -> "List[EncoderDecoderCache]":
+    def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         self.check_dynamic_cache(self.batch_split.__name__)
@@ -1537,10 +1530,7 @@ class EncoderDecoderCache(Cache):
         return out
 
     @classmethod
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_batch_splits(
-        cls, splits: List["EncoderDecoderCache"], num_hidden_layers: int = None
-    ) -> "EncoderDecoderCache":
+    def from_batch_splits(cls, splits: List["EncoderDecoderCache"]) -> "EncoderDecoderCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         self_attention_cache = DynamicCache()
@@ -1589,7 +1579,7 @@ class HybridCache(Cache):
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Example:
@@ -1611,6 +1601,10 @@ class HybridCache(Cache):
         HybridCache()
         ```
     """
+
+    # TODO (joao): dive deeper into gemma2 and paligemma -- there are reports of speed loss with compilation. Revert
+    # ALL changes from the PR that commented the line below when reactivating it.
+    # is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
@@ -1832,6 +1826,8 @@ class MambaCache:
         ```
     """
 
+    is_compileable = True
+
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
@@ -1935,7 +1931,7 @@ class OffloadedStaticCache(StaticCache):
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
         layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
-            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between differents gpus.
+            Mapping between the layers and its device. This is required when you are manually initializing the cache and the model is splitted between different gpus.
             You can know which layers mapped to which device by checking the associated device_map: `model.hf_device_map`.
 
     Attributes:
@@ -1974,6 +1970,8 @@ class OffloadedStaticCache(StaticCache):
         >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
+
+    is_compileable = True
 
     @deprecate_kwarg("layer_device_map", version="4.52.0")
     def __init__(

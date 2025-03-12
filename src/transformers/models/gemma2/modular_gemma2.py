@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache
+from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -123,6 +123,20 @@ class Gemma2Config(PretrainedConfig):
 
     model_type = "gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -256,8 +270,18 @@ class Gemma2Attention(GemmaAttention):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+                "sliding_window": self.sliding_window,
+            }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            # Here we need to slice as we use a static cache by default, but FA2 does not support it
+            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
+                seq_len = attention_mask.shape[-1]
+                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -312,20 +336,30 @@ class Gemma2DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        last_cache_position: int = 0,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            # Flash-attn is a 2D tensor
+            # In prefill, we may be larger than sliding window
+            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
+            # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
+            # thus we must slice from the right (at most `effective_seq_len` elements)
             if self.config._attn_implementation == "flash_attention_2":
-                if past_key_value is not None:  # when decoding
-                    attention_mask = attention_mask[:, -self.sliding_window :]
+                attention_mask = attention_mask[:, -effective_seq_len:]
+            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
+            # from the left, with an offset if we are beyond the sliding window
             else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
+                min_dtype = torch.finfo(attention_mask.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-                if attention_mask.shape[-1] <= 1:  # when decoding
-                    attention_mask = attention_mask[:, :, :, -self.sliding_window :]
+                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
+                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
+                offset = last_cache_position - effective_seq_len
+                # Should only be used when beyond the sliding window (i.e. offset > 0)
+                offset = max(0, offset)
+                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
 
         residual = hidden_states
 
@@ -341,6 +375,7 @@ class Gemma2DecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
@@ -378,6 +413,7 @@ class Gemma2Model(GemmaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -417,6 +453,16 @@ class Gemma2Model(GemmaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        if last_cache_position is None:
+            last_cache_position = 0
+            if attention_mask is not None:
+                # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
+                # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
+                last_cache_position = (
+                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+                )
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -452,6 +498,7 @@ class Gemma2Model(GemmaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    last_cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -463,6 +510,7 @@ class Gemma2Model(GemmaModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    last_cache_position=last_cache_position,
                     **flash_attn_kwargs,
                 )
 
@@ -502,7 +550,7 @@ class Gemma2Model(GemmaModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
-        if isinstance(past_key_values, HybridCache):
+        if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
@@ -543,10 +591,26 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-2-9b")
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
+
+        >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 
         >>> prompt = "What is your favorite condiment?"
@@ -580,6 +644,7 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **loss_kwargs,
         )
 
         hidden_states = outputs[0]
@@ -621,33 +686,23 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
     ):
         # Overwritten: has a special cache type, `HybridCache`
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s
-                # `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride
-                # during the decoding. Here, simply using `.contiguous()` is not sufficient as in the
-                # batch size = 1 case, `position_ids` is already contiguous but with varying stride
-                # which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-        else:
-            # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+        if logits_to_keep is None:
+            _ = model_inputs.pop("logits_to_keep", None)
 
         if (
             isinstance(past_key_values, HybridCache)
@@ -670,19 +725,8 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
+            model_inputs["attention_mask"] = attention_mask
 
-        if logits_to_keep is not None:
-            model_inputs["logits_to_keep"] = logits_to_keep
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
         return model_inputs
 
 
