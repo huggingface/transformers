@@ -135,7 +135,7 @@ class MLCDMLP(CLIPMLP):
 
 class MLCDRotaryEmbedding(VisionRotaryEmbedding):
     def forward(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        '''Calculate sequence length from grid, and then get the RoPE for MLCDVisionModel'''
+        """Calculate sequence length from grid, and then get the RoPE for MLCDVisionModel"""
 
         t, h, w = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
 
@@ -148,8 +148,8 @@ class MLCDRotaryEmbedding(VisionRotaryEmbedding):
         wpos_ids = wpos_ids.unsqueeze(0).expand(len(grid_thw), -1, -1)
 
         # Slice hpos_ids and wpos_ids to match the actual grid sizes
-        hpos_ids = [hpos_ids[i, :h[i], :w[i]] for i in range(len(grid_thw))]
-        wpos_ids = [wpos_ids[i, :h[i], :w[i]] for i in range(len(grid_thw))]
+        hpos_ids = [hpos_ids[i, : h[i], : w[i]] for i in range(len(grid_thw))]
+        wpos_ids = [wpos_ids[i, : h[i], : w[i]] for i in range(len(grid_thw))]
 
         # Stack and flatten hpos_ids and wpos_ids, then repeat according to t
         pos_ids = [torch.stack([hpos_ids[i].flatten(), wpos_ids[i].flatten()], dim=-1) for i in range(len(grid_thw))]
@@ -480,12 +480,8 @@ class MLCDEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -567,7 +563,6 @@ class MLCDVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-
         twh = (1, pixel_values.size(3) // self.config.patch_size, pixel_values.size(2) // self.config.patch_size)
         rotary_pos_emb = self.vision_rotary_embedding(torch.tensor([twh], device=pixel_values.device))
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
@@ -575,12 +570,8 @@ class MLCDVisionTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -714,12 +705,8 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         return self.vision_model(
             pixel_values=pixel_values,

@@ -331,4 +331,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_mlcd_checkpoint(args.model_name, args.input_dir, args.output_dir, args.verify_hidden_state, args.push_to_hub)
+    convert_mlcd_checkpoint(
+        args.model_name, args.input_dir, args.output_dir, args.verify_hidden_state, args.push_to_hub
+    )
