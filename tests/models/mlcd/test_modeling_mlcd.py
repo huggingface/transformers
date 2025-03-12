@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ class MLCDVisionModelTester:
 
 
 @require_torch
-class MLCDVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
+class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `MLCDVisionModel`.
     """
@@ -122,7 +122,6 @@ class MLCDVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
     test_resize_embeddings = False
-    has_attentions = False
 
     def setUp(self):
         self.model_tester = MLCDVisionModelTester(self)
