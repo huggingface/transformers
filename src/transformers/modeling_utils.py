@@ -1223,10 +1223,12 @@ def _get_torch_dtype(
                     )
             elif hasattr(torch, torch_dtype):
                 torch_dtype = getattr(torch, torch_dtype)
+                config.torch_dtype = torch_dtype
                 for sub_config_key in config.sub_configs.keys():
                     sub_config = getattr(config, sub_config_key)
                     sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, torch.dtype):
+            config.torch_dtype = torch_dtype
             for sub_config_key in config.sub_configs.keys():
                 sub_config = getattr(config, sub_config_key)
                 sub_config.torch_dtype = torch_dtype
@@ -4365,6 +4367,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
+            # config.torch_dtype=None
             model = cls(config, *model_args, **model_kwargs)
 
         # Make sure to tie the weights correctly
