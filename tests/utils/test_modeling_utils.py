@@ -1910,9 +1910,9 @@ class ModelUtilsTest(TestCasePlus):
         dt = time.time() - t0
         
         # Assert loading is faster than 6s
-        self.assertLess(dt, 6)
+        self.assertLess(dt, 6, "Loading is too slow!")
         # Ensure everything is correctly loaded on gpu
-        self.assertTrue(all(p.device == torch_device for p in model.parameters()))
+        self.assertTrue(all(p.device == torch_device for p in model.parameters()), "Some parameters are not on GPU")
 
 
 @slow
