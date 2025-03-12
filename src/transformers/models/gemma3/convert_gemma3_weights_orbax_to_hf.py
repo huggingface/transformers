@@ -55,7 +55,11 @@ from .configuration_gemma3 import (
 
 _CHAT_TEMPLATE = """{{ bos_token }}
 {%- if messages[0]['role'] == 'system' -%}
-    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
+    {%- if messages[0]['content'] is string -%}
+        {%- set first_user_prefix = messages[0]['content'] + '\n\n' -%}
+    {%- else -%}
+        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
+    {%- endif -%}
     {%- set loop_messages = messages[1:] -%}
 {%- else -%}
     {%- set first_user_prefix = "" -%}
