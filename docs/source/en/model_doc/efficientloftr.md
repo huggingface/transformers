@@ -15,6 +15,10 @@ rendered properly in your Markdown viewer.
 
 # EfficientLoFTR
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The EfficientLoFTR model was proposed in [Efficient LoFTR: Semi-Dense Local Feature Matching with Sparse-Like Speed](https://arxiv.org/abs/2403.04765) by Yifan Wang, Xingyi He, Sida Peng, Dongli Tan and Xiaowei Zhou.
