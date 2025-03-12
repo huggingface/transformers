@@ -683,10 +683,22 @@ class TimesFmModel(TimesFmPreTrainedModel):
         )
         return outputs, (mu, sigma)
 
-    def _preprocess_input(
-        self, input_ts: torch.Tensor, input_padding: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Preprocess input for stacked transformer."""
+    @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        past_values_padding: torch.LongTensor,
+        freq: torch.Tensor,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
+        """
+        past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The padding indicator of the time series.
+        """
         # Reshape into patches (using view for efficiency)
         bsize = input_ts.shape[0]
         patched_inputs = input_ts.view(bsize, -1, self.config.patch_length)
@@ -717,29 +729,6 @@ class TimesFmModel(TimesFmPreTrainedModel):
             pos_emb = timesfm_shift_padded_seq(patched_padding, pos_emb)
             model_input += pos_emb
 
-        return model_input, patched_padding, stats, patched_inputs
-
-    @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        past_values: torch.Tensor,
-        past_values_padding: torch.LongTensor,
-        freq: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
-        """
-        past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The padding indicator of the time series.
-        """
-
-        model_input, patched_padding, stats, _ = self._preprocess_input(
-            input_ts=past_values,
-            input_padding=past_values_padding,
-        )
         f_emb = self.freq_emb(freq)  # B x 1 x D
         model_input += f_emb
 
