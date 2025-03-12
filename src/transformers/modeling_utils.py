@@ -4571,8 +4571,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         loading_base_model_from_task_state_dict: bool = False,
         loading_task_model_from_base_state_dict: bool = False,
     ):
-        """Fixes state dict keys by replacing legacy parameter names with their modern equivalents.
-        Logs if any parameters have been renamed.
+        """
+        Compute a mapping between the serialized keys on disk `checkpoint_keys`, and the keys that the model
+        that we are loading expects. This is the single entry point for key renaming that will be used during
+        loading.
+        Log if any parameters have been renamed.
         """
         prefix = self.base_model_prefix
         _prefix = f"{prefix}."
