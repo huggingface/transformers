@@ -41,10 +41,12 @@ Project page: [https://zju3dv.github.io/efficientloftr/](https://zju3dv.github.i
 
 Here is a quick example of using the model. 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModel
+
+from transformers import AutoImageProcessor, AutoModelForKeypointMatching
+
 
 url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 image1 = Image.open(requests.get(url_image1, stream=True).raw)
@@ -54,7 +56,7 @@ image2 = Image.open(requests.get(url_image2, stream=True).raw)
 images = [image1, image2]
 
 processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficientloftr")
-model = AutoModel.from_pretrained("stevenbucaille/efficientloftr")
+model = AutoModelForKeypointMatching.from_pretrained("stevenbucaille/efficientloftr")
 
 inputs = processor(images, return_tensors="pt")
 with torch.no_grad():
@@ -74,15 +76,13 @@ for i, output in enumerate(outputs):
         print(
             f"Keypoint at coordinate {keypoint0.numpy()} in the first image matches with keypoint at coordinate {keypoint1.numpy()} in the second image with a score of {matching_score}."
         )
-
 ```
 
 From the outputs, you can visualize the matches between the two images using the following code:
 ```python
 processor.plot_keypoint_matching(images, outputs)
+# TODO make plot
 ```
-
-![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/01ZYaLB1NL5XdA8u7yCo4.png)
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
