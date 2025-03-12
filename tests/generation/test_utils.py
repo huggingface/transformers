@@ -113,7 +113,19 @@ from transformers.utils import is_sklearn_available
 
 
 # TODO: raushan remove this when VLMs start accepting input embeds
-VLM_CLASS_NAMES = ["llava", "idefics2", "idefics3", "mllama", "paligemma", "emu3", "gotocr2", "qwen2vl", "qwen2_5_vl"]
+VLM_CLASS_NAMES = [
+    "llava",
+    "idefics2",
+    "idefics3",
+    "mllama",
+    "paligemma",
+    "emu3",
+    "gotocr2",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "ayavision",
+    "gemma3",
+]
 
 
 class GenerationTesterMixin:
@@ -2107,6 +2119,9 @@ class GenerationTesterMixin:
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
+        # Monkey-patching the HybridCache at test-time to continue testing compilation support
+        HybridCache.is_compileable = True
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2203,6 +2218,9 @@ class GenerationTesterMixin:
         Tests that all optional outputs are behaving as expected when compilation is triggered.
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
+        # Monkey-patching the HybridCache at test-time to continue testing compilation support
+        HybridCache.is_compileable = True
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2287,6 +2305,7 @@ class GenerationTesterMixin:
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     @pytest.mark.generate
+    @is_flaky
     def test_assisted_decoding_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):

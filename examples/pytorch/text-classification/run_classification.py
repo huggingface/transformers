@@ -429,7 +429,7 @@ def main():
     if is_regression:
         label_list = None
         num_labels = 1
-        # regession requires float as label type, let's cast it if needed
+        # regression requires float as label type, let's cast it if needed
         for split in raw_datasets.keys():
             if raw_datasets[split].features["label"].dtype not in ["float32", "float64"]:
                 logger.warning(

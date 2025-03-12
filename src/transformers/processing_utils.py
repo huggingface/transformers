@@ -901,7 +901,7 @@ class ProcessorMixin(PushToHubMixin):
                 ```python
                 tokenizer = tokenizer_class(..., {"padding": "max_length"})
                 image_processor = image_processor_class(...)
-                processor(tokenizer, image_processor) # will pass max_length unless overriden by kwargs at call
+                processor(tokenizer, image_processor) # will pass max_length unless overridden by kwargs at call
                 ```
             4) defaults kwargs specified at processor level have lowest priority.
                 ```python
@@ -1105,7 +1105,17 @@ class ProcessorMixin(PushToHubMixin):
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
                 classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
-                use_fast = kwargs.get("use_fast", True)
+                if attribute_name == "image_processor":
+                    # TODO: @yoni, change logic in v4.50 (when use_fast set to True by default)
+                    use_fast = kwargs.get("use_fast", None)
+                    if use_fast is None:
+                        logger.warning_once(
+                            "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
+                            "`use_fast=True` will be the default behavior in v4.50, even if the model was saved with a slow processor. "
+                            "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
+                        )
+                else:
+                    use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
@@ -1205,7 +1215,7 @@ class ProcessorMixin(PushToHubMixin):
         video models might want to specify in the prompt the duration of video or which frame indices at which timestamps
         were sampled. This information cannot be accessed before the video is loaded.
 
-        For most models it is a no-op, and must be overriden by model processors which require special processing.
+        For most models it is a no-op, and must be overridden by model processors which require special processing.
 
         Args:
             conversation (`List[Dict, str, str]`):
@@ -1372,7 +1382,7 @@ class ProcessorMixin(PushToHubMixin):
         if tokenize:
             # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
             # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
-            # and pass it to the processor. Users thus never worried about special tokens relying on processor hadnling
+            # and pass it to the processor. Users thus never worried about special tokens relying on processor handling
             # everything internally. The below line is to keep BC for that and be able to work with model that have
             # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
             # without actionable solution for users
