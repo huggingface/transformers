@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # DeiT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://arxiv.org/abs/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
@@ -123,6 +129,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## DeiTImageProcessor
 
 [[autodoc]] DeiTImageProcessor
+    - preprocess
+
+## DeiTImageProcessorFast
+
+[[autodoc]] DeiTImageProcessorFast
     - preprocess
 
 <frameworkcontent>

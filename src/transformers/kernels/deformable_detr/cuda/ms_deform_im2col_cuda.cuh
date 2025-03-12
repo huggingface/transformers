@@ -258,7 +258,7 @@ __global__ void ms_deformable_im2col_gpu_kernel(const int n,
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 
@@ -328,7 +328,7 @@ __global__ void ms_deformable_col2im_gpu_kernel_shm_blocksize_aware_reduce_v1(co
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 
@@ -433,7 +433,7 @@ __global__ void ms_deformable_col2im_gpu_kernel_shm_blocksize_aware_reduce_v2(co
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 
@@ -541,7 +541,7 @@ __global__ void ms_deformable_col2im_gpu_kernel_shm_reduce_v1(const int n,
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 
@@ -646,7 +646,7 @@ __global__ void ms_deformable_col2im_gpu_kernel_shm_reduce_v2(const int n,
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 
@@ -759,7 +759,7 @@ __global__ void ms_deformable_col2im_gpu_kernel_shm_reduce_v2_multi_blocks(const
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 
@@ -869,7 +869,7 @@ __global__ void ms_deformable_col2im_gpu_kernel_gm(const int n,
     const int sampling_index = _temp; 
     const int m_col = _temp % num_heads;
     _temp /= num_heads;
-    const int q_col = _temp % num_query;
+    [[maybe_unused]] const int q_col = _temp % num_query;
     _temp /= num_query;
     const int b_col = _temp;
 

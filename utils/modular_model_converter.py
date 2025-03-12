@@ -19,7 +19,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Dict, Set
+from typing import Dict, Optional, Set, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -169,7 +169,7 @@ def is_call_to_super(node, func_name):
     )
 
 
-def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
+def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[str]:
     """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
     successive value of an Attribute are not Name nodes, return `None`."""
     if m.matches(node, m.Name()):
@@ -253,10 +253,29 @@ def get_docstring_indent(docstring):
     return 0
 
 
+def is_full_docstring(new_docstring: str) -> bool:
+    """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
+    be merged with the existing old one.
+    """
+    # libcst returns the docstrinbgs with litteral `r"""` quotes in front
+    new_docstring = new_docstring.split('"""', 1)[1]
+    # The docstring contains Args definition, so it is self-contained
+    if re.search(r"\n\s*Args:\n", new_docstring):
+        return True
+    # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
+    # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
+    match_object = re.search(r"\n([^\S\n]*)Returns:\n", new_docstring)
+    if match_object is not None:
+        full_indent = match_object.group(1)
+        striped_doc = new_docstring.strip("\n")
+        if striped_doc.startswith(full_indent + " " * 4) or striped_doc.startswith(full_indent + "\t"):
+            return True
+    return False
+
+
 def merge_docstrings(original_docstring, updated_docstring):
-    # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    if not re.findall(r"\n\s*Args:\n", updated_docstring):
+    if not is_full_docstring(updated_docstring):
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
@@ -430,11 +449,11 @@ class SuperTransformer(cst.CSTTransformer):
 
 def find_all_dependencies(
     dependency_mapping: Dict[str, set],
-    start_entity: str | None = None,
-    initial_dependencies: set | None = None,
-    initial_checked_dependencies: set | None = None,
+    start_entity: Optional[str] = None,
+    initial_dependencies: Optional[set] = None,
+    initial_checked_dependencies: Optional[set] = None,
     return_parent: bool = False,
-) -> list | set:
+) -> Union[list, set]:
     """Return all the dependencies of the given `start_entity` or `initial_dependencies`. This is basically some kind of
     BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
 
@@ -525,7 +544,7 @@ class ClassDependencyMapper(CSTVisitor):
     """
 
     def __init__(
-        self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None
+        self, class_name: str, global_names: set[str], objects_imported_from_modeling: Optional[set[str]] = None
     ):
         super().__init__()
         self.class_name = class_name
@@ -553,7 +572,7 @@ def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> s
 
 
 def augmented_dependencies_for_class_node(
-    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None
+    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: Optional[set[str]] = None
 ) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
@@ -649,9 +668,11 @@ class ModuleMapper(CSTVisitor, ABC):
             self.current_function = None
 
     def visit_If(self, node):
-        for stmt in node.body.body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports.append(node)
+        # If we are inside a function, do not add the import to the list of imports
+        if self.current_function is None:
+            for stmt in node.body.body:
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                    self.imports.append(node)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
@@ -1066,6 +1087,8 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "FastImageProcessorInitKwargs": "image_processing*_fast",
+    "FastImageProcessorPreprocessKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1714,7 +1737,7 @@ if __name__ == "__main__":
     if args.files_to_parse == ["examples"]:
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
 
-    priority_list = find_priority_list(args.files_to_parse)
+    priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:

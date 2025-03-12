@@ -52,3 +52,5 @@ markers = [
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
     "generate: marks tests that use the GenerationTesterMixin"
 ]
+log_cli = 1
+log_cli_level = "WARNING"

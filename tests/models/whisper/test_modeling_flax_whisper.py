@@ -17,9 +17,8 @@ import inspect
 import tempfile
 import unittest
 
-import transformers
 from transformers import WhisperConfig, is_flax_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
+from transformers.testing_utils import require_flax, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
@@ -45,7 +44,6 @@ if is_flax_available():
         WhisperFeatureExtractor,
         WhisperProcessor,
     )
-    from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.whisper.modeling_flax_whisper import sinusoidal_embedding_init
 
 
@@ -190,7 +188,6 @@ def make_partial_class(full_class, *args, **kwargs):
 @require_flax
 class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxWhisperForConditionalGeneration, FlaxWhisperModel) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxWhisperForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -245,99 +242,6 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
-
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as test recently became flaky
-        super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
-
-    # overwrite because of `input_features`
-    @is_pt_flax_cross_test
-    def test_save_load_bf16_to_base_pt(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == base_class.__name__:
-                continue
-
-            model = model_class(config)
-            model.params = model.to_bf16(model.params)
-            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
-
-            # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
-            pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
-
-                base_params = flatten_dict(unfreeze(base_model.params))
-
-                for key in base_params_from_head.keys():
-                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-    # overwrite because of `input_features`
-    @is_pt_flax_cross_test
-    def test_save_load_from_base_pt(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == base_class.__name__:
-                continue
-
-            model = base_class(config)
-            base_params = flatten_dict(unfreeze(model.params))
-
-            # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
-            pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                # save pt model
-                pt_model.save_pretrained(tmpdirname)
-                head_model = model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
-
-                for key in base_param_from_head.keys():
-                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-    # overwrite because of `input_features`
-    @is_pt_flax_cross_test
-    def test_save_load_to_base_pt(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = make_partial_class(FLAX_MODEL_MAPPING[config.__class__], input_shape=self.init_shape)
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == base_class.__name__:
-                continue
-
-            model = model_class(config)
-            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
-
-            # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
-            pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
-
-                base_params = flatten_dict(unfreeze(base_model.params))
-
-                for key in base_params_from_head.keys():
-                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     # overwrite because of `input_features`
     def test_save_load_from_base(self):
@@ -899,19 +803,4 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     # WhisperEncoder does not have any base model
     def test_save_load_from_base(self):
-        pass
-
-    # WhisperEncoder does not have any base model
-    @is_pt_flax_cross_test
-    def test_save_load_from_base_pt(self):
-        pass
-
-    # WhisperEncoder does not have any base model
-    @is_pt_flax_cross_test
-    def test_save_load_to_base_pt(self):
-        pass
-
-    # WhisperEncoder does not have any base model
-    @is_pt_flax_cross_test
-    def test_save_load_bf16_to_base_pt(self):
         pass

@@ -43,8 +43,10 @@ from unittest import mock
 from unittest.mock import patch
 
 import huggingface_hub.utils
+import requests
 import urllib3
 from huggingface_hub import delete_repo
+from packaging import version
 
 from transformers import logging as transformers_logging
 
@@ -53,6 +55,7 @@ from .integrations import (
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
+    is_swanlab_available,
     is_tensorboard_available,
     is_wandb_available,
 )
@@ -62,6 +65,7 @@ from .utils import (
     GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
@@ -120,6 +124,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_available,
     is_spacy_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -135,6 +140,8 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
+    is_torch_greater_or_equal,
+    is_torch_hpu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -196,6 +203,8 @@ else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
 
+logger = transformers_logging.get_logger(__name__)
+
 
 def parse_flag_from_env(key, default=False):
     try:
@@ -227,63 +236,11 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
-_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=True)
-_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
-
-
-def get_device_count():
-    import torch
-
-    if is_torch_xpu_available():
-        num_devices = torch.xpu.device_count()
-    else:
-        num_devices = torch.cuda.device_count()
-
-    return num_devices
-
-
-def is_pt_tf_cross_test(test_case):
-    """
-    Decorator marking a test as a test that control interactions between PyTorch and TensorFlow.
-
-    PT+TF tests are skipped by default and we can run only them by setting RUN_PT_TF_CROSS_TESTS environment variable
-    to a truthy value and selecting the is_pt_tf_cross_test pytest mark.
-
-    """
-    if not _run_pt_tf_cross_tests or not is_torch_available() or not is_tf_available():
-        return unittest.skip(reason="test is PT+TF test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pt_tf_cross_test()(test_case)
-
-
-def is_pt_flax_cross_test(test_case):
-    """
-    Decorator marking a test as a test that control interactions between PyTorch and Flax
-
-    PT+FLAX tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment
-    variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
-
-    """
-    if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
-        return unittest.skip(reason="test is PT+FLAX test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pt_flax_cross_test()(test_case)
 
 
 def is_staging_test(test_case):
@@ -401,6 +358,14 @@ def require_galore_torch(test_case):
     https://github.com/jiaweizzhao/GaLore
     """
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
+def require_apollo_torch(test_case):
+    """
+    Decorator marking a test that requires GaLore. These tests are skipped when APOLLO isn't installed.
+    https://github.com/zhuhanqing/APOLLO
+    """
+    return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
 
 
 def require_lomo(test_case):
@@ -554,6 +519,21 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torch_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PyTorch version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_flash_attn(test_case):
@@ -770,17 +750,17 @@ def require_spacy(test_case):
 
 def require_torch_multi_gpu(test_case):
     """
-    Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
-    multiple GPUs.
+    Decorator marking a test that requires a multi-GPU CUDA setup (in PyTorch). These tests are skipped on a machine without
+    multiple CUDA GPUs.
 
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    device_count = get_device_count()
+    import torch
 
-    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple CUDA GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
@@ -879,6 +859,13 @@ def require_torch_multi_npu(test_case):
     return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
 
 
+def require_non_hpu(test_case):
+    """
+    Decorator marking a test that should be skipped for HPU.
+    """
+    return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
+
+
 def require_torch_xpu(test_case):
     """
     Decorator marking a test that requires XPU (in PyTorch).
@@ -910,6 +897,19 @@ def require_torch_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
+def require_torch_multi_hpu(test_case):
+    """
+    Decorator marking a test that requires a multi-HPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple HPUs.
+
+    To run *only* the multi_hpu tests, assuming all test names contain multi_hpu: $ pytest -sv ./tests -k "multi_hpu"
+    """
+    if not is_torch_hpu_available():
+        return unittest.skip(reason="test requires PyTorch HPU")(test_case)
+
+    return unittest.skipUnless(torch.hpu.device_count() > 1, "test requires multiple HPUs")(test_case)
+
+
 if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
@@ -938,6 +938,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "hpu" and not is_torch_hpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -950,6 +954,8 @@ if is_torch_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
+    elif _run_third_party_device_tests and is_torch_hpu_available():
+        torch_device = "hpu"
     elif _run_third_party_device_tests and is_torch_xpu_available():
         torch_device = "xpu"
     else:
@@ -976,6 +982,18 @@ def require_torchdynamo(test_case):
 def require_torchao(test_case):
     """Decorator marking a test that requires torchao"""
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
+def require_torchao_version_greater_or_equal(torchao_version):
+    def decorator(test_case):
+        correct_torchao_version = is_torchao_available() and version.parse(
+            version.parse(importlib.metadata.version("torchao")).base_version
+        ) >= version.parse(torchao_version)
+        return unittest.skipUnless(
+            correct_torchao_version, f"Test requires torchao with the version greater than {torchao_version}."
+        )(test_case)
+
+    return decorator
 
 
 def require_torch_tensorrt_fx(test_case):
@@ -1108,6 +1126,16 @@ def require_sigopt(test_case):
     return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
 
 
+def require_swanlab(test_case):
+    """
+    Decorator marking a test that requires swanlab.
+
+    These tests are skipped when swanlab isn't installed.
+
+    """
+    return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
+
+
 def require_wandb(test_case):
     """
     Decorator marking a test that requires wandb.
@@ -1164,6 +1192,13 @@ def require_vptq(test_case):
     Decorator marking a test that requires vptq
     """
     return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
+
+
+def require_spqr(test_case):
+    """
+    Decorator marking a test that requires spqr
+    """
+    return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
 
 def require_eetq(test_case):
@@ -2170,7 +2205,7 @@ def pytest_terminal_summary_main(tr, id):
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
                 if rep.duration < durations_min:
-                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    f.write(f"{len(dlist) - i} durations < {durations_min} secs were omitted")
                     break
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
@@ -2410,7 +2445,7 @@ class SubprocessCallException(Exception):
 def run_command(command: List[str], return_stdout=False):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
-    if an error occured while running `command`
+    if an error occurred while running `command`
     """
     try:
         output = subprocess.check_output(command, stderr=subprocess.STDOUT)
@@ -2503,7 +2538,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
                     return test_func_ref(*args, **kwargs)
 
                 except Exception as err:
-                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
                     retry_count += 1
@@ -2513,6 +2548,62 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
         return wrapper
 
     return decorator
+
+
+def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
+    """
+    To decorate tests that download from the Hub. They can fail due to a
+    variety of network issues such as timeouts, connection resets, etc.
+
+    Args:
+        max_attempts (`int`, *optional*, defaults to 5):
+            The maximum number of attempts to retry the flaky test.
+        wait_before_retry (`float`, *optional*, defaults to 2):
+            If provided, will wait that number of seconds before retrying the test.
+    """
+
+    def decorator(test_func_ref):
+        @functools.wraps(test_func_ref)
+        def wrapper(*args, **kwargs):
+            retry_count = 1
+
+            while retry_count < max_attempts:
+                try:
+                    return test_func_ref(*args, **kwargs)
+                # We catch all exceptions related to network issues from requests
+                except (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ReadTimeout,
+                    requests.exceptions.HTTPError,
+                    requests.exceptions.RequestException,
+                ) as err:
+                    logger.error(
+                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
+                    )
+                    if wait_before_retry is not None:
+                        time.sleep(wait_before_retry)
+                    retry_count += 1
+
+            return test_func_ref(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def run_first(test_case):
+    """
+    Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
+    are garanteed to run first.
+
+    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
+    single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
+    allocation conflicts.
+    """
+    import pytest
+
+    return pytest.mark.order(1)(test_case)
 
 
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
@@ -2555,7 +2646,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     process.join(timeout=timeout)
 
     if results["error"] is not None:
-        test_case.fail(f'{results["error"]}')
+        test_case.fail(f"{results['error']}")
 
 
 def run_test_using_subprocess(func):
@@ -2622,7 +2713,7 @@ def run_test_using_subprocess(func):
 The following contains utils to run the documentation tests without having to overwrite any files.
 
 The `preprocess_string` function adds `# doctest: +IGNORE_RESULT` markers on the fly anywhere a `load_dataset` call is
-made as a print would otherwise fail the corresonding line.
+made as a print would otherwise fail the corresponding line.
 
 To skip cuda tests, make sure to call `SKIP_CUDA_DOCTEST=1 pytest --doctest-modules <path_to_files_to_test>
 """
@@ -2802,6 +2893,25 @@ else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
+
+if is_torch_hpu_available():
+    BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
+    BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_npu_available():
+    BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
+    BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
+    BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
+
+if is_torch_xpu_available():
+    BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
+    BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
+    BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
+
+if is_torch_xla_available():
+    BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
+    BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
+    BACKEND_DEVICE_COUNT["xla"] = torch.cuda.device_count
 
 
 def backend_manual_seed(device: str, seed: int):

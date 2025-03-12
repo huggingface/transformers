@@ -65,12 +65,12 @@ class HiggsConfigTest(unittest.TestCase):
 @require_accelerate
 # @require_read_token
 class HiggsTest(unittest.TestCase):
-    model_name = "meta-llama/Meta-Llama-3.1-8B"
+    model_name = "unsloth/Llama-3.2-1B"
 
-    input_text = "A quick brown fox jumps over the"
+    input_text = "Font test: A quick brown fox jumps over the"
     max_new_tokens = 2
 
-    EXPECTED_OUTPUT = "A quick brown fox jumps over the lazy dog"
+    EXPECTED_OUTPUT = "Font test: A quick brown fox jumps over the lazy dog"
 
     device_map = "cuda"
 

@@ -28,6 +28,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -58,7 +59,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..llava_next.image_processing_llava_next import divide_to_patches, make_batched_images
+from ..llava_next.image_processing_llava_next import divide_to_patches
 
 
 logger = logging.get_logger(__name__)
@@ -498,6 +499,8 @@ class AriaImageProcessor(BaseImageProcessor):
             The resampling filter to use if resizing the image.
     """
 
+    model_input_names = ["pixel_values", "pixel_mask", "num_crops"]
+
     def __init__(
         self,
         image_mean: List[float] = None,
@@ -609,7 +612,7 @@ class AriaImageProcessor(BaseImageProcessor):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
-        images = make_batched_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -996,6 +999,10 @@ class AriaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+
+        # Remove `num_crops`, it is popped and used only when processing. Make a copy of list when remocing
+        # otherwise `self.image_processor.model_input_names` is also modified
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
@@ -1341,6 +1348,7 @@ ARIA_START_DOCSTRING = r"""
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
     _supports_flash_attn_2 = False
+    _supports_flex_attn = False
     _supports_sdpa = False
     _tied_weights_keys = ["language_model.lm_head.weight"]
 
@@ -1430,7 +1438,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics3ForConditionalGeneration`).
