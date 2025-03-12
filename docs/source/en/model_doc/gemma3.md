@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The gemma3 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by Google. It is a 3B vision-language model composed by a [SigLIP](siglip) vision encoder and a [Gemma-2](gemma_2) language decoder linked by a multimodal linear projection. It cuts an image into a fixed number of tokens same way as Siglip if the image does not exceed certain aspect ratio. For images that exceed the givenn aspect ratio, it crops the image into multiple smaller pacthes and concatenates them with the base image embedding. One particularity is that the model uses bidiredctional attention on all the image tokens. Also the model interleaves sliding window local attention with full causal attention in the language backbone, where each sixth layer is a full causal attention.
+The Gemma 3 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by Google. It is a vision-language model composed by a [SigLIP](siglip) vision encoder and a [Gemma 2](gemma_2) language decoder, linked by a multimodal linear projection. It cuts an image into a fixed number of tokens, in the same way as SigLIP, as long as the image does not exceed certain aspect ratio. For images that exceed the given aspect ratio, it crops the image into multiple smaller patches and concatenates them with the base image embedding. One particularity is that the model uses bidirectional attention on all the image tokens. In addition, the model interleaves sliding window local attention with full causal attention in the language backbone, where each sixth layer is a full causal attention layer.
 
 This model was contributed by [INSERT](INSERT).
 
