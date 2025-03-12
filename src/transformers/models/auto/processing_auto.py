@@ -63,6 +63,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
+        ("gemma3", "Gemma3Processor"),
         ("git", "GitProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("grounding-dino", "GroundingDinoProcessor"),

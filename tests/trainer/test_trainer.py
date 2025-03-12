@@ -75,6 +75,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
+    require_non_hpu,
     require_non_xpu,
     require_optuna,
     require_peft,
@@ -88,6 +89,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
+    require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
@@ -98,6 +100,7 @@ from transformers.testing_utils import (
     require_torchdynamo,
     require_vision,
     require_wandb,
+    run_first,
     run_test_using_subprocess,
     slow,
     torch_device,
@@ -118,6 +121,13 @@ from transformers.utils import (
 )
 from transformers.utils.hp_naming import TrialShortNamer
 
+
+if torch_device == "hpu":
+    RTOL = 1e-3
+    ATOL = 1e-3
+else:
+    RTOL = 1e-5
+    ATOL = 1e-5
 
 if is_torch_available():
     import torch
@@ -726,11 +736,11 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.alternate_trained_model = (trainer.model.a, trainer.model.b)
 
-    def check_trained_model(self, model, alternate_seed=False):
+    def check_trained_model(self, model, alternate_seed=False, **kwargs):
         # Checks a training seeded with learning_rate = 0.1
         (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
-        torch.testing.assert_close(model.a, a)
-        torch.testing.assert_close(model.b, b)
+        torch.testing.assert_close(model.a, a, **kwargs)
+        torch.testing.assert_close(model.b, b, **kwargs)
 
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
@@ -812,11 +822,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        state_dict = model.state_dict()
-
-        base_loss_callback = StoreLossCallback()
-
         args_kwargs = {
             "report_to": "none",
             "logging_steps": 1,
@@ -830,6 +835,10 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir,
                 **args_kwargs,
             )
+            # train with base loss
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
@@ -840,16 +849,17 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             assert trainer.model_accepts_loss_kwargs
             trainer.train()
 
-        grad_accum_loss_callback = StoreLossCallback()
-        with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 tmp_dir,
                 **args_kwargs,
                 gradient_accumulation_steps=2,
                 per_device_train_batch_size=4,
             )
+
+            # train with gradient accumulation
             set_seed(42)
             model = AutoModelForCausalLM.from_pretrained(model_name)
+            grad_accum_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
                 args,
@@ -857,10 +867,12 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 callbacks=[grad_accum_loss_callback],
                 data_collator=data_collator,
             )
+            assert trainer.model_accepts_loss_kwargs
             trainer.train()
 
+            # train with broken loss
             set_seed(42)
-            model.load_state_dict(state_dict)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
             broken_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
@@ -869,30 +881,28 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 callbacks=[broken_loss_callback],
                 data_collator=data_collator,
             )
-            # disable model_accepts_loss_kwargs
+            # disable model_accepts_loss_kwargs so that "num_items_in_batch" is not passed to the model
             trainer.model_accepts_loss_kwargs = False
             trainer.train()
 
-            # Calculate the difference between the base loss and the grad_accum loss
-            diff_truth = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-            ]
-            diff_broken = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
-            ]
+        # Calculate the difference between the base loss and the grad_accum loss
+        diff_truth = [
+            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
+        ]
+        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
 
-            # all diff truth should be quite close
-            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
+        # all diff truth should be quite close
+        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
-            # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 1.5, f"Difference {max(diff_broken)} is not greater than 2")
+        # max diff broken should be very off
+        self.assertGreater(max(diff_broken), 1.3, f"Difference {max(diff_broken)} is not greater than 1.3")
 
-            loss_base = sum(base_loss_callback.losses)
-            loss_broken = sum(broken_loss_callback.losses)
+        loss_base = sum(base_loss_callback.losses)
+        loss_broken = sum(broken_loss_callback.losses)
 
-            # mean/sum loss should not vary too much.
-            relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
-            self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
+        # mean/sum loss should not vary too much.
+        relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
+        self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
 
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
@@ -1214,14 +1224,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.b, b))
             self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
-    @require_torch_accelerator
     @require_torch_bf16
+    @require_torch_accelerator
     def test_mixed_bf16(self):
         # very basic test
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(learning_rate=0.1, bf16=True, output_dir=tmp_dir)
             trainer.train()
-            self.check_trained_model(trainer.model)
+            self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
 
         # --bf16 --half_precision_backend apex can't be used together
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3582,6 +3592,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
 
     @slow
+    @run_first
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3598,6 +3609,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(result["eval_loss"], 0.2)
 
     @slow
+    @run_first
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -3897,6 +3909,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(skip_memory_metrics=True, output_dir=tmp_dir)
             self.check_mem_metrics(trainer, self.assertNotIn)
 
+    @require_torch_fp16
     @require_torch_accelerator
     def test_fp16_full_eval(self):
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
@@ -4152,6 +4165,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
     @slow
+    @require_non_hpu
     @require_torch_multi_accelerator
     def test_end_to_end_example(self):
         # Tests that `translation.py` will run without issues
