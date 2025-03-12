@@ -1620,8 +1620,8 @@ class WhisperGenerationMixin(GenerationMixin):
             elif attention_mask is not None:
                 generation_config.num_frames = attention_mask.sum(-1).cpu()
             else:
-                raise ValueError(
-                    "When setting `return_token_timestamps` to `True`, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
+                logger.warning(
+                    "When setting `return_token_timestamps` to `True`, make sure to pass an `attention_mask` to get precise token-level timestamps. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
                 )
 
     @staticmethod
