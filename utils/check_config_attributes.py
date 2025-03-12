@@ -204,6 +204,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "weight_loss_vfl",
     ],
     "RTDetrV2Config": [
+        "decoder_n_levels",
         "eos_coefficient",
         "focal_loss_alpha",
         "focal_loss_gamma",
