@@ -1898,7 +1898,7 @@ class ModelUtilsTest(TestCasePlus):
     @parameterized.expand([("3B", 5), ("7B", 6)])
     @require_torch_gpu
     def test_loading_is_fast_on_gpu(self, model_size: str, max_loading_time: float):
-        """Note that we run this test in a subprocess, to ensure that cuda is not already initialized."""
+        """Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up."""
         model_id = f"Qwen/Qwen2.5-{model_size}-Instruct"
         # First download the weights if not already on disk
         _ = AutoModelForCausalLM.from_pretrained(model_id)
