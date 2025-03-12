@@ -1408,15 +1408,12 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             coarse_features, coarse_scale
         )
 
-        # if torch.sum(coarse_matching_scores > self.config.coarse_matching_threshold) == 0:
-        #     return coarse_matched_keypoints
-
         # 3. Fine-level refinement
         residual_features = features[1:]
         fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
 
         # Filter fine features with coarse matches indices
-        _, num_matches = coarse_matching_scores.shape
+        _, num_keypoints = coarse_matching_scores.shape
         batch_indices = torch.arange(batch_size)[..., None]
         fine_features_0 = fine_features_0[batch_indices, coarse_matched_indices[:, 0]]
         fine_features_1 = fine_features_1[batch_indices, coarse_matched_indices[:, 1]]
@@ -1433,7 +1430,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         matching_scores = torch.stack([coarse_matching_scores, coarse_matching_scores], dim=1)
         mask = torch.ones_like(matching_scores)
-        match_indices = torch.arange(num_matches, device=matching_keypoints.device)[None, None].repeat(
+        match_indices = torch.arange(num_keypoints, device=matching_keypoints.device)[None, None].repeat(
             batch_size, 2, 1
         )
 

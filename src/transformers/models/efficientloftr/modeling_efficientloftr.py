@@ -22,7 +22,6 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -1026,7 +1025,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         self.post_init()
 
-    def _get_matches_from_scores(self, scores: torch.Tensor):
+    def _get_matches_from_scores(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Based on a keypoint score matrix, compute the best keypoint matches between the first and second image.
         Since each image pair can have different number of matches, the matches are concatenated together for all pair
@@ -1063,39 +1062,16 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         mask = mask * (scores == max_0) * (scores == max_1)
 
         # 4. Fine coarse matches
-        scores = scores * mask
-        matching_scores_0, match_indices_0 = scores.max(2)
-        matching_scores_1, match_indices_1 = scores.max(1)
+        masked_scores = scores * mask
+        matching_scores, max_indices_0 = masked_scores.max(2)
+        _, max_indices_1 = masked_scores.max(1)
+        matching_indices = torch.cat([max_indices_1, max_indices_0]).reshape(batch_size, 2, -1)
 
-        matching_scores = []
-        matching_indices_0 = []
-        matching_indices_1 = []
-        mask = []
-        for _matching_scores_0, _match_indices_0, _matching_scores_1, _match_indices_1 in zip(
-            matching_scores_0, match_indices_0, matching_scores_1, match_indices_1
-        ):
-            valid_matches_0 = _matching_scores_0 > 0
-            valid_matches_1 = _matching_scores_1 > 0
-            _matching_scores = _matching_scores_0[valid_matches_0]
-            _match_indices_0 = _match_indices_0[valid_matches_0]
-            _match_indices_1 = _match_indices_1[valid_matches_1]
-            _mask = torch.ones_like(_matching_scores)
-            matching_scores.append(_matching_scores)
-            matching_indices_0.append(_match_indices_0)
-            matching_indices_1.append(_match_indices_1)
-            mask.append(_mask)
-
-        matching_scores = pad_sequence(matching_scores, batch_first=True)
-        matching_indices_0 = pad_sequence(matching_indices_0, batch_first=True)
-        matching_indices_1 = pad_sequence(matching_indices_1, batch_first=True)
-        mask = pad_sequence(mask, batch_first=True)
-        matching_indices = torch.stack([matching_indices_0, matching_indices_1], dim=1)
-
-        return matching_indices, matching_scores, mask
+        return matching_indices, matching_scores
 
     def _coarse_matching(
         self, coarse_features: torch.Tensor, coarse_scale: float
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         For each image pair, compute the matching confidence between each coarse element (by default (image_height / 8)
         * (image_width / 8 elements)) from the first image to the second image. Since the number of matches can vary
@@ -1135,7 +1111,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             confidence = nn.functional.softmax(similarity, 1) * nn.functional.softmax(similarity, 2)
 
         confidence = confidence.view(batch_size, height, width, height, width)
-        matched_indices, matching_scores, mask = self._get_matches_from_scores(confidence)
+        matched_indices, matching_scores = self._get_matches_from_scores(confidence)
 
         matched_keypoints = torch.stack([matched_indices % width, matched_indices // width], dim=-1) * coarse_scale
 
@@ -1143,7 +1119,6 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             matched_keypoints,
             matching_scores,
             matched_indices,
-            mask,
         )
 
     def _get_first_stage_fine_matching(
@@ -1318,13 +1293,19 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         fine_kernel_size = torch_int(fine_window_size**0.5)
 
+        # Split fine features into first and second stage features
         split_fine_features_0 = torch.split(fine_features_0, fine_embed_dim - fine_matching_slice_dim, -1)
         split_fine_features_1 = torch.split(fine_features_1, fine_embed_dim - fine_matching_slice_dim, -1)
 
+        # Retrieve first stage fine features
         fine_features_0 = split_fine_features_0[0]
         fine_features_1 = split_fine_features_1[0]
+
+        # Normalize first stage fine features
         fine_features_0 = fine_features_0 / fine_features_0.shape[-1] ** 0.5
         fine_features_1 = fine_features_1 / fine_features_1.shape[-1] ** 0.5
+
+        # Compute first stage confidence
         fine_confidence = fine_features_0 @ fine_features_1.transpose(-1, -2)
         fine_confidence = nn.functional.softmax(fine_confidence, 1) * nn.functional.softmax(fine_confidence, 2)
         fine_confidence = fine_confidence.reshape(
@@ -1342,10 +1323,14 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             fine_scale,
         )
 
+        # Retrieve second stage fine features
         fine_features_0 = split_fine_features_0[1]
         fine_features_1 = split_fine_features_1[1]
 
+        # Normalize second stage fine features
         fine_features_1 = fine_features_1 / fine_matching_slice_dim**0.5
+
+        # Compute second stage fine confidence
         second_stage_fine_confidence = fine_features_0 @ fine_features_1.transpose(-1, -2)
 
         fine_coordinates = self._get_second_stage_fine_matching(
@@ -1409,19 +1394,16 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
         batch_size, _, channels, height, width = pixel_values.shape
         coarse_scale = height / coarse_height
-        coarse_matched_keypoints, coarse_matching_scores, coarse_matched_indices, mask = self._coarse_matching(
+        coarse_matched_keypoints, coarse_matching_scores, coarse_matched_indices = self._coarse_matching(
             coarse_features, coarse_scale
         )
-
-        # if torch.sum(coarse_matching_scores > self.config.coarse_matching_threshold) == 0:
-        #     return coarse_matched_keypoints
 
         # 3. Fine-level refinement
         residual_features = features[1:]
         fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
 
         # Filter fine features with coarse matches indices
-        _, num_matches = coarse_matching_scores.shape
+        _, num_keypoints = coarse_matching_scores.shape
         batch_indices = torch.arange(batch_size)[..., None]
         fine_features_0 = fine_features_0[batch_indices, coarse_matched_indices[:, 0]]
         fine_features_1 = fine_features_1[batch_indices, coarse_matched_indices[:, 1]]
@@ -1437,8 +1419,8 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         matching_keypoints[:, :, :, 1] = matching_keypoints[:, :, :, 1] / height
 
         matching_scores = torch.stack([coarse_matching_scores, coarse_matching_scores], dim=1)
-        mask = torch.stack([mask, mask], dim=1)
-        match_indices = torch.arange(num_matches, device=matching_keypoints.device)[None, None].repeat(
+        mask = torch.ones_like(matching_scores)
+        match_indices = torch.arange(num_keypoints, device=matching_keypoints.device)[None, None].repeat(
             batch_size, 2, 1
         )
 
