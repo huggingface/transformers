@@ -37,7 +37,6 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     replace_return_docstrings,
     torch_int,
 )
@@ -49,73 +48,74 @@ _CONFIG_FOR_DOC = "RTDetrV2Config"
 
 
 def multi_scale_deformable_attention_v2(
-    value: torch.Tensor,
-    value_spatial_shapes: torch.Tensor,
-    sampling_locations: torch.Tensor,
-    attention_weights: torch.Tensor,
-    num_points_list: List[int],
+    value: Tensor,
+    value_spatial_shapes: Union[Tensor, List[Tuple]],
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
     method="default",
-) -> torch.Tensor:
-    
+) -> Tensor:
+    """
+    In addition to the `multi_scale_deformable_attention` (v1) function,
+    this function supports the `discrete` method of sampling, for `default` sampling method
+    the behavior is the same as the `multi_scale_deformable_attention` (v1) function.
+    """
     batch_size, _, num_heads, hidden_dim = value.shape
-    num_queries = sampling_locations.shape[1]
+    batched_num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    num_queries = batched_num_queries // batch_size
 
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
-    
     if method == "default":
         sampling_grids = 2 * sampling_locations - 1
     elif method == "discrete":
         sampling_grids = sampling_locations
 
-    sampling_grids = sampling_grids.permute(0, 2, 1, 3, 4).flatten(0, 1)
-    sampling_grids = sampling_grids.split(num_points_list, dim=-2)
+    value_levels = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+
     sampled_values = []
-
     for idx, (height, width) in enumerate(value_spatial_shapes):
-        value_i = value_list[idx]
-        sampling_grid_i = sampling_grids[idx]
-        num_points_i = num_points_list[idx]
-
         # batch_size, height * width, num_heads, hidden_dim
         # -> batch_size, num_heads * hidden_dim, height * width
         # -> batch_size * num_heads, hidden_dim, height, width
+        value_i = value_levels[idx]
         value_i = value_i.flatten(2).transpose(1, 2)
         value_i = value_i.reshape(batch_size * num_heads, hidden_dim, height, width)
 
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        # batch_size * num_queries, num_heads, num_points, 2
+        # -> batch_size * num_heads, num_queries, num_points, 2
+        sampling_grid_i = sampling_grids[:, :, idx]
+        sampling_grid_i = sampling_grid_i.view(batch_size, num_queries, num_heads, num_points, 2)
+        sampling_grid_i = sampling_grid_i.transpose(1, 2).flatten(0, 1)
+
+        # batch_size * num_heads, hidden_dim, num_queries, num_points
         if method == "default":
             sampled_value_i = nn.functional.grid_sample(
                 value_i, sampling_grid_i, mode="bilinear", padding_mode="zeros", align_corners=False
             )
         elif method == "discrete":
-
             sampling_coord = sampling_grid_i * torch.tensor([[width, height]], device=value_i.device) + 0.5
             sampling_coord = sampling_coord.to(torch.int64)
 
             # Separate clamping for x and y coordinates
             sampling_coord_x = sampling_coord[..., 0].clamp(0, width - 1)
             sampling_coord_y = sampling_coord[..., 1].clamp(0, height - 1)
-            
-            sampling_coord_x = sampling_coord_x.reshape(batch_size * num_heads, num_queries * num_points_i)
-            sampling_coord_y = sampling_coord_y.reshape(batch_size * num_heads, num_queries * num_points_i)
+
+            sampling_coord_x = sampling_coord_x.reshape(batch_size * num_heads, num_queries * num_points)
+            sampling_coord_y = sampling_coord_y.reshape(batch_size * num_heads, num_queries * num_points)
 
             sampling_idx = torch.arange(batch_size * num_heads, device=value_i.device)
-            sampling_idx = sampling_idx.unsqueeze(-1).repeat(1, num_queries * num_points_i)
+            sampling_idx = sampling_idx.unsqueeze(-1).repeat(1, num_queries * num_points)
 
             sampled_value_i = value_i[sampling_idx, :, sampling_coord_y, sampling_coord_x]
             sampled_value_i = sampled_value_i.transpose(1, 2)
-            sampled_value_i = sampled_value_i.reshape(batch_size * num_heads, hidden_dim, num_queries, num_points_i)
+            sampled_value_i = sampled_value_i.reshape(batch_size * num_heads, hidden_dim, num_queries, num_points)
 
         sampled_values.append(sampled_value_i)
-    sampled_values = torch.concat(sampled_values, dim=-1)
+    sampled_values = torch.stack(sampled_values, dim=-2)
 
-    # (batch_size, num_queries, num_heads, num_levels, num_points)
-    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    # (batch_size, num_queries, num_heads, ...) -> (batch_size, num_heads, num_queries, ...)
     attention_weights = attention_weights.transpose(1, 2)
-    attention_weights = attention_weights.reshape(batch_size * num_heads, 1, num_queries, sum(num_points_list))
-    
-    output = attention_weights * sampled_values
+    attention_weights = attention_weights.reshape(batch_size * num_heads, 1, num_queries, num_levels * num_points)
+
+    output = attention_weights * sampled_values.flatten(-2)
     output = output.sum(-1)
 
     output = output.view(batch_size, num_heads * hidden_dim, num_queries)
@@ -124,7 +124,6 @@ def multi_scale_deformable_attention_v2(
     return output
 
 
-# the main change
 class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     """
     RTDetrV2 version of multiscale deformable attention, extending the base implementation
@@ -165,10 +164,6 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         # V2-specific attributes
         self.offset_scale = config.decoder_offset_scale
         self.method = config.decoder_method
-        n_points_list = [self.num_points for _ in range(self.num_levels)]
-        self.n_points_list = n_points_list
-        n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
-        self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
 
     def forward(
         self,
@@ -180,7 +175,6 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
@@ -228,21 +222,21 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         elif num_coordinates == 4:
             reference_points_xy = reference_points[..., :2]
-            offset = sampling_offsets / self.num_points * reference_points[..., 2:] * 0.5
+            offset = sampling_offsets / self.num_points * reference_points[..., 2:] * self.offset_scale
             sampling_locations = reference_points_xy + offset
 
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        attention_weights = attention_weights.view(batch_size, num_queries, self.num_heads, self.num_levels * self.num_points)
-        sampling_locations = sampling_locations.view(batch_size, num_queries, self.num_heads, self.num_levels * self.num_points, 2)
-
-        # V2-specific attention implementation choice
         output = multi_scale_deformable_attention_v2(
-            value, spatial_shapes_list, sampling_locations, attention_weights, self.n_points_list, self.method
+            value, spatial_shapes_list, sampling_locations, attention_weights, method=self.method
         )
 
         output = self.output_proj(output)
+
+        if not output_attentions:
+            attention_weights = None
+
         return output, attention_weights
 
 
@@ -378,7 +372,9 @@ class RTDetrV2DecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # override only the encoder attention module with v2 version
-        self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(config, num_heads=config.decoder_attention_heads, num_points=config.decoder_n_points)
+        self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(
+            config, num_heads=config.decoder_attention_heads, num_points=config.decoder_n_points
+        )
         self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
@@ -443,7 +439,6 @@ class RTDetrV2DecoderLayer(nn.Module):
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
 
@@ -1346,16 +1341,16 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
         if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
+            thetas = torch.arange(module.num_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.num_heads
             )
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
+                .view(module.num_heads, 1, 1, 2)
+                .repeat(1, module.num_levels, module.num_points, 1)
             )
-            for i in range(module.n_points):
+            for i in range(module.num_points):
                 grid_init[:, :, i, :] *= i + 1
             with torch.no_grad():
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))

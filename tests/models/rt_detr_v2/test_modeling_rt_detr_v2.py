@@ -391,11 +391,12 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self.assertIsInstance(cross_attentions, (list, tuple))
             self.assertEqual(len(cross_attentions), self.model_tester.decoder_layers)
             self.assertListEqual(
-                list(cross_attentions[0].shape[-3:]),
+                list(cross_attentions[0].shape[-4:]),
                 [
                     self.model_tester.num_queries,
                     self.model_tester.decoder_attention_heads,
-                    self.model_tester.decoder_n_levels * self.model_tester.decoder_n_points,
+                    self.model_tester.decoder_n_levels,
+                    self.model_tester.decoder_n_points,
                 ],
             )
 
