@@ -71,7 +71,7 @@ class WrappedFlexAttention:
         return self._compiled_flex_attention
 
 
-def make_flex_block_causal_mask(attention_mask_2d: torch.Tensor) -> BlockMask:
+def make_flex_block_causal_mask(attention_mask_2d: torch.Tensor) -> "BlockMask":
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
     Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
