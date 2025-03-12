@@ -16,13 +16,18 @@
 
 import unittest
 
+import requests
+from PIL import Image
+
 from transformers import (
+    AutoProcessor,
     MLCDVisionConfig,
     MLCDVisionModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
     require_torch,
+    slow,
     torch_device,
 )
 
@@ -149,3 +154,64 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+
+@require_torch
+class MLCDVisionModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model_name = "DeepGlint-AI/mlcd-vit-bigG-patch14-448"
+        model = MLCDVisionModel.from_pretrained(model_name).to(torch_device)
+        processor = AutoProcessor.from_pretrained(model_name)
+
+        # process single image
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+        inputs = processor(images=image, return_tensors="pt")
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, output_attentions=True)
+
+        last_hidden_state = outputs.last_hidden_state
+        last_attention = outputs.attentions[-1]
+
+        # verify the shapes of last_hidden_state and last_attention
+        self.assertEqual(
+            last_hidden_state.shape,
+            torch.Size([1, 1025, 1664]),
+        )
+        self.assertEqual(
+            last_attention.shape,
+            torch.Size([1, 16, 1025, 1025]),
+        )
+
+        # verify the values of last_hidden_state and last_attention
+        # fmt: off
+        expected_partial_5x5_last_hidden_state = torch.tensor(
+            [
+                [-0.8978, -0.1181,  0.4769,  0.4761, -0.5779],
+                [ 0.2640, -2.6150,  0.4853,  0.5743, -1.1003],
+                [ 0.3314, -0.3328, -0.4305, -0.1874, -0.7701],
+                [-1.5174, -1.0238, -1.1854,  0.1749, -0.8786],
+                [ 0.2323, -0.8346, -0.9680, -0.2951,  0.0867],
+            ]
+        ).to(torch_device)
+
+        expected_partial_5x5_last_attention = torch.tensor(
+            [
+                [2.0930e-01, 6.3073e-05, 1.4717e-03, 2.6881e-05, 3.0513e-03],
+                [1.5828e-04, 2.1056e-03, 4.6784e-04, 1.8276e-03, 5.3233e-04],
+                [5.7824e-04, 1.1446e-03, 1.3854e-03, 1.1775e-03, 1.2750e-03],
+                [9.6343e-05, 1.6365e-03, 2.9066e-04, 3.1089e-03, 2.0607e-04],
+                [6.2688e-04, 1.1656e-03, 1.5030e-03, 8.2819e-04, 2.6992e-03],
+            ]
+        ).to(torch_device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            last_hidden_state[0, :5, :5], expected_partial_5x5_last_hidden_state, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            last_attention[0, 0, :5, :5], expected_partial_5x5_last_attention, rtol=1e-4, atol=1e-4
+        )
