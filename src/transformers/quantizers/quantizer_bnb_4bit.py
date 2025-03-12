@@ -303,7 +303,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
         if not isinstance(self.modules_to_not_convert, list):
             self.modules_to_not_convert = [self.modules_to_not_convert]
-
+        if keep_in_fp32_modules is None:
+            keep_in_fp32_modules = []
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
         # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
