@@ -29,7 +29,7 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
-    get_file_from_repo,
+    cached_file,
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
@@ -86,6 +86,7 @@ else:
             ("flava", ("FlavaImageProcessor",)),
             ("focalnet", ("BitImageProcessor",)),
             ("fuyu", ("FuyuImageProcessor",)),
+            ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor",)),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
@@ -287,7 +288,7 @@ def get_image_processor_config(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    resolved_config_file = get_file_from_repo(
+    resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         IMAGE_PROCESSOR_NAME,
         cache_dir=cache_dir,
@@ -297,6 +298,9 @@ def get_image_processor_config(
         token=token,
         revision=revision,
         local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+        _raise_exceptions_for_connection_errors=False,
     )
     if resolved_config_file is None:
         logger.info(
