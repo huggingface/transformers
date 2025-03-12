@@ -535,7 +535,7 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_DOCSTRING"]
 
 
 class ClassDependencyMapper(CSTVisitor):

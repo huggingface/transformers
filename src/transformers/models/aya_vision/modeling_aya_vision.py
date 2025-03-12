@@ -189,7 +189,7 @@ class AyaVisionCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-AYA_VISION_INPUTS_DOCSTRING = r"""
+AYA_VISION_INPUTS_DOCSTRING = """
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -201,8 +201,8 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`AyaVisionProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`AyaVisionProcessor`] uses
+            [`GotOcr2ImageProcessor`] for processing images.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -391,24 +391,33 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
 
         Example:
 
-        ```python
-        >>> from PIL import Image
-        >>> import requests
+            ```python
         >>> from transformers import AutoProcessor, AyaVisionForConditionalGeneration
+        >>> import torch
 
-        >>> model = AyaVisionForConditionalGeneration.from_pretrained("aya_vision-hf/aya_vision-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("aya_vision-hf/aya_vision-1.5-7b-hf")
+        >>> torch_device = "cuda:0"
+        >>> processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b", use_fast=True)
+        >>> model = AyaVisionForConditionalGeneration.from_pretrained("CohereForAI/aya-vision-8b", device_map=torch_device)
 
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "url": "https://pbs.twimg.com/media/Fx7YvfQWYAIp6rZ?format=jpg&name=medium",
+        ...             },
+        ...             {"type": "text", "text": "चित्र में लिखा पाठ क्या कहता है?"},
+        ...         ],
+        ...     }
+        ... ]
 
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", device=torch_device
+        ... ).to(model.device)
 
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        >>> gen_tokens = model.generate(**inputs, max_new_tokens=300, do_sample=True, temperature=0.3)
+        >>> processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

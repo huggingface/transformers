@@ -14,9 +14,13 @@
 # limitations under the License.
 """PyTorch AyaVision model."""
 
+from typing import List, Optional, Tuple, Union
+
+import torch
 from torch import nn
 
 from transformers.models.llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaMultiModalProjector,
     LlavaPreTrainedModel,
@@ -33,8 +37,6 @@ from .configuration_aya_vision import AyaVisionConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AyaVisionConfig"
-
-LlavaMultiModalProjector
 
 
 class AyaVisionMultiModalProjector(LlavaMultiModalProjector):
@@ -113,7 +115,11 @@ class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _supports_static_cache = False
 
 
-AYA_VISION_INPUTS_DOCSTRING = r"""
+class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    pass
+
+
+AYA_VISION_INPUTS_DOCSTRING = """
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -165,12 +171,13 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
+            Can be one of `"default"` or `"full"`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -194,7 +201,75 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
-    pass
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        image_sizes: torch.Tensor = None,
+        **lm_kwargs,
+    ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
+        r"""
+        ```python
+        >>> from transformers import AutoProcessor, AyaVisionForConditionalGeneration
+        >>> import torch
+
+        >>> torch_device = "cuda:0"
+        >>> processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b", use_fast=True)
+        >>> model = AyaVisionForConditionalGeneration.from_pretrained("CohereForAI/aya-vision-8b", device_map=torch_device)
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "url": "https://pbs.twimg.com/media/Fx7YvfQWYAIp6rZ?format=jpg&name=medium",
+        ...             },
+        ...             {"type": "text", "text": "चित्र में लिखा पाठ क्या कहता है?"},
+        ...         ],
+        ...     }
+        ... ]
+
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", device=torch_device
+        ... ).to(model.device)
+
+        >>> gen_tokens = model.generate(**inputs, max_new_tokens=300, do_sample=True, temperature=0.3)
+        >>> processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        ```
+        """
+        super().forward(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            image_sizes=image_sizes,
+            **lm_kwargs,
+        )
 
 
 __all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"]
