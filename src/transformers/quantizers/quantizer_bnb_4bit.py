@@ -293,11 +293,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_bnb_linear
 
+        llm_int8_enable_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
+
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
         )
-
-        llm_int8_enable_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
         # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:
