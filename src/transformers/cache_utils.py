@@ -455,8 +455,8 @@ class DynamicCache(Cache):
             or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
             or not self.key_cache[layer_idx].numel()  # the layer has no cache
         )
-        return self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
-        # return layer_seq_length
+        layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
+        return layer_seq_length
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
