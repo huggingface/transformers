@@ -856,12 +856,12 @@ def _load_state_dict_into_meta_model(
             full_state_dict = bin_state_dict
 
     for serialized_param_name, empty_param in state_dict.items():
-        if serialized_param_name not in expected_keys:
-            continue
-
         # serialized_param_name is the raw, serialized name
         # fixed_param_name is the model's equivalent
         fixed_param_name, _ = model.rename_key(serialized_param_name)
+
+        if fixed_param_name not in expected_keys:
+            continue
 
         # we need to use serialized_param_name as file pointer is untouched
         if shard_file.endswith(".safetensors"):
