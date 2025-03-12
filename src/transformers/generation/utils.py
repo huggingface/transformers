@@ -399,12 +399,58 @@ class GenerationMixin:
         # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+            if is_torchdynamo_exporting():
+                if inputs_embeds is None:
+                    input_ids = input_ids[:, cache_position]
+                else:
+                    # This is the code we need to implemented with torch.cond.
+                    # if input_ids.shape[1] == 0:
+                    #     inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+                    # else:
+                    #     if cache_position[-1] >= input_ids.shape[1]:
+                    #         input_ids = input_ids[:, -cache_position.shape[0] :]
+                    #     else:
+                    #         if input_ids.shape[1] != cache_position.shape[0]:
+                    #             input_ids = input_ids[:, cache_position]
+                    def branch_1(inputs_embeds, cache_position):
+                        return inputs_embeds[:, -cache_position.shape[0] :]
+                    def branch_2(input_ids, cache_position):
+                        return input_ids[:, -cache_position.shape[0] :]
+                    def branch_3(input_ids, cache_position):
+                        return input_ids[:, cache_position]
+                    inputs_embeds, input_ids = torch.cond(
+                        input_ids.shape[1] == 0,
+                        (
+                            lambda input_ids, inputs_embeds, cache_position: (
+                                branch_1(inputs_embeds, cache_position), input_ids
+                            )
+                        ),
+                        (
+                            lambda input_ids, inputs_embeds, cache_position: (
+                                inputs_embeds,
+                                torch.cond(
+                                    cache_position[-1] >= input_ids.shape[1],
+                                    branch_2,
+                                    lambda input_ids, cache_position: (
+                                        torch.cond(
+                                            input_ids.shape[1] != cache_position.shape[0],
+                                            branch_3,
+                                            (lambda input_ids, cache_position: input_ids),
+                                            [input_ids, cache_position],
+                                        )
+                                    ),
+                                    [input_ids, cache_position]
+                                )
+                            )
+                        ),
+                        [input_ids, inputs_embeds, cache_position]
+                    )
+            elif inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
                 inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
             elif (
                 inputs_embeds is not None  # Exception 1
                 or (
-                    (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+                    is_torchdynamo_compiling()
                     or cache_position[-1] >= input_ids.shape[1]
                 )  # Exception 3
             ):
