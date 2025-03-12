@@ -15,7 +15,7 @@ class ExpectationsTest(unittest.TestCase):
         )
 
         def check(value, type=None, major=None):
-            assert expectations.find_expectation(type, major).result == value
+            assert expectations.find_expectation(type, major) == value
 
         # xpu has no matches so should find default expectation
         check(1, "xpu")

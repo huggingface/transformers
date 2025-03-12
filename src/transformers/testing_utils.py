@@ -3012,7 +3012,7 @@ class Expectations:
         Find best matching expectation based on environment device properties.
         """
         (type, major) = self._get_device_properties()
-        return self.find_expectation(type, major)
+        return self.find_expectation(type, major).result
 
     def find_expectation(self, type: Union[str, None] = None, major: Union[int, None] = None) -> Expectation:
         """
