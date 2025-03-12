@@ -17,10 +17,11 @@ import glob
 import json
 import os
 import os.path
+import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
-import time
 import unittest
 import unittest.mock as mock
 import uuid
@@ -63,7 +64,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_usr_bin_time,
-    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -1895,27 +1895,53 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(len(cm.records), 1)
             self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
 
-    @require_torch_gpu
     @parameterized.expand([("3B", 5), ("7B", 6)])
-    @run_test_using_subprocess
+    @require_torch_gpu
     def test_loading_is_fast_on_gpu(self, model_size: str, max_loading_time: float):
         """Note that we run this test in a subprocess, to ensure that cuda is not already initialized."""
         model_id = f"Qwen/Qwen2.5-{model_size}-Instruct"
-        device = torch.device("cuda:0")
         # First download the weights if not already on disk
         _ = AutoModelForCausalLM.from_pretrained(model_id)
 
-        # Now start timing the loading time
-        torch.cuda.synchronize(device)
-        t0 = time.time()
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map=device)
-        torch.cuda.synchronize(device)
-        dt = time.time() - t0
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            import time
+            import argparse
+            from transformers import AutoModelForCausalLM
 
-        # Assert loading is faster (it should be more than enough in both cases)
-        self.assertLess(dt, max_loading_time, "Loading is too slow!")
-        # Ensure everything is correctly loaded on gpu
-        self.assertTrue(all(p.device == device for p in model.parameters()), "Some parameters are not on GPU")
+            parser = argparse.ArgumentParser()
+            parser.add_argument("model_id", type=str)
+            parser.add_argument("max_loading_time", type=float)
+            args = parser.parse_args()
+
+            device = torch.device("cuda:0")
+
+            torch.cuda.synchronize(device)
+            t0 = time.time()
+            model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.float16, device_map=device)
+            torch.cuda.synchronize(device)
+            dt = time.time() - t0
+
+            # Assert loading is faster (it should be more than enough in both cases)
+            if dt > args.max_loading_time:
+                raise ValueError("Loading is too slow!")
+            # Ensure everything is correctly loaded on gpu
+            if not all(p.device == device for p in model.parameters()):
+                raise ValueError("Some parameters are not on GPU")
+            """
+        )
+
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+            tmp.write(script_to_run)
+            tmp.flush()
+            tmp.seek(0)
+            cmd = f"python {tmp.name} {model_id} {max_loading_time}".split()
+            # Note that the subprocess will be waited for here, and raise an error if not successful
+            try:
+                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"The following error was captured: {e.stderr}")
 
 
 @slow
