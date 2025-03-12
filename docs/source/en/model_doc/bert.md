@@ -28,12 +28,10 @@ rendered properly in your Markdown viewer.
 
 [BERT](https://huggingface.co/papers/1810.04805) is a bidirectional transformer pretrained on unlabeled text to predict masked tokens in a sentence and to predict whether one sentence follows another. The main idea is that by randomly masking some tokens, the model can train on text to the left and right, giving it deeper and better language representation. BERT's superior - compared to traditional models - language understanding can be adapted for other NLP tasks by fine-tuning an additional layer or head, making it very versatile.
 
-Inputs should be padded on the right because BERT uses absolute position embeddings.
-
 > [!TIP]
 > Click on the BERT models in the right sidebar for more examples of how to apply BERT to different language tasks.
 
-The example below demonstrates how to use BERT to predict the `[MASK]` token with the high-level [`Pipeline`] or the [`AutoModel`] class. You can find all the original BERT checkpoints under the [BERT release](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) collection.
+The example below demonstrates how to use BERT to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line. You can find all the original BERT checkpoints under the [BERT release](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) collection.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -80,15 +78,33 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model google-bert/bert-base-uncased --device 0
+```
+
+</hfoption>
 </hfoptions>
+
+Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
+
+```py
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained("google-bert/bert-base-uncased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+model.visualize_attention_mask(tokenizer, "Plants create [MASK] through a process known as photosynthesis.")
+```
+
+## Notes
+
+- Inputs should be padded on the right because BERT uses absolute position embeddings.
 
 ## BertConfig
 
 [[autodoc]] BertConfig
     - all
-
-<hfoptions id="frameworks">
-<hfoption id="PyTorch">
 
 ## BertTokenizer
 
@@ -147,9 +163,6 @@ print(f"The predicted token is: {predicted_token}")
 [[autodoc]] BertForQuestionAnswering
     - forward
 
-</hfoption>
-<hfoption id="TensorFlow">
-
 ## TFBertTokenizer
 
 [[autodoc]] TFBertTokenizer
@@ -199,9 +212,6 @@ print(f"The predicted token is: {predicted_token}")
 [[autodoc]] TFBertForQuestionAnswering
     - call
 
-</hfoption>
-<hfoption id="Flax">
-
 ## FlaxBertModel
 
 [[autodoc]] FlaxBertModel
@@ -246,9 +256,6 @@ print(f"The predicted token is: {predicted_token}")
 
 [[autodoc]] FlaxBertForQuestionAnswering
     - __call__
-
-</hfoption>
-</hfoptions>
 
 ## Bert specific outputs
 

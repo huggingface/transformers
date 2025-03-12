@@ -31,7 +31,7 @@ rendered properly in your Markdown viewer.
 > [!TIP]
 > Click on the Llama models in the right sidebar for more examples of how to apply Llama to different language tasks.
 
-The example below demonstrates how to use Llama to generate text with [`Pipeline`] or the [`AutoModel`] class. You can find all the original Llama checkpoints under the [Huggy Llama](https://huggingface.co/huggyllama) organization.
+The example below demonstrates how to use Llama to generate text with [`Pipeline`], [`AutoModel`], and from the command line. You can find all the original Llama checkpoints under the [Huggy Llama](https://huggingface.co/huggyllama) organization.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -72,7 +72,28 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model huggyllama/llama-7b --device 0
+```
+
+</hfoption>
 </hfoptions>
+
+Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b")
+tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+model.visualize_attention_mask(tokenizer, "Plants create energy through a process known as")
+```
+
+## Notes
+
+- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.
 
 ## LlamaConfig
 
@@ -94,9 +115,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary
-
-<hfoptions id="frameworks">
-<hfoption id="PyTorch">
 
 ## LlamaModel
 
@@ -123,9 +141,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 [[autodoc]] LlamaForTokenClassification
     - forward
 
-</hfoption>
-<hfoption id="Flax">
-
 ## FlaxLlamaModel
 
 [[autodoc]] FlaxLlamaModel
@@ -135,6 +150,3 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] FlaxLlamaForCausalLM
     - __call__
-
-</hfoption>
-</hfoptions>
