@@ -18,14 +18,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
 )
-from ...modeling_utils import (
-    PretrainedConfig,
-    PreTrainedModel,
-)
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,

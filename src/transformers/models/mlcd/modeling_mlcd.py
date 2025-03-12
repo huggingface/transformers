@@ -133,7 +133,7 @@ def apply_rotary_pos_emb_vision(
     orig_q_dtype = q.dtype
     orig_k_dtype = k.dtype
     q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2), sin.unsqueeze(-2)
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     q_embed = q_embed.to(orig_q_dtype)
