@@ -1895,13 +1895,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
-            self._pp_plan = self.config.base_model_pp_plan
-
-        if not self._tp_plan:
-            if isinstance(self.config.base_model_tp_plan, dict):
-                self._tp_plan = self.config.base_model_tp_plan.copy()
-            else:
-                self._tp_plan = {}
+            self._pp_plan = self.config.base_model_pp_plan.copy()
+            self._tp_plan = self.config.base_model_tp_plan.copy() or {}
+        else:
+            self._tp_plan = self._tp_plan or {}
+            for name, module in self.named_children():
+                if plan := getattr(module, "_tp_plan", None):
+                    self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
         for name, module in self.named_children():
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
