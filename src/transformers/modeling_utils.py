@@ -754,6 +754,7 @@ def _load_state_dict_into_meta_model(
     keep_in_fp32_modules: Optional[List[str]] = None,
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
+    tp_key_registry: Optional[Dict] = None,
     weights_only=True,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
@@ -794,78 +795,88 @@ def _load_state_dict_into_meta_model(
             hf_quantizer,
         )
 
-        if device_mesh is not None:  # In this case, the param is already on the correct device!
-            shard_and_distribute_module(
-                model,
-                param,
-                empty_param,
-                param_name,
-                casting_dtype,
-                to_contiguous,
-                tensor_device,  # the rank
-                device_mesh,
+        param = param[...]
+        if casting_dtype is not None:
+            param = param.to(casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+
+        if device_map is None:
+            param_device = "cpu"
+        else:
+            module_layer = re.search(device_map_regex, param_name)
+            if not module_layer:
+                raise ValueError(f"{param_name} doesn't have any device set.")
+            else:
+                param_device = device_map[module_layer.group()]
+
+        if param_device == "disk":
+            if not is_safetensors:
+                disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
+        elif param_device == "cpu" and cpu_offload_index is not None:
+            cpu_offload_index = offload_weight(param, param_name, cpu_offload_folder, cpu_offload_index)
+        elif (
+            not is_quantized
+            or (not hf_quantizer.requires_parameters_quantization)
+            or (
+                not hf_quantizer.check_quantized_param(
+                    model,
+                    param,
+                    param_name,
+                    state_dict,
+                    param_device=param_device,
+                    device_map=device_map,
+                )
+            )
+        ):
+            if is_fsdp_enabled():
+                param_device = "cpu" if is_local_dist_rank_0() else "meta"
+            module, param_type = get_module_from_name(model, param_name)
+            module.load_state_dict(
+                {param_type: param.to(param_device)},
+                strict=False,
+                assign=True,
             )
         else:
-            param = param[...]
-            if casting_dtype is not None:
-                param = param.to(casting_dtype)
-            if to_contiguous:
-                param = param.contiguous()
-
-            if device_map is None:
-                param_device = "cpu"
-            else:
-                module_layer = re.search(device_map_regex, param_name)
-                if not module_layer:
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                else:
-                    param_device = device_map[module_layer.group()]
-
-            if param_device == "disk":
-                if not is_safetensors:
-                    disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-            elif param_device == "cpu" and cpu_offload_index is not None:
-                cpu_offload_index = offload_weight(param, param_name, cpu_offload_folder, cpu_offload_index)
-            elif (
-                not is_quantized
-                or (not hf_quantizer.requires_parameters_quantization)
-                or (
-                    not hf_quantizer.check_quantized_param(
-                        model,
-                        param,
-                        param_name,
-                        state_dict,
-                        param_device=param_device,
-                        device_map=device_map,
-                    )
-                )
-            ):
-                if is_fsdp_enabled():
-                    param_device = "cpu" if is_local_dist_rank_0() else "meta"
+            hf_quantizer.create_quantized_param(
+                model, param, param_name, param_device, state_dict, unexpected_keys
+            )
+            # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+            # and then cast it to CPU to avoid excessive memory usage on each GPU
+            # in comparison to the sharded model across GPUs.
+            if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
                 module, param_type = get_module_from_name(model, param_name)
-                module.load_state_dict(
-                    {param_type: param.to(param_device)},
-                    strict=False,
-                    assign=True,
+                value = getattr(module, param_type)
+                param_to = "cpu"
+                if is_fsdp_enabled() and not is_local_dist_rank_0():
+                    param_to = "meta"
+                val_kwargs = {}
+                if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                    val_kwargs["requires_grad"] = False
+                value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                setattr(module, param_type, value)
+
+        # In this case, let's parallelize the modules as soon as we can!
+        if tp_key_registry is not None:
+            plan = None
+            patterns = "|".join(map(re.escape, tp_key_registry.keys()))
+            match_object = re.match(rf"({patterns})\.", param_name)
+            if match_object is not None:
+                module_prefix = match_object.group(1)
+                tp_key_registry[module_prefix]["children"].remove(param_name)
+                # If all the children were already removed, it means that all parameters are now on the correct
+                # device -> we should call `parallelize_module` right now!
+                if len(tp_key_registry[module_prefix]["children"]) == 0:
+                    plan = tp_key_registry[module_prefix]["plan"]
+                    del tp_key_registry[module_prefix]
+
+            if plan is not None:
+                module_to_parallelize = model.get_submodule(module_prefix)
+                torch.distributed.tensor.parallel.parallelize_module(
+                    module_to_parallelize,
+                    device_mesh=device_mesh,
+                    parallelize_plan=plan,
                 )
-            else:
-                hf_quantizer.create_quantized_param(
-                    model, param, param_name, param_device, state_dict, unexpected_keys
-                )
-                # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-                # and then cast it to CPU to avoid excessive memory usage on each GPU
-                # in comparison to the sharded model across GPUs.
-                if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    module, param_type = get_module_from_name(model, param_name)
-                    value = getattr(module, param_type)
-                    param_to = "cpu"
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
-                        param_to = "meta"
-                    val_kwargs = {}
-                    if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
-                        val_kwargs["requires_grad"] = False
-                    value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                    setattr(module, param_type, value)
 
     if file_pointer is not None:
         file_pointer.__exit__(None, None, None)
@@ -1434,6 +1445,93 @@ def _find_mismatched_keys(
                     mismatched_keys.append((key_with_prefix, state_dict[key].shape, model_state_dict[key].shape))
                     del state_dict[key]
     return mismatched_keys
+
+
+def translate_to_torch_parallel_style(style: str):
+    """
+    In model configurations, we use a neutral type (string) to specify parallel
+    styles, here we translate them into torch.distributed tensor-parallel
+    types.
+    """
+    from torch.distributed.tensor import Replicate
+    from torch.distributed.tensor.parallel import (
+        ColwiseParallel,
+        RowwiseParallel,
+    )
+
+    if not isinstance(style, str):
+        raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
+
+    if style == "colwise":
+        return ColwiseParallel()
+    elif style == "rowwise":
+        return RowwiseParallel()
+    elif style == "colwise_rep":
+        return ColwiseParallel(output_layouts=Replicate())
+    elif style == "rowwise_rep":
+        return RowwiseParallel(input_layouts=Replicate())
+    else:
+        raise ValueError(f"Unsupported parallel style value: {style}")
+
+
+def _get_tp_key_registry(model: "PreTrainedModel") -> Dict[str, Dict]:
+    """Create a registry of all keys of the model, and the entity under which they should be parallelized using
+    TP (tensor parallel). The strategy is to parallelize each individual Layer as a single entity, then other
+    individual modules as specified in the tp_plan, if they are not part of a bigger Layer module.
+
+    This strategy ensures the best tradeoff between loading speed and memory footprint while parallelizing the model.
+    Indeed, loading the whole model and then parallelizing creates a huge memory overhead, as each process must
+    first load the full model on its given device. The other extreme, parallelizing each leaf of the model (Linear layers)
+    as they are loaded creates a huge speed overhead, due to a lot of call to `torch.distributed.tensor.parallel.parallelize_module`.
+    Parallelizing each Layer instead as soon as their parameters are loaded provides the best of both world: almost no
+    memory overhead, and almost as fast as parallelizing the full model at once.
+
+    Args:
+        model (`PreTrainedModel`): The model to parallelize. It must have a valid tp plan associated.
+
+    Returns:
+        Dict[str, Dict]: The associated TP registry. They keys are the name of the module which will be parallelized,
+        i.e. the module on which we will call `torch.distributed.tensor.parallel.parallelize_module`. The values
+        are a `Dict` containing 2 keys, `children` which is a set of all parameters of the given module, and `plan`,
+        which contains the tp_plan (a `Dict` or `str`) for the given module.
+    """
+    prefix = model.base_model_prefix
+    is_task_specific_model = hasattr(model, prefix) if len(prefix) > 0 else False
+
+    # Translate the plan
+    full_tp_plan = {key: translate_to_torch_parallel_style(plan) for key, plan in model._tp_plan.items()}
+
+    # Extract full prefix before the layer numbers
+    layer_prefix = None
+    layer_prefixes = {k.split("*", 1)[0] for k in full_tp_plan.keys() if "*" in k}
+    if len(layer_prefixes) != 1:
+        raise ValueError("The `base_model_tp_plan` in the config does not seem to have a proper per-layer pattern.")
+    # We remove the trailing "."
+    layer_prefix = layer_prefixes.pop()[:-1]
+
+    # Create the tp plan for an entire layer (it will be the same for each layer number in the ModuleList)
+    layer_tp_plan = {
+        key.split("*", 1)[1][1:]: plan for key, plan in full_tp_plan.items() if key.startswith(layer_prefix)
+    }
+
+    # This contains all the modules to parallelize, as well as corresponding tp_plan for the full module
+    modules_to_parallelize = {
+        f"{layer_prefix}.{layer_idx}": layer_tp_plan for layer_idx in range(model.config.num_hidden_layers)
+    }
+    # Add modules which are not layers
+    modules_to_parallelize.update(
+        {key: plan for key, plan in full_tp_plan.items() if not key.startswith(layer_prefix)}
+    )
+
+    tp_key_registry = {}
+    for module_name, tp_plan in modules_to_parallelize.items():
+        # Retrieve the actual module object corresponding to module_name
+        actual_module = model.get_submodule(module_name)
+        # Find all parameters in the state dict of the module
+        children = {f"{module_name}.{child}" for child in set(actual_module.state_dict().keys())}
+        tp_key_registry[module_name] = {"children": children, "plan": tp_plan}
+
+    return tp_key_registry
 
 
 class PipelineParallel(Enum):
@@ -4829,6 +4927,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
+        # Prepare inputs if using tensor parallel
+        tp_key_registry = None
+        if device_mesh is not None:
+            tp_key_registry = _get_tp_key_registry(model_to_load)
+
         error_msgs = []
         mismatched_keys = []
         has_multiple_shards = len(checkpoint_files) > 1
@@ -4887,6 +4990,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         keep_in_fp32_modules=keep_in_fp32_modules,
                         unexpected_keys=unexpected_keys,
                         device_mesh=device_mesh,
+                        tp_key_registry=tp_key_registry,
                         weights_only=weights_only,
                     )
             else:
@@ -4939,22 +5043,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
             if loading_task_model_from_base_state_dict:
-                parameters_to_initialize = {
-                    name: param for name, param in model.named_parameters() if not name.startswith(prefix)
-                }
-                for name, param in parameters_to_initialize.items():
-                    # First move data to correct
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_modules)
-                    shard_and_distribute_module(
-                        model,
-                        param.to(tp_device),
-                        param,
-                        name,
-                        casting_dtype,
-                        to_contiguous,
-                        tp_device.index,
-                        device_mesh,
-                    )
+                raise NotImplementedError("skip for now")
 
         # All potential warnings/infos
         if len(error_msgs) > 0:
