@@ -3643,7 +3643,11 @@ class ModelTesterMixin:
                     "pretrained_model_name_or_path": tmpdirname,
                     "torch_dtype": torch_dtype,
                 }
-                if hasattr(config, "use_mask_token"):
+
+                if (
+                    hasattr(config, "use_mask_token")
+                    or "use_mask_token" in inspect.signature(model.__init__).parameters
+                ):
                     model_from_pretrained_kwargs["use_mask_token"] = True
 
                 # TODO: remove this try/except, models should have a shared API
