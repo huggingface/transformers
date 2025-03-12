@@ -146,7 +146,7 @@ print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.sha
 
 ```
 
-### Text-onlty inference
+### Text-only inference
 
 ```python
 from transformers import AutoTokenizer, Gemma3ForCausalLM
