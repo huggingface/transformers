@@ -20,15 +20,16 @@ import os.path
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import unittest.mock as mock
 import uuid
 import warnings
-import time
 from pathlib import Path
 
 import requests
 from huggingface_hub import HfApi, HfFolder
+from parameterized import parameterized
 from pytest import mark
 from requests.exceptions import HTTPError
 
@@ -61,8 +62,8 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    run_test_using_subprocess,
     require_usr_bin_time,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -1895,10 +1896,11 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
 
     @require_torch_gpu
+    @parameterized.expand([("3B", 5), ("7B", 6)])
     @run_test_using_subprocess
-    def test_loading_is_fast_on_gpu(self):
+    def test_loading_is_fast_on_gpu(self, model_size: str, max_loading_time: float):
         """Note that we run this test in a subprocess, to ensure that cuda is not already initialized."""
-        model_id = "Qwen/Qwen2.5-7B-Instruct"
+        model_id = f"Qwen/Qwen2.5-{model_size}-Instruct"
         device = torch.device("cuda:0")
         # First download the weights if not already on disk
         _ = AutoModelForCausalLM.from_pretrained(model_id)
@@ -1909,9 +1911,9 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map=device)
         torch.cuda.synchronize(device)
         dt = time.time() - t0
-        
-        # Assert loading is faster than 6s
-        self.assertLess(dt, 6, "Loading is too slow!")
+
+        # Assert loading is faster (it should be more than enough in both cases)
+        self.assertLess(dt, max_loading_time, "Loading is too slow!")
         # Ensure everything is correctly loaded on gpu
         self.assertTrue(all(p.device == device for p in model.parameters()), "Some parameters are not on GPU")
 
