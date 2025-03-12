@@ -1303,13 +1303,19 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         fine_kernel_size = torch_int(fine_window_size**0.5)
 
+        # Split fine features into first and second stage features
         split_fine_features_0 = torch.split(fine_features_0, fine_embed_dim - fine_matching_slice_dim, -1)
         split_fine_features_1 = torch.split(fine_features_1, fine_embed_dim - fine_matching_slice_dim, -1)
 
+        # Retrieve first stage fine features
         fine_features_0 = split_fine_features_0[0]
         fine_features_1 = split_fine_features_1[0]
+
+        # Normalize first stage fine features
         fine_features_0 = fine_features_0 / fine_features_0.shape[-1] ** 0.5
         fine_features_1 = fine_features_1 / fine_features_1.shape[-1] ** 0.5
+
+        # Compute first stage confidence
         fine_confidence = fine_features_0 @ fine_features_1.transpose(-1, -2)
         fine_confidence = nn.functional.softmax(fine_confidence, 1) * nn.functional.softmax(fine_confidence, 2)
         fine_confidence = fine_confidence.reshape(
@@ -1327,10 +1333,14 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             fine_scale,
         )
 
+        # Retrieve second stage fine features
         fine_features_0 = split_fine_features_0[1]
         fine_features_1 = split_fine_features_1[1]
 
+        # Normalize second stage fine features
         fine_features_1 = fine_features_1 / fine_matching_slice_dim**0.5
+
+        # Compute second stage fine confidence
         second_stage_fine_confidence = fine_features_0 @ fine_features_1.transpose(-1, -2)
 
         fine_coordinates = self._get_second_stage_fine_matching(
