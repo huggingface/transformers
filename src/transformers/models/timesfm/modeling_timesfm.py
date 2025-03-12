@@ -702,7 +702,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         # Reshape into patches (using view for efficiency)
         bsize = past_values.shape[0]
         patched_inputs = past_values.view(bsize, -1, self.config.patch_length)
-        patched_pads = input_padding.view(bsize, -1, self.config.patch_length)
+        patched_pads = past_values_padding.view(bsize, -1, self.config.patch_length)
 
         patched_inputs = torch.where(
             torch.abs(patched_pads - 1.0) < self.config.tolerance,
