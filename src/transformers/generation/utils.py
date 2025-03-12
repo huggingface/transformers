@@ -1574,16 +1574,12 @@ class GenerationMixin:
         if not is_torchdynamo_compiling():
             generation_config = copy.deepcopy(generation_config)
             model_kwargs = generation_config.update(**kwargs)
-            # If `generation_config` is provided, let's fallback ALL special tokens to the default values for the model
+            # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
             if not using_model_generation_config:
-                if generation_config.bos_token_id is None:
-                    generation_config.bos_token_id = self.generation_config.bos_token_id
-                if generation_config.eos_token_id is None:
-                    generation_config.eos_token_id = self.generation_config.eos_token_id
-                if generation_config.pad_token_id is None:
-                    generation_config.pad_token_id = self.generation_config.pad_token_id
-                if generation_config.decoder_start_token_id is None:
-                    generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
+                default_generation_config = GenerationConfig()
+                for key, default_value in default_generation_config.__dict__.items():
+                    if getattr(generation_config, key) == default_value:
+                        setattr(generation_config, key, getattr(self.generation_config, key))
         else:
             model_kwargs = kwargs
 
