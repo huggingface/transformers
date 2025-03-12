@@ -9,7 +9,7 @@ BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
 
 
-def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img>"):
+def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img>", is_causal=True):
     n = len(words)
     max_word_length = max(len(word) for word in words)
     first_img_idx = 0
@@ -19,7 +19,10 @@ def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img
         for i in range(n):
             mask[i, max(0, i - sliding_window + 1) : i + 1] = 1
     else:
-        mask = np.tril(np.ones((n, n), dtype=int))
+        if is_causal:
+            mask = np.tril(np.ones((n, n), dtype=int))
+        else:
+            mask = np.ones((n, n), dtype=int)
 
     for i, k in enumerate(words):
         if img_token in k and not first_img_idx:
@@ -43,10 +46,10 @@ def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img
         print((max_word_length + 5) * " " + " ".join(row))
 
     for i, word in enumerate(words):
-        colored_word = f"{YELLOW}{word}{RESET}" if img_token in word else word
+        colored_word = f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
         number = str(i).rjust(len(str(n))) 
         colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
-        base_display = colored_word.ljust(max_word_length) + ": " + colored_number + " "
+        base_display = colored_word + ": " + colored_number + " "
         row_display = " ".join(
             f"{YELLOW}{BLACK_SQUARE}{RESET}"
             if img_token in words[j] and mask[i, j] and img_token in words[i]
@@ -68,6 +71,26 @@ sentece = (
 words = sentece.split()
 generate_sliding_window_mask_matrix(words)
 generate_sliding_window_mask_matrix(words, sliding_window=3)
+
+
+sentece = (
+    "<img> <img> <img> <img> This is the system prompt."
+)
+words = sentece.split()
+generate_sliding_window_mask_matrix(words, is_causal=False)
+
+sentece = (
+    "This step is decoding, the mask is causal."
+)
+words = sentece.split()
+generate_sliding_window_mask_matrix(words, is_causal=True)
+
+sentece = (
+    "<img> <img> <img> <img> This is the system prompt. This step is decoding, the mask is causal."
+)
+words = sentece.split()
+generate_sliding_window_mask_matrix(words, is_causal=True)
+
 
 # Should print:
 """"
