@@ -1899,7 +1899,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_loading_is_fast_on_gpu(self):
         """Note that we run this test in a subprocess, to ensure that cuda is not already initialized."""
         model_id = "Qwen/Qwen2.5-7B-Instruct"
-        device = torch.device(torch_device)
+        device = torch.device("cuda:0")
         # First download the weights if not already on disk
         _ = AutoModelForCausalLM.from_pretrained(model_id)
 
