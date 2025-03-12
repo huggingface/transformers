@@ -1899,21 +1899,21 @@ class ModelUtilsTest(TestCasePlus):
     def test_loading_is_fast_on_gpu(self):
         """Note that we run this test in a subprocess, to ensure that cuda is not already initialized."""
         model_id = "Qwen/Qwen2.5-7B-Instruct"
-        torch_device = torch.device(torch_device)
+        device = torch.device(torch_device)
         # First download the weights if not already on disk
         _ = AutoModelForCausalLM.from_pretrained(model_id)
 
         # Now start timing the loading time
-        torch.cuda.synchronize(torch_device)
+        torch.cuda.synchronize(device)
         t0 = time.time()
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map=torch_device)
-        torch.cuda.synchronize(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map=device)
+        torch.cuda.synchronize(device)
         dt = time.time() - t0
         
         # Assert loading is faster than 6s
         self.assertLess(dt, 6, "Loading is too slow!")
         # Ensure everything is correctly loaded on gpu
-        self.assertTrue(all(p.device == torch_device for p in model.parameters()), "Some parameters are not on GPU")
+        self.assertTrue(all(p.device == device for p in model.parameters()), "Some parameters are not on GPU")
 
 
 @slow
