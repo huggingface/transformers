@@ -165,7 +165,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         pan_and_scan_min_ratio_to_activate: float,
     ):
         """
-        Pan and Scan and image, by cropping into smaller images when the aspect ratio exceeds
+        Pan and Scan an image, by cropping into smaller images when the aspect ratio exceeds
         minumum allowed ratio.
 
         Args:
