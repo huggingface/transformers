@@ -2049,7 +2049,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ).input_features
         input_features = input_features.to(torch_device)
 
-        generated_ids = model.generate(input_features, max_length=448, return_timestamps=True, condition_on_prev_tokens=True).to("cpu")
+        generated_ids = model.generate(
+            input_features, max_length=448, return_timestamps=True, condition_on_prev_tokens=True
+        ).to("cpu")
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([

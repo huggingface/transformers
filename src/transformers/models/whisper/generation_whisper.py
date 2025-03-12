@@ -175,7 +175,7 @@ def _pad_to_max_length(
                     # see https://github.com/huggingface/transformers/pull/34537
                     sequences_list.append(d["tokens"][:-1])
                 else:
-                    sequences_list.append(d["tokens"])  
+                    sequences_list.append(d["tokens"])
             sequence = torch.cat(sequences_list, dim=-1)
 
             if return_token_timestamps:
