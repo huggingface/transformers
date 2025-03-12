@@ -295,12 +295,12 @@ def prepare_imgs():
 class EfficientLoFTRModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("stevenbucaille/efficient_loftr") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("stevenbucaille/efficientloftr") if is_vision_available() else None
 
     @slow
     def test_inference(self):
         model = EfficientLoFTRForKeypointMatching.from_pretrained(
-            "stevenbucaille/efficient_loftr", attn_implementation="eager"
+            "stevenbucaille/efficientloftr", attn_implementation="eager"
         ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
