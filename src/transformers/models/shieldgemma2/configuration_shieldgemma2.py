@@ -24,9 +24,9 @@ logger = logging.get_logger(__name__)
 
 class ShieldGemma2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ShieldGemma2ForConditionalGeneration`]. It is used to instantiate an
-    ShieldGemma2ForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
+    This is the configuration class to store the configuration of a [`ShieldGemma2ForImageClassification`]. It is used to instantiate an
+    ShieldGemma2ForImageClassification according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the shieldgemma-2-4b-it.
 
     e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
 
