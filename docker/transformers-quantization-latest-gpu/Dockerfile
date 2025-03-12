@@ -66,7 +66,6 @@ RUN python3 -m pip install --no-cache-dir gguf
 # Add autoawq for quantization testing
 # New release v0.2.8
 RUN python3 -m pip install --no-cache-dir autoawq[kernels]
-RUN python3 -m pip install --no-cache-dir autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
