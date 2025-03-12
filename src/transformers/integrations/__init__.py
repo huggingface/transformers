@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_torch_greater_or_equal
 
 
 _import_structure = {
@@ -63,7 +63,12 @@ _import_structure = {
         "load_dequant_gguf_tensor",
         "load_gguf",
     ],
-    "higgs": ["HiggsLinear", "dequantize_higgs", "quantize_with_higgs", "replace_with_higgs_linear"],
+    "higgs": [
+        "HiggsLinear",
+        "dequantize_higgs",
+        "quantize_with_higgs",
+        "replace_with_higgs_linear",
+    ],
     "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -77,6 +82,7 @@ _import_structure = {
         "MLflowCallback",
         "NeptuneCallback",
         "NeptuneMissingConfiguration",
+        "SwanLabCallback",
         "TensorBoardCallback",
         "WandbCallback",
         "get_available_reporting_integrations",
@@ -96,6 +102,7 @@ _import_structure = {
         "is_ray_available",
         "is_ray_tune_available",
         "is_sigopt_available",
+        "is_swanlab_available",
         "is_tensorboard_available",
         "is_wandb_available",
         "rewrite_logs",
@@ -119,6 +126,27 @@ else:
     _import_structure["executorch"] = [
         "TorchExportableModuleWithStaticCache",
         "convert_and_export_with_cache",
+    ]
+
+try:
+    if not is_torch_greater_or_equal("2.3"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tensor_parallel"] = [
+        "shard_and_distribute_module",
+        "SUPPORTED_TP_STYLES",
+        "translate_to_torch_parallel_style",
+    ]
+try:
+    if not is_torch_greater_or_equal("2.5"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["flex_attention"] = [
+        "make_flex_block_causal_mask",
     ]
 
 if TYPE_CHECKING:
@@ -182,6 +210,7 @@ if TYPE_CHECKING:
         MLflowCallback,
         NeptuneCallback,
         NeptuneMissingConfiguration,
+        SwanLabCallback,
         TensorBoardCallback,
         WandbCallback,
         get_available_reporting_integrations,
@@ -201,6 +230,7 @@ if TYPE_CHECKING:
         is_ray_available,
         is_ray_tune_available,
         is_sigopt_available,
+        is_swanlab_available,
         is_tensorboard_available,
         is_wandb_available,
         rewrite_logs,
@@ -222,6 +252,25 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
+    try:
+        if not is_torch_greater_or_equal("2.3"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tensor_parallel import (
+            SUPPORTED_TP_STYLES,
+            shard_and_distribute_module,
+            translate_to_torch_parallel_style,
+        )
+
+    try:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .flex_attention import make_flex_block_causal_mask
 else:
     import sys
 
