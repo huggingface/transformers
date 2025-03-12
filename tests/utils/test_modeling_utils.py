@@ -1937,9 +1937,9 @@ class ModelUtilsTest(TestCasePlus):
             tmp.flush()
             tmp.seek(0)
             cmd = f"python {tmp.name} {model_id} {max_loading_time}".split()
-            # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
-                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
+                # We cannot use a timeout of `max_loading_time` as cuda initialization can take up to 15-20s
+                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True, timeout=60)
             except subprocess.CalledProcessError as e:
                 raise Exception(f"The following error was captured: {e.stderr}")
 
