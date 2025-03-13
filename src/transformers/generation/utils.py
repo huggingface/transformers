@@ -1587,20 +1587,20 @@ class GenerationMixin:
         # exception will be raised in `_validate_model_kwargs`
         if not is_torchdynamo_compiling():
             generation_config = copy.deepcopy(generation_config)
-            model_kwargs = generation_config.update(**kwargs)
 
-            # If `generation_config` is provided, let's fallback ALL `None` default values to the model's generation
-            # config
+            # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
+            # TODO (joao): migrate the defaults in `GenerationConfig` to None, so we can safely know when a user has
+            # explicitly set them. E.g. boolean args with non-None default can easily result in unexpected behavior.
             if not using_model_generation_config:
                 default_generation_config = GenerationConfig()
                 for key, default_value in default_generation_config.__dict__.items():
-                    # We CAN'T safely overwrite non-None values
-                    if default_value is None:
-                        custom_generation_config_value = getattr(generation_config, key)
-                        model_generation_config_value = getattr(self.generation_config, key)
-                        if custom_generation_config_value is None and model_generation_config_value is not None:
-                            setattr(generation_config, key, model_generation_config_value)
+                    custom_gen_config_value = getattr(generation_config, key)
+                    model_gen_config_value = getattr(self.generation_config, key)
+                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                        setattr(generation_config, key, model_gen_config_value)
 
+            # Finally, apply any passed kwargs
+            model_kwargs = generation_config.update(**kwargs)
         else:
             model_kwargs = kwargs
 
