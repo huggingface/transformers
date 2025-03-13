@@ -30,9 +30,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
-from transformers.models.mllama.modeling_mllama import (
-    MllamaVisionMLP,
-)
+
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -337,9 +335,13 @@ class Llama4TextAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(*input_shape, 1, -1)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        query_states, key_states = apply_rotary_emb(
+            query_states, key_states, position_embeddings.to(query_states.device)
+        )
 
         # because L2 is computed on the shards, we need to find an appropriate reshape
         # here, to make sure in TP but also non TP settings. Logits diverge otherwise
@@ -349,12 +351,8 @@ class Llama4TextAttention(nn.Module):
                 (*input_shape, self.pretraining_tp, -1)
             )
         else:
-            query_states = self.qk_norm(query_states).reshape(hidden_shape)
-            key_states = self.qk_norm(key_states).reshape((*input_shape, 1, -1))
-
-        query_states, key_states = apply_rotary_emb(
-            query_states, key_states, position_embeddings.to(query_states.device)
-        )
+            query_states = self.qk_norm(query_states)
+            key_states = self.qk_norm(key_states)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -1029,7 +1027,7 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
 
 
 
-class Llama4VisionMLP(torch.nn.Module):
+class Llama4VisionMLP2(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1040,7 +1038,7 @@ class Llama4VisionMLP(torch.nn.Module):
         self.fc2 = nn.Linear(
             config.projector_output_dim, config.projector_output_dim, bias=False
         )
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.activation_fn = nn.GELU() #ACT2FN[config.hidden_act]
         self.dropout = config.projector_dropout
 
     def forward(self, hidden_states):
@@ -1100,7 +1098,7 @@ class Llama4VisionPixelShuffleMLP(nn.Module):
         self.pixel_shuffle_ratio = config.pixel_shuffle_ratio
         self.inner_dim = int(config.projector_input_dim // (self.pixel_shuffle_ratio**2))
         self.output_dim = config.projector_output_dim
-        self.mlp = Llama4VisionMLP(config)
+        self.mlp = Llama4VisionMLP2(config)
 
     def forward(self, encoded_patches: torch.Tensor) -> torch.Tensor:
         encoded_patches = pixel_shuffle(encoded_patches, self.pixel_shuffle_ratio)
@@ -1215,13 +1213,27 @@ class Llama4VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class Llama4VisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = nn.GELU() #ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
 class Llama4VisionEncoderLayer(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = Llama4VisionAttention(config)
-        self.mlp = MllamaVisionMLP(config)
+        self.mlp = Llama4VisionMLP(config)
 
         self.input_layernorm = LayerNorm(config.hidden_size)
         self.post_attention_layernorm = LayerNorm(config.hidden_size)
@@ -1348,7 +1360,7 @@ class Llama4VisionEncoder(nn.Module):
         )
 
 
-class UnfoldConvolution(nn.Module):
+class Llama4UnfoldConvolution(nn.Module):
     def __init__(self, config):
         super().__init__()
         kernel_size = config.patch_size
@@ -1404,7 +1416,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
         self.scale = config.hidden_size**-0.5
 
-        self.patch_embedding = UnfoldConvolution(config)
+        self.patch_embedding = Llama4UnfoldConvolution(config)
 
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
         self.positional_embedding_vlm = nn.Parameter(
