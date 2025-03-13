@@ -21,7 +21,6 @@ URL: https://github.com/SysCV/sam-hq
 """
 
 import argparse
-import re
 
 import numpy as np
 import requests
@@ -121,16 +120,16 @@ def replace_keys(state_dict):
     model_state_dict = {}
     state_dict.pop("pixel_mean", None)
     state_dict.pop("pixel_std", None)
-    
+
     # Process each key in the state dict
     for key, value in state_dict.items():
         new_key = key
-        
+
         # Apply static mappings from KEYS_TO_MODIFY_MAPPING
         for key_to_modify, replacement in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in new_key:
                 new_key = new_key.replace(key_to_modify, replacement)
-        
+
         model_state_dict[new_key] = value
 
     # Add mapping for shared embedding for positional embedding
@@ -138,16 +137,21 @@ def replace_keys(state_dict):
         model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
             "prompt_encoder.shared_embedding.positional_embedding"
         ]
-    
+
     # Special handling for IOU prediction head keys
     # Check if we're missing the expected keys and have the converted ones instead
-    if ("mask_decoder.iou_prediction_head.layers.0.weight" not in model_state_dict and 
-        "mask_decoder.iou_prediction_head.proj_in.weight" in model_state_dict):
-        
+    if (
+        "mask_decoder.iou_prediction_head.layers.0.weight" not in model_state_dict
+        and "mask_decoder.iou_prediction_head.proj_in.weight" in model_state_dict
+    ):
         # Copy the converted key back to the expected format
-        model_state_dict["mask_decoder.iou_prediction_head.layers.0.weight"] = model_state_dict["mask_decoder.iou_prediction_head.proj_in.weight"]
-        model_state_dict["mask_decoder.iou_prediction_head.layers.0.bias"] = model_state_dict["mask_decoder.iou_prediction_head.proj_in.bias"]
-    
+        model_state_dict["mask_decoder.iou_prediction_head.layers.0.weight"] = model_state_dict[
+            "mask_decoder.iou_prediction_head.proj_in.weight"
+        ]
+        model_state_dict["mask_decoder.iou_prediction_head.layers.0.bias"] = model_state_dict[
+            "mask_decoder.iou_prediction_head.proj_in.bias"
+        ]
+
     return model_state_dict
 
 
