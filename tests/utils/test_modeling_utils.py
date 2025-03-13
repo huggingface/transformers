@@ -1925,10 +1925,11 @@ class ModelUtilsTest(TestCasePlus):
 
             # Assert loading is faster (it should be more than enough in both cases)
             if dt > args.max_loading_time:
-                raise ValueError("Loading is too slow!")
+                raise ValueError(f"Loading is too slow! It should not take more than {args.max_loading_time}s")
             # Ensure everything is correctly loaded on gpu
-            if not all(p.device == device for p in model.parameters()):
-                raise ValueError("Some parameters are not on GPU")
+            bad_device_params = {k for k, v in model.named_parameters() if v.device != device}
+            if len(bad_device_params) > 0:
+                raise ValueError(f"The following parameters are not on GPU: {bad_device_params}")
             """
         )
 
