@@ -1,20 +1,21 @@
 """Convert Dino DETR checkpoints."""
 
 import argparse
-from huggingface_hub import hf_hub_download
+import json
+from pathlib import Path
 
 import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers.utils import logging
 from transformers import (
-    DinoDetrImageProcessor,
-    DinoDetrForObjectDetection,
     DinoDetrConfig,
+    DinoDetrForObjectDetection,
+    DinoDetrImageProcessor,
 )
-import json
-from pathlib import Path
+from transformers.utils import logging
+
 
 torch.manual_seed(42)
 
@@ -633,17 +634,13 @@ def convert_dino_detr_checkpoint(
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.loads(
-        Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text()
-    )
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)[
-        "model"
-    ]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)["model"]
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
@@ -1316,9 +1313,7 @@ def convert_dino_detr_checkpoint(
     print("Everything ok!")
 
     # Save model and image processor
-    logger.info(
-        f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}..."
-    )
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
     processor.save_pretrained(pytorch_dump_folder_path)
