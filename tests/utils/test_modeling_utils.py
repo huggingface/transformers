@@ -57,6 +57,7 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_flax,
+    require_read_token,
     require_safetensors,
     require_tf,
     require_torch,
@@ -1895,13 +1896,14 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(len(cm.records), 1)
             self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
 
-    @parameterized.expand([("3B", 5), ("7B", 6)])
+    @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 5), ("meta-llama/Llama-2-7b-chat-hf", 6)])
+    @slow
+    @require_read_token
     @require_torch_gpu
-    def test_loading_is_fast_on_gpu(self, model_size: str, max_loading_time: float):
+    def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
         """Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up."""
-        model_id = f"Qwen/Qwen2.5-{model_size}-Instruct"
         # First download the weights if not already on disk
-        _ = AutoModelForCausalLM.from_pretrained(model_id)
+        _ = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
 
         script_to_run = textwrap.dedent(
             """
@@ -1925,7 +1927,7 @@ class ModelUtilsTest(TestCasePlus):
 
             # Assert loading is faster (it should be more than enough in both cases)
             if dt > args.max_loading_time:
-                raise ValueError(f"Loading is too slow! It should not take more than {args.max_loading_time}s")
+                raise ValueError(f"Loading took {dt:.2f}s! It should not take more than {args.max_loading_time}s")
             # Ensure everything is correctly loaded on gpu
             bad_device_params = {k for k, v in model.named_parameters() if v.device != device}
             if len(bad_device_params) > 0:
