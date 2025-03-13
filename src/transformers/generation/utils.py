@@ -1588,12 +1588,19 @@ class GenerationMixin:
         if not is_torchdynamo_compiling():
             generation_config = copy.deepcopy(generation_config)
             model_kwargs = generation_config.update(**kwargs)
-            # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
+
+            # If `generation_config` is provided, let's fallback ALL `None` default values to the model's generation
+            # config
             if not using_model_generation_config:
                 default_generation_config = GenerationConfig()
                 for key, default_value in default_generation_config.__dict__.items():
-                    if getattr(generation_config, key) == default_value:
-                        setattr(generation_config, key, getattr(self.generation_config, key))
+                    # We CAN'T safely overwrite non-None values
+                    if default_value is None:
+                        custom_generation_config_value = getattr(generation_config, key)
+                        model_generation_config_value = getattr(self.generation_config, key)
+                        if custom_generation_config_value is None and model_generation_config_value is not None:
+                            setattr(generation_config, key, model_generation_config_value)
+
         else:
             model_kwargs = kwargs
 
