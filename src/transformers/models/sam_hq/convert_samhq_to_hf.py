@@ -98,6 +98,22 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_decoder.embedding_maskfeature.1": "mask_decoder.mask_norm",
     "mask_decoder.embedding_maskfeature.3": "mask_decoder.mask_conv2",
     "mask_decoder.hf_mlp": "mask_decoder.hq_mask_mlp",
+    # Add patterns for the output_hypernetworks_mlps and hq_mask_mlp
+    "output_hypernetworks_mlps.0.layers.0": "output_hypernetworks_mlps.0.proj_in",
+    "output_hypernetworks_mlps.0.layers.1": "output_hypernetworks_mlps.0.layers.0",
+    "output_hypernetworks_mlps.0.layers.2": "output_hypernetworks_mlps.0.proj_out",
+    "output_hypernetworks_mlps.1.layers.0": "output_hypernetworks_mlps.1.proj_in",
+    "output_hypernetworks_mlps.1.layers.1": "output_hypernetworks_mlps.1.layers.0",
+    "output_hypernetworks_mlps.1.layers.2": "output_hypernetworks_mlps.1.proj_out",
+    "output_hypernetworks_mlps.2.layers.0": "output_hypernetworks_mlps.2.proj_in",
+    "output_hypernetworks_mlps.2.layers.1": "output_hypernetworks_mlps.2.layers.0",
+    "output_hypernetworks_mlps.2.layers.2": "output_hypernetworks_mlps.2.proj_out",
+    "output_hypernetworks_mlps.3.layers.0": "output_hypernetworks_mlps.3.proj_in",
+    "output_hypernetworks_mlps.3.layers.1": "output_hypernetworks_mlps.3.layers.0",
+    "output_hypernetworks_mlps.3.layers.2": "output_hypernetworks_mlps.3.proj_out",
+    "hq_mask_mlp.layers.0": "hq_mask_mlp.proj_in",
+    "hq_mask_mlp.layers.1": "hq_mask_mlp.layers.0",
+    "hq_mask_mlp.layers.2": "hq_mask_mlp.proj_out",
 }
 
 
@@ -105,41 +121,33 @@ def replace_keys(state_dict):
     model_state_dict = {}
     state_dict.pop("pixel_mean", None)
     state_dict.pop("pixel_std", None)
-
-    output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
-    hf_mlp_layers_pattern = r".*hq_mask_mlp.layers.(\d+).*"
-
+    
+    # Process each key in the state dict
     for key, value in state_dict.items():
         new_key = key
+        
+        # Apply static mappings from KEYS_TO_MODIFY_MAPPING
         for key_to_modify, replacement in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in new_key:
                 new_key = new_key.replace(key_to_modify, replacement)
-
-        if re.match(output_hypernetworks_mlps_pattern, new_key):
-            layer_nb = int(re.match(output_hypernetworks_mlps_pattern, new_key).group(2))
-            if layer_nb == 0:
-                new_key = new_key.replace("layers.0", "proj_in")
-            elif layer_nb == 1:
-                new_key = new_key.replace("layers.1", "layers.0")
-            elif layer_nb == 2:
-                new_key = new_key.replace("layers.2", "proj_out")
-
-        # Handle HQ-specific MLP layers
-        if re.match(hf_mlp_layers_pattern, new_key):
-            layer_nb = int(re.match(hf_mlp_layers_pattern, new_key).group(1))
-            if layer_nb == 0:
-                new_key = new_key.replace("layers.0", "proj_in")
-            elif layer_nb == 1:
-                new_key = new_key.replace("layers.1", "layers.0")
-            elif layer_nb == 2:
-                new_key = new_key.replace("layers.2", "proj_out")
-
+        
         model_state_dict[new_key] = value
 
-    model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
-        "prompt_encoder.shared_embedding.positional_embedding"
-    ]
-
+    # Add mapping for shared embedding for positional embedding
+    if "prompt_encoder.shared_embedding.positional_embedding" in model_state_dict:
+        model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
+            "prompt_encoder.shared_embedding.positional_embedding"
+        ]
+    
+    # Special handling for IOU prediction head keys
+    # Check if we're missing the expected keys and have the converted ones instead
+    if ("mask_decoder.iou_prediction_head.layers.0.weight" not in model_state_dict and 
+        "mask_decoder.iou_prediction_head.proj_in.weight" in model_state_dict):
+        
+        # Copy the converted key back to the expected format
+        model_state_dict["mask_decoder.iou_prediction_head.layers.0.weight"] = model_state_dict["mask_decoder.iou_prediction_head.proj_in.weight"]
+        model_state_dict["mask_decoder.iou_prediction_head.layers.0.bias"] = model_state_dict["mask_decoder.iou_prediction_head.proj_in.bias"]
+    
     return model_state_dict
 
 
