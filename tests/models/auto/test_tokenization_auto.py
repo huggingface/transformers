@@ -51,7 +51,6 @@ from transformers.testing_utils import (
     RequestCounter,
     is_flaky,
     require_tokenizers,
-    skip,
     slow,
 )
 
@@ -442,7 +441,7 @@ class AutoTokenizerTest(unittest.TestCase):
         ):
             _ = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    @skip("This test is failing on main")
+    @unittest.skip("This test is failing on main")
     def test_cached_tokenizer_has_minimum_calls_to_head(self):
         # Make sure we have cached the tokenizer.
         _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
