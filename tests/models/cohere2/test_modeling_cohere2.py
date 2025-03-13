@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Cohere2 model."""
 
 import unittest
+import pytest
 
 from packaging import version
 from parameterized import parameterized
@@ -85,6 +86,7 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_eager_matches_sdpa_generate(self):
         pass
 
+    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):

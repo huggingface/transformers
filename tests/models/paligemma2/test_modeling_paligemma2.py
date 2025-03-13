@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch PaliGemma model."""
 
 import unittest
+import pytest
 
 from parameterized import parameterized
 
@@ -350,6 +351,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_beam_search_low_memory(self):
         pass
 
+    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):

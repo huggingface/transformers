@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch RecurrentGemma model."""
 
+import pytest
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
@@ -379,6 +380,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_parallel_beam_search(self):
         pass
 
+    @pytest.mark.generate
     @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
     def test_assisted_decoding_matches_greedy_search(self):
         pass

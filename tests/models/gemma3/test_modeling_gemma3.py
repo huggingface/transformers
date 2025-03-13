@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Gemma3 model."""
 
 import unittest
+import pytest
 
 from parameterized import parameterized
 
@@ -74,6 +75,7 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
+    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
@@ -276,6 +278,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
+    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
