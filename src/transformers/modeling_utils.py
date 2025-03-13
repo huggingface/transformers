@@ -5814,12 +5814,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
-        max_memory_device = None # TODO @arthur this does not work for TP
+        max_memory_device = None  # TODO @arthur this does not work for TP
         if device.type == "cuda":
             max_memory_device = torch.cuda.mem_get_info(device.index)[0]
         # allocate only if we have enough memory
-        # if max_memory_device is None or max_memory_device > param_count * dtype_byte_size(dtype):
-        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
+        if max_memory_device is None or max_memory_device > param_count * dtype_byte_size(dtype):
+            _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):

@@ -165,7 +165,7 @@ def write_model(
     convert_checkpoints,
     safe_serialization=True,
     instruct=False,
-    ):
+):
     os.makedirs(model_path, exist_ok=True)
 
     with open(os.path.join(input_base_path, "params.json"), "r") as f:
@@ -229,11 +229,7 @@ def write_model(
     image_size = vision_params["image_size"]["height"]  # siglip config is outdated
     vision_num_heads = vision_params["n_heads"]
 
-    num_vision_heads_per_shard = vision_num_heads // num_shards
-
-
     vision_output_dim = vision_params["output_dim"]
-    vision_patch_size = vision_params["patch_size"]["height"]
 
     vision_config = Llama4VisionConfig(
         hidden_act="gelu",
@@ -272,7 +268,7 @@ def write_model(
                 for i in tqdm(range(num_shards), desc="Loading shards", unit="shard")
             ]
 
-        all_keys_raw = [k for k in loaded[0].keys()]
+        all_keys_raw = list(loaded[0].keys())
         repeated_keys = []
         sharded_keys = []
         for _key in all_keys_raw:
@@ -404,7 +400,7 @@ def write_model(
                 breakpoint()
                 current_parameter = torch.cat(current_parameter, dim=concat_dim).clone()
                 # We don't reshape the patch embedding as we're using unfolded convolution as well
-                state_dict[new_key] = current_parameter #.reshape(-1, 3, vision_patch_size, vision_patch_size)
+                state_dict[new_key] = current_parameter  # .reshape(-1, 3, vision_patch_size, vision_patch_size)
             # generic concat for weights/select one for biases
             elif isinstance(current_parameter, list) and len(current_parameter) > 0:
                 if not is_param_same_across_shards(new_key):
@@ -477,18 +473,19 @@ def write_model(
         )
         generation_config.save_pretrained(model_path)
 
+
 BOS_ADDED_TOKEN = AddedToken(
     "<|begin_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
 )
 EOS_ADDED_TOKEN = AddedToken(
     "<|end_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
 )
-EOT_ADDED_TOKEN = AddedToken(
-    "<|eot|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
-)
+EOT_ADDED_TOKEN = AddedToken("<|eot|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True)
+
 
 def get_reserved_special_tokens(name, count, start_index=0):
     return [f"<|{name}_reserved_special_token_{i}|>" for i in range(start_index, start_index + count)]
+
 
 # 200005, ..., 200079
 LLAMA4_TEXT_POST_TRAIN_SPECIAL_TOKENS = [

@@ -74,8 +74,8 @@ class Llama4VisionConfig(PretrainedConfig):
         "model.layers.*.self_attn.k_proj": "colwise",
         "model.layers.*.self_attn.v_proj": "colwise",
         "model.layers.*.self_attn.o_proj": "rowwise",
-        "vision_adapter.mlp.fc1":"colwise",
-        "vision_adapter.mlp.fc2":"rowwise",
+        "vision_adapter.mlp.fc1": "colwise",
+        "vision_adapter.mlp.fc2": "rowwise",
         "patch_embedding.linear": "colwise_rep",
     }
     model_type = "llama4_vision_model"
@@ -323,6 +323,7 @@ class Llama4Config(PretrainedConfig):
     base_model_tp_plan = {
         "multi_modal_projector.linear_1": "colwise_rep",
     }
+
     def __init__(
         self,
         vision_config=None,
