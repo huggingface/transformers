@@ -93,7 +93,7 @@ image_sizes = [(image.size[1], image.size[0]) for image in images]
 outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 ```
 
-위 코드를 통해 결과값은 딕셔너리를 갖는 리스트가 되고, 각 딕셔너리들은 후처리된 키포인트, 점수 및 설명자로 이루어져있습니다.
+위 코드를 통해 결과값은 딕셔너리를 갖는 리스트가 되고, 각 딕셔너리들은 후처리된 키포인트, 점수 및 디스크립터로 이루어져있습니다.
 
 
 ```python
