@@ -711,8 +711,8 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
 def _infer_parameter_dtype(
     model: "PreTrainedModel",
     param_name: str,
-    empty_param,
-    keep_in_fp32_modules=None,
+    empty_param: torch.Tensor,
+    keep_in_fp32_modules: Optional[List[str]] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
     try:
