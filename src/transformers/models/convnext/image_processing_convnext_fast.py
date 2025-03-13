@@ -21,8 +21,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -54,11 +53,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class ConvNextFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    crop_pct: Optional[float]
-
-
-class ConvNextFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     crop_pct: Optional[float]
 
 
@@ -81,10 +76,9 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     crop_pct = 224 / 256
-    valid_init_kwargs = ConvNextFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = ConvNextFastImageProcessorPreprocessKwargs
+    valid_kwargs = ConvNextFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -95,9 +89,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             overridden by `crop_pct` in the`preprocess` method.
         """,
     )
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
