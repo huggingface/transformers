@@ -497,7 +497,9 @@ class GenerationMixin:
                 # This function is only used when the model is exported. Another implementation is used when
                 # eager mode is used as the documentation of torch.cond still mentions training
                 # is not supported by torch.cond.
-                inputs_embeds, input_ids = _cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+                inputs_embeds, input_ids = _cache_dependant_input_preparation_exporting(
+                    input_ids, inputs_embeds, cache_position
+                )
             else:
                 inputs_embeds, input_ids = _cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
 

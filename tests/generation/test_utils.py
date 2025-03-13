@@ -109,11 +109,11 @@ if is_torch_available():
 
 from unittest.mock import patch
 
-from transformers.utils import is_sklearn_available
 from transformers.generation.utils import (
     _cache_dependant_input_preparation,
     _cache_dependant_input_preparation_exporting,
 )
+from transformers.utils import is_sklearn_available
 
 
 # TODO: raushan remove this when VLMs start accepting input embeds
