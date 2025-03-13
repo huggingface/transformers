@@ -108,10 +108,10 @@ class TextStreamer(BaseStreamer):
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
-        # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
+        # Otherwise, print all text except the last character to avoid showing incomplete char during streaming,
         # which may change with the subsequent token -- there are probably smarter ways to do this!)
         else:
-            printable_text = text[self.print_len : text.rfind(" ") + 1]
+            printable_text = text[self.print_len : len(text) - 1]  # the incomplete char cannot be longer than 1
             self.print_len += len(printable_text)
 
         self.on_finalized_text(printable_text)
