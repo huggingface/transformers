@@ -105,14 +105,14 @@ if is_torch_available():
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
     )
-    from transformers.generation.utils import _speculative_sampling
+    from transformers.generation.utils import (
+        _cache_dependant_input_preparation,
+        _cache_dependant_input_preparation_exporting,
+        _speculative_sampling,
+    )
 
 from unittest.mock import patch
 
-from transformers.generation.utils import (
-    _cache_dependant_input_preparation,
-    _cache_dependant_input_preparation_exporting,
-)
 from transformers.utils import is_sklearn_available
 
 
