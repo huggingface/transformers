@@ -49,100 +49,121 @@ logger = logging.get_logger(__name__)
 
 class DeepseekV2Config(LlamaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekV2Model`]. It is used to instantiate an DeepSeek
+    This is the configuration class to store the configuration of a [`DeepseekV2Model`]. It is used to instantiate a DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DeepSeek-V2.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
-        vocab_size (`int`, *optional*, defaults to 102400):
-            Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`DeepseekV2Model`]
+        vocab_size (`int`, *optional*, defaults to 32000):
+            Vocabulary size of the DeepSeek model. Defines the number of different tokens that can be represented by the
+            `input_ids` passed when calling [`DeepseekV2Model`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 1407):
-            Dimension of the MoE representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        n_shared_experts (`int`, *optional*, defaults to None):
-            Number of shared experts, None means dense model.
-        n_routed_experts (`int`, *optional*, defaults to None):
-            Number of routed experts, None means dense model.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor or routed experts.
-        topk_method (`str`, *optional*, defaults to `gready`):
-            Topk method used in routed gate.
-        n_group (`int`, *optional*, defaults to None):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to None):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        num_experts_per_tok (`int`, *optional*, defaults to None):
-            Number of selected experts, None means dense model.
-        moe_layer_freq (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
-        first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
-        norm_topk_prob (`bool`, *optional*, defaults to False):
-            Whether to normalize the weights of the routed experts.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
-            Auxiliary loss weight coefficient.
-        seq_aux = (`bool`, *optional*, defaults to True):
-            Whether to compute the auxiliary loss for each individual sample.
         num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
-            `num_attention_heads`.
+            The number of key-value heads used to implement Grouped Query Attention (GQA). If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi-Head Attention (MHA). If
+            `num_key_value_heads=1`, the model will use Multi-Query Attention (MQA). Otherwise, GQA is used.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            The standard deviation of the truncated normal initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
+            The epsilon value used by the RMS normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether or not the model should return the last key/value attentions (useful for inference optimization).
         pad_token_id (`int`, *optional*):
-            Padding token id.
+            Padding token ID.
         bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
+            Beginning-of-sequence token ID.
         eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
+            End-of-sequence token ID.
         pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
+            Tensor parallelism rank used during pretraining for efficient distributed training.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+            Whether to tie input and output embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+            The base period of the Rotary Position Embeddings (RoPE).
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            Configuration for scaling RoPE embeddings. Supports `linear` and `dynamic` scaling strategies.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value, and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+            The dropout probability applied to attention weights.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias term in the MLP layers.
+        head_dim (`int`, *optional*):
+            The dimension of each attention head.
+        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
+            Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
+        first_k_dense_replace (`int`, *optional*, defaults to 0):
+            Number of dense layers in the shallow layers before switching to MoE layers.
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the LoRA decomposition for key-value projections.
+        q_lora_rank (`int`, *optional*, defaults to 1536):
+            Rank of the LoRA decomposition for query projections.
+        moe_layer_freq (`int`, *optional*, defaults to 1):
+            The frequency of inserting MoE layers within the Transformer architecture.
+        n_group (`int`, *optional*):
+            Number of groups for routed experts.
+        n_routed_experts (`int`, *optional*):
+            Number of routed experts (None indicates a dense model).
+        n_shared_experts (`int`, *optional*):
+            Number of shared experts (None indicates a dense model).
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+            The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            The head dimension for QK projections when using RoPE.
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+            Scaling factor for routed experts in MoE models.
+        seq_aux (`bool`, *optional*, defaults to `True`):
+            Whether to compute the auxiliary loss for each individual sequence.
+        topk_group (`int`, *optional*):
+            Number of selected groups per token for expert selection.
+        topk_method (`str`, *optional*, defaults to `"greedy"`):
+            The method used for selecting top-k experts in the routed gate mechanism.
+        v_head_dim (`int`, *optional*, defaults to 128):
+            The dimension of value projections in the attention layers.
+        num_experts_per_tok (`int`, *optional*):
+            The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
+        scoring_func (`str`, *optional*, defaults to `"softmax"`):
+            The function used to compute expert scores in the MoE mechanism (e.g., `"softmax"`).
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to normalize the probability distribution over top-k selected experts.
+        moe_intermediate_size (`int`, *optional*, defaults to 1407):
+            Dimension of the MoE (Mixture of Experts) representations.
+        ep_size (`int`, *optional*, defaults to 1):
+            The expert parallel size, which determines the number of expert shards used in distributed training.
+
     ```python
     >>> from transformers import DeepseekV2Model, DeepseekV2Config
-    >>> # Initializing a Deepseek-V2 style configuration
+    >>> # Initializing a DeepSeek-V2 style configuration
     >>> configuration = DeepseekV2Config()
     >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    >>> model = DeepseekV2Model(configuration)
+    >>> print(model.config)
+    ```
+    """
+
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.q_a_proj": "colwise",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     model_type = "deepseek_v2"
     keys_to_ignore_at_inference = ["past_key_values"]
