@@ -921,8 +921,8 @@ class RTDetrEncoderLayer(nn.Module):
         # self-attention
         self.self_attn = RTDetrMultiheadAttention(
             embed_dim=config.encoder_hidden_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
+            num_heads=config.num_attention_heads,
+            dropout=config.dropout,
         )
         self.self_attn_dropout = nn.Dropout(config.dropout)
 
