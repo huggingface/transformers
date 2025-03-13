@@ -38,10 +38,15 @@ DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 FLAKY_TEST_FAILURE_PATTERNS = [
     "OSError",  # Machine/connection transient error
     "Timeout",  # Machine/connection transient error
+    "FileNotFoundError",  # Raised by `datasets` on Hub failures
+    "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
     "HTTPError.*502",  # Hub-related
     "HTTPError.*504",  # Hub-related
     "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
+    # TODO: throw an appropriate exception for the cases below
     "TypeError: expected str, bytes or os.PathLike object, not NoneType",  # error downloading `merged.txt` from hub
+    "Converting from Tiktoken failed",  # same as the case above; we catch a general `Exception` and throw this message
+    "KeyError: <class 'transformers",  # lazy loading of tokenizer, probably same as the case above.
 ]
 
 
