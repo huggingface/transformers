@@ -109,7 +109,10 @@ class PretrainedConfig(PushToHubMixin):
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
         is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as decoder or not (in which case it's used as an encoder).
+            Whether the model is used as decoder or not (in which case it's used as an encoder) in an encoder/decoder
+            architecture. This setting only applies to sequence-to-sequence (encoder/decoder) architectures;
+            therefore, changing its parameter value does not have any effect in standalone autoregressive
+            (decoder-only) or autoencoding (encoder-only) architectures.
         cross_attention_hidden_size** (`bool`, *optional*):
             The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
             setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
