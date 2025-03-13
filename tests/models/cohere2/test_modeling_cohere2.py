@@ -15,8 +15,8 @@
 """Testing suite for the PyTorch Cohere2 model."""
 
 import unittest
-import pytest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark

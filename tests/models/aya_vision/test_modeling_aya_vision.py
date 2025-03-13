@@ -15,8 +15,8 @@
 """Testing suite for the PyTorch GotOcr2 model."""
 
 import unittest
-import pytest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (

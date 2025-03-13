@@ -15,8 +15,8 @@
 """Testing suite for the PyTorch Gemma3 model."""
 
 import unittest
-import pytest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (

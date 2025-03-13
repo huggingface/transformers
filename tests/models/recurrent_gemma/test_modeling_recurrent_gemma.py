@@ -14,8 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch RecurrentGemma model."""
 
-import pytest
 import unittest
+
+import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
