@@ -102,7 +102,7 @@ class Llama4VisionConfig(PretrainedConfig):
         multi_modal_projector_bias=False,
         projector_dropout=0.0,
         attention_dropout=0.0,
-        rope_theta=1000,
+        rope_theta=10000,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -114,7 +114,7 @@ class Llama4VisionConfig(PretrainedConfig):
         self.vision_output_dim = vision_output_dim
         self.patch_size = patch_size
         self.norm_eps = norm_eps
-        self.attention_heads = num_attention_heads
+        self.num_attention_heads = num_attention_heads
         self.initializer_range = initializer_range
         self.pixel_shuffle_ratio = pixel_shuffle_ratio
         self.projector_input_dim = projector_input_dim

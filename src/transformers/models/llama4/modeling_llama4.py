@@ -1035,14 +1035,10 @@ class Llama4VisionMLP(torch.nn.Module):
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.fc1 = nn.Linear(
-            self.intermediate_size,
-            config.projector_input_dim,
-            bias=True
+            self.intermediate_size, config.projector_input_dim, bias=False
         )
         self.fc2 = nn.Linear(
-            config.projector_output_dim,
-            config.projector_output_dim,
-            bias=True
+            config.projector_output_dim, config.projector_output_dim, bias=False
         )
         self.activation_fn = ACT2FN[config.hidden_act]
         self.dropout = config.projector_dropout
@@ -1162,8 +1158,8 @@ class Llama4VisionAttention(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.num_heads = config.attention_heads
-        self.head_dim = config.hidden_size // config.attention_heads
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.hidden_size // config.num_attention_heads
         self.attention_dropout = config.attention_dropout
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
@@ -1223,15 +1219,12 @@ class Llama4VisionEncoderLayer(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.num_attention_heads = config.attention_heads
-        self.intermediate_size = config.intermediate_size
 
         self.self_attn = Llama4VisionAttention(config)
         self.mlp = MllamaVisionMLP(config)
 
-
-        self.input_layernorm = LayerNorm(config.hidden_size, eps=1e-5, bias=True)
-        self.post_attention_layernorm = LayerNorm(config.hidden_size, eps=1e-5, bias=True)
+        self.input_layernorm = LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -1383,15 +1376,15 @@ class Llama4VisionRotaryEmbedding(nn.Module):
         img_idx[-1, -1] = -2  # ID_CLS_TOKEN
         frequencies_x = img_idx % idx  # get the coordinates of the 2d matrix along x
         frequencies_y = img_idx // idx  # get the coordinates of the 2d matrix along y
-
-        rope_freq = 1.0 / (config.rope_theta ** (torch.arange(0, config.hidden_size, 2)[: (config.hidden_size // 2)].float() / config.hidden_size))
+        freq_dim = config.hidden_size // config.num_attention_heads // 2
+        rope_freq = 1.0 / (config.rope_theta ** (torch.arange(0, freq_dim, 2)[: (freq_dim // 2)].float() / freq_dim))
         with torch.device("cpu"):
-            freqs_x = (rope_freq * (frequencies_x + 1))[:,None,:].repeat_interleave(2, dim=-1)
-            freqs_y = (rope_freq * (frequencies_y + 1))[:,None,:].repeat_interleave(2, dim=-1)
+            freqs_x = ((frequencies_x + 1)[...,None] * rope_freq[None,None,:]).repeat_interleave(2, dim=-1)
+            freqs_y = ((frequencies_y + 1)[...,None] * rope_freq[None,None,:]).repeat_interleave(2, dim=-1)
         freqs = torch.cat([freqs_x, freqs_y], dim=-1).float().contiguous()[..., ::2]
-        freqs = freqs.masked_fill(img_idx[...,None] < 0, 0)
+        freqs = freqs.masked_fill(img_idx.reshape(-1,1,1)< 0, 0)
         freq_cis = torch.view_as_complex(torch.stack([torch.cos(freqs), torch.sin(freqs)], dim=-1))
-        self.freqs_ci = freq_cis
+        self.freqs_ci = freq_cis # idx**2, idx**2, idx * 2
 
     def forward(self, hidden_states):
         return  self.freqs_ci.to(hidden_states.device)
