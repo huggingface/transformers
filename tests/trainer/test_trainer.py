@@ -803,6 +803,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_trained_model(trainer.model, alternate_seed=True)
 
+    @slow
     def test_gradient_accumulation_loss_alignment_with_model_loss(self):
         set_seed(42)
         import datasets
