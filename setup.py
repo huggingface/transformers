@@ -150,6 +150,7 @@ _deps = [
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
     "pytest-asyncio",
+    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
     "pytest-order",
