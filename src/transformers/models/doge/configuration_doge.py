@@ -5,10 +5,9 @@
 #                          modular_doge.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 Jingze Shi and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Jingze Shi and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on the Wonderful Matrices paper implementation.
-# The Doge family of small language models is trained by Jingze Shi.
+# The Doge family of small language models is trained by SmallDoge Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -114,12 +113,12 @@ class DogeConfig(PretrainedConfig):
         keep_window_size (`int`, *optional*, defaults to 2048):
             The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
         dynamic_mask_ratio (`float`, *optional*, defaults to 0.0):
-            The ratio to control the proportion of the dynamic mask filled with the minimum value. For more details checkout [this paper](https://arxiv.org/pdf/2412.11834).
+            The ratio to control the proportion of the dynamic mask filled with the minimum value.
         is_moe (`bool`, *optional*, defaults to `False`):
-            Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize. For more details checkout [this paper](https://arxiv.org/pdf/2412.11834).
-        num_experts (`int`, *optional*, defaults to 2048):
+            Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize.
+        num_experts (`int`, *optional*, defaults to 16384):
             Number of Experts for the Cross Domain Mixture of Experts.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
+        num_experts_per_tok (`int`, *optional*, defaults to 64):
             Number of selected experts to route per-token.
         expert_retrieval_size (`int`, *optional*, defaults to 64):
             Dimension of the Expert retrieval states for calculating the dot product of query and key to determine the expert index.
@@ -146,12 +145,12 @@ class DogeConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dt_proj": "rowwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.gate_proj": "colwise",
-        "layers.*.feed_forward.up_proj": "colwise",
-        "layers.*.feed_forward.down_proj": "rowwise",
-        "layers.*.feed_forward.queries_proj": "colwise",
-        "layers.*.feed_forward.down_embed": "rowwise",
-        "layers.*.feed_forward.up_embed": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.queries_proj": "colwise",
+        "layers.*.mlp.down_embed": "rowwise",
+        "layers.*.mlp.up_embed": "rowwise",
     }
 
     def __init__(
@@ -179,8 +178,8 @@ class DogeConfig(PretrainedConfig):
         keep_window_size=2048,
         dynamic_mask_ratio=0.0,
         is_moe=False,
-        num_experts=2048,
-        num_experts_per_tok=8,
+        num_experts=16384,
+        num_experts_per_tok=64,
         expert_retrieval_size=64,
         **kwargs,
     ):

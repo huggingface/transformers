@@ -5,10 +5,9 @@
 #                          modular_doge.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 Jingze Shi and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Jingze Shi and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on the Wonderful Matrices paper implementation.
-# The Doge family of small language models is trained by Jingze Shi.
+# The Doge family of small language models is trained by SmallDoge Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -220,8 +219,6 @@ def eager_attention_forward(
 
 
 class DogeDynamicMaskAttention(nn.Module):
-    """Dynamic Mask Attention from 'Wonderful Matrices' paper."""
-
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -367,8 +364,6 @@ class DogeMLP(nn.Module):
 
 
 class DogeCDMoE(DogeMLP):
-    """Cross Domain Mixture of Experts from 'Wonderful Matrices' paper."""
-
     def __init__(self, config: DogeConfig):
         super().__init__(config)
         self.hidden_dim = config.hidden_size
@@ -399,13 +394,12 @@ class DogeCDMoE(DogeMLP):
         routing_weights = torch.matmul(queries, self.keys)
 
         # get experts with the highest routing weights
-        (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.top_k, dim=-1)
+        (scores_x, scores_y), (indices_x, indices_y) = [w.topk(self.num_keys, dim=-1) for w in routing_weights]
         all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
-        all_scores = all_scores.view(*scores_x.shape[:-1], -1)
-        all_indices = (indices_x.unsqueeze(-1) * self.num_keys) + indices_y.unsqueeze(-2)
-        all_indices = all_indices.view(*indices_x.shape[:-1], -1)
-        scores, pk_indices = all_scores.topk(self.top_k, dim=-1)
-        indices = all_indices.gather(-1, pk_indices)
+        all_indices = indices_x.unsqueeze(-1) * self.num_keys + indices_y.unsqueeze(-2)
+        all_scores = all_scores.view(*all_scores.shape[:-2], -1)
+        all_indices = all_indices.view(*all_indices.shape[:-2], -1)
+        scores, indices = all_scores.topk(self.top_k, dim=-1)
         down_embed = self.down_embed(indices).transpose(1, 2)
         up_embed = self.up_embed(indices)
 
@@ -423,13 +417,13 @@ class DogeDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_dropout = config.hidden_dropout
 
-        self.pre_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.self_attn = DogeDynamicMaskAttention(config=config, layer_idx=layer_idx)
-        self.pre_residual = DogeResidual(config.hidden_size)
+        self.input_residual = DogeResidual(config.hidden_size)
 
-        self.post_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.feed_forward = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
-        self.post_residual = DogeResidual(config.hidden_size)
+        self.post_attention_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
+        self.post_attention_residual = DogeResidual(config.hidden_size)
 
     def forward(
         self,
@@ -445,7 +439,7 @@ class DogeDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         # sequence transformation
         residual = hidden_states
-        hidden_states = self.pre_layernorm(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -459,14 +453,14 @@ class DogeDecoderLayer(nn.Module):
         )
         self_attn_weights = None
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
-        hidden_states = self.pre_residual(residual, hidden_states)
+        hidden_states = self.input_residual(residual, hidden_states)
 
         # state transformation
         residual = hidden_states
-        hidden_states = self.post_layernorm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
-        hidden_states = self.post_residual(residual, hidden_states)
+        hidden_states = self.post_attention_residual(residual, hidden_states)
 
         outputs = (hidden_states,)
         if output_attentions:
