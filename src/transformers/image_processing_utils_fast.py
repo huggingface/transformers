@@ -595,6 +595,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return processed_images
 
     def _further_process_kwargs(
+        self,
         size: Optional[SizeDict] = None,
         crop_size: Optional[SizeDict] = None,
         default_to_square: Optional[bool] = None,
@@ -610,15 +611,22 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if kwargs is None:
             kwargs = {}
         if size is not None:
-            kwargs["size"] = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
         if crop_size is not None:
-            kwargs["crop_size"] = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+            crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
         if isinstance(image_mean, list):
-            kwargs["image_mean"] = tuple(image_mean)
+            image_mean = tuple(image_mean)
         if isinstance(image_std, list):
-            kwargs["image_std"] = tuple(image_std)
+            image_std = tuple(image_std)
         if data_format is None:
-            kwargs["data_format"] = ChannelDimension.FIRST
+            data_format = ChannelDimension.FIRST
+
+        kwargs["size"] = size
+        kwargs["crop_size"] = crop_size
+        kwargs["default_to_square"] = default_to_square
+        kwargs["image_mean"] = image_mean
+        kwargs["image_std"] = image_std
+        kwargs["data_format"] = data_format
 
         return kwargs
 

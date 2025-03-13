@@ -49,7 +49,6 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .image_processing_qwen2_vl import smart_resize
@@ -58,13 +57,14 @@ from .image_processing_qwen2_vl import smart_resize
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
+if is_torchvision_available():
+    from ...image_utils import pil_torch_interpolation_mapping
+
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -323,7 +323,9 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             return_tensors=return_tensors,
             data_format=data_format,
         )
-        interpolation = self._set_interpolation(resample)
+        interpolation = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         if images is not None:
             images = make_flat_list_of_images(images)
