@@ -29,7 +29,6 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_accelerator,
     require_torch_bf16,
     require_vision,
     slow,
@@ -106,13 +105,9 @@ class DinoDetrModelTester:
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.image_size, self.image_size]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        pixel_mask = torch.ones(
-            [self.batch_size, self.image_size, self.image_size], device=torch_device
-        )
+        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
         labels = None
         if self.use_labels:
@@ -172,9 +167,7 @@ class DinoDetrModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def create_and_check_deformable_detr_model(
-        self, config, pixel_values, pixel_mask, labels
-    ):
+    def create_and_check_deformable_detr_model(self, config, pixel_values, pixel_mask, labels):
         model = DinoDetrModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -187,9 +180,7 @@ class DinoDetrModelTester:
             (self.batch_size, self.num_queries, self.hidden_size),
         )
 
-    def create_and_check_deformable_detr_object_detection_head_model(
-        self, config, pixel_values, pixel_mask, labels
-    ):
+    def create_and_check_deformable_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
         model = DinoDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -197,29 +188,19 @@ class DinoDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_queries, self.num_labels)
-        )
-        self.parent.assertEqual(
-            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_queries, self.num_labels)
-        )
-        self.parent.assertEqual(
-            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
 @require_torch
 class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (DinoDetrModel, DinoDetrForObjectDetection) if is_torch_available() else ()
-    )
+    all_model_classes = (DinoDetrModel, DinoDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DinoDetrModel,
@@ -237,9 +218,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(
-            inputs_dict, model_class, return_labels=return_labels
-        )
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
             if model_class.__name__ == "DinoDetrForObjectDetection":
@@ -292,9 +271,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_deformable_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_deformable_detr_object_detection_head_model(
-            *config_and_inputs
-        )
+        self.model_tester.create_and_check_deformable_detr_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="Dino DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -371,9 +348,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(
-                len(decoder_attentions), self.model_tester.num_hidden_layers
-            )
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
                 [
@@ -434,18 +409,12 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(
-                    **tuple_inputs, return_dict=False, **additional_kwargs
-                )
-                dict_output = model(
-                    **dict_inputs, return_dict=True, **additional_kwargs
-                ).to_tuple()
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object, dict_object
-                        ):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -481,52 +450,28 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
-            dict_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
-            )
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_attentions": True}
-            )
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
-            dict_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
-            )
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
-            dict_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_attentions": True}
-            )
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
-            dict_inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(
                 model,
                 tuple_inputs,
@@ -580,16 +525,12 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = model_class(config)
             model.to(torch_device)
 
-            inputs = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
             outputs = model(**inputs)
 
             self.assertIsNotNone(outputs.auxiliary_outputs)
-            self.assertEqual(
-                len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1
-            )
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -607,9 +548,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     if "head_mask" and "decoder_head_mask" in arg_names
                     else []
                 )
-                self.assertListEqual(
-                    arg_names[: len(expected_arg_names)], expected_arg_names
-                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
@@ -638,14 +577,10 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(
-                    len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4
-                )
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
             else:
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(
-                    len(model.backbone.conv_encoder.intermediate_channel_sizes), 4
-                )
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -674,14 +609,10 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(
-                    len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4
-                )
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
             else:
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(
-                    len(model.backbone.conv_encoder.intermediate_channel_sizes), 4
-                )
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -761,16 +692,10 @@ def prepare_img():
 class DinoDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = DinoDetrForObjectDetection.from_pretrained(
-            "SenseTime/deformable-detr"
-        ).to(torch_device)
+        model = DinoDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -781,9 +706,7 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, pixel_mask)
 
-        expected_shape_logits = torch.Size(
-            (1, model.config.num_queries, model.config.num_labels)
-        )
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
@@ -801,31 +724,21 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(
-            outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(
-            outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(
-            torch_device
-        )
+        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(
-            torch_device
-        )
+        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
-        torch.testing.assert_close(
-            results["scores"], expected_scores, rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
