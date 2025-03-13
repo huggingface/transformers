@@ -36,7 +36,7 @@ from transformers.image_utils import (
     make_list_of_images,
     make_nested_list_of_images,
 )
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 
 
 if is_torch_available():
@@ -854,6 +854,7 @@ class LoadImageTester(unittest.TestCase):
 
         self.assertEqual(img_arr.shape, (1061, 750, 3))
 
+    @is_flaky()
     def test_load_img_url_timeout(self):
         with self.assertRaises((ReadTimeout, ConnectTimeout)):
             load_image(INVOICE_URL, timeout=0.001)

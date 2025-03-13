@@ -292,7 +292,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @is_flaky()  # >10% failure rate, exception: AttributeError: 'NoneType' object has no attribute 'retain_grad'
+    @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 

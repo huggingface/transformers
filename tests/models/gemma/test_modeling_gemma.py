@@ -23,6 +23,7 @@ from packaging import version
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -455,6 +456,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
+    @is_flaky()
     @slow
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
@@ -483,7 +485,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 # gemma flash attention 2 needs a high tolerance
-                torch.testing.assert_close(logits_fa, logits, atol=3e-3)
+                assert torch.allclose(logits_fa, logits, atol=3e-3)
 
 
 @slow

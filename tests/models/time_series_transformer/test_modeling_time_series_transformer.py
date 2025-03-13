@@ -470,7 +470,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
         # assert that the first element of the future_values is offset by lag after the decoders input
         assert lagged_sequence[0, ..., 0][-1] + lags_sequence[0] == future_values[0, ..., 0]
 
-    @is_flaky()  # >10% failure rate, exception: AttributeError: 'NoneType' object has no attribute 'retain_grad'
+    @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 

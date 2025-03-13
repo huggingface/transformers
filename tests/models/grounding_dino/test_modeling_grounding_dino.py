@@ -718,7 +718,6 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
     @require_torch_accelerator
     @is_flaky()
-    @slow
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         processor = self.default_processor
         image = prepare_img()
@@ -759,7 +758,6 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(results_cpu["boxes"], result_gpu["boxes"].cpu(), rtol=1e-3, atol=1e-3)
 
     @is_flaky()
-    @slow
     def test_cross_attention_mask(self):
         model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
 

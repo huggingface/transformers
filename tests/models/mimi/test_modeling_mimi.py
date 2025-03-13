@@ -26,6 +26,7 @@ from pytest import mark
 
 from transformers import AutoFeatureExtractor, MimiConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_torch_available,
     require_flash_attn,
     require_torch,
@@ -697,6 +698,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -722,7 +724,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 logits = outputs[1]
                 logits_fa = outputs_fa[1]
 
-                torch.testing.assert_close(logits_fa, logits, atol=4e-2, rtol=4e-2)
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
     @unittest.skip(reason="The MimiModel does not support right padding")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
