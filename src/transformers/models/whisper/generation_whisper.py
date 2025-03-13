@@ -790,6 +790,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
                 seek=seek,
+                batch_idx_map=batch_idx_map,
                 temperatures=temperatures,
                 generation_config=generation_config,
                 logits_processor=logits_processor,
@@ -905,6 +906,7 @@ class WhisperGenerationMixin(GenerationMixin):
         decoder_input_ids,
         cur_bsz,
         seek,
+        batch_idx_map,
         temperatures,
         generation_config,
         logits_processor,
@@ -977,6 +979,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 generation_config=generation_config,
                 is_shortform=is_shortform,
                 seek=seek,
+                batch_idx_map=batch_idx_map,
             )
 
             if cur_bsz < batch_size:
@@ -1064,6 +1067,7 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config,
         is_shortform,
         seek,
+        batch_idx_map
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
@@ -1073,11 +1077,15 @@ class WhisperGenerationMixin(GenerationMixin):
             return seek_outputs[:, start_idx:], seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            num_frames = getattr(generation_config, "num_frames", None)
+            num_frames = getattr(generation_config, "num_frames")
+            if num_frames is not None:
+                num_frames = num_frames - seek
+                num_frames = num_frames[batch_idx_map]
+
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs,
                 generation_config.alignment_heads,
-                num_frames=num_frames - seek if num_frames is not None else None,
+                num_frames=num_frames,
                 num_input_ids=decoder_input_ids.shape[-1],
             )
 
@@ -1612,7 +1620,12 @@ class WhisperGenerationMixin(GenerationMixin):
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
             if "num_frames" in kwargs:
-                generation_config.num_frames = kwargs.pop("num_frames").cpu()
+                generation_config.num_frames = kwargs.pop("num_frames")
+                if isinstance(generation_config.num_frames, torch.Tensor):
+                    generation_config.num_frames = generation_config.num_frames.cpu()
+                else:
+                    generation_config.num_frames = torch.tensor(generation_config.num_frames)
+
                 warnings.warn(
                     "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
                     "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
@@ -1623,6 +1636,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 logger.warning(
                     "When setting `return_token_timestamps` to `True`, make sure to pass an `attention_mask` to get precise token-level timestamps. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
                 )
+                generation_config.num_frames = None
 
     @staticmethod
     def _set_thresholds_and_condition(
