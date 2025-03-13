@@ -229,7 +229,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
 
 def make_flat_list_of_images(
     images: Union[List[ImageInput], ImageInput],
-) -> ImageInput:
+) -> List[ImageInput]:
     """
     Ensure that the output is a flat list of images. If the input is a single image, it is converted to a list of length 1.
     If the input is a nested list of images, it is converted to a flat list of images.
@@ -264,7 +264,7 @@ def make_flat_list_of_images(
 
 def make_nested_list_of_images(
     images: Union[List[ImageInput], ImageInput],
-) -> ImageInput:
+) -> List[List[ImageInput]]:
     """
     Ensure that the output is a nested list of images.
     Args:
