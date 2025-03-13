@@ -1896,12 +1896,17 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(len(cm.records), 1)
             self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
 
-    @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 5), ("meta-llama/Llama-2-7b-chat-hf", 6)])
+    @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
     @slow
     @require_read_token
     @require_torch_gpu
     def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
-        """Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up."""
+        """
+        This test is used to avoid regresion on https://github.com/huggingface/transformers/pull/36380.
+        10s should be more than enough for both models, and allows for some margin as loading time are quite
+        unstable. Before #36380, it used to take more than 40s, so 10s is still reasonable.
+        Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up.
+        """
         # First download the weights if not already on disk
         _ = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
 
