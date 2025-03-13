@@ -49,10 +49,10 @@ from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     RequestCounter,
-    require_tokenizers,
-    slow,
     is_flaky,
-    skip
+    require_tokenizers,
+    skip,
+    slow,
 )
 
 
