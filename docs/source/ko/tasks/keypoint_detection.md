@@ -67,7 +67,7 @@ images = [image_1, image_2]
 inputs = processor(images,return_tensors="pt").to(model.device, model.dtype)
 outputs = model(**inputs)
 ```
-모델 출력에는 배치 내의 각 항목에 대한 상대적인 키포인트, 설명자, 마스크와 점수가 있습니다. 마스크는 이미지에서 키포인트가 있는 영역을 강조하는 역할을 합니다.
+모델 출력에는 배치 내의 각 항목에 대한 상대적인 키포인트, 디스크립터, 마스크와 점수가 있습니다. 마스크는 이미지에서 키포인트가 있는 영역을 강조하는 역할을 합니다.
 
 ```python
 SuperPointKeypointDescriptionOutput(loss=None, keypoints=tensor([[[0.0437, 0.0167],
