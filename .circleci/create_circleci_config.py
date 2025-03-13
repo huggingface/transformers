@@ -33,6 +33,26 @@ COMMON_ENV_VARIABLES = {
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "vvv": None, "rsfE":None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
+# Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
+# to rerun the tests that match these patterns.
+FLAKY_TEST_FAILURE_PATTERNS = [
+    "OSError",  # Machine/connection transient error
+    "Timeout",  # Machine/connection transient error
+    "ConnectionError",  # Connection transient error
+    "FileNotFoundError",  # Raised by `datasets` on Hub failures
+    "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
+    "HTTPError.*502",  # Hub-related
+    "HTTPError.*504",  # Hub-related
+    "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
+    # TODO: error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
+    # them under a single message.
+    "TypeError: expected str, bytes or os.PathLike object, not NoneType",
+    "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType",
+    "Converting from Tiktoken failed",
+    "KeyError: <class ",
+    "TypeError: not a string",
+]
+
 
 class EmptyJob:
     job_name = "empty"
@@ -124,7 +144,9 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
-        additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
+        repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
             "checkout",
@@ -152,7 +174,7 @@ class CircleCIJob:
             },
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {additional_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
             },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
