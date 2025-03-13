@@ -115,7 +115,7 @@ outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
           [-0.0525,  0.0726,  0.0270,  ...,  0.0389, -0.0189, -0.0211]}]
 ```
 
-이제 위 딕셔너리를 사용하여 키 포인트를 그릴 수 있습니다.
+이제 위 딕셔너리를 사용하여 키포인트를 표시할 수 있습니다.
 
 ```python
 import matplotlib.pyplot as plt
