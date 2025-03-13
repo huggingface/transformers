@@ -343,6 +343,107 @@ GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDec
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 
+def _cache_dependant_input_preparation(
+    input_ids: torch.LongTensor,
+    inputs_embeds: Optional[torch.FloatTensor],
+    cache_position: Optional[torch.LongTensor],
+) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+    """
+    Generic cache-dependent input preparation
+    The code is put in a separate function to allow granular unit testing
+    as it needs a different implementation to be exportable.
+
+    If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+    - Exception 1: when passing input_embeds, input_ids may be missing entries
+    - Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+    - Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+                   (we can't check exception 3 while compiling)
+    - Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+      generate the first token for each sequence. Later use the generated Input ids for continuation.
+    """
+    if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+        inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+    elif (
+        inputs_embeds is not None  # Exception 1
+        or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+    ):
+        input_ids = input_ids[:, -cache_position.shape[0] :]
+    elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+        input_ids = input_ids[:, cache_position]
+    return inputs_embeds, input_ids
+
+
+def _cache_dependant_input_preparation_exporting(
+    input_ids: torch.LongTensor,
+    inputs_embeds: Optional[torch.FloatTensor],
+    cache_position: Optional[torch.LongTensor],
+) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+    """
+    Generic cache-dependent input preparation.
+    This function implements function ``_cache_dependant_input_preparation``
+    with :func:`torch.cond` to make it exportable with :func:`torch.export.export`.
+    The code is put in a separate function to allow granular unit testing.
+
+    If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+    - Exception 1: when passing input_embeds, input_ids may be missing entries
+    - Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+    - Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+                   (we can't check exception 3 while compiling)
+    - Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+      generate the first token for each sequence. Later use the generated Input ids for continuation.
+    """
+    if inputs_embeds is None:
+        input_ids = input_ids[:, cache_position]
+    else:
+        # This is the code we need to implemented with torch.cond.
+        # if input_ids.shape[1] == 0:
+        #     inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+        # else:
+        #     if cache_position[-1] >= input_ids.shape[1]:
+        #         input_ids = input_ids[:, -cache_position.shape[0] :]
+        #     else:
+        #         if input_ids.shape[1] != cache_position.shape[0]:
+        #             input_ids = input_ids[:, cache_position]
+        def branch_1(inputs_embeds, cache_position):
+            return inputs_embeds[:, -cache_position.shape[0] :]
+
+        def branch_2(input_ids, cache_position):
+            return input_ids[:, -cache_position.shape[0] :]
+
+        def branch_3(input_ids, cache_position):
+            return input_ids[:, cache_position]
+
+        inputs_embeds, input_ids = torch.cond(
+            input_ids.shape[1] == 0,
+            (
+                lambda input_ids, inputs_embeds, cache_position: (
+                    branch_1(inputs_embeds, cache_position),
+                    input_ids,
+                )
+            ),
+            (
+                lambda input_ids, inputs_embeds, cache_position: (
+                    inputs_embeds,
+                    torch.cond(
+                        cache_position[-1] >= input_ids.shape[1],
+                        branch_2,
+                        lambda input_ids, cache_position: (
+                            torch.cond(
+                                input_ids.shape[1] != cache_position.shape[0],
+                                branch_3,
+                                (lambda input_ids, cache_position: input_ids),
+                                [input_ids, cache_position],
+                            )
+                        ),
+                        [input_ids, cache_position],
+                    ),
+                )
+            ),
+            [input_ids, inputs_embeds, cache_position],
+        )
+    return inputs_embeds, input_ids
+
+
 class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
@@ -390,74 +491,15 @@ class GenerationMixin:
             cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
         # 2. Generic cache-dependent input preparation
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
-        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
             if is_torchdynamo_exporting():
-                if inputs_embeds is None:
-                    input_ids = input_ids[:, cache_position]
-                else:
-                    # This is the code we need to implemented with torch.cond.
-                    # if input_ids.shape[1] == 0:
-                    #     inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-                    # else:
-                    #     if cache_position[-1] >= input_ids.shape[1]:
-                    #         input_ids = input_ids[:, -cache_position.shape[0] :]
-                    #     else:
-                    #         if input_ids.shape[1] != cache_position.shape[0]:
-                    #             input_ids = input_ids[:, cache_position]
-                    def branch_1(inputs_embeds, cache_position):
-                        return inputs_embeds[:, -cache_position.shape[0] :]
-
-                    def branch_2(input_ids, cache_position):
-                        return input_ids[:, -cache_position.shape[0] :]
-
-                    def branch_3(input_ids, cache_position):
-                        return input_ids[:, cache_position]
-
-                    inputs_embeds, input_ids = torch.cond(
-                        input_ids.shape[1] == 0,
-                        (
-                            lambda input_ids, inputs_embeds, cache_position: (
-                                branch_1(inputs_embeds, cache_position),
-                                input_ids,
-                            )
-                        ),
-                        (
-                            lambda input_ids, inputs_embeds, cache_position: (
-                                inputs_embeds,
-                                torch.cond(
-                                    cache_position[-1] >= input_ids.shape[1],
-                                    branch_2,
-                                    lambda input_ids, cache_position: (
-                                        torch.cond(
-                                            input_ids.shape[1] != cache_position.shape[0],
-                                            branch_3,
-                                            (lambda input_ids, cache_position: input_ids),
-                                            [input_ids, cache_position],
-                                        )
-                                    ),
-                                    [input_ids, cache_position],
-                                ),
-                            )
-                        ),
-                        [input_ids, inputs_embeds, cache_position],
-                    )
-            elif inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
-                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-            elif (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
+                # This function is only used when the model is exported. Another implementation is used when
+                # eager mode is used as the documentation of torch.cond still mentions training
+                # is not supported by torch.cond.
+                inputs_embeds, input_ids = _cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+            else:
+                inputs_embeds, input_ids = _cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
