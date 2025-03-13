@@ -1,4 +1,3 @@
-%%writefile qwen2_vl.py
 # coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
