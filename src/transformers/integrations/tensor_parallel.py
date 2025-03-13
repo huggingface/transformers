@@ -343,20 +343,6 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
 
-    @staticmethod
-    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        if hasattr(mod, "bias") and mod.bias is not None:
-            mod._bias = mod.bias
-            mod.bias = None
-
-        input_tensor = inputs[0]
-        if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
-
-        if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
-        return input_tensor
-
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
         # means Rowwise as nn.Linear is input * weight^T + bias, where
@@ -374,6 +360,20 @@ class RowwiseParallel(TensorParallelLayer):
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, shard, run_check=False)
         return nn.Parameter(parameter)
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        if hasattr(mod, "bias") and mod.bias is not None:
+            mod._bias = mod.bias
+            mod.bias = None
+
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
