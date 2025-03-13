@@ -1292,7 +1292,7 @@ class SamHQMaskDecoder(nn.Module):
             masks_sam = torch.gather(
                 masks_sam,
                 2,
-                sort_indices.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, masks_sam.shape[3], masks_sam.shape[4]),
+                sort_indices[..., None, None].expand(-1, -1, -1, masks_sam.shape[3], masks_sam.shape[4]),
             )
             # Update iou_pred with sorted scores
             iou_pred = iou_pred_sorted
