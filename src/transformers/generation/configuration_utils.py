@@ -379,8 +379,7 @@ class GenerationConfig(PushToHubMixin):
             If using a static cache, this controls how `generate` will `compile` the forward pass for performance
             gains.
 
-        disable_compile (`bool`, *optional*): Whether to disable the compilation of the forward pass when using 'static' cache
-            implementation. If the model is quantized, the default varies based on the quantization method. Defaults to `False` otherwise.
+        disable_compile (`bool`, *optional*): Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when specific criteria are met, including using a compileable cache. Please open an issue if you find the need to use this flag.
 
         > Wild card
 
