@@ -24,8 +24,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     get_size_dict,
     group_images_by_shape,
     reorder_images,
@@ -67,14 +66,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma3FastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
-
-
-class Gemma3FastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class Gemma3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_pan_and_scan: Optional[bool]
     pan_and_scan_min_crop_size: Optional[int]
     pan_and_scan_max_num_crops: Optional[int]
@@ -108,10 +100,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     pan_and_scan_min_crop_size = None
     pan_and_scan_max_num_crops = None
     pan_and_scan_min_ratio_to_activate = None
-    valid_init_kwargs = Gemma3FastImageProcessorInitKwargs
-    valid_preprocess_kwargs = Gemma3FastImageProcessorPreprocessKwargs
+    valid_kwargs = Gemma3FastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _prepare_images_structure(
@@ -262,14 +253,12 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Gemma3FastImageProcessorPreprocessKwargs],
+        **kwargs: Unpack[Gemma3FastImageProcessorKwargs],
     ) -> BatchFeature:
-        validate_kwargs(
-            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
-        )
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_preprocess_kwargs.__annotations__:
+        for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input images
