@@ -1,23 +1,31 @@
-import warnings
-import torch
-from typing import List, Optional, Union
+# coding=utf-8
+# Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for Deepseek-VL.
+"""
+from typing import List, Union
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
-from ...tokenization_utils_base import BatchEncoding, AddedToken
-from .image_processing_deepseek_vl import DeekseekImageProcessor
-from ..llama.tokenization_llama_fast import LlamaTokenizerFast
-from ..llama.tokenization_llama import LlamaTokenizer
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...tokenization_utils_base import (
-    AddedToken,
     PreTokenizedInput,
     TextInput,
 )
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
-    TextKwargs,
     Unpack,
     _validate_images_text_input_order,
 )
@@ -29,65 +37,17 @@ DEFAULT_SYSTEM_PROMPT = (
     "and assist the user with a variety of tasks using natural language.\n\n"
 )
 
-def add_image_tokens_to_input_ids(
-    input_ids: torch.LongTensor,
-    image_indices: List[int],
-    image_token_id: int,
-    num_image_tokens: int,
-    add_special_tokens: bool = False,
-    ):
-    """
-    Args:
-        image_indices (List[int]): [index_0, index_1, ..., index_j]
-        input_ids (torch.LongTensor): [N]
-
-    Returns:
-        input_ids (torch.LongTensor): [N + image tokens]
-        num_image_tokens (torch.IntTensor): [n_images]
-    """
-    input_slices = []
-    start = 0
-    for index in image_indices:
-        if add_special_tokens:
-            end =  index + 1
-        else:
-            end = index
-        
-        input_slices.append(input_ids[start:end])
-
-        input_slices.append(
-            image_token_id * torch.ones((num_image_tokens,), dtype=torch.long)
-        )
-        start = index + 1
-    input_slices.append(input_ids[start:])
-
-    input_ids = torch.cat(input_slices, dim=0)
-    num_image_tokens = torch.IntTensor([num_image_tokens] * len(image_indices))
-
-    return input_ids, num_image_tokens
-
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {},
+        _defaults = {
+        "text_kwargs": {"padding": False,},
+        "common_kwargs": {"return_tensors": "pt"},
     }
-
 
 class DeepseekVLProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     
-    image_processor_class = "AutoImageProcessor"
+    image_processor_class = "DeepseekImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(
@@ -95,7 +55,7 @@ class DeepseekVLProcessor(ProcessorMixin):
             image_processor=None, 
             tokenizer=None, 
             chat_template=None,
-            use_deafult_system_prompt=True, 
+            use_deafult_system_prompt=False, 
             **kwargs,
         ):
         if image_processor is None:
@@ -124,11 +84,13 @@ class DeepseekVLProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
             text (`str`, `List[str]`, `List[List[str]]`):
         """
+        # check if images and text inputs are reversed for BC
         images, text = _validate_images_text_input_order(images, text)
+
 
         output_kwargs = self._merge_kwargs(
             DeepseekVLProcessorKwargs,
-            **kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
         if text is None and images is None:
             raise ValueError("You must provide either text or images.")
@@ -139,7 +101,7 @@ class DeepseekVLProcessor(ProcessorMixin):
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
         
-        # add and replace image tokens
+        # Replace the image token with expanded image tokens.
         prompt_strings = []
         single_image_tokes = IMAGE_TOKEN * self.num_image_tokens
         for prompt in text:
