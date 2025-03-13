@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 키포인트 탐지 [[Keypoint-Detection]]
+# 키포인트 탐지 [[keypoint-detection]]
 
 [[open-in-colab]]
 
