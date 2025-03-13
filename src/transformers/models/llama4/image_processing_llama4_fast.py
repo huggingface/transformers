@@ -16,24 +16,21 @@
 
 from collections import defaultdict
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import (
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
-    validate_fast_preprocess_arguments,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -50,20 +47,13 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
-
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
 
 
-class Llama4ImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
-
-
-class Llama4ImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     max_patches: Optional[int]
     resize_to_max_canvas: Optional[bool]
 
@@ -309,52 +299,10 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     max_patches = 16
     resize_to_max_canvas = False
-    valid_init_kwargs = Llama4ImageProcessorInitKwargs
-    valid_preprocess_kwargs = Llama4ImageProcessorPreprocessKwargs
+    valid_kwargs = Llama4ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Llama4ImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Llama4ImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    @lru_cache(maxsize=10)
-    def _prepare_process_arguments(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        device: Optional["torch.device"] = None,
-    ) -> tuple:
-        """
-        Prepare the arguments for the process method.
-        """
-        validate_fast_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            resample=resample,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
-
-        interpolation = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        return image_mean, image_std, interpolation
 
     def rescale_and_normalize(
         self,
@@ -367,6 +315,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
+        Override to rescale and normalize the images in torch.bfloat16 as in the original implementation
         """
         if do_rescale and do_normalize:
             images = images.to(dtype=torch.bfloat16) * rescale_factor
@@ -391,7 +340,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
             but never upsample, unless the image is smaller than the patch size.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorPreprocessKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
