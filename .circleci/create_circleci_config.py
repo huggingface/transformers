@@ -137,7 +137,6 @@ class CircleCIJob:
         junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
-        # '(OSError|Timeout|HTTPError.*502|HTTPError.*504)'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
             "checkout",
