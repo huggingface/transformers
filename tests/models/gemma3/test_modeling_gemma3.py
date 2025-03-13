@@ -22,9 +22,9 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    GenerationConfig,
     Gemma3Config,
     Gemma3TextConfig,
+    GenerationConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -525,11 +525,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
-
     def test_generation_beyond_sliding_window_with_generation_config(self):
         """
         Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
-        ensures `cache_implementation='hybrid'` is correctly inherited from the base model.generation_config.
+        ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
         """
         model_id = "gg-hf-g/gemma-3-1b-it"
         attn_implementation = "sdpa"
