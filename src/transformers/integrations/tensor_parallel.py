@@ -528,7 +528,7 @@ def shard_and_distribute_module(
             param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
         )
     else:
-        param = param[:]
+        param = param[...]
         if is_contiguous:
             param = param.contiguous()
 
