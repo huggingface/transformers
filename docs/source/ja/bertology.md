@@ -31,4 +31,4 @@ rendered properly in your Markdown viewer.
 - BERT/GPT/GPT-2の各ヘッドの注意重みにアクセスできます。
 - ヘッドの出力値と勾配を取得し、ヘッドの重要性スコアを計算し、[論文リンク](https://arxiv.org/abs/1905.10650)で説明されているようにヘッドを削減できます。
 
-これらの機能を理解し、使用するのを支援するために、特定のサンプルスクリプト「[bertology.py](https://github.com/huggingface/transformers/tree/main/examples/research_projects/bertology/run_bertology.py)」を追加しました。このスクリプトは、GLUEで事前トレーニングされたモデルから情報を抽出し、ヘッドを削減する役割を果たします。
+これらの機能を理解し、使用するのを支援するために、特定のサンプルスクリプト「[bertology.py](https://github.com/huggingface/transformers-research-projects/tree/main/bertology/run_bertology.py)」を追加しました。このスクリプトは、GLUEで事前トレーニングされたモデルから情報を抽出し、ヘッドを削減する役割を果たします。

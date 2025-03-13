@@ -12,8 +12,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -40,12 +39,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class LlavaOnevisionFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    image_grid_pinpoints: Optional[List[List[int]]]
-    do_pad: Optional[bool]
-
-
-class LlavaOnevisionFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_grid_pinpoints: Optional[List[List[int]]]
     do_pad: Optional[bool]
 
@@ -77,11 +71,10 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    valid_init_kwargs = LlavaOnevisionFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = LlavaOnevisionFastImageProcessorPreprocessKwargs
+    valid_kwargs = LlavaOnevisionFastImageProcessorKwargs
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs: Unpack[LlavaOnevisionFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -95,9 +88,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(

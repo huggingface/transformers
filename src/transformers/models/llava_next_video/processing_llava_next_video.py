@@ -85,7 +85,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         "video_token",
         "num_additional_image_tokens",
     ]
-    image_processor_class = "LlavaNextImageProcessor"
+    image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
     video_processor_class = "LlavaNextVideoImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
