@@ -20,6 +20,7 @@
 """Image processor class for Qwen2-VL."""
 
 import math
+from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -47,7 +48,11 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_numba_available, logging
+
+
+if is_numba_available():
+    from ...image_transforms import fast_rescale_normalize_transpose
 
 
 logger = logging.get_logger(__name__)
@@ -86,7 +91,10 @@ def smart_resize(
 
 class Qwen2VLImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
+    Constructs a numpy-based Qwen2-VL image processor that dynamically resizes images based on the original images.
+
+    Note that this image processor will automatically apply jit compilation for performance optimization
+    when numba is available. Please install numba if you want to get better numpy performance on CPU.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -151,6 +159,39 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         self.merge_size = merge_size
         self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         self.do_convert_rgb = do_convert_rgb
+
+    @lru_cache
+    def _get_pixel_map(
+        self,
+        rescale_factor: float,
+        image_mean: Union[float, List[float]],
+        image_std: Union[float, List[float]],
+    ) -> np.ndarray:
+        pixel_map = np.ones((3, 256), dtype=np.float32)
+        pixel_map *= np.linspace(0, 255, 256, dtype=np.float32) * rescale_factor
+        image_mean = np.array(image_mean, dtype=np.float32)[:, np.newaxis]
+        image_std = np.array(image_std, dtype=np.float32)[:, np.newaxis]
+        return (pixel_map - image_mean) / image_std
+
+    def fuse_preprocess(
+        self,
+        image: np.ndarray,
+        scale: float,
+        mean: Union[float, List[float]],
+        std: Union[float, List[float]],
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: ChannelDimension = None,
+    ):
+        mean = tuple(mean) if isinstance(mean, list) else mean
+        std = tuple(std) if isinstance(std, list) else std
+        pixel_map = self._get_pixel_map(scale, mean, std)
+        image_out = fast_rescale_normalize_transpose(
+            image,
+            pixel_map,
+            target_channel_dim=data_format,
+            input_channel_dim=input_data_format,
+        )
+        return image_out
 
     def _preprocess(
         self,
@@ -220,32 +261,57 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(images[0], channel_dim=input_data_format)
         resized_height, resized_width = height, width
-        processed_images = []
-        for image in images:
+        if do_resize:
+            resized_height, resized_width = smart_resize(
+                height,
+                width,
+                factor=self.patch_size * self.merge_size,
+                min_pixels=self.min_pixels,
+                max_pixels=self.max_pixels,
+            )
+
+        is_fuse_ops_available = is_numba_available() and data_format == ChannelDimension.FIRST
+        if do_rescale and do_normalize and is_fuse_ops_available:
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
+                images = np.array(
+                    [
+                        resize(
+                            image,
+                            (resized_height, resized_width),
+                            resample=resample,
+                            input_data_format=input_data_format,
+                        )
+                        for image in images
+                    ]
                 )
-                image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
-                )
+            else:
+                images = np.array(images)
+            patches = self.fuse_preprocess(
+                images, scale=rescale_factor, mean=image_mean, std=image_std, input_data_format=input_data_format
+            )
+        else:
+            processed_images = []
+            for image in images:
+                if do_resize:
+                    image = resize(
+                        image,
+                        size=(resized_height, resized_width),
+                        resample=resample,
+                        input_data_format=input_data_format,
+                    )
 
-            if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                if do_rescale:
+                    image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
-            if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
+                if do_normalize:
+                    image = self.normalize(
+                        image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    )
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            processed_images.append(image)
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                processed_images.append(image)
+            patches = np.array(processed_images)
 
-        patches = np.array(processed_images)
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] % self.temporal_patch_size != 0:

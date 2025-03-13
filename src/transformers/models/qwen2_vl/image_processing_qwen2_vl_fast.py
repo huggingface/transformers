@@ -78,7 +78,7 @@ class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
 
 @add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes images based on the original images.",
+    "Constructs a torch-based fast Qwen2-VL image processor that dynamically resizes images based on the original images.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         min_pixels (`int`, *optional*, defaults to `56 * 56`):

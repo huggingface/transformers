@@ -1371,6 +1371,10 @@ def is_triton_available():
     return _triton_available
 
 
+def is_numba_available():
+    return importlib.util.find_spec("numba") is not None
+
+
 def is_rich_available():
     return _rich_available
 
