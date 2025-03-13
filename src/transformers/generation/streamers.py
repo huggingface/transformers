@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import string
 from queue import Queue
 from typing import TYPE_CHECKING, Optional
 
@@ -105,7 +106,7 @@ class TextStreamer(BaseStreamer):
             self.token_cache = []
             self.print_len = 0
         # If the last token is a CJK character, we print the characters.
-        elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+        elif len(text) > 0 and (text[-1] in string.printable or self._is_chinese_char(ord(text[-1]))):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
         # Otherwise, print all text except the last character to avoid showing incomplete char during streaming,
