@@ -41,6 +41,7 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     "HTTPError.*502",  # Hub-related
     "HTTPError.*504",  # Hub-related
     "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
+    "TypeError: expected str, bytes or os.PathLike object, not NoneType",  # error downloading `merged.txt` from hub
 ]
 
 
