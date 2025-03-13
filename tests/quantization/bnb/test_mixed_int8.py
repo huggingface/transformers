@@ -986,17 +986,17 @@ class Bnb8bitCompile(unittest.TestCase):
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
-        with self.assertRaises(Exception):
-            self.model_8bit.generate(
-                input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
-                max_new_tokens=10,
-                cache_implementation="static",
-                disable_compile=False,
-            )
-
         # if nothing is set, compile will be disabled for bnb
         self.model_8bit.generate(
             input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
             max_new_tokens=10,
             cache_implementation="static",
         )
+
+        with self.assertRaises(Exception):
+            object.__setattr__(self.model_8bit.hf_quantizer, "is_compileable", True)
+            self.model_8bit.generate(
+                input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
+                max_new_tokens=10,
+                cache_implementation="static",
+            )

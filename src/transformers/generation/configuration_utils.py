@@ -484,7 +484,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Performances
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
-        self.disable_compile = kwargs.pop("disable_compile", None)
+        self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
