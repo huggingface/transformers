@@ -343,6 +343,10 @@ class RowwiseParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        if hasattr(mod, "bias") and mod.bias is not None:
+            mod._bias = mod.bias
+            mod.bias = None
+
         input_tensor = inputs[0]
         if not isinstance(input_tensor, DTensor):
             input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
@@ -376,6 +380,8 @@ class RowwiseParallel(TensorParallelLayer):
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        if hasattr(mod, "_bias"):
+            outputs += mod._bias
         # back to local tensor if use_local_output is True
         return outputs.to_local() if use_local_output else outputs
 

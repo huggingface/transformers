@@ -21,7 +21,6 @@
 # limitations under the License.
 import math
 
-# ------ START LLAVA CODE BLOCK -----
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -29,7 +28,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import einsum  # TODO replace, it's just a dot product
 
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 from transformers.models.mllama.modeling_mllama import (
@@ -57,9 +55,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
-
-# TODO move to modular here (all llava code is useless, only al predictor is changed!)
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -188,7 +183,6 @@ class Llama4TextMoe(nn.Module):
         routed_in = routed_in * router_scores.reshape(-1, 1)
         routed_out = self.experts(routed_in)  # routed in is "sorted" / ready for EP
 
-        # TODO ARTHUR FOR NOW SHARED IS NOT ISOLATED BUT REPLICATED
         out = self.shared_expert(hidden_states)
         # now that we finished expert computation -> we scatter add because we gathered previously
         # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
@@ -901,7 +895,6 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAMA4_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1035,35 +1028,6 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-def pixel_shuffle_op(input_x, pixel_shuffle_ratio):
-    n, w, h, c = input_x.size()
-    input_x = input_x.view(n, w, int(h * pixel_shuffle_ratio), int(c / pixel_shuffle_ratio))
-    input_x = input_x.permute(0, 2, 1, 3).contiguous()
-    input_x = input_x.view(
-        n,
-        int(h * pixel_shuffle_ratio),
-        int(w * pixel_shuffle_ratio),
-        int(c / (pixel_shuffle_ratio**2)),
-    )
-    input_x = input_x.permute(0, 2, 1, 3).contiguous()
-    return input_x
-
-
-class Llama4VisionPixelShuffle(nn.Module):
-    def __init__(self, pixel_shuffle_ratio):
-        super().__init__()
-        self.pixel_shuffle_ratio = pixel_shuffle_ratio
-
-    def forward(self, x):
-        # x: [B, N, C], N = number of patches
-        assert self.pixel_shuffle_ratio is not None, "pixel_shuffle_ratio is required for pixel shuffle"
-        assert x.dim() == 3, "pixel shuffle requires encoded patches [B, N, C]"
-        hh = ww = int(math.sqrt(x.shape[1]))
-        x = x.reshape(x.shape[0], hh, ww, -1)
-        x = pixel_shuffle_op(x, pixel_shuffle_ratio=self.pixel_shuffle_ratio)
-        pixel_shuffle_patches = x.reshape(x.shape[0], -1, x.shape[-1])
-        return pixel_shuffle_patches
-
 
 class Llama4VisionMLP(torch.nn.Module):
     def __init__(self, config):
@@ -1073,12 +1037,12 @@ class Llama4VisionMLP(torch.nn.Module):
         self.fc1 = nn.Linear(
             self.intermediate_size,
             config.projector_input_dim,
-            bias=config.multi_modal_projector_bias,
+            bias=True
         )
         self.fc2 = nn.Linear(
             config.projector_output_dim,
             config.projector_output_dim,
-            bias=config.multi_modal_projector_bias,
+            bias=True
         )
         self.activation_fn = ACT2FN[config.hidden_act]
         self.dropout = config.projector_dropout
@@ -1107,29 +1071,44 @@ class Llama4MultiModalProjector(nn.Module):
         return hidden_states
 
 
+def pixel_shuffle(input_tensor, shuffle_ratio):
+    # input_tensor: [batch_size, num_patches, channels]
+    batch_size, num_patches, channels = input_tensor.shape
+    patch_size = int(math.sqrt(num_patches))
+    
+    input_tensor = input_tensor.view(batch_size, patch_size, patch_size, -1)
+    batch_size, height, width, channels = input_tensor.size()
+    
+    reshaped_tensor = input_tensor.view(
+        batch_size,
+        height, 
+        int(width * shuffle_ratio),
+        int(channels / shuffle_ratio)
+    )
+    reshaped_tensor = reshaped_tensor.permute(0, 2, 1, 3).contiguous()
+    
+    reshaped_tensor = reshaped_tensor.view(
+        batch_size,
+        int(height * shuffle_ratio),
+        int(width * shuffle_ratio),
+        int(channels / (shuffle_ratio**2))
+    )
+    reshaped_tensor = reshaped_tensor.permute(0, 2, 1, 3).contiguous()
+ 
+    output_tensor = reshaped_tensor.view(batch_size, -1, reshaped_tensor.shape[-1])
+    return output_tensor
+
 class Llama4VisionPixelShuffleMLP(nn.Module):
-    def __init__(
-        self,
-        config,
-        add_fc=False,
-    ):
+    def __init__(self, config):
         super().__init__()
         self.pixel_shuffle_ratio = config.pixel_shuffle_ratio
-        self.pixel_shuffle = Llama4VisionPixelShuffle(self.pixel_shuffle_ratio)
         self.inner_dim = int(config.projector_input_dim // (self.pixel_shuffle_ratio**2))
         self.output_dim = config.projector_output_dim
         self.mlp = Llama4VisionMLP(config)
-        self.fc = nn.Identity()
-        if add_fc:
-            self.fc = nn.Linear(
-                self.output_dim,
-                self.output_dim,
-                bias=False,
-            )
 
     def forward(self, encoded_patches: torch.Tensor) -> torch.Tensor:
-        encoded_patches = self.pixel_shuffle(encoded_patches)
-        return self.fc(self.mlp(encoded_patches))
+        encoded_patches = pixel_shuffle(encoded_patches, self.pixel_shuffle_ratio)
+        return self.mlp(encoded_patches)
 
 
 LLAVA_START_DOCSTRING = r"""
@@ -1149,31 +1128,6 @@ LLAVA_START_DOCSTRING = r"""
 """
 
 
-def _prepare_image_attention_mask(
-        attention_mask: torch.Tensor,
-        num_patches: int,
-        target_length: int,
-        dtype: torch.dtype,
-) -> torch.Tensor:
-    # Expand aspect ratio mask to target_length
-    batch_size, image_seq_len = attention_mask.shape
-    attention_mask = attention_mask.view(batch_size, image_seq_len, 1, 1).to(dtype)
-    attention_mask = attention_mask.repeat(1, 1, target_length, 1)
-
-    # Mask padding patches
-    pad_patches = target_length - num_patches
-    attention_mask[:, :, -pad_patches:] = 0
-
-    # Invert the mask (0 -> 1, 1 -> 0)
-    attention_mask = 1 - attention_mask
-
-    # Reshape to 2D and create 4D attention mask
-    # (batch_size, 1, max_num_tiles * target_length, max_num_tiles * target_length)
-    attention_mask = attention_mask.reshape(batch_size, target_length, 1)
-    attention_mask = attention_mask @ attention_mask.transpose(-1, -2) * torch.finfo(dtype).min
-    attention_mask = attention_mask.unsqueeze(1)
-
-    return attention_mask
 
 # TODO there is a different RoPE for vision encoder, defined as below
 def reshape_for_broadcast(freqs_ci: torch.Tensor, query: torch.Tensor):
@@ -1210,10 +1164,7 @@ class Llama4VisionAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.attention_heads
         self.head_dim = config.hidden_size // config.attention_heads
-        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-        self.pretraining_tp = 8
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=True)
@@ -1236,11 +1187,11 @@ class Llama4VisionAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         query_states, key_states = vision_apply_rotary_emb(query_states, key_states, freqs_ci=freqs_ci)
-        # torch.allclose(query_states[:,:,0:2,:], xq_out_typed, atol=5e-3) # False but True for 8e-3
+
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-        # 8e-3 to this point
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
@@ -1258,7 +1209,7 @@ class Llama4VisionAttention(nn.Module):
             value_states,
             None,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling = None, # scaling is by the dim per head by default, 88 here
+            scaling=None,
             is_causal=False, # HAS TO BE ENFORCED
             **kwargs,
         )
@@ -1403,43 +1354,18 @@ class Llama4VisionEncoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-# TODO Rope was broken - this is temporary to get back the packing indices
-class PackingIndex:
-    Z = 0  # Z (time) coordinate of the token in the original sample
-    Y = 1  # Y (height) coordinate of the token in the original sample
-    X = 2  # X (width) coordinate of the token in the original sample
-    TIME = 3  # Total number of time units (frames) in the original sample
-    HEIGHT = 4  # Height of the original sample
-    WIDTH = 5  # Width of the original sample
-    # USE INDEX TO CHECK THE TYPE OF THE TOKEN (see ID fields below)
-    IDX = 6  # Full index of the token in the original sample (x + y * w + z * w * h)
-    BATCH_IDX = 7  # Which batch element this token belongs to. Note the batch idx of padding tokens is BATCH_SIZE
-
-    # Total size of the enum, remember to update this!
-    NUM_METADATA = 8
-
-    # Note: For padding tokens IDX = -1
-    #       For cls tokens,    IDX = -2
-    ID_CLS_TOKEN = -2
-    ID_PAD_TOKEN = -1
-
 
 class UnfoldConvolution(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride,
-                 bias
-                 ):
+    def __init__(self, config):
         super().__init__()
+        kernel_size = config.patch_size
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
-        self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride)
+        self.unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=config.patch_size)
         self.linear = nn.Linear(
-            in_channels * kernel_size[0] * kernel_size[1],
-            out_channels,
-            bias=bias,
+            config.num_channels * kernel_size[0] * kernel_size[1],
+            config.hidden_size,
+            bias=False,
         )
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.unfold(hidden_states)
@@ -1448,7 +1374,27 @@ class UnfoldConvolution(nn.Module):
         return hidden_states
 
 
+class Llama4VisionRotaryEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        idx = config.image_size // config.patch_size
+        img_idx = torch.arange(idx ** 2, dtype=torch.int32).reshape(idx ** 2, 1)
+        img_idx = torch.cat([img_idx, img_idx[:1]], dim=0)
+        img_idx[-1, -1] = -2  # ID_CLS_TOKEN
+        frequencies_x = img_idx % idx  # get the coordinates of the 2d matrix along x
+        frequencies_y = img_idx // idx  # get the coordinates of the 2d matrix along y
 
+        rope_freq = 1.0 / (config.rope_theta ** (torch.arange(0, config.hidden_size, 2)[: (config.hidden_size // 2)].float() / config.hidden_size))
+        with torch.device("cpu"):
+            freqs_x = (rope_freq * (frequencies_x + 1))[:,None,:].repeat_interleave(2, dim=-1)
+            freqs_y = (rope_freq * (frequencies_y + 1))[:,None,:].repeat_interleave(2, dim=-1)
+        freqs = torch.cat([freqs_x, freqs_y], dim=-1).float().contiguous()[..., ::2]
+        freqs = freqs.masked_fill(img_idx[...,None] < 0, 0)
+        freq_cis = torch.view_as_complex(torch.stack([torch.cos(freqs), torch.sin(freqs)], dim=-1))
+        self.freqs_ci = freq_cis
+
+    def forward(self, hidden_states):
+        return  self.freqs_ci.to(hidden_states.device)
 
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
@@ -1459,58 +1405,19 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         super().__init__(config)
         self.image_size = config.image_size
         self.patch_size = config.patch_size
-        # self.max_num_tiles = config.max_num_tiles
         self.hidden_size = config.hidden_size
         self.num_channels = config.num_channels
-        # self.intermediate_layers_indices = config.intermediate_layers_indices
 
         self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
         self.scale = config.hidden_size**-0.5
 
-        self.patch_embedding = UnfoldConvolution(
-            in_channels=config.num_channels,
-            out_channels=self.hidden_size,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
+        self.patch_embedding = UnfoldConvolution(config)
 
         self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
         self.positional_embedding_vlm = nn.Parameter(
             self.scale * torch.randn(self.num_patches, self.hidden_size)
         )
-
-        # compute rope frequencies, custom
-        # TODO this is a bad copy/paste of the current packing hack.
-        # Covers resized square tiles, always. Only the layout conveys
-        # aspect ratio.
-
-        # It is however necessary for RoPE
-
-
-        idx = self.image_size // self.patch_size
-        img_idx = torch.arange((self.image_size // self.patch_size) ** 2 , dtype=torch.int32)
-        img_idx = img_idx.reshape(idx ** 2, 1)
-        img_idx = torch.cat([img_idx, img_idx[:1]], dim=0)
-        img_idx[-1, -1] = PackingIndex.ID_CLS_TOKEN
-
-        packed_img_idx = torch.empty(
-            img_idx.shape[0],
-            img_idx.shape[1],
-            PackingIndex.NUM_METADATA - 1,
-            dtype=torch.int32,
-        )
-
-        packed_img_idx[:, :, PackingIndex.Y] = img_idx // idx
-        packed_img_idx[:, :, PackingIndex.X] = img_idx % idx
-        packed_img_idx[:, :, PackingIndex.HEIGHT].fill_(idx)
-        packed_img_idx[:, :, PackingIndex.WIDTH].fill_(idx)
-        packed_img_idx[:, :, PackingIndex.IDX] = img_idx
-        packed_img_idx = packed_img_idx.reshape(1, -1, PackingIndex.NUM_METADATA - 1)
-
-        rope_freq = self.get_rope_freqs(self.hidden_size // config.attention_heads // 2)
-        self.freqs_ci = self.update_rope_frequencies(packed_img_idx, rope_freq)
+        self.rotary_embedding = Llama4VisionRotaryEmbedding(config)
 
         # layer norms
         self.layernorm_pre =  LayerNorm(self.hidden_size, eps=1e-5)
@@ -1521,42 +1428,12 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         self.vision_adapter = Llama4VisionPixelShuffleMLP(config)
         self.post_init()
 
-    # TODO the three following methods are RoPE hacky implems we need to move out
-    # Take good note that the theta is much lower for the image sequence
-    def get_rope_freqs(self, dim, theta=10000):
-        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-        return freqs
-
-    torch.amp.autocast("cuda", enabled=False)
-    def compute_rope_freqs(self, freqs, t):
-        freqs = einsum("..., f -> ... f", t.type(freqs.dtype), freqs)
-        freqs = freqs.repeat_interleave(2, dim=-1)
-        return freqs
-
-    def update_rope_frequencies(self, packed_img_idx, rope_freq):
-        freqs_x = self.compute_rope_freqs(rope_freq, packed_img_idx[:, :, PackingIndex.X] + 1)
-        freqs_y = self.compute_rope_freqs(rope_freq, packed_img_idx[:, :, PackingIndex.Y] + 1)
-        freqs = torch.cat([freqs_x, freqs_y], dim=-1).float().contiguous()[..., ::2]
-        # disable RoPE for padding and cls tokens
-        freqs = freqs.masked_fill(packed_img_idx[:, :, PackingIndex.IDX, None] < 0, 0)
-        # compute complex freqs
-        freq_cis = torch.view_as_complex(torch.stack([torch.cos(freqs), torch.sin(freqs)], dim=-1))
-        # xlf automatically broadcasts
-        return freq_cis.squeeze(0)
-
     def get_input_embeddings(self):
         """
         This function is used to fetch the first embedding layer to activate grads on inputs.
         """
         return self.patch_embedding
 
-    def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        class_embedding = self.class_embedding.expand(hidden_state.shape[0], 1, hidden_state.shape[-1])
-        return torch.cat([hidden_state, class_embedding], dim=1)
-
-    def apply_positional_embedding_vlm(self, hidden_state: torch.Tensor):
-        positional_embedding = self.positional_embedding_vlm.to(dtype=hidden_state.dtype, device=hidden_state.device)
-        return hidden_state + positional_embedding
 
     def forward(
         self,
@@ -1601,25 +1478,26 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         batch_size_times_num_tiles, num_channels, height, width = pixel_values.shape
         num_concurrent_media = 1 
         num_chunks = 1
-        # hidden_state = patch_embeds.flatten(2).transpose(1, 2)
         hidden_state = self.patch_embedding(pixel_values)
         _, num_patches, hidden_dim = hidden_state.shape
 
         # Add cls token
         hidden_state = hidden_state.reshape(batch_size_times_num_tiles * num_concurrent_media * num_chunks, num_patches, hidden_dim)
-        hidden_state = self.apply_class_embedding(hidden_state)
+        class_embedding = self.class_embedding.expand(hidden_state.shape[0], 1, hidden_state.shape[-1])
+        hidden_state = torch.cat([hidden_state, class_embedding], dim=1)
         num_patches += 1
 
         # Position embeddings
         hidden_state = hidden_state.reshape(batch_size_times_num_tiles * num_concurrent_media, num_chunks, num_patches, hidden_dim)
-        hidden_state = self.apply_positional_embedding_vlm(hidden_state)
+        positional_embedding = self.positional_embedding_vlm.to(dtype=hidden_state.dtype, device=hidden_state.device)
+        hidden_state = hidden_state + positional_embedding
 
         hidden_state = self.layernorm_pre(hidden_state)
 
 
         hidden_state = hidden_state.view(batch_size_times_num_tiles, -1, hidden_dim)
-        freqs_ci = self.freqs_ci.to(pixel_values.device)
-        # Apply encoder
+        freqs_ci = self.rotary_embedding(pixel_values)
+
         output = self.model(
             hidden_state,
             attention_mask=None,
@@ -1656,7 +1534,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 class Llama4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True

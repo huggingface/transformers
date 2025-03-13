@@ -102,6 +102,7 @@ class Llama4VisionConfig(PretrainedConfig):
         multi_modal_projector_bias=False,
         projector_dropout=0.0,
         attention_dropout=0.0,
+        rope_theta=1000,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -123,6 +124,7 @@ class Llama4VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.vision_feature_layer = vision_feature_layer
         self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.rope_theta = rope_theta
         super().__init__(**kwargs)
 
 
