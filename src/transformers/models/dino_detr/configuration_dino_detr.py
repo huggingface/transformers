@@ -176,7 +176,7 @@ class DinoDetrConfig(PretrainedConfig):
         num_heads=8,
         decoder_n_points=4,
         dilation=False,
-        position_embedding_type="sine",
+        position_embedding_type="SineHW",
         encoder_n_points=4,
         dropout=0.0,
         activation_function="relu",
@@ -234,6 +234,8 @@ class DinoDetrConfig(PretrainedConfig):
         backbone_config=None,
         backbone_kwargs=None,
         is_encoder_decoder=True,
+        pe_temperatureH=20,
+        pe_temperatureW=20,
         **kwargs,
     ):
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
@@ -389,6 +391,9 @@ class DinoDetrConfig(PretrainedConfig):
 
         self.enc_layer_share = enc_layer_share
         self.dec_layer_share = dec_layer_share
+
+        self.pe_temperatureH = pe_temperatureH
+        self.pe_temperatureW = pe_temperatureW
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

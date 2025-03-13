@@ -548,7 +548,7 @@ def _get_clones(module, N, layer_share=False):
         return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def inverse_sigmoid(x, eps=1e-5):
+def inverse_sigmoid(x, eps=1e-3):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
@@ -1062,18 +1062,24 @@ def dn_post_process(outputs_class, outputs_coord, dn_meta, aux_loss, _set_aux_lo
     return outputs_class, outputs_coord
 
 
-class DinoDetrSinePositionEmbedding(nn.Module):
+class DinoDetrPositionEmbeddingSineHW(nn.Module):
     """
-    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
-    need paper, generalized to work on images.
+    This is a more standard version of the position embedding, very similar to the one
+    used by the Attention is all you need paper, generalized to work on images.
     """
 
     def __init__(
-        self, embedding_dim=64, temperature=10000, normalize=False, scale=None
+        self,
+        num_pos_feats=64,
+        temperatureH=10000,
+        temperatureW=10000,
+        normalize=False,
+        scale=None,
     ):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
+        self.num_pos_feats = num_pos_feats
+        self.temperatureH = temperatureH
+        self.temperatureW = temperatureW
         self.normalize = normalize
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
@@ -1081,25 +1087,25 @@ class DinoDetrSinePositionEmbedding(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, pixel_values, pixel_mask):
-        if pixel_mask is None:
-            raise ValueError("No pixel mask provided")
-        y_embed = pixel_mask.cumsum(1, dtype=pixel_values.dtype)
-        x_embed = pixel_mask.cumsum(2, dtype=pixel_values.dtype)
+    def forward(self, x, mask):
+        assert mask is not None
+        not_mask = mask
+        y_embed = not_mask.cumsum(1, dtype=torch.float32)
+        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+
         if self.normalize:
             eps = 1e-6
-            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(
-            self.embedding_dim, dtype=pixel_values.dtype, device=pixel_values.device
-        )
-        dim_t = self.temperature ** (
-            2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim
-        )
+        dim_tx = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_tx = self.temperatureW ** (2 * (dim_tx // 2) / self.num_pos_feats)
+        pos_x = x_embed[:, :, :, None] / dim_tx
 
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
+        dim_ty = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_ty = self.temperatureH ** (2 * (dim_ty // 2) / self.num_pos_feats)
+        pos_y = y_embed[:, :, :, None] / dim_ty
+
         pos_x = torch.stack(
             (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
         ).flatten(3)
@@ -1107,49 +1113,59 @@ class DinoDetrSinePositionEmbedding(nn.Module):
             (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
         ).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding
-class DinoDetrLearnedPositionEmbedding(nn.Module):
+class DinoDetrPositionEmbeddingLearned(nn.Module):
     """
-    This module learns positional embeddings up to a fixed maximum size.
+    Absolute pos embedding, learned.
     """
 
-    def __init__(self, embedding_dim=256):
+    def __init__(self, num_pos_feats=256):
         super().__init__()
-        self.row_embeddings = nn.Embedding(50, embedding_dim)
-        self.column_embeddings = nn.Embedding(50, embedding_dim)
+        self.row_embed = nn.Embedding(50, num_pos_feats)
+        self.col_embed = nn.Embedding(50, num_pos_feats)
+        self.reset_parameters()
 
-    def forward(self, pixel_values, pixel_mask=None):
-        height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
-        x_emb = self.column_embeddings(width_values)
-        y_emb = self.row_embeddings(height_values)
-        pos = torch.cat(
-            [
-                x_emb.unsqueeze(0).repeat(height, 1, 1),
-                y_emb.unsqueeze(1).repeat(1, width, 1),
-            ],
-            dim=-1,
+    def reset_parameters(self):
+        nn.init.uniform_(self.row_embed.weight)
+        nn.init.uniform_(self.col_embed.weight)
+
+    def forward(self, x, mask):
+        h, w = x.shape[-2:]
+        i = torch.arange(w, device=x.device)
+        j = torch.arange(h, device=x.device)
+        x_emb = self.col_embed(i)
+        y_emb = self.row_embed(j)
+        pos = (
+            torch.cat(
+                [
+                    x_emb.unsqueeze(0).repeat(h, 1, 1),
+                    y_emb.unsqueeze(1).repeat(1, w, 1),
+                ],
+                dim=-1,
+            )
+            .permute(2, 0, 1)
+            .unsqueeze(0)
+            .repeat(x.shape[0], 1, 1, 1)
         )
-        pos = pos.permute(2, 0, 1)
-        pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->DinoDetr
 def build_position_encoding(config):
-    n_steps = config.d_model // 2
-    if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = DinoDetrSinePositionEmbedding(n_steps, normalize=True)
-    elif config.position_embedding_type == "learned":
-        position_embedding = DinoDetrLearnedPositionEmbedding(n_steps)
+    N_steps = config.d_model // 2
+    if config.position_embedding_type in ("SineHW"):
+        position_embedding = DinoDetrPositionEmbeddingSineHW(
+            N_steps,
+            temperatureH=config.pe_temperatureH,
+            temperatureW=config.pe_temperatureW,
+            normalize=True,
+        )
+    elif config.position_embedding_type in ("Learned"):
+        position_embedding = DinoDetrPositionEmbeddingLearned(N_steps)
     else:
-        raise ValueError(f"Not supported {config.position_embedding_type}")
+        raise ValueError(f"not supported {config.position_embedding}")
 
     return position_embedding
 
@@ -1727,7 +1743,7 @@ class DinoDetrDecoderLayer(nn.Module):
                     memory,
                     memory_key_padding_mask,
                     memory_level_start_index,
-                    memory_spatial_shapes_list,
+                    memory_spatial_shapes,
                     memory_pos,
                     self_attn_mask,
                     cross_attn_mask,
@@ -2740,7 +2756,7 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.init_std
 
-        if isinstance(module, DinoDetrLearnedPositionEmbedding):
+        if isinstance(module, DinoDetrPositionEmbeddingLearned):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
