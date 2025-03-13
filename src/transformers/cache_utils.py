@@ -77,10 +77,10 @@ class Cache:
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
-            if self.key_cache[layer_idx] != []:
+            if self.key_cache[layer_idx].numel():
                 device = self.key_cache[layer_idx].device
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            if self.value_cache[layer_idx] != []:
+            if self.value_cache[layer_idx].numel():
                 device = self.value_cache[layer_idx].device
                 self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
@@ -492,7 +492,7 @@ class DynamicCache(Cache):
 
         self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
-            if self.key_cache[idx] != []:
+            if self.key_cache[idx].numel():
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
@@ -514,8 +514,8 @@ class DynamicCache(Cache):
         `generation.utils`"""
         cache = cls()
         for idx in range(len(splits[0])):
-            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx] != []]
-            value_cache = [current.value_cache[idx] for current in splits if current.value_cache[idx] != []]
+            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx].numel()]
+            value_cache = [current.value_cache[idx] for current in splits if current.value_cache[idx].numel()]
             if key_cache != []:
                 layer_keys = torch.cat(key_cache, dim=0)
                 layer_values = torch.cat(value_cache, dim=0)
