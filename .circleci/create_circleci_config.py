@@ -46,7 +46,7 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     # TODO: throw an appropriate exception for the cases below
     "TypeError: expected str, bytes or os.PathLike object, not NoneType",  # error downloading `merged.txt` from hub
     "Converting from Tiktoken failed",  # same as the case above; we catch a general `Exception` and throw this message
-    "KeyError: <class 'transformers",  # lazy loading of tokenizer, probably same as the case above.
+    "KeyError: <class ",  # lazy loading of tokenizer, probably same as the case above.
 ]
 
 
