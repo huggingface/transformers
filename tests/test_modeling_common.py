@@ -137,8 +137,8 @@ if is_deepspeed_available():
 TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
     (
         # test name for the test runner
-        f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attention_mask'}"
-        f"{'_output_attentions' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+        f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attn_mask'}"
+        f"{'_output_attn' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
         # parameterization
         *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
     )
@@ -3584,10 +3584,10 @@ class ModelTesterMixin:
         elif torch_dtype == "fp32":
             torch_dtype = torch.float32
 
-        if torch_dtype == torch.float16 and not is_torch_fp16_available_on_device(torch_device):
+        if not is_torch_fp16_available_on_device(torch_device) and torch_dtype == torch.float16:
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
-        if torch_dtype == torch.bfloat16 and not is_torch_bf16_available_on_device(torch_device):
+        if not is_torch_bf16_available_on_device(torch_device) and torch_dtype == torch.bfloat16:
             self.skipTest(
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
