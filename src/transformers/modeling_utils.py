@@ -5838,7 +5838,7 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, Callable]] = {}
+ALL_ATTENTION_FUNCTIONS: Dict[str, Callable] = {}
 
 ALL_ATTENTION_FUNCTIONS.update(
     {
