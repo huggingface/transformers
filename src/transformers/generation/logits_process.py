@@ -1353,8 +1353,11 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         mask = torch.full_like(scores, -math.inf)
-        for batch_id, beam_sent in enumerate(input_ids.view(-1, self._num_beams, input_ids.shape[-1])):
-            for beam_id, sent in enumerate(beam_sent):
+        batch_size = input_ids.shape[0] // self._num_beams
+
+        for batch_id in range(batch_size):
+            for beam_id in range(self._num_beams):
+                sent = input_ids[batch_id * self._num_beams + beam_id]
                 prefix_allowed_tokens = self._prefix_allowed_tokens_fn(batch_id, sent)
                 if len(prefix_allowed_tokens) == 0:
                     raise ValueError(
