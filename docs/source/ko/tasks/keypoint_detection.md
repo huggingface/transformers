@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 이번 가이드에서는 이미지에서 키포인트를 추출하는 방법을 다루어 보겠습니다.
 
-이번 튜토리얼에서는 키포인트 감지의 기본이 되는 모델인 [SuperPoint](./model_doc/superpoint.md)를 사용해보겠습니다.
+이번 튜토리얼에서는 키포인트 감지의 기본이 되는 모델인 [SuperPoint](./model_doc/superpoint)를 사용해보겠습니다.
 
 ```python
 from transformers import AutoImageProcessor, SuperPointForKeypointDetection
