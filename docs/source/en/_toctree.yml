@@ -1033,8 +1033,6 @@
         title: TimesFM
       title: Time series models
     - sections:
-    - title: Graph models
-      sections:
       - local: model_doc/graphormer
         title: Graphormer
       title: Graph models
