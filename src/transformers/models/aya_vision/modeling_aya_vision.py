@@ -391,7 +391,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
 
         Example:
 
-            ```python
+        ```python
         >>> from transformers import AutoProcessor, AyaVisionForConditionalGeneration
         >>> import torch
 
