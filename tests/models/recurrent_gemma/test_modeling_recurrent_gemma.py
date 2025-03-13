@@ -390,6 +390,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_left_padding_compatibility(self):
         pass
 
+    @pytest.mark.generate
     @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
         pass
