@@ -867,7 +867,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Llama4TextModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, 202048, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1413,6 +1413,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         # encoders
         self.model = Llama4VisionEncoder(config)
+        self.model = self.model.to(torch.bfloat16)
         self.vision_adapter = Llama4VisionPixelShuffleMLP(config)
         self.post_init()
 
