@@ -404,7 +404,7 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             [self.model_tester.num_attention_heads, encoder_seq_length, dim],
         )
 
-    @is_flaky()
+    @is_flaky()  # >10% failure rate, exception: AttributeError: 'NoneType' object has no attribute 'retain_grad'
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 

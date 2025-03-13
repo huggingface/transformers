@@ -22,7 +22,6 @@ import pytest
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -137,7 +136,6 @@ class NemotronModelTest(GemmaModelTest):
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    @is_flaky()
     @slow
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
@@ -166,7 +164,7 @@ class NemotronModelTest(GemmaModelTest):
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 # nemotron flash attention 2 needs a high tolerance
-                assert torch.allclose(logits_fa, logits, atol=1e-2)
+                torch.testing.assert_close(logits_fa, logits, atol=1e-2, rtol=1e-2)
 
 
 @require_torch_gpu

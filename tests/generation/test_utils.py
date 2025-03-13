@@ -31,7 +31,6 @@ from parameterized import parameterized
 
 from transformers import AutoConfig, AutoProcessor, AutoTokenizer, is_torch_available, pipeline
 from transformers.testing_utils import (
-    is_flaky,
     require_accelerate,
     require_flash_attn,
     require_optimum_quanto,
@@ -878,8 +877,6 @@ class GenerationTesterMixin:
                 num_beams=beam_kwargs["num_beams"],
             )
 
-    # TODO: @gante check why it is flaky
-    @is_flaky()
     @pytest.mark.generate
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:

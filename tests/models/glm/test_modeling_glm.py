@@ -20,7 +20,6 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_large_gpu,
@@ -376,7 +375,6 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_past_key_values_format(self):
         pass
 
-    @is_flaky()
     def test_custom_4d_attention_mask(self):
         """Overwrite the common test to use atol=1e-3 instead of 1e-4. Can still rarely fail, thus flaky."""
         for model_class in self.all_generative_model_classes:
@@ -411,7 +409,6 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # comparing softmax-normalized logits:
             normalized_0 = torch.nn.functional.softmax(out_last_tokens)
             normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
-            print(torch.abs(normalized_0 - normalized_1).max())
 
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
 

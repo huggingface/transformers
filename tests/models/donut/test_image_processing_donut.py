@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import is_flaky, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -128,7 +128,6 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
         self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 
-    @is_flaky()
     def test_call_pil(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
@@ -161,7 +160,6 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ),
         )
 
-    @is_flaky()
     def test_call_numpy(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
@@ -194,7 +192,6 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ),
         )
 
-    @is_flaky()
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)

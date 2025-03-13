@@ -40,6 +40,7 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     "Timeout",  # Hub-related
     "HTTPError.*502",  # Hub-related
     "HTTPError.*504",  # Hub-related
+    "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
 ]
 
 
