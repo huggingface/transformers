@@ -36,8 +36,8 @@ DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 # Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
 # to rerun the tests that match these patterns.
 FLAKY_TEST_FAILURE_PATTERNS = [
-    "OSError",  # Hub-related
-    "Timeout",  # Hub-related
+    "OSError",  # Machine/connection transient error
+    "Timeout",  # Machine/connection transient error
     "HTTPError.*502",  # Hub-related
     "HTTPError.*504",  # Hub-related
     "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
@@ -135,7 +135,8 @@ class CircleCIJob:
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
-        repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({"|".join(FLAKY_TEST_FAILURE_PATTERNS)})'"
+        joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
+        repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         # '(OSError|Timeout|HTTPError.*502|HTTPError.*504)'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
