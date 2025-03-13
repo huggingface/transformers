@@ -1,5 +1,6 @@
 FROM python:3.9-slim
 ENV PYTHONDONTWRITEBYTECODE=1
+ARG REF=main
 USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
 RUN apt-get install -y g++ cmake

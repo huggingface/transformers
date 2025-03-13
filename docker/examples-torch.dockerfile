@@ -1,5 +1,6 @@
 FROM python:3.9-slim
 ENV PYTHONDONTWRITEBYTECODE=1
+ARG REF=main
 USER root
 RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git
 ENV UV_PYTHON=/usr/local/bin/python
