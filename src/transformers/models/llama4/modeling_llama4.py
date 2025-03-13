@@ -335,7 +335,7 @@ class Llama4TextAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(*input_shape, 1, -1)
+        key_states = self.k_proj(hidden_states).view(*input_shape, -1, self.head_dim)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         query_states, key_states = apply_rotary_emb(
@@ -1125,8 +1125,8 @@ def vision_apply_rotary_emb(
     return query_out.type_as(query), key_out.type_as(key)  # but this drops to 8e-3
 
 
-class LayerNorm(nn.LayerNorm):
-    """Subclass torch's LayerNorm to handle fp16."""
+class Llama4VisionLayerNorm(nn.LayerNorm):
+    """Subclass torch's Llama4VisionLayerNorm to handle fp16."""
 
     def forward(self, x: torch.Tensor):
         x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
@@ -1200,8 +1200,8 @@ class Llama4VisionMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = nn.GELU()  # ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=True)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
@@ -1218,8 +1218,8 @@ class Llama4VisionEncoderLayer(nn.Module):
         self.self_attn = Llama4VisionAttention(config)
         self.mlp = Llama4VisionMLP(config)
 
-        self.input_layernorm = LayerNorm(config.hidden_size)
-        self.post_attention_layernorm = LayerNorm(config.hidden_size)
+        self.input_layernorm = Llama4VisionLayerNorm(config.hidden_size)
+        self.post_attention_layernorm = Llama4VisionLayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -1408,8 +1408,8 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         self.rotary_embedding = Llama4VisionRotaryEmbedding(config)
 
         # layer norms
-        self.layernorm_pre = LayerNorm(self.hidden_size, eps=1e-5)
-        self.layernorm_post = LayerNorm(self.hidden_size, eps=1e-5)
+        self.layernorm_pre = Llama4VisionLayerNorm(self.hidden_size)
+        self.layernorm_post = Llama4VisionLayerNorm(self.hidden_size)
 
         # encoders
         self.model = Llama4VisionEncoder(config)
@@ -1499,6 +1499,11 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         hidden_state = output.last_hidden_state
 
         hidden_state = self.layernorm_post(hidden_state)
+
+        hidden_state = hidden_state[:, :-1, :]
+
+        # now, we use Llama4VisionPixelShuffle + mlp to project embeddings
+        hidden_state = self.vision_adapter(hidden_state)
 
         hidden_states = output.hidden_states if output_hidden_states else None
 
@@ -1591,17 +1596,9 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         """
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {self.vision_feature_select_strategy}")
-
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-
         image_outputs = self.vision_model(pixel_values, output_hidden_states=False, **kwargs)
-
         hidden_state = image_outputs.last_hidden_state
-        # Remove CLS token
-        hidden_state = hidden_state[:, :-1, :]
-
-        # now, we use Llama4VisionPixelShuffle + mlp to project embeddings
-        hidden_state = self.vision_model.vision_adapter(hidden_state)
         return hidden_state
 
     @staticmethod
