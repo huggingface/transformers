@@ -8,6 +8,7 @@ from transformers.testing_utils import require_torch_gpu
 from transformers.utils.kernel_hub import (
     LayerRepository,
     register_layer_mapping,
+    replace_hub_layer_forward,
     use_hub_layer_forward,
 )
 
@@ -78,6 +79,18 @@ class KernelHubTest(unittest.TestCase):
         torch.manual_seed(0)
         layer_ref = LlamaRMSNormReference(64).cuda()
         layer_hub = LlamaRMSNormHub(64).cuda()
+        X = torch.randn((8, 64), device="cuda", dtype=torch.float32)
+        self.assertTrue(torch.allclose(layer_ref(X), layer_hub(X)))
+
+    def test_replace_hub_layer_forward(self):
+        class Layer(LlamaRMSNormReference):
+            pass
+
+        replace_hub_layer_forward(Layer, "LlamaRMSNormForTesting", use_fallback=False)
+
+        torch.manual_seed(0)
+        layer_ref = LlamaRMSNormReference(64).cuda()
+        layer_hub = Layer(64).cuda()
         X = torch.randn((8, 64), device="cuda", dtype=torch.float32)
         self.assertTrue(torch.allclose(layer_ref(X), layer_hub(X)))
 

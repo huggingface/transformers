@@ -41,6 +41,62 @@ def register_layer_mapping(kernel_name: str, *, device_type: str, layer_reposito
     _KERNEL_MAPPING.setdefault(kernel_name, {})[_Architecture(device_type=device_type)] = layer_repository
 
 
+def replace_hub_layer_forward(cls, layer_name: str, *, use_fallback: bool = True):
+    """
+    Replace the forward function of a layer using a layer from the kernel hub.
+
+    This function monkeypatches a layer, replacing the `forward` method
+    of the layer with that of a layer from the hub. The replacement is done
+    when a layer matching `layer_name` and device type is registered through
+    `register_layer_mapping`. The device type is inferred from the first
+    argument to `forward`.
+    """
+
+    fallback_forward = cls.forward
+
+    cached_forward = {}
+
+    def forward(self, x, **args):
+        kernel = _KERNEL_MAPPING.get(layer_name)
+        if kernel is None:
+            if not use_fallback:
+                raise ValueError(f"No layer mapping for `{layer_name}`")
+            return fallback_forward(self, x, **args)
+
+        device = getattr(x, "device", None)
+        if device is None:
+            return fallback_forward(self, x, **args)
+
+        # Short-circuit if we already loaded the layer.
+        arch = _Architecture(device_type=device.type)
+        layer_forward = cached_forward.get(arch, None)
+        if layer_forward is not None:
+            return layer_forward(self, x, **args)
+
+        repo = kernel.get(arch)
+        if repo is None:
+            if not use_fallback:
+                raise ValueError(f"No layer mapping for `{layer_name}` with device type `{device.type}`")
+            return fallback_forward(self, x, **args)
+
+        try:
+            layer = _get_kernel_layer(
+                repo_id=repo.repo_id,
+                layer_name=repo.layer_name,
+                revision=repo.revision,
+            )
+            layer_forward = layer.forward
+            cached_forward[arch] = layer_forward
+        except Exception as e:
+            if not use_fallback:
+                raise e
+            layer_forward = fallback_forward
+
+        return layer_forward(self, x, **args)
+
+    cls.forward = forward
+
+
 def use_hub_layer_forward(layer_name: str, *, use_fallback: bool = True):
     """
     Replace the forward function of a layer using a layer from the kernel hub.
@@ -53,50 +109,7 @@ def use_hub_layer_forward(layer_name: str, *, use_fallback: bool = True):
     """
 
     def decorator(cls):
-        fallback_forward = cls.forward
-
-        cached_forward = {}
-
-        def forward(self, x, **args):
-            kernel = _KERNEL_MAPPING.get(layer_name)
-            if kernel is None:
-                if not use_fallback:
-                    raise ValueError(f"No layer mapping for `{layer_name}`")
-                return fallback_forward(self, x, **args)
-
-            device = getattr(x, "device", None)
-            if device is None:
-                return fallback_forward(self, x, **args)
-
-            # Short-circuit if we already loaded the layer.
-            arch = _Architecture(device_type=device.type)
-            layer_forward = cached_forward.get(arch, None)
-            if layer_forward is not None:
-                return layer_forward(self, x, **args)
-
-            repo = kernel.get(arch)
-            if repo is None:
-                if not use_fallback:
-                    raise ValueError(f"No layer mapping for `{layer_name}` with device type `{device.type}`")
-                return fallback_forward(self, x, **args)
-
-            try:
-                layer = _get_kernel_layer(
-                    repo_id=repo.repo_id,
-                    layer_name=repo.layer_name,
-                    revision=repo.revision,
-                )
-                layer_forward = layer.forward
-                cached_forward[arch] = layer_forward
-            except Exception as e:
-                if not use_fallback:
-                    raise e
-                layer_forward = fallback_forward
-
-            return layer_forward(self, x, **args)
-
-        cls.forward = forward
-
+        replace_hub_layer_forward(cls, layer_name, use_fallback=use_fallback)
         return cls
 
     return decorator
