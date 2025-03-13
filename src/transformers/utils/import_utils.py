@@ -813,7 +813,7 @@ def is_torch_hpu_available():
 
         def patched_masked_fill_(self, mask, value):
             if self.dtype == torch.int64:
-                logger.warning(
+                logger.warning_once(
                     "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
                     "This operation will be performed out-of-place using tensor[mask] = value."
                 )
