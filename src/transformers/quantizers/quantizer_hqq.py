@@ -273,12 +273,8 @@ class HqqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        keep_in_fp32_modules: List[str] = None,
         **kwargs,
     ):
-        keep_in_fp32_modules = keep_in_fp32_modules if keep_in_fp32_modules is not None else []
-
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear -> HQQLinear conversion in create_quantized_param().
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
