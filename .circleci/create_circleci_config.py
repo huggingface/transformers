@@ -43,11 +43,12 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     "HTTPError.*502",  # Hub-related
     "HTTPError.*504",  # Hub-related
     "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
-    # TODO: throw an appropriate exception for the cases below
-    "TypeError: expected str, bytes or os.PathLike object, not NoneType",  # error downloading `merged.txt` from hub
-    "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType"  # same as above
-    "Converting from Tiktoken failed",  # same as the case above; we catch a general `Exception` and throw this message
-    "KeyError: <class ",  # lazy loading of tokenizer, probably same as the case above.
+    # TODO: error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
+    # them under a single message.
+    "TypeError: expected str, bytes or os.PathLike object, not NoneType",
+    "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType",
+    "Converting from Tiktoken failed",
+    "KeyError: <class ",
 ]
 
 
