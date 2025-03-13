@@ -709,9 +709,19 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
 
 
 def _infer_parameter_dtype(
-    model: "PreTrainedModel", param_name: str, empty_param, keep_in_fp32_modules=None
+    model: "PreTrainedModel",
+    param_name: str,
+    empty_param: torch.Tensor,
+    keep_in_fp32_modules: Optional[List[str]] = None,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
-    old_param = model.get_parameter_or_buffer(param_name)
+    try:
+        old_param = model.get_parameter_or_buffer(param_name)
+    except Exception as e:
+        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ:
+            return True, None
+        else:
+            raise e
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
     # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
     # in int/uint/bool and not cast them.
@@ -781,6 +791,7 @@ def _load_state_dict_into_meta_model(
             param_name,
             empty_param,
             keep_in_fp32_modules,
+            hf_quantizer,
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
@@ -795,7 +806,7 @@ def _load_state_dict_into_meta_model(
                 device_mesh,
             )
         else:
-            param = param[:]
+            param = param[...]
             if casting_dtype is not None:
                 param = param.to(casting_dtype)
             if to_contiguous:
@@ -1223,10 +1234,12 @@ def _get_torch_dtype(
                     )
             elif hasattr(torch, torch_dtype):
                 torch_dtype = getattr(torch, torch_dtype)
+                config.torch_dtype = torch_dtype
                 for sub_config_key in config.sub_configs.keys():
                     sub_config = getattr(config, sub_config_key)
                     sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, torch.dtype):
+            config.torch_dtype = torch_dtype
             for sub_config_key in config.sub_configs.keys():
                 sub_config = getattr(config, sub_config_key)
                 sub_config.torch_dtype = torch_dtype
@@ -1895,9 +1908,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
-            self._pp_plan = self.config.base_model_pp_plan
-
-        self._tp_plan = self._tp_plan or self.config.base_model_tp_plan or {}
+            self._pp_plan = (
+                self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+            )
+            self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        else:
+            self._tp_plan = self._tp_plan or {}
+            for name, module in self.named_children():
+                if plan := getattr(module, "_tp_plan", None):
+                    self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
         for name, module in self.named_children():
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
@@ -4216,10 +4235,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 token=token,
                 revision=revision,
                 subfolder=subfolder,
+                gguf_file=gguf_file,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
                 **kwargs,
             )
+            if "gguf_file" in model_kwargs:
+                model_kwargs.pop("gguf_file")
         else:
             # In case one passes a config to `from_pretrained` + "attn_implementation"
             # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
@@ -5827,7 +5849,7 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, Callable]] = {}
+ALL_ATTENTION_FUNCTIONS: Dict[str, Callable] = {}
 
 ALL_ATTENTION_FUNCTIONS.update(
     {
