@@ -795,7 +795,7 @@ def _load_state_dict_into_meta_model(
                 device_mesh,
             )
         else:
-            param = param[:]
+            param = param[...]
             if casting_dtype is not None:
                 param = param.to(casting_dtype)
             if to_contiguous:
