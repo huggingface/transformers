@@ -226,6 +226,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
     ],
     "GPTNeoXConfig": ["rotary_emb_base"],
+    "Gemma3Config": ["boi_token_index", "eoi_token_index"],
+    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
 }
 
 

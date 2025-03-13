@@ -153,6 +153,13 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_equivalence(self):
         pass
 
+    @unittest.skip(
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
+        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 @slow
 @require_torch_gpu
