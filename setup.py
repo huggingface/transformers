@@ -327,6 +327,7 @@ extras["testing"] = (
         "pytest-rich",
         "pytest-xdist",
         "pytest-order",
+        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
