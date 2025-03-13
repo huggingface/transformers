@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Image processor class for SigLIP2."""
 
-import math
 from functools import lru_cache
 from typing import List, Optional, Tuple, Union
 
@@ -25,8 +24,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
 )
 from ...image_utils import (
@@ -42,6 +40,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from .image_processing_siglip2 import get_image_size_for_max_num_patches
 
 
 if is_torch_available():
@@ -55,55 +54,6 @@ if is_torchvision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-@lru_cache(maxsize=256)
-# Copied from transformers.models.siglip2.image_processing_siglip2.get_image_size_for_max_num_patches
-def get_image_size_for_max_num_patches(
-    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
-) -> Tuple[int, int]:
-    """
-    Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
-
-    Args:
-        image_height (`int`):
-            Original image height.
-        image_width (`int`):
-            Original image width.
-        patch_size (`int`):
-            Patch size for processing.
-        max_num_patches (`int`):
-            Maximum number of patches.
-        eps (`float`):
-            Small threshold for binary search.
-
-    Returns:
-        Tuple: (target_height, target_width)
-    """
-
-    def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
-        scaled_size = size * scale
-        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
-        scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
-        return int(scaled_size)
-
-    # Binary search for optimal scale
-    scale_min, scale_max = eps / 10, 100.0
-    while (scale_max - scale_min) >= eps:
-        scale = (scale_min + scale_max) / 2
-        target_height = get_scaled_image_size(scale, image_height, patch_size)
-        target_width = get_scaled_image_size(scale, image_width, patch_size)
-        num_patches = (target_height / patch_size) * (target_width / patch_size)
-
-        if num_patches <= max_num_patches:
-            scale_min = scale
-        else:
-            scale_max = scale
-
-    scale = scale_min
-    target_height = get_scaled_image_size(scale, image_height, patch_size)
-    target_width = get_scaled_image_size(scale, image_width, patch_size)
-    return target_height, target_width
 
 
 def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.Tensor":
@@ -136,12 +86,7 @@ def pad_along_first_dim(
     return tensor, mask
 
 
-class Siglip2FastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
-
-
-class Siglip2FastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class Siglip2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     patch_size: Optional[int]
     max_num_patches: Optional[int]
 
@@ -166,11 +111,10 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     patch_size = 16
     max_num_patches = 256
-    valid_init_kwargs = Siglip2FastImageProcessorInitKwargs
-    valid_preprocess_kwargs = Siglip2FastImageProcessorPreprocessKwargs
+    valid_kwargs = Siglip2FastImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
-    def __init__(self, **kwargs: Unpack[Siglip2FastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @lru_cache(maxsize=10)
@@ -189,9 +133,7 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
             and then padded in "patch" dimension to match this number exactly.
         """,
     )
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
