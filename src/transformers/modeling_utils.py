@@ -4229,7 +4229,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 _from_pipeline=from_pipeline,
                 **kwargs,
             )
-            if gguf_file is not None:
+            if "gguf_file" in model_kwargs:
                 model_kwargs.pop("gguf_file")
         else:
             # In case one passes a config to `from_pretrained` + "attn_implementation"
