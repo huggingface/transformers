@@ -14,7 +14,6 @@
 # limitations under the License.
 import copy
 import glob
-import itertools
 import json
 import os
 import os.path
@@ -37,6 +36,7 @@ from transformers import (
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    CLIPTextModelWithProjection,
     DynamicCache,
     LlavaForConditionalGeneration,
     MistralForCausalLM,
@@ -525,13 +525,12 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
 
-        # TODO @ARTHURZUCKER FIX THIS
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
-        # LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
-        # model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
-        # self.assertEqual(model.language_model.dtype, torch.float32)
-        # self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
-        # self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -539,20 +538,6 @@ class ModelUtilsTest(TestCasePlus):
             model = LlavaForConditionalGeneration.from_pretrained(
                 TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
-
-    @require_torch
-    @unittest.skip("Broken by @arthurzucker because the fix was not correct. Knowing the context is super hard")
-    def test_model_from_pretrained_meta_device(self):
-        def is_on_meta(model_id, dtype):
-            with torch.device("meta"):
-                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-                return all(value.device.type == "meta" for value in model.state_dict().values())
-
-        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
-        dtypes = (None, "auto", torch.float16)
-
-        for model_id, dtype in itertools.product(model_ids, dtypes):
-            self.assertTrue(is_on_meta(model_id, dtype))
 
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
@@ -632,6 +617,14 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+
+        # test model that init the model with _from_config
+        model = CLIPTextModelWithProjection.from_pretrained(
+            "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+            subfolder="text_encoder",
+            torch_dtype=torch.bfloat16,
+        )
+        self.assertEqual(model.dtype, torch.bfloat16)
 
     def test_model_from_pretrained_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either

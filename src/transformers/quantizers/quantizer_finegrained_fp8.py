@@ -162,16 +162,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        modules_to_not_convert: List[str] = [],
+        keep_in_fp32_modules: Optional[List[str]] = None,
         **kwargs,
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
-        self.modules_to_not_convert = ["lm_head"] + modules_to_not_convert
-
-        if self.quantization_config.modules_to_not_convert:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model = replace_with_fp8_linear(
             model,

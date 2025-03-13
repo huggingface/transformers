@@ -44,7 +44,7 @@ class AltCLIPProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
     @deprecate_kwarg(old_name="feature_extractor", version="5.0.0", new_name="image_processor")

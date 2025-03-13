@@ -448,17 +448,19 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @require_read_token
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory is the most",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that 1) time and space are not absolute, but are relative to the observer, and 2) the laws of physics are the same everywhere in the universe. This means that the speed of light is",
+            "My favorite all time favorite condiment is ketchup. I love how it adds a sweet and tangy flavor to my food. I also enjoy using it as a dip for fries, burgers, and grilled meats. It's a classic condiment that never",
         ]
 
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="left")
+        tokenizer = LlamaTokenizer.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", pad_token="</s>", padding_side="left"
+        )
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+            "unsloth/Llama-3.2-1B-Instruct", device_map="sequential", torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
 

@@ -24,9 +24,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
-    get_size_dict,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -38,7 +36,6 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
     make_nested_list_of_images,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -67,14 +64,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma3FastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
-
-
-class Gemma3FastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class Gemma3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_pan_and_scan: Optional[bool]
     pan_and_scan_min_crop_size: Optional[int]
     pan_and_scan_max_num_crops: Optional[int]
@@ -108,10 +98,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     pan_and_scan_min_crop_size = None
     pan_and_scan_max_num_crops = None
     pan_and_scan_min_ratio_to_activate = None
-    valid_init_kwargs = Gemma3FastImageProcessorInitKwargs
-    valid_preprocess_kwargs = Gemma3FastImageProcessorPreprocessKwargs
+    valid_kwargs = Gemma3FastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _prepare_images_structure(
@@ -262,65 +251,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Gemma3FastImageProcessorPreprocessKwargs],
+        **kwargs: Unpack[Gemma3FastImageProcessorKwargs],
     ) -> BatchFeature:
-        validate_kwargs(
-            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
-        )
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_preprocess_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Pop kwargs that need further processing or won't be used in _preprocess
-        default_to_square = kwargs.pop("default_to_square")
-        size = kwargs.pop("size")
-        crop_size = kwargs.pop("crop_size")
-        image_mean = kwargs.pop("image_mean")
-        image_std = kwargs.pop("image_std")
-        data_format = kwargs.pop("data_format")
-        resample = kwargs.pop("resample")
-
-        # Make hashable for cache
-        size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square)) if size is not None else None
-        crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size")) if crop_size is not None else None
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        image_mean, image_std, interpolation = self._prepare_process_arguments(
-            size=size,
-            crop_size=crop_size,
-            resample=resample,
-            image_mean=image_mean,
-            image_std=image_std,
-            data_format=data_format if data_format is not None else ChannelDimension.FIRST,
-            device=images[0][0].device,
-            do_resize=kwargs.get("do_resize"),
-            do_center_crop=kwargs.get("do_center_crop"),
-            do_rescale=kwargs.get("do_rescale"),
-            rescale_factor=kwargs.get("rescale_factor"),
-            do_normalize=kwargs.get("do_normalize"),
-            return_tensors=kwargs.get("return_tensors"),
-        )
-
-        return self._preprocess(
-            images=images,
-            size=size,
-            crop_size=crop_size,
-            interpolation=interpolation,
-            image_mean=image_mean,
-            image_std=image_std,
-            **kwargs,
-        )
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,

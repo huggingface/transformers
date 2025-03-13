@@ -1424,8 +1424,6 @@ class HiggsConfig(QuantizationConfigMixin):
         tune_metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        if modules_to_not_convert is None:
-            modules_to_not_convert = ["lm_head"]
         if tune_metadata is None:
             tune_metadata = {}
         self.quant_method = QuantizationMethod.HIGGS
@@ -1652,8 +1650,6 @@ class SpQRConfig(QuantizationConfigMixin):
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        if modules_to_not_convert is None:
-            modules_to_not_convert = []
         self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
@@ -1674,10 +1670,6 @@ class SpQRConfig(QuantizationConfigMixin):
             raise ValueError("SpQR currently only supports beta1 = 16")
         if self.beta2 != 16:
             raise ValueError("SpQR currently only supports beta2 = 16")
-
-        if self.modules_to_not_convert is not None and not isinstance(self.modules_to_not_convert, list):
-            raise ValueError("modules_to_not_convert must be a list of strings")
-
         if not isinstance(self.shapes, dict):
             raise TypeError("shapes must be a dict")
 

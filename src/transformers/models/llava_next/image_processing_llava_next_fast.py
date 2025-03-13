@@ -21,8 +21,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -57,12 +56,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class LlavaNextFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    image_grid_pinpoints: Optional[List[List[int]]]
-    do_pad: Optional[bool]
-
-
-class LlavaNextFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_grid_pinpoints: Optional[List[List[int]]]
     do_pad: Optional[bool]
 
@@ -96,10 +90,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-    valid_init_kwargs = LlavaNextFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = LlavaNextFastImageProcessorPreprocessKwargs
+    valid_kwargs = LlavaNextFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -113,9 +106,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
