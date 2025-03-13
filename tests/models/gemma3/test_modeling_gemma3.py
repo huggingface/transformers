@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    GenerationConfig,
     Gemma3Config,
     Gemma3TextConfig,
     is_torch_available,
@@ -519,6 +520,38 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertTrue(input_size > model.config.sliding_window)
 
         out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+
+        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+
+    def test_generation_beyond_sliding_window_with_generation_config(self):
+        """
+        Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
+        ensures `cache_implementation='hybrid'` is correctly inherited from the base model.generation_config.
+        """
+        model_id = "gg-hf-g/gemma-3-1b-it"
+        attn_implementation = "sdpa"
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+        ).to(torch_device)
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        generation_config = GenerationConfig(max_new_tokens=20)
+
+        out = model.generate(**inputs, generation_config=generation_config)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
