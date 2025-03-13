@@ -476,7 +476,7 @@ When both implementations produce the same output, verify the outputs are within
 torch.allclose(original_output, output, atol=1e-3)
 ```
 
-This is typically the most difficult part of the process. Congratulations if you've made it this far! 
+This is typically the most difficult part of the process. Congratulations if you've made it this far!
 
 And if you're stuck or struggling with this step, don't hesitate to ask for help on your pull request.
 
@@ -544,17 +544,42 @@ When both implementations have the same `input_ids`, add a tokenizer test file. 
 ## Implement image processor
 
 > [!TIP]
-> We recommend adding a fast image processor (inheriting from [`BaseImageProcessorFast`]) in addition to the 'slow' image processor ([`BaseImageProcessor`]) to give users the best performance. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for help on how to add [`BaseImageProcessorFast`].
-> Fast image processors uses the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU, resulting in much faster processing times.
+> We recommend adding a fast image processor (inheriting from [`BaseImageProcessorFast`]) in addition to the 'slow' image processor ([`BaseImageProcessor`]) to provide users with the best performance. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for guidance on adding a [`BaseImageProcessorFast`].
+> Fast image processors uses the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU, significantly improving processing speed.
 
-While this example doesn't include an image processor, you may need to implement one if the model requires image inputs. The image processor should be able to process images and return the processed images in a format that the model can understand.
-Before you start implementing the image processor, make sure that you can't use an existing image processor in Transformers, as lots of models use very similar image processing techniques, and you may be able to reuse an existing image processor.
+While this example doesn't include an image processor, you may need to implement one if your model requires image inputs. The image processor is responsible for converting images into a format suitable for your model. Before implementing a new one, check whether an existing image processor in the Transformers library can be reused, as many models share similar image processing techniques. Note that you can also use [modular](./modular_transformers) for image processors to reuse existing components.
 
-If you do need to implement a new image processor, you can look at others 
+If you do need to implement a new image processor, refer to existing image processors in the library to understand the expected structure. Keep in mind that slow image processors ([`BaseImageProcessor`]) and fast image processors ([`BaseImageProcessorFast`]) are designed differently, so be sure to follow the correct structure based on the type of processor you're implementing.
+
+If you didn't add a fast image processor when initially creating the model using the `add-new-model-like` command, you can add one now by running:
+
+```bash
+transformers-cli add-fast-image-processor --model-name your_model_name
+```
+
+This command will generate the necessary imports and provide a pre-filled template for the fast image processor. You can then modify it to fit your model's needs.
+
+Additionally, you will need to add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors in the library and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well 🤗.
 
 ## Implement processor
 
-If the model you are adding needs to process more than one modalities (e.g. text and images), you'll need to implement a processor. The processor is responsible for processing the inputs and outputs of the model.
+If the model you are adding processes multiple modalities (e.g., text and images), you will need to implement a processor. The processor centralizes the preprocessing of different modalities before passing them to the model.
+
+The model should call the appropriate modality-specific processors within its `__call__` function to handle each type of input correctly. Be sure to check existing processors in the library to understand the expected structure. We follow a specific convention for the `__call__` function signature, here’s an example for a model that processes both images and text:
+```python
+def __call__(
+    self,
+    images: ImageInput = None,
+    text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+    audio=None,
+    videos=None,
+    **kwargs: Unpack[YourModelProcessorKwargs],
+) -> BatchFeature:
+    ...
+```
+`YourModelProcessorKwargs` is a `TypedDict` that includes all typical processing arguments and any extra arguments this specific processor may require.
+
+You will also need to add tests for the processor in `tests/models/your_model_name/test_processor_your_model_name.py`. These tests should be similar to those for other processors in the library and should verify that the processor correctly handles the different modalities.
 
 ## Integration tests
 
