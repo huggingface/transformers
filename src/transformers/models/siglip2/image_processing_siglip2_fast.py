@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Image processor class for SigLIP2."""
 
-from functools import lru_cache
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -117,11 +116,10 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @lru_cache(maxsize=10)
-    def _prepare_process_arguments(self, **kwargs) -> tuple:
+    def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
         # Remove do_resize from kwargs to not raise an error as size is None
         kwargs.pop("do_resize", None)
-        return super()._prepare_process_arguments(**kwargs)
+        return super()._validate_preprocess_kwargs(**kwargs)
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
