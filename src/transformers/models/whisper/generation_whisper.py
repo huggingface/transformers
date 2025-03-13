@@ -1067,7 +1067,7 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config,
         is_shortform,
         seek,
-        batch_idx_map
+        batch_idx_map,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
