@@ -709,12 +709,16 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
 
 
 def _infer_parameter_dtype(
-    model: "PreTrainedModel", param_name: str, empty_param, keep_in_fp32_modules=None, hf_quantizer: Optional[HfQuantizer] = None
+    model: "PreTrainedModel",
+    param_name: str,
+    empty_param,
+    keep_in_fp32_modules=None,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
-    try :
+    try:
         old_param = model.get_parameter_or_buffer(param_name)
     except Exception as e:
-        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ : 
+        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ:
             return True, None
         else:
             raise e
