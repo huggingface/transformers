@@ -1348,7 +1348,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     model_tags = None
 
     _auto_class = None
-    _no_split_modules = None
+    _no_split_modules = []
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
 
@@ -4153,7 +4153,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dummy_model = cls(config)
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
-            resolved_archive_file = None
+            resolved_archive_file = gguf_file
             is_sharded = False
         else:
             resolved_archive_file = None
@@ -4595,8 +4595,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         new_key = key
         if len(self.base_model_prefix) > 0:
-            if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
-                new_key = ".".join(key.split(".")[1:])
+            if not hasattr(self, self.base_model_prefix) and self.base_model_prefix in key:
+                new_key = key.split(self.base_model_prefix)[1]
             elif (
                 hasattr(self, self.base_model_prefix)
                 and not key.startswith(self.base_model_prefix)
@@ -5896,7 +5896,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
 
     parameter_count = defaultdict(lambda: 0)
     allocation_factor = 1
-    if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
+    if _torch_distributed_available or len(set(accelerator_device_map.values())) >= 2:
         allocation_factor = 2
 
     for param_name, device in accelerator_device_map.items():
@@ -5921,12 +5921,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
-        max_memory_device = None
+        max_memory_device = None # TODO @arthur this does not work for TP
         if device.type == "cuda":
             max_memory_device = torch.cuda.mem_get_info(device.index)[0]
         # allocate only if we have enough memory
-        if max_memory_device is None or max_memory_device > param_count * dtype_byte_size(dtype):
-            _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
+        # if max_memory_device is None or max_memory_device > param_count * dtype_byte_size(dtype):
+        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):

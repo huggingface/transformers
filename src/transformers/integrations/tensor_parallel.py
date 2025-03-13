@@ -154,7 +154,6 @@ class TensorParallelLayer:
     """
     General tensor parallel layer for transformers.
     """
-
     use_dtensor = True
 
     @staticmethod
@@ -174,7 +173,6 @@ class TensorParallelLayer:
                 partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
-
 
 # use_dtensor needs to be set to false for nn.Parameter when you want to view, chunk, slice
 # you name it. Whatever you want to do that is a bit unconventional, you need local tensors
@@ -402,7 +400,6 @@ class RowwiseParallel(TensorParallelLayer):
                 partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
-
 
 class PackedRowwiseParallel(RowwiseParallel):
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):

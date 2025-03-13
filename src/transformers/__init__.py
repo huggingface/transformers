@@ -560,6 +560,12 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
+    "models.llama4": [
+        "Llama4Config",
+        "Llama4Processor",
+        "Llama4VisionConfig",
+        "Llama4TextConfig",
+    ],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -1261,6 +1267,7 @@ else:
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
+    _import_structure["models.llama4"].extend(["Llama4ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
@@ -1333,6 +1340,7 @@ else:
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
+    _import_structure["models.llama4"].append("Llama4ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -2467,6 +2475,14 @@ else:
             "GlmForTokenClassification",
             "GlmModel",
             "GlmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llama4"].extend(
+        [
+            "Llama4ForCausalLM",
+            "Llama4ForConditionalGeneration",
+            "Llama4Model",
+            "Llama4PreTrainedModel",
         ]
     )
     _import_structure["models.glpn"].extend(
@@ -5716,6 +5732,12 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
+    from .models.llama4 import (
+        Llama4Config,
+        Llama4Processor,
+        Llama4TextConfig,
+        Llama4VisionConfig,
+    )
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -6467,6 +6489,7 @@ if TYPE_CHECKING:
             LayoutLMv3ImageProcessor,
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
+        from .models.llama4 import Llama4ImageProcessor
         from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
@@ -6536,6 +6559,7 @@ if TYPE_CHECKING:
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
+        from .models.llama4 import Llama4ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -7699,6 +7723,12 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
+        )
+        from .models.llama4 import (
+            Llama4ForCausalLM,
+            Llama4ForConditionalGeneration,
+            Llama4Model,
+            Llama4PreTrainedModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
