@@ -62,20 +62,8 @@ def expand_to_square(image: np.array, background_color) -> np.array:
         result = np.ones((height, height, image.shape[2]), dtype=image.dtype) * background_color
         result[:, (height - width) // 2 : (height - width) // 2 + width] = image
         return result
-# To Do
-""" 
-NOTE:
-The preprocessor_config.json from deepkseek_vl repo has set "image_processor_type": "VLMImageProcessor".
-So When we load the model, the model will look for "VLMImageProcessor" class. 
 
-That's why we need to keep the same class name as a "VLMImageProcessor" class.
-
-However if we want to use different class name such as "DeepseekImageProcessor" then we need to 
-create a different repo where we mentiion used the "DeepseekImageProcessor" in the preprocessor_config.json file.
-
-Need to discuss.
-""" 
-class VLMImageProcessor(BaseImageProcessor):
+class DeepseekImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
     
     def __init__(
@@ -233,4 +221,4 @@ class VLMImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
-__all__ = ["VLMImageProcessor"]
+__all__ = ["DeepseekImageProcessor"]
