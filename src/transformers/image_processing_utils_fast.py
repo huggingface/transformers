@@ -265,12 +265,14 @@ class BaseImageProcessorFast(BaseImageProcessor):
     device = None
     model_input_names = ["pixel_values"]
     valid_kwargs = DefaultFastImageProcessorKwargs
+    unused_kwargs = None
 
     def __init__(
         self,
         **kwargs: Unpack[DefaultFastImageProcessorKwargs],
     ) -> None:
         super().__init__(**kwargs)
+        kwargs = self.filter_out_unused_kwargs(kwargs)
         size = kwargs.pop("size", self.size)
         self.size = (
             get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
@@ -437,6 +439,19 @@ class BaseImageProcessorFast(BaseImageProcessor):
             ImageInput: The converted image.
         """
         return convert_to_rgb(image)
+
+    def filter_out_unused_kwargs(self, kwargs: dict):
+        """
+        Filter out the unused kwargs from the kwargs dictionary.
+        """
+        if self.unused_kwargs is None:
+            return kwargs
+
+        for kwarg_name in self.unused_kwargs:
+            if kwarg_name in kwargs:
+                logger.warning_once(f"This processor does not use the `{kwarg_name}` parameter. It will be ignored.")
+                kwargs.pop(kwarg_name)
+        return kwargs
 
     def _prepare_images_structure(
         self,
@@ -634,6 +649,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
