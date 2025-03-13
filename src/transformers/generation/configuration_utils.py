@@ -487,7 +487,7 @@ class GenerationConfig(PushToHubMixin):
         ## assistant generation for different tokenizers, pruning of the LM head of the assistant model
         self.assistant_prune_LM_head = kwargs.pop("assistant_prune_LM_head", True)
 
-        # Performances
+        # Performance
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
         self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card
