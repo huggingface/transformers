@@ -369,6 +369,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     architecture = read_field(reader, "general.architecture")[0]
     model_name = read_field(reader, "general.name")
 
+    updated_architecture = None
     # in llama.cpp mistral models use the same architecture as llama. We need
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
@@ -377,6 +378,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
+        if "t5encoder" in architecture:
+            parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
         updated_architecture = "t5"
     else:
         updated_architecture = architecture
@@ -395,7 +398,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
-    if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
+    if architecture not in GGUF_SUPPORTED_ARCHITECTURES and updated_architecture not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"GGUF model with architecture {architecture} is not supported yet.")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
