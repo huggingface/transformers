@@ -25,7 +25,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -49,7 +49,6 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .image_processing_qwen2_vl import smart_resize
@@ -58,18 +57,19 @@ from .image_processing_qwen2_vl import smart_resize
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
+if is_torchvision_available():
+    from ...image_utils import pil_torch_interpolation_mapping
+
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -107,10 +107,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = 56 * 56
     max_pixels = 28 * 28 * 1280
-    valid_init_kwargs = Qwen2VLFastImageProcessorInitKwargs
+    valid_kwargs = DefaultFastImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(
@@ -311,19 +311,22 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         image_mean = tuple(image_mean) if image_mean is not None else None
         image_std = tuple(image_std) if image_std is not None else None
 
-        image_mean, image_std, interpolation = self._prepare_process_arguments(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+        self._validate_preprocess_kwargs(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
             return_tensors=return_tensors,
             data_format=data_format,
-            device=device,
         )
+        interpolation = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
+
         if images is not None:
             images = make_flat_list_of_images(images)
         if videos is not None:
