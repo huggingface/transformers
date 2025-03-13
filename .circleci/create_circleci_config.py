@@ -38,6 +38,7 @@ DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 FLAKY_TEST_FAILURE_PATTERNS = [
     "OSError",  # Machine/connection transient error
     "Timeout",  # Machine/connection transient error
+    "ConnectionError",  # Connection transient error
     "FileNotFoundError",  # Raised by `datasets` on Hub failures
     "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
     "HTTPError.*502",  # Hub-related
@@ -49,6 +50,7 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType",
     "Converting from Tiktoken failed",
     "KeyError: <class ",
+    "TypeError: not a string",
 ]
 
 
