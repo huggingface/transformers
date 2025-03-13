@@ -36,6 +36,7 @@ from transformers import (
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    CLIPTextModelWithProjection,
     DynamicCache,
     LlavaForConditionalGeneration,
     MistralForCausalLM,
@@ -616,6 +617,14 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+
+        # test model that init the model with _from_config
+        model = CLIPTextModelWithProjection.from_pretrained(
+            "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+            subfolder="text_encoder",
+            torch_dtype=torch.bfloat16,
+        )
+        self.assertEqual(model.dtype, torch.bfloat16)
 
     def test_model_from_pretrained_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either
