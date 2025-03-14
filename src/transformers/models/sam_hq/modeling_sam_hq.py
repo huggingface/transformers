@@ -650,168 +650,6 @@ class SamHQLayerNorm(nn.Module):
         return x
 
 
-class SamHQMaskEmbedding(nn.Module):
-    def __init__(self, config: SamHQPromptEncoderConfig):
-        super().__init__()
-        self.mask_input_channels = config.mask_input_channels // 4
-        self.activation = ACT2FN[config.hidden_act]
-        self.conv1 = nn.Conv2d(1, self.mask_input_channels, kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
-        self.layer_norm1 = SamHQLayerNorm(
-            self.mask_input_channels, eps=config.layer_norm_eps, data_format="channels_first"
-        )
-        self.layer_norm2 = SamHQLayerNorm(
-            self.mask_input_channels * 4, eps=config.layer_norm_eps, data_format="channels_first"
-        )
-
-    def forward(self, masks):
-        hidden_states = self.conv1(masks)
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-
-        hidden_states = self.conv2(hidden_states)
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        dense_embeddings = self.conv3(hidden_states)
-        return dense_embeddings
-
-
-class SamHQPromptEncoder(nn.Module):
-    def __init__(self, config: SamHQPromptEncoderConfig, shared_patch_embedding):
-        super().__init__()
-        self.shared_embedding = shared_patch_embedding
-        self.mask_embed = SamHQMaskEmbedding(config)
-        self.no_mask_embed = nn.Embedding(1, config.hidden_size)
-
-        self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
-        self.input_image_size = config.image_size
-
-        self.point_embed = nn.ModuleList(
-            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
-        )
-        self.hidden_size = config.hidden_size
-        self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
-
-    def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
-        """Embeds point prompts."""
-        points = points + 0.5  # Shift to center of pixel
-        if pad:
-            target_point_shape = (points.shape[0], points.shape[1], 1, points.shape[-1])
-            target_labels_shape = (points.shape[0], points.shape[1], 1)
-            padding_point = torch.zeros(target_point_shape, device=points.device)
-            padding_label = -torch.ones(target_labels_shape, device=labels.device)
-            points = torch.cat([points, padding_point], dim=2)
-            labels = torch.cat([labels, padding_label], dim=2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        point_embedding = self.shared_embedding(points, input_shape)
-
-        # torch.where and expanding the labels tensor is required by the ONNX export
-        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
-
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
-        point_embedding = torch.where(
-            labels[..., None] != -10,
-            point_embedding,
-            torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
-        )
-
-        point_embedding = torch.where(
-            (labels == 0)[:, :, :, None],
-            point_embedding + self.point_embed[0].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 1)[:, :, :, None],
-            point_embedding + self.point_embed[1].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        return point_embedding
-
-    def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
-        """Embeds box prompts."""
-        boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
-        corner_embedding[:, :, 0, :] += self.point_embed[2].weight
-        corner_embedding[:, :, 1, :] += self.point_embed[3].weight
-        return corner_embedding
-
-    def forward(
-        self,
-        input_points: Optional[Tuple[torch.Tensor, torch.Tensor]],
-        input_labels: Optional[torch.Tensor],
-        input_boxes: Optional[torch.Tensor],
-        input_masks: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Embeds different types of prompts, returning both sparse and dense embeddings.
-
-        Args:
-            points (`torch.Tensor`, *optional*):
-                point coordinates and labels to embed.
-            boxes (`torch.Tensor`, *optional*):
-                boxes to embed
-            masks (`torch.Tensor`, *optional*):
-                masks to embed
-        """
-        sparse_embeddings = None
-        batch_size = 1
-        target_device = self.shared_embedding.positional_embedding.device
-        if input_points is not None:
-            batch_size, point_batch_size = input_points.shape[:2]
-            if input_labels is None:
-                raise ValueError("If points are provided, labels must also be provided.")
-            point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
-            sparse_embeddings = point_embeddings
-        if input_boxes is not None:
-            batch_size = input_boxes.shape[0]
-            box_embeddings = self._embed_boxes(input_boxes)
-            if sparse_embeddings is None:
-                sparse_embeddings = box_embeddings
-            else:
-                sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=2)
-        if input_masks is not None:
-            dense_embeddings = self.mask_embed(input_masks)
-        else:
-            dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
-                batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
-            )
-
-        if sparse_embeddings is None:
-            sparse_embeddings = torch.zeros((batch_size, 1, 1, self.hidden_size), device=target_device)
-
-        return sparse_embeddings, dense_embeddings
-
-
-class SamHQPositionalEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.scale = config.hidden_size // 2
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
-
-
 class SamHQAttention(nn.Module):
     """
     SAM_HQ's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
@@ -1336,20 +1174,167 @@ class SamHQPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-SAM_HQ_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
+class SamHQPositionalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.hidden_size // 2
+        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
 
-    Parameters:
-        config ([`SamHQConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
+class SamHQMaskEmbedding(nn.Module):
+    def __init__(self, config: SamHQPromptEncoderConfig):
+        super().__init__()
+        self.mask_input_channels = config.mask_input_channels // 4
+        self.activation = ACT2FN[config.hidden_act]
+        self.conv1 = nn.Conv2d(1, self.mask_input_channels, kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
+        self.layer_norm1 = SamHQLayerNorm(
+            self.mask_input_channels, eps=config.layer_norm_eps, data_format="channels_first"
+        )
+        self.layer_norm2 = SamHQLayerNorm(
+            self.mask_input_channels * 4, eps=config.layer_norm_eps, data_format="channels_first"
+        )
+
+    def forward(self, masks):
+        hidden_states = self.conv1(masks)
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        dense_embeddings = self.conv3(hidden_states)
+        return dense_embeddings
+
+
+class SamHQPromptEncoder(nn.Module):
+    def __init__(self, config: SamHQPromptEncoderConfig, shared_patch_embedding):
+        super().__init__()
+        self.shared_embedding = shared_patch_embedding
+        self.mask_embed = SamHQMaskEmbedding(config)
+        self.no_mask_embed = nn.Embedding(1, config.hidden_size)
+
+        self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
+        self.input_image_size = config.image_size
+
+        self.point_embed = nn.ModuleList(
+            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
+        )
+        self.hidden_size = config.hidden_size
+        self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
+
+    def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
+        """Embeds point prompts."""
+        points = points + 0.5  # Shift to center of pixel
+        if pad:
+            target_point_shape = (points.shape[0], points.shape[1], 1, points.shape[-1])
+            target_labels_shape = (points.shape[0], points.shape[1], 1)
+            padding_point = torch.zeros(target_point_shape, device=points.device)
+            padding_label = -torch.ones(target_labels_shape, device=labels.device)
+            points = torch.cat([points, padding_point], dim=2)
+            labels = torch.cat([labels, padding_label], dim=2)
+        input_shape = (self.input_image_size, self.input_image_size)
+        point_embedding = self.shared_embedding(points, input_shape)
+
+        # torch.where and expanding the labels tensor is required by the ONNX export
+        point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
+
+        # This is required for the ONNX export. The dtype, device need to be explicitely
+        # specificed as otherwise torch.onnx.export interprets as double
+        point_embedding = torch.where(
+            labels[..., None] != -10,
+            point_embedding,
+            torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
+        )
+
+        point_embedding = torch.where(
+            (labels == 0)[:, :, :, None],
+            point_embedding + self.point_embed[0].weight[None, None, :, :],
+            point_embedding,
+        )
+
+        point_embedding = torch.where(
+            (labels == 1)[:, :, :, None],
+            point_embedding + self.point_embed[1].weight[None, None, :, :],
+            point_embedding,
+        )
+
+        return point_embedding
+
+    def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
+        """Embeds box prompts."""
+        boxes = boxes + 0.5  # Shift to center of pixel
+        batch_size, nb_boxes = boxes.shape[:2]
+        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
+        input_shape = (self.input_image_size, self.input_image_size)
+        corner_embedding = self.shared_embedding(coords, input_shape)
+        corner_embedding[:, :, 0, :] += self.point_embed[2].weight
+        corner_embedding[:, :, 1, :] += self.point_embed[3].weight
+        return corner_embedding
+
+    def forward(
+        self,
+        input_points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        input_labels: Optional[torch.Tensor],
+        input_boxes: Optional[torch.Tensor],
+        input_masks: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Embeds different types of prompts, returning both sparse and dense embeddings.
+
+        Args:
+            points (`torch.Tensor`, *optional*):
+                point coordinates and labels to embed.
+            boxes (`torch.Tensor`, *optional*):
+                boxes to embed
+            masks (`torch.Tensor`, *optional*):
+                masks to embed
+        """
+        sparse_embeddings = None
+        batch_size = 1
+        target_device = self.shared_embedding.positional_embedding.device
+        if input_points is not None:
+            batch_size, point_batch_size = input_points.shape[:2]
+            if input_labels is None:
+                raise ValueError("If points are provided, labels must also be provided.")
+            point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
+            sparse_embeddings = point_embeddings
+        if input_boxes is not None:
+            batch_size = input_boxes.shape[0]
+            box_embeddings = self._embed_boxes(input_boxes)
+            if sparse_embeddings is None:
+                sparse_embeddings = box_embeddings
+            else:
+                sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=2)
+        if input_masks is not None:
+            dense_embeddings = self.mask_embed(input_masks)
+        else:
+            dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
+                batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+            )
+
+        if sparse_embeddings is None:
+            sparse_embeddings = torch.zeros((batch_size, 1, 1, self.hidden_size), device=target_device)
+
+        return sparse_embeddings, dense_embeddings
+
 
 SAM_HQ_INPUTS_DOCSTRING = r"""
     Args:
@@ -1368,7 +1353,7 @@ SAM_HQ_INPUTS_DOCSTRING = r"""
             computation of the embedding will be skipped for these points using the labels.
         input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
             Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
-            official implementation, there are 3 types of labels:
+            official implementation, there are 3 types of labels
 
             - `1`: the point is a point that contains the object of interest
             - `0`: the point is a point that does not contain the object of interest
@@ -1392,21 +1377,18 @@ SAM_HQ_INPUTS_DOCSTRING = r"""
             - `y2`: the y coordinate of the bottom right point of the input box
 
         input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
-            SAM-HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
+            SAM_HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
             generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
             manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
 
         image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
-            Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
+            Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
         multimask_output (`bool`, *optional*):
             In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
-        hq_token_only (`bool`, *optional*, defaults to `False`):
-            Whether to use only the HQ token path for mask generation. When False, combines both standard and HQ paths.
-            This is specific to SAM-HQ's architecture.
         attention_similarity (`torch.FloatTensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
@@ -1421,9 +1403,22 @@ SAM_HQ_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
-            Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
-            Required when providing pre-computed image_embeddings instead of pixel_values.
+"""
+
+
+SAM_HQ_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`SamHQConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -1438,9 +1433,9 @@ class SamHQModel(SamHQPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
-
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
         self.prompt_encoder = SamHQPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
@@ -1459,7 +1454,7 @@ class SamHQModel(SamHQPreTrainedModel):
         x_embed = x_embed / size
 
         positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
-        return positional_embedding.permute(2, 0, 1).unsqueeze(0)
+        return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # channel x height x width
 
     @torch.no_grad()
     def get_image_embeddings(
@@ -1547,8 +1542,80 @@ class SamHQModel(SamHQPreTrainedModel):
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
-        Example:
 
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values. Pixel values can be obtained using [`SamHQProcessor`]. See [`SamHQProcessor.__call__`] for
+                details.
+            input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+                Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
+                better results. The points can be obtained by passing a list of list of list to the processor that will
+                create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
+                second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
+                per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
+                multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
+                coordinates of the point. If a different number of points is passed either for each image, or for each
+                mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
+                computation of the embedding will be skipped for these points using the labels.
+            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
+                Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
+                official implementation, there are 3 types of labels
+
+                - `1`: the point is a point that contains the object of interest
+                - `0`: the point is a point that does not contain the object of interest
+                - `-1`: the point corresponds to the background
+
+                We added the label:
+
+                - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
+
+                The padding labels should be automatically done by the processor.
+            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+                Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
+                much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
+                that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
+                size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+                In the order (`x1`, `y1`, `x2`, `y2`):
+
+                - `x1`: the x coordinate of the top left point of the input box
+                - `y1`: the y coordinate of the top left point of the input box
+                - `x2`: the x coordinate of the bottom right point of the input box
+                - `y2`: the y coordinate of the bottom right point of the input box
+
+            input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+                SAM_HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
+                generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
+                manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
+
+            image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+                Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
+                efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
+                method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
+            multimask_output (`bool`, *optional*):
+                In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
+                bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
+                "best" mask, by specifying `multimask_output=False`.
+            hq_token_only (`bool`, *optional*, defaults to `False`):
+                Whether to use only the HQ token path for mask generation. When False, combines both standard and HQ paths.
+                This is specific to SAM-HQ's architecture.
+            attention_similarity (`torch.FloatTensor`, *optional*):
+                Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
+                model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            target_embedding (`torch.FloatTensor`, *optional*):
+                Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
+                the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+                tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+                more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
+                Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
+                Required when providing pre-computed image_embeddings instead of pixel_values.
+        Example:
         ```python
         >>> from PIL import Image
         >>> import requests

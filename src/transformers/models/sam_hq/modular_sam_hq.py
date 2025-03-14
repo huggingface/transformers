@@ -20,15 +20,14 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings, logging
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
     SamFeedForward,
     SamImageSegmentationOutput,
     SamLayerNorm,
-    SamPositionalEmbedding,
+    SamModel,
     SamPreTrainedModel,
-    SamPromptEncoder,
     SamTwoWayTransformer,
     SamVisionEncoder,
     SamVisionEncoderOutput,
@@ -194,14 +193,6 @@ class SamHQVisionEncoder(SamVisionEncoder):
 
 
 class SamHQLayerNorm(SamLayerNorm):
-    pass
-
-
-class SamHQPromptEncoder(SamPromptEncoder):
-    pass
-
-
-class SamHQPositionalEmbedding(SamPositionalEmbedding):
     pass
 
 
@@ -447,115 +438,22 @@ SAM_HQ_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SAM_HQ_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SamHQProcessor`]. See [`SamHQProcessor.__call__`] for
-            details.
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
-            Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
-            better results. The points can be obtained by passing a list of list of list to the processor that will
-            create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
-            second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
-            per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
-            multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
-            coordinates of the point. If a different number of points is passed either for each image, or for each
-            mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
-            computation of the embedding will be skipped for these points using the labels.
-        input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
-            Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
-            official implementation, there are 3 types of labels:
-
-            - `1`: the point is a point that contains the object of interest
-            - `0`: the point is a point that does not contain the object of interest
-            - `-1`: the point corresponds to the background
-
-            We added the label:
-
-            - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
-
-            The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
-            Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
-            much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
-            that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
-            In the order (`x1`, `y1`, `x2`, `y2`):
-
-            - `x1`: the x coordinate of the top left point of the input box
-            - `y1`: the y coordinate of the top left point of the input box
-            - `x2`: the x coordinate of the bottom right point of the input box
-            - `y2`: the y coordinate of the bottom right point of the input box
-
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
-            SAM-HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
-            generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
-            manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
-            Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
-            efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
-            method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
-        multimask_output (`bool`, *optional*):
-            In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
-            bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
-            "best" mask, by specifying `multimask_output=False`.
-        hq_token_only (`bool`, *optional*, defaults to `False`):
-            Whether to use only the HQ token path for mask generation. When False, combines both standard and HQ paths.
-            This is specific to SAM-HQ's architecture.
-        attention_similarity (`torch.FloatTensor`, *optional*):
-            Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
-            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
-            Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
-            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
-            Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
-            Required when providing pre-computed image_embeddings instead of pixel_values.
-"""
-
 
 @add_start_docstrings(
     "Segment Anything Model HQ (SAM-HQ) for generating masks,given an input image and",
     " optional 2D location and bounding boxes.",
     SAM_HQ_START_DOCSTRING,
 )
-class SamHQModel(SamHQPreTrainedModel):
+class SamHQModel(SamModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
-
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
-        self.prompt_encoder = SamHQPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.vision_encoder.get_input_embeddings()
-
-    def get_image_wide_positional_embeddings(self):
-        size = self.config.prompt_encoder_config.image_embedding_size
-        target_device = self.shared_image_embedding.positional_embedding.device
-        target_dtype = self.shared_image_embedding.positional_embedding.dtype
-        grid = torch.ones((size, size), device=target_device, dtype=target_dtype)
-        y_embed = grid.cumsum(dim=0) - 0.5
-        x_embed = grid.cumsum(dim=1) - 0.5
-        y_embed = y_embed / size
-        x_embed = x_embed / size
-
-        positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
-        return positional_embedding.permute(2, 0, 1).unsqueeze(0)
 
     @torch.no_grad()
     def get_image_embeddings(
@@ -590,40 +488,6 @@ class SamHQModel(SamHQPreTrainedModel):
 
         return image_embeddings, intermediate_embeddings
 
-    @torch.no_grad()
-    def get_prompt_embeddings(
-        self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-    ):
-        r"""
-        Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
-
-        Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
-                Optional input points for the prompt encoder. The padding of the point is automatically done by the
-                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
-                point. The model will output `point_batch_size` times 3 masks in total.
-            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
-                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
-                processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
-                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
-                processor. users can also pass manually the input boxes.
-            input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
-                Optional input masks for the prompt encoder.
-        """
-        prompt_output = self.prompt_encoder(
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-            input_masks=input_masks,
-        )
-        return prompt_output
-
-    @add_start_docstrings_to_model_forward(SAM_HQ_INPUTS_DOCSTRING)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -643,8 +507,80 @@ class SamHQModel(SamHQPreTrainedModel):
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
-        Example:
 
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Pixel values. Pixel values can be obtained using [`SamHQProcessor`]. See [`SamHQProcessor.__call__`] for
+                details.
+            input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+                Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
+                better results. The points can be obtained by passing a list of list of list to the processor that will
+                create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
+                second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
+                per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
+                multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
+                coordinates of the point. If a different number of points is passed either for each image, or for each
+                mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
+                computation of the embedding will be skipped for these points using the labels.
+            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
+                Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
+                official implementation, there are 3 types of labels
+
+                - `1`: the point is a point that contains the object of interest
+                - `0`: the point is a point that does not contain the object of interest
+                - `-1`: the point corresponds to the background
+
+                We added the label:
+
+                - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
+
+                The padding labels should be automatically done by the processor.
+            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+                Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
+                much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
+                that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
+                size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+                In the order (`x1`, `y1`, `x2`, `y2`):
+
+                - `x1`: the x coordinate of the top left point of the input box
+                - `y1`: the y coordinate of the top left point of the input box
+                - `x2`: the x coordinate of the bottom right point of the input box
+                - `y2`: the y coordinate of the bottom right point of the input box
+
+            input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+                SAM_HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
+                generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
+                manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
+
+            image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+                Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
+                efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
+                method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
+            multimask_output (`bool`, *optional*):
+                In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
+                bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
+                "best" mask, by specifying `multimask_output=False`.
+            hq_token_only (`bool`, *optional*, defaults to `False`):
+                Whether to use only the HQ token path for mask generation. When False, combines both standard and HQ paths.
+                This is specific to SAM-HQ's architecture.
+            attention_similarity (`torch.FloatTensor`, *optional*):
+                Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
+                model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            target_embedding (`torch.FloatTensor`, *optional*):
+                Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
+                the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+                tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+                more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
+                Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
+                Required when providing pre-computed image_embeddings instead of pixel_values.
+        Example:
         ```python
         >>> from PIL import Image
         >>> import requests
