@@ -608,7 +608,7 @@ class AutoImageProcessor:
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
             raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
         if fast_image_processor_class is not None and not issubclass(fast_image_processor_class, BaseImageProcessorFast):
-            raise ValueError("You passed a slow image processor in as the `fast_image_processor_class`.")
+            raise ValueError("The `fast_image_processor_class` should inherit from `BaseImageProcessorFast`.")
 
         if (
             slow_image_processor_class is not None
