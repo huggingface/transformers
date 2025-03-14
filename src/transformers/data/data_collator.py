@@ -2003,7 +2003,6 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_seq_idx = return_seq_idx
         self.separator_id = separator_id
 
-        self._flash_attn_kwargs = {"cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k"}
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
             "Make sure your attention computation is able to handle it!"
@@ -2066,8 +2065,10 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if self.return_position_ids:
             ret["position_ids"] = data_cls(ret["position_ids"], dtype=dtype_64)[None]
         if self.return_flash_attn_kwargs:
-            for k in self._flash_attn_kwargs:
-                ret[k] = data_cls(ret[k], dtype=dtype_32)
+            ret["cu_seq_lens_q"] = data_cls(ret["cu_seq_lens_q"], dtype=dtype_32)
+            ret["cu_seq_lens_k"] = data_cls(ret["cu_seq_lens_k"], dtype=dtype_32)
+            ret["max_length_q"] = data_cls(ret["max_length_q"], dtype=dtype_32)
+            ret["max_length_k"] = data_cls(ret["max_length_k"], dtype=dtype_32)
         if self.return_seq_idx:
             ret["seq_idx"] = data_cls(ret["seq_idx"], dtype=dtype_32)[None]
         return ret
