@@ -120,9 +120,17 @@ class MistralModel(LlamaModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
-                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                if attention_mask.dim() == 4:  # for static cache, the attention mask is 4D, so we recover the 2D mask
+                    query_length = attention_mask.size(2)
+                    mask_2d = (attention_mask != min_dtype).int()[:, 0, query_length - 1, :query_length]
+                else:
+                    mask_2d = attention_mask
+                is_padding_right = mask_2d[:, -1].sum().item() != input_tensor.size()[0]
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
@@ -155,8 +163,6 @@ class MistralModel(LlamaModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
         if using_sliding_window_cache or using_static_cache:
