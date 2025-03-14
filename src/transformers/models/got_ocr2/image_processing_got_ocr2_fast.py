@@ -21,8 +21,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -54,13 +53,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class GotOcr2ImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
-
-
-class GotOcr2ImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class GotOcr2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     crop_to_patches: Optional[bool]
     min_patches: Optional[int]
     max_patches: Optional[int]
@@ -93,10 +86,9 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
-    valid_init_kwargs = GotOcr2ImageProcessorInitKwargs
-    valid_preprocess_kwargs = GotOcr2ImageProcessorPreprocessKwargs
+    valid_kwargs = GotOcr2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[valid_kwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -113,7 +105,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
                 set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorPreprocessKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_kwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(

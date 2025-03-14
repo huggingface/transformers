@@ -490,7 +490,7 @@ class SynthIDTextWatermarkDetector:
     Parameters:
         detector_module ([`BayesianDetectorModel`]):
             Bayesian detector module object initialized with parameters.
-            Check examples/research_projects/synthid_text/detector_training.py for usage.
+            Check https://github.com/huggingface/transformers-research-projects/tree/main/synthid_text for usage.
         logits_processor (`SynthIDTextWatermarkLogitsProcessor`):
             The logits processor used for watermarking.
         tokenizer (`Any`):
@@ -502,7 +502,7 @@ class SynthIDTextWatermarkDetector:
     ...     AutoTokenizer, BayesianDetectorModel, SynthIDTextWatermarkLogitsProcessor, SynthIDTextWatermarkDetector
     ... )
 
-    >>> # Load the detector. See examples/research_projects/synthid_text for training a detector.
+    >>> # Load the detector. See https://github.com/huggingface/transformers-research-projects/tree/main/synthid_text for training a detector.
     >>> detector_model = BayesianDetectorModel.from_pretrained("joaogante/dummy_synthid_detector")
     >>> logits_processor = SynthIDTextWatermarkLogitsProcessor(
     ...     **detector_model.config.watermarking_config, device="cpu"

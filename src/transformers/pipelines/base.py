@@ -45,6 +45,7 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -963,6 +964,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 self.device = torch.device(f"cuda:{device}")
             elif is_torch_npu_available():
                 self.device = torch.device(f"npu:{device}")
+            elif is_torch_hpu_available():
+                self.device = torch.device(f"hpu:{device}")
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
             elif is_torch_mps_available():

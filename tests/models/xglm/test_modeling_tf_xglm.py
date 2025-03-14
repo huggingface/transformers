@@ -239,6 +239,7 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
+    @slow
     def test_loss_with_padding(self):
         tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")

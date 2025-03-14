@@ -41,12 +41,12 @@ Models:
 
 - text models: @ArthurZucker
 - vision models: @amyeroberts, @qubvel
-- speech models: @ylacombe, @eustlb
+- speech models: @eustlb
 - graph models: @clefourrier
 
 Library:
 
-- flax: @sanchit-gandhi
+- flax: @gante and @Rocketknight1
 - generate: @zucchini-nlp (visual-language models) or @gante (all others)
 - pipelines: @Rocketknight1
 - tensorflow: @gante and @Rocketknight1
@@ -72,7 +72,7 @@ HF projects:
 
 Maintained examples (not research project or legacy):
 
-- Flax: @sanchit-gandhi
+- Flax: @Rocketknight1
 - PyTorch: See Models above and tag the person corresponding to the modality of the example.
 - TensorFlow: @Rocketknight1
 

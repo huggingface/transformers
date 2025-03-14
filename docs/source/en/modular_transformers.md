@@ -24,7 +24,7 @@ A linter "unravels" the modular file into a `modeling.py` file to preserve the s
 Run the command below to automatically generate a `modeling.py` file from a modular file.
 
 ```bash
-python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py
+python utils/modular_model_converter.py --files_to_parse src/transformers/models/<your_model>/modular_<your_model>.py
 ```
 
 For example:

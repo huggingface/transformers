@@ -15,4 +15,4 @@
 - الوصول إلى جميع أوزان الانتباه لكل رأس في BERT/GPT/GPT-2،
 - استرجاع قيم ومشتقات  مخرجات الرأس لحساب درجة أهمية الرأس وحذفه كما هو موضح في https://arxiv.org/abs/1905.10650.
 
-ولمساعدتك على فهم واستخدام هذه الميزات بسهولة، أضفنا مثالًا برمجيًا محددًا: [bertology.py](https://github.com/huggingface/transformers/tree/main/examples/research_projects/bertology/run_bertology.py) أثناء استخراج المعلومات  وتقليص من نموذج تم تدريبه مسبقًا على GLUE.
+ولمساعدتك على فهم واستخدام هذه الميزات بسهولة، أضفنا مثالًا برمجيًا محددًا: [bertology.py](https://github.com/huggingface/transformers-research-projects/tree/main/bertology/run_bertology.py) أثناء استخراج المعلومات  وتقليص من نموذج تم تدريبه مسبقًا على GLUE.

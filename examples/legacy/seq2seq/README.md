@@ -17,7 +17,7 @@ limitations under the License.
 # Sequence-to-Sequence Training and Evaluation
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/bertabs/README.md).
+For deprecated `bertabs` instructions, see https://github.com/huggingface/transformers-research-projects/blob/main/bertabs/README.md.
 
 ### Supported Architectures
 

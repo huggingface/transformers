@@ -843,6 +843,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         if self.random_replace_prob < 0 or self.random_replace_prob > 1:
             raise ValueError("random_replace_prob should be between 0 and 1.")
 
+        self.mlm_probability = float(self.mlm_probability)
+        self.mask_replace_prob = float(self.mask_replace_prob)
+        self.random_replace_prob = float(self.random_replace_prob)
+
         if self.tf_experimental_compile:
             import tensorflow as tf
 

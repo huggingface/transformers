@@ -483,7 +483,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
         self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
-        # Performances
+        # Performance
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
         self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card

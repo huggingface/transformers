@@ -1348,6 +1348,7 @@ ARIA_START_DOCSTRING = r"""
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
     _supports_flash_attn_2 = False
+    _supports_flex_attn = False
     _supports_sdpa = False
     _tied_weights_keys = ["language_model.lm_head.weight"]
 

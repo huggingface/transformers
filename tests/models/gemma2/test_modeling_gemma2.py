@@ -91,11 +91,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
@@ -151,6 +146,13 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_sdpa_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
+        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
 

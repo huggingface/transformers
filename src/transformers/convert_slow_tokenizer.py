@@ -113,10 +113,10 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        # there is a missing token in the vocab. We have to do this to support merges
+        # If "\t" is missing in the vocab, we have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
-        vocab["\t"] = vocab.get("<0x09>")
-
+        if "\t" not in vocab:
+            vocab["\t"] = vocab.get("<0x09>")
         merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
@@ -1296,12 +1296,14 @@ class GemmaConverter(SpmConverter):
             (self.original_tokenizer.eos_token, 0.0),
             (self.original_tokenizer.bos_token, 0.0),
         ]
-        for piece in proto.pieces[3:]:
-            if piece.piece == "<0x09>":
-                vocab += [("\t", piece.score)]
-            else:
-                vocab += [(piece.piece, piece.score)]
-        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+
+        # Older gemma tokenizers had a missing tab token, so we fix that here
+        if not any(x[0] == "\t" for x in vocab):
+            override_index = next((i for i, x in enumerate(vocab) if x[0] == "<0x09>"), None)
+            if override_index is not None:
+                vocab[override_index] = ("\t", 0.0)
+
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):

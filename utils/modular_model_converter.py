@@ -257,7 +257,7 @@ def is_full_docstring(new_docstring: str) -> bool:
     """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
     be merged with the existing old one.
     """
-    # libcst returns the docstrinbgs with litteral `r"""` quotes in front
+    # libcst returns the docstrinbgs with literal `r"""` quotes in front
     new_docstring = new_docstring.split('"""', 1)[1]
     # The docstring contains Args definition, so it is self-contained
     if re.search(r"\n\s*Args:\n", new_docstring):
@@ -1087,8 +1087,7 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
-    "FastImageProcessorInitKwargs": "image_processing*_fast",
-    "FastImageProcessorPreprocessKwargs": "image_processing*_fast",
+    "FastImageProcessorKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1142,7 +1141,7 @@ def append_new_import_node(
 def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """Get all the imports needed in the `body`, from the list of `all_imports`.
     `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
-    Note: we need to use `isinstance` on scope assignements, m.matches apparently does not work here yet!
+    Note: we need to use `isinstance` on scope assignments, m.matches apparently does not work here yet!
     """
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
@@ -1616,7 +1615,7 @@ def get_class_node_and_dependencies(
 
 
 def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
-    """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
+    """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
     current_file_indices = defaultdict(lambda: 0)
 
