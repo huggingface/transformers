@@ -28,7 +28,7 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, get_file_from_repo, logging
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -63,6 +63,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
+        ("gemma3", "Gemma3Processor"),
         ("git", "GitProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -253,15 +254,21 @@ class AutoProcessor:
         processor_auto_map = None
 
         # First, let's see if we have a processor or preprocessor config.
-        # Filter the kwargs for `get_file_from_repo`.
-        get_file_from_repo_kwargs = {
-            key: kwargs[key] for key in inspect.signature(get_file_from_repo).parameters.keys() if key in kwargs
+        # Filter the kwargs for `cached_file`.
+        cached_file_kwargs = {
+            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
         }
+        # We don't want to raise
+        cached_file_kwargs.update(
+            {
+                "_raise_exceptions_for_gated_repo": False,
+                "_raise_exceptions_for_missing_entries": False,
+                "_raise_exceptions_for_connection_errors": False,
+            }
+        )
 
         # Let's start by checking whether the processor class is saved in a processor config
-        processor_config_file = get_file_from_repo(
-            pretrained_model_name_or_path, PROCESSOR_NAME, **get_file_from_repo_kwargs
-        )
+        processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
             processor_class = config_dict.get("processor_class", None)
@@ -270,8 +277,8 @@ class AutoProcessor:
 
         if processor_class is None:
             # If not found, let's check whether the processor class is saved in an image processor config
-            preprocessor_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
+            preprocessor_config_file = cached_file(
+                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
             )
             if preprocessor_config_file is not None:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
@@ -290,8 +297,8 @@ class AutoProcessor:
 
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer
-            tokenizer_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **get_file_from_repo_kwargs
+            tokenizer_config_file = cached_file(
+                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **cached_file_kwargs
             )
             if tokenizer_config_file is not None:
                 with open(tokenizer_config_file, encoding="utf-8") as reader:

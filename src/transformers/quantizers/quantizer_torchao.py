@@ -13,7 +13,7 @@
 # limitations under the License.
 import importlib
 import types
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from packaging import version
 
@@ -144,14 +144,12 @@ class TorchAoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import get_keys_to_not_convert
-
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
-
+    def _process_model_before_weight_loading(
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+    ):
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
         return
 
     def check_quantized_param(
