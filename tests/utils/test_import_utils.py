@@ -14,15 +14,12 @@ from transformers.utils.import_utils import clear_import_cache
 @run_test_using_subprocess
 def test_clear_import_cache():
     """Test the clear_import_cache function."""
-    # Import the function to test
-
-    # First, ensure we have some transformers modules loaded
 
     # Save initial state
     initial_modules = {name: mod for name, mod in sys.modules.items() if name.startswith("transformers.")}
     assert len(initial_modules) > 0, "No transformers modules loaded before test"
 
-    # Run the test
+    # Execute clear_import_cache() function
     clear_import_cache()
 
     # Verify modules were removed
@@ -31,6 +28,5 @@ def test_clear_import_cache():
 
     # Import and verify module exists
     from transformers.models.auto import modeling_auto
-
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
