@@ -384,7 +384,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             images_list = [images for images, _ in images_list_and_num_crops]
             num_crops = [num_crops for _, num_crops in images_list_and_num_crops]
         else:
-            num_crops = [[0] for images in images_list]
+            num_crops = [[0] for _ in images_list]
 
         processed_images = []
         for images in images_list:

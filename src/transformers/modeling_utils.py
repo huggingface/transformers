@@ -4831,6 +4831,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         error_msgs = []
         mismatched_keys = []
+        has_multiple_shards = len(checkpoint_files) > 1
         # Iterate on all the shards to load the weights
         for shard_file in checkpoint_files:
             # Skip the load for shards that only contain disk-offloaded weights
@@ -4849,7 +4850,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
-            # If shard_file is""", we use the existing state_dict instead of loading it
+            # If shard_file is "", we use the existing state_dict instead of loading it
             if shard_file != "":
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
@@ -4895,9 +4896,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     model_to_load.load_state_dict(state_dict, strict=False, assign=assign_params)
 
-            # force memory release
             del state_dict
-            gc.collect()
+            # force memory release if loading multiple shards
+            if has_multiple_shards:
+                gc.collect()
 
         # Adjust offloaded weights name and save if needed
         if disk_offload_index is not None and len(disk_offload_index) > 0:
