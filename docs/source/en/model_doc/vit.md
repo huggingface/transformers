@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 # Vision Transformer (ViT)
 
-[Vision Transformer (ViT)](https://huggingface.co/papers/2010.11929) is a transformer - unlike traditional convolutional architectures - adopted for computer vision tasks. An image is split into smaller fixed-sized patches which are treated as a sequence of tokens, just like words for NLP tasks. ViT requires less resources to pretrain compared to convolutional architectures and its performance on large datasets can be transferred to smaller downstream tasks.
+[Vision Transformer (ViT)](https://huggingface.co/papers/2010.11929) is a transformer adopted for computer vision tasks, unlike traditional convolutional architectures. An image is split into smaller fixed-sized patches which are treated as a sequence of tokens, just like words for NLP tasks. ViT requires less resources to pretrain compared to convolutional architectures and its performance on large datasets can be transferred to smaller downstream tasks.
 
 > [!TIP]
 > Click on the ViT models in the right sidebar for more examples of how to apply ViT to different computer vision tasks.
@@ -97,7 +97,7 @@ model.visualize_attention_mask(processor, "https://huggingface.co/datasets/huggi
 ## Notes
 
 - The best results are obtained with supervised pretraining, and during fine-tuning, it can be better to use images with a resolution higher than 224x224.
-- Use the [`VitImageProcessor`] to resize (or rescale) and normalize images to the expected size.
+- Use [`ViTImageProcessorFast`] to resize (or rescale) and normalize images to the expected size.
 - The patch and image resolution are reflected in the checkpoint name. For example, google/vit-base-patch16-224, is the **base-sized** architecture with a patch resolution of 16x16 and fine-tuning resolution of 224x224.
 
 ## ViTConfig

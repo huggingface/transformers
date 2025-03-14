@@ -24,12 +24,14 @@ rendered properly in your Markdown viewer.
 
 # Llama 2
 
-[Llama 2](https://huggingface.co/papers/2307.09288) is a family of large language models, Llama 2 and Llama 2-Chat, available in 7B, 13B, and 70B parameters. The Llama 2 model mostly keeps the same architecture as [Llama](./llama), but it is pretrained on more tokens, doubles the context length, and uses grouped-query attention (GQA) in the 70B model to improve inference. Llama 2-Chat is trained with supervised fine-tuning (SFT) and reinforcement learning with human feedback (RLHF) - rejcetion sampling and proximal policy optimization (PPO) - is applied to the fine-tuned model to align the chat model with human preferences.
+[Llama 2](https://huggingface.co/papers/2307.09288) is a family of large language models, Llama 2 and Llama 2-Chat, available in 7B, 13B, and 70B parameters. The Llama 2 model mostly keeps the same architecture as [Llama](./llama), but it is pretrained on more tokens, doubles the context length, and uses grouped-query attention (GQA) in the 70B model to improve inference.
+
+Llama 2-Chat is trained with supervised fine-tuning (SFT) and reinforcement learning with human feedback (RLHF) - rejection sampling and proximal policy optimization (PPO) - is applied to the fine-tuned model to align the chat model with human preferences.
 
 > [!TIP]
 > Click on the Llama 2 models in the right sidebar for more examples of how to apply Llama to different language tasks.
 
-The example below demonstrates how to use Llama to generate text with the model using [`Pipeline`], [`AutoModel`], and how to chat with the model from the command line. You can find all the original Llama 2 checkpoints under the [Llama 2 Family](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b) collection.
+The example below demonstrates how to use Llama to generate text with the model using [`Pipeline`], [`AutoModel`], and how to chat with Llama 2-Chat from the command line. You can find all the original Llama 2 checkpoints under the [Llama 2 Family](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b) collection.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
