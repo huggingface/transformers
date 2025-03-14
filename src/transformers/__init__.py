@@ -633,6 +633,10 @@ _import_structure = {
         "MoshiConfig",
         "MoshiDepthConfig",
     ],
+    "models.conversational_speech_model": [
+        "ConversationalSpeechModelConfig",
+        "ConversationalSpeechModelDepthConfig",
+    ],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -3029,6 +3033,14 @@ else:
             "MoshiForConditionalGeneration",
             "MoshiModel",
             "MoshiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.conversational_speech_model"].extend(
+        [
+            "ConversationalSpeechModelForCausalLM",
+            "ConversationalSpeechModelForConditionalGeneration",
+            "ConversationalSpeechModelModel",
+            "ConversationalSpeechModelPreTrainedModel",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5815,6 +5827,10 @@ if TYPE_CHECKING:
         MoshiConfig,
         MoshiDepthConfig,
     )
+    from .models.conversational_speech_model import (
+        ConversationalSpeechModelConfig,
+        ConversationalSpeechModelDepthConfig,
+    )
     from .models.mpnet import (
         MPNetConfig,
         MPNetTokenizer,
@@ -7914,6 +7930,12 @@ if TYPE_CHECKING:
             MoshiForConditionalGeneration,
             MoshiModel,
             MoshiPreTrainedModel,
+        )
+        from .models.conversational_speech_model import (
+            ConversationalSpeechModelForCausalLM,
+            ConversationalSpeechModelForConditionalGeneration,
+            ConversationalSpeechModelModel,
+            ConversationalSpeechModelPreTrainedModel,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
