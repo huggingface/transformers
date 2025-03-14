@@ -2220,7 +2220,14 @@ class ModelTesterMixin:
 
     def test_model_set_vocab_size(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        #if model has no vocab_size attribute in config, leave test.
+
+        # if model has ambigious text config, leave test
+        try:
+            config.get_text_config()
+        except ValueError:
+            self.skipTest(reason="Could not get text config, not applicable.")
+
+        # if model has no vocab_size attribute in config, leave test.
         if not hasattr(config.get_text_config(), "vocab_size"):
             self.skipTest(reason="Config has no vocab size, not applicable.")
 
