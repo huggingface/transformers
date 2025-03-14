@@ -2033,4 +2033,12 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 ret["cu_seq_lens_k"].append(ret["cu_seq_lens_k"][-1] + len_input_ids)
                 ret["max_length_q"][0] = max(ret["max_length_q"][0], len_input_ids)
                 ret["max_length_k"][0] = max(ret["max_length_k"][0], len_input_ids)
+        # FlashAttentionKwargs and seq_idx are all expected to be in int32 format, if provided:
+        if self.return_flash_attn_kwargs:
+            ret["cu_seq_lens_q"]= np.array(ret["cu_seq_lens_q"], dtype=np.int32)
+            ret["cu_seq_lens_k"]= np.array(ret["cu_seq_lens_k"], dtype=np.int32)
+            ret["max_length_q"]= np.array(ret["max_length_q"], dtype=np.int32)
+            ret["max_length_k"]= np.array(ret["max_length_k"], dtype=np.int32)
+        if self.return_seq_idx:
+            ret["seq_idx"]= np.array(ret["seq_idx"], dtype=np.int32)
         return default_data_collator([ret], return_tensors)

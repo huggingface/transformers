@@ -1843,10 +1843,10 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["cu_seq_lens_k"][0].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["cu_seq_lens_q"].shape, (1, 4))
         self.assertEqual(batch["cu_seq_lens_q"][0].tolist(), [0, 3, 9, 16])
-        self.assertEqual(batch["max_length_k"].shape, (1,))
-        self.assertEqual(batch["max_length_k"][0].tolist(), 7)
-        self.assertEqual(batch["max_length_q"].shape, (1,))
-        self.assertEqual(batch["max_length_q"][0].tolist(), 7)
+        self.assertEqual(batch["max_length_k"].shape, (1, 1))
+        self.assertEqual(batch["max_length_k"][0].tolist(), [7])
+        self.assertEqual(batch["max_length_q"].shape, (1, 1))
+        self.assertEqual(batch["max_length_q"][0].tolist(), [7])
 
     def test_data_collator_with_flattening_seq_idx(self):
         features = [
