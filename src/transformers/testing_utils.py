@@ -942,6 +942,7 @@ if is_torch_available():
         if torch_device == "mlu" and not is_torch_mlu_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MLU is unavailable. Please double-check your testing environment."
+            )
         if torch_device == "hpu" and not is_torch_hpu_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
@@ -2899,19 +2900,16 @@ if is_torch_available():
     # testing.
     BACKEND_MANUAL_SEED = {
         "cuda": torch.cuda.manual_seed,
-        "mlu": torch.mlu.manual_seed if is_torch_mlu_available() else torch.manual_seed,
         "cpu": torch.manual_seed,
         "default": torch.manual_seed,
     }
     BACKEND_EMPTY_CACHE = {
         "cuda": torch.cuda.empty_cache,
-        "mlu": torch.mlu.empty_cache if is_torch_mlu_available() else None,
         "cpu": None,
         "default": None,
     }
     BACKEND_DEVICE_COUNT = {
         "cuda": torch.cuda.device_count,
-        "mlu": torch.mlu.device_count if is_torch_mlu_available() else lambda: 0,
         "cpu": lambda: 0,
         "default": lambda: 1,
     }
@@ -2923,6 +2921,11 @@ else:
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_mlu_available():
+    BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
+    BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
+    BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
 
 if is_torch_npu_available():
     BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
