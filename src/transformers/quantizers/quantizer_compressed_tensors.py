@@ -121,7 +121,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 raise ValueError("`run_compressed` is only supported for quantized_compressed models")
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
         elif self.is_quantized and not self.is_quantization_compressed:
-            apply_quantization_config(model, ct_quantization_config)
+            apply_quantization_config(model, ct_quantization_config, transforms_config=self.quantization_config.transforms_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
