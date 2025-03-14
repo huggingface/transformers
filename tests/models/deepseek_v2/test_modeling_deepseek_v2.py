@@ -16,13 +16,11 @@
 
 import unittest
 
+from packaging import version
 from parameterized import parameterized
 
 from transformers import DeepseekV2Config, is_torch_available, set_seed
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-)
+from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,11 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        DeepseekV2ForCausalLM,
-        DeepseekV2ForSequenceClassification,
-        DeepseekV2Model,
-    )
+    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2ForSequenceClassification, DeepseekV2Model
     from transformers.models.deepseek_v2 import DeepseekV2RotaryEmbedding
 
 
