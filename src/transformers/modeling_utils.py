@@ -1981,6 +1981,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return None  # Overwrite for models with output embeddings
 
+    def set_vocab_size(self, new_vocab_size: int):
+        """
+        Set model config's vocab size to a new specified size
+
+        Args:
+            new_vocab_size (int): New vocab size to set in the config.
+        """
+        self.config.get_text_config().vocab_size = new_vocab_size
+
     def _init_weights(self, module):
         """
         Initialize the weights. This method should be overridden by derived class and is
@@ -2216,7 +2225,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             vocab_size = model_embeds.weight.shape[0]
 
         # Update base model and current model config.
-        self.config.get_text_config().vocab_size = vocab_size
+        self.set_vocab_size(vocab_size)
         self.vocab_size = vocab_size
 
         # Tie weights again if needed
