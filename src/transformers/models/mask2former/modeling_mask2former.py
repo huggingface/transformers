@@ -2157,8 +2157,9 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                         nn.init.constant_(input_projection.bias, 0)
 
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
+            # Keep this initialization block first to prevent overwriting
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
+            thetas = torch.arange(module.n_heads, dtype=torch.float32) * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -2181,34 +2182,19 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)
+                elif p.dim() == 1:  # Bias terms
+                    nn.init.uniform_(p, -0.1, 0.1)  # Initialize biases with small non-zero values
 
-        elif isinstance(module, Mask2FormerPixelLevelModule):
-            for submodule in module.modules():
-                if isinstance(submodule, (nn.Conv2d, nn.Linear)):
-                    submodule.weight.data.normal_(mean=0.0, std=std)
-                    if submodule.bias is not None:
-                        submodule.bias.data.zero_()
-
-        elif isinstance(module, Mask2FormerPixelDecoder):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
-            nn.init.normal_(module.level_embed, std=0)
-
-        elif isinstance(module, Mask2FormerPixelDecoderEncoderOnly):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
+        elif isinstance(module, nn.Embedding):
+            # Use PyTorch default initialization (std=1.0)
+            module.weight.data.normal_(mean=0.0, std=1.0)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
