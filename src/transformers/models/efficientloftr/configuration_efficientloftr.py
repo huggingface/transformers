@@ -113,7 +113,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
         stage_stride: Optional[List[int]] = None,
         hidden_size: int = 256,
         activation_function: str = "relu",
-        aggregation_sizes: Optional[List[int]] = None,
+        q_aggregation_kernel_size: int = 4,
+        kv_aggregation_kernel_size: int = 4,
+        q_aggregation_stride: int = 4,
+        kv_aggregation_stride: int = 4,
         num_attention_layers: int = 4,
         num_attention_heads: int = 8,
         attention_dropout: float = 0.0,
@@ -143,7 +146,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
             )
 
         self.activation_function = activation_function
-        self.aggregation_sizes = aggregation_sizes if aggregation_sizes is not None else [4, 4]
+        self.q_aggregation_kernel_size = q_aggregation_kernel_size
+        self.kv_aggregation_kernel_size = kv_aggregation_kernel_size
+        self.q_aggregation_stride = q_aggregation_stride
+        self.kv_aggregation_stride = kv_aggregation_stride
         self.num_attention_layers = num_attention_layers
         self.num_attention_heads = num_attention_heads
         self.attention_dropout = attention_dropout

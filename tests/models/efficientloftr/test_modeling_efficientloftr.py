@@ -46,7 +46,10 @@ class EfficientLoFTRModelTester:
         stage_num_blocks: List[int] = [1, 1, 1],
         stage_hidden_expansion: List[int] = [1, 1, 1],
         stage_stride: List[int] = [2, 1, 2],
-        aggregation_sizes: List[int] = [1, 1],
+        q_aggregation_kernel_size: int = 1,
+        kv_aggregation_kernel_size: int = 1,
+        q_aggregation_stride: int = 1,
+        kv_aggregation_stride: int = 1,
         num_attention_layers: int = 2,
         num_attention_heads: int = 8,
         hidden_size: int = 64,
@@ -63,7 +66,10 @@ class EfficientLoFTRModelTester:
         self.stage_num_blocks = stage_num_blocks
         self.stage_hidden_expansion = stage_hidden_expansion
         self.stage_stride = stage_stride
-        self.aggregation_sizes = aggregation_sizes
+        self.q_aggregation_kernel_size = q_aggregation_kernel_size
+        self.kv_aggregation_kernel_size = kv_aggregation_kernel_size
+        self.q_aggregation_stride = q_aggregation_stride
+        self.kv_aggregation_stride = kv_aggregation_stride
         self.num_attention_layers = num_attention_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_size = hidden_size
@@ -83,7 +89,10 @@ class EfficientLoFTRModelTester:
             stage_num_blocks=self.stage_num_blocks,
             stage_hidden_expansion=self.stage_hidden_expansion,
             stage_stride=self.stage_stride,
-            aggregation_sizes=self.aggregation_sizes,
+            q_aggregation_kernel_size=self.q_aggregation_kernel_size,
+            kv_aggregation_kernel_size=self.kv_aggregation_kernel_size,
+            q_aggregation_stride=self.q_aggregation_stride,
+            kv_aggregation_stride=self.kv_aggregation_stride,
             num_attention_layers=self.num_attention_layers,
             num_attention_heads=self.num_attention_heads,
             hidden_size=self.hidden_size,
