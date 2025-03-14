@@ -85,13 +85,13 @@ class Gemma3Processor(ProcessorMixin):
     ) -> BatchFeature:
         if text is None and images is None:
             raise ValueError("Provide at least one of `text` or `images`.")
-
+        
         output_kwargs = self._merge_kwargs(
             Gemma3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
+        
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
@@ -133,10 +133,10 @@ class Gemma3Processor(ProcessorMixin):
                         text_with_crops[batch_idx] = prompt
 
             # Expand placeholder image tokens to the full image token sequence
-            text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
+            text_with_crops = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text_with_crops]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
+        text_inputs = self.tokenizer(text=text_with_crops, **output_kwargs["text_kwargs"], return_tensors="np")
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
         array_ids = np.array(text_inputs["input_ids"])
