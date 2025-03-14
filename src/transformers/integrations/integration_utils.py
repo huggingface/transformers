@@ -2291,7 +2291,7 @@ class SwanLabCallback(TrainerCallback):
         if state.is_world_process_zero:
             for k, v in logs.items():
                 if k in single_value_scalars:
-                    self._swanlab.log({f"single_value/{k}": v})
+                    self._swanlab.log({f"single_value/{k}": v}, step=state.global_step)
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
             self._swanlab.log({**non_scalar_logs, "train/global_step": state.global_step}, step=state.global_step)
