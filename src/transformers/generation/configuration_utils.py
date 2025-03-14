@@ -372,6 +372,8 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        assistant_prune_LM_head(`bool`, *optional*, defaults to `True`):
+            If set to `True`, LM head of the assistant model will be pruned. Can only be used with different tokenizers in speculative decoding with `do_sample=True`.
 
         > Parameters related to performances and compilation
 
@@ -482,6 +484,8 @@ class GenerationConfig(PushToHubMixin):
         ## assistant generation for different tokenizers, the windows size for assistant/target model
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
         self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
+        ## assistant generation for different tokenizers, pruning of the LM head of the assistant model
+        self.assistant_prune_LM_head = kwargs.pop("assistant_prune_LM_head", True)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
