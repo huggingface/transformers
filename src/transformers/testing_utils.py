@@ -38,7 +38,7 @@ from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
+from typing import Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -48,6 +48,7 @@ import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
 
+from transformers import Trainer
 from transformers import logging as transformers_logging
 
 from .integrations import (
@@ -1440,6 +1441,34 @@ def get_tests_dir(append_path=None):
         return tests_dir
 
 
+def get_steps_per_epoch(trainer: Trainer) -> int:
+    training_args = trainer.args
+    train_dataloader = trainer.get_train_dataloader()
+
+    initial_training_values = trainer.set_initial_training_values(
+        args=training_args,
+        dataloader=train_dataloader,
+        total_train_batch_size=training_args.per_device_train_batch_size,
+    )
+    steps_per_epoch = initial_training_values[1]
+
+    return steps_per_epoch
+
+
+def evaluate_side_effect_factory(
+    side_effect_values: List[Dict[str, float]],
+) -> Generator[Dict[str, float], None, None]:
+    """
+    Function that returns side effects for the _evaluate method.
+    Used when we're unsure of exactly how many times _evaluate will be called.
+    """
+    for side_effect_value in side_effect_values:
+        yield side_effect_value
+
+    while True:
+        yield side_effect_values[-1]
+
+
 #
 # Helper functions for dealing with testing text outputs
 # The original code came from:
@@ -2732,8 +2761,8 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
-    codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
+    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
         if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
