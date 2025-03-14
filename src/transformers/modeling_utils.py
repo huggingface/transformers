@@ -1983,7 +1983,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def set_vocab_size(self, new_vocab_size: int):
         """
-        Set model config's vocab size to a new specified size
+        Set the model's text config's vocab size to a new specified size.
 
         Args:
             new_vocab_size (int): New vocab size to set in the config.

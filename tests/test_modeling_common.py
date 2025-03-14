@@ -2201,6 +2201,14 @@ class ModelTesterMixin:
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    def test_model_set_vocab_size(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            new_vocab_size = config.get_text_config().vocab_size + 10
+            model.set_vocab_size(new_vocab_size)
+            self.assertEqual(model.config.get_text_config().vocab_size, new_vocab_size)
+
     def test_model_main_input_name(self):
         for model_class in self.all_model_classes:
             model_signature = inspect.signature(getattr(model_class, "forward"))
