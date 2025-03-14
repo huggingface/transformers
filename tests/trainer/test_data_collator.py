@@ -126,6 +126,32 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, torch.Size([2, 8]))
 
+    def test_data_collator_with_flattening(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+
+        data_collator = DataCollatorWithFlattening(return_tensors="pt")
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size([1, 9]))
+
+        data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size([1, 9]))
+        self.assertEqual(batch["cu_seq_lens_q"].shape, torch.Size([1, len(features) + 1]))
+        self.assertEqual(batch["cu_seq_lens_k"].shape, torch.Size([1, len(features) + 1]))
+        self.assertEqual(batch["max_length_q"].shape, torch.Size([1, 1]))
+        self.assertEqual(batch["max_length_k"].shape, torch.Size([1, 1]))
+        self.assertEqual(batch["cu_seq_lens_q"].dtype, torch.int32)
+        self.assertEqual(batch["cu_seq_lens_k"].dtype, torch.int32)
+        self.assertEqual(batch["max_length_q"].dtype, torch.int32)
+        self.assertEqual(batch["max_length_k"].dtype, torch.int32)
+
+        data_collator = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size([1, 9]))
+        self.assertEqual(batch["seq_idx"].shape, torch.Size([1, 9]))
+        self.assertEqual(batch["seq_idx"].dtype, torch.int32)
+
     def test_data_collator_for_token_classification(self):
         tokenizer = BertTokenizer(self.vocab_file)
         features = [
