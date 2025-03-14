@@ -103,7 +103,7 @@ _deps = [
     "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets!=2.5.0",
+    "datasets!=2.5.0",  # pinned to datasets@main in create_circleci_config.py
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
