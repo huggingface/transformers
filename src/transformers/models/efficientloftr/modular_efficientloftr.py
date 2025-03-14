@@ -199,8 +199,14 @@ class EfficientLoFTRConfig(PretrainedConfig):
             The dimension of the descriptors.
         activation_function (`str`, *optional*, defaults to `"relu"`):
             The activation function used in the backbone
-        aggregation_sizes (`List`, *optional*, defaults to [4, 4]):
-            The size of each aggregation for the fusion network
+        q_aggregation_kernel_size (`int`, *optional*, defaults to 4):
+            The kernel size of the aggregation of query states in the fusion network
+        kv_aggregation_kernel_size (`int`, *optional*, defaults to 4):
+            The kernel size of the aggregation of key and value states in the fusion network
+        q_aggregation_stride (`int`, *optional*, defaults to 4):
+            The stride of the aggregation of query states in the fusion network
+        kv_aggregation_stride (`int`, *optional*, defaults to 4):
+            The stride of the aggregation of key and value states in the fusion network
         num_attention_layers (`int`, *optional*, defaults to 4):
             Number of attention layers in the LocalFeatureTransformer
         num_attention_heads (`int`, *optional*, defaults to 8):
