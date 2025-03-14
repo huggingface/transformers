@@ -1068,33 +1068,13 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertIn("max_length_q", batch)
         self.assertEqual(batch["position_ids"].shape.as_list(), [1, 16])
         self.assertEqual(batch["position_ids"][0].numpy().tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
-        self.assertEqual(
-            batch["cu_seq_lens_k"].shape.as_list(),
-            [
-                4,
-            ],
-        )
+        self.assertEqual(batch["cu_seq_lens_k"].shape.as_list(), [4])
         self.assertEqual(batch["cu_seq_lens_k"].numpy().tolist(), [0, 3, 9, 16])
-        self.assertEqual(
-            batch["cu_seq_lens_q"].shape.as_list(),
-            [
-                4,
-            ],
-        )
+        self.assertEqual(batch["cu_seq_lens_q"].shape.as_list(), [4])
         self.assertEqual(batch["cu_seq_lens_q"].numpy().tolist(), [0, 3, 9, 16])
-        self.assertEqual(
-            batch["max_length_k"].shape.as_list(),
-            [
-                1,
-            ],
-        )
+        self.assertEqual(batch["max_length_k"].shape.as_list(), [1])
         self.assertEqual(batch["max_length_k"].numpy().tolist(), [7])
-        self.assertEqual(
-            batch["max_length_q"].shape.as_list(),
-            [
-                1,
-            ],
-        )
+        self.assertEqual(batch["max_length_q"].shape.as_list(), [1])
         self.assertEqual(batch["max_length_q"].numpy().tolist(), [7])
 
     def test_data_collator_with_flattening_seq_idx(self):
