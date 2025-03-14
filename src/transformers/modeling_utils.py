@@ -4409,9 +4409,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Find fp32 modules if needed
         keep_in_fp32_regex = None
-        if model._keep_in_fp32_modules is not None and len(model._keep_in_fp32_modules) > 0:
-            if is_accelerate_available() and not is_deepspeed_zero3_enabled():
-                low_cpu_mem_usage = True
+        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+        # in case of loading models that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
+        # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287
+        if model._keep_in_fp32_modules is not None and (torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)):
+            # Only the path with `low_cpu_mem_usage` will check every param for the correct dtype
+            low_cpu_mem_usage = True
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
             keep_in_fp32_regex = re.compile(
                 "|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules])
