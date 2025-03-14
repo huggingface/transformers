@@ -364,9 +364,10 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             inputs,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_new_tokens=decoder_config.max_new_tokens,
         )
-        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        # +1 Because the BOS token is injected to start generation
+        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_new_tokens + 1,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()

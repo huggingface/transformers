@@ -1045,9 +1045,12 @@ class PretrainedConfig(PushToHubMixin):
 
     @staticmethod
     def _get_global_generation_defaults() -> Dict[str, Any]:
+        # Explicitly coded here to avoid circular imports. TODO joao: refactor to avoid this
         return {
-            "max_length": 20,
-            "min_length": 0,
+            "max_new_tokens": 20,
+            "min_new_tokens": None,
+            "max_length": None,
+            "min_length": None,
             "do_sample": False,
             "early_stopping": False,
             "num_beams": 1,

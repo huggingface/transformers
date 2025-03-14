@@ -1532,6 +1532,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
 
+        generation_config.max_length = (
+            generation_config.max_length or generation_config.max_new_tokens + input_ids_seq_length
+        )
         pre_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
