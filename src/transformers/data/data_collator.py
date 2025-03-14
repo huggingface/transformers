@@ -2003,6 +2003,12 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_seq_idx = return_seq_idx
         self.separator_id = separator_id
 
+        self._flash_attn_kwargs = {"cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k"}
+        warnings.warn(
+            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
+            "Make sure your attention computation is able to handle it!"
+        )
+
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
@@ -2033,12 +2039,35 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 ret["cu_seq_lens_k"].append(ret["cu_seq_lens_k"][-1] + len_input_ids)
                 ret["max_length_q"][0] = max(ret["max_length_q"][0], len_input_ids)
                 ret["max_length_k"][0] = max(ret["max_length_k"][0], len_input_ids)
-        # FlashAttentionKwargs and seq_idx are all expected to be in int32 format, if provided:
+
+        # FlashAttentionKwargs are expected to not have any batch dimension. Both
+        # FlashAttentionKwargs and seq_idx are expected to be int32s.
+        if return_tensors == "pt":
+            import torch
+
+            data_cls = torch.tensor
+            dtype_64 = torch.int64
+            dtype_32 = torch.int32
+        elif return_tensors == "np":
+            data_cls = np.array
+            dtype_64 = np.int64
+            dtype_32 = np.int32
+        elif return_tensors == "tf":
+            import tensorflow as tf
+
+            data_cls = tf.convert_to_tensor
+            dtype_64 = tf.int64
+            dtype_32 = tf.int32
+        else:
+            raise ValueError(f'return_tensors must be one of ("pt", "np", "tf"), not {return_tensors=}')
+
+        ret["input_ids"] = data_cls(ret["input_ids"], dtype=dtype_64)[None]
+        ret["labels"] = data_cls(ret["labels"], dtype=dtype_64)[None]
+        if self.return_position_ids:
+            ret["position_ids"] = data_cls(ret["position_ids"], dtype=dtype_64)[None]
         if self.return_flash_attn_kwargs:
-            ret["cu_seq_lens_q"]= np.array(ret["cu_seq_lens_q"], dtype=np.int32)
-            ret["cu_seq_lens_k"]= np.array(ret["cu_seq_lens_k"], dtype=np.int32)
-            ret["max_length_q"]= np.array(ret["max_length_q"], dtype=np.int32)
-            ret["max_length_k"]= np.array(ret["max_length_k"], dtype=np.int32)
+            for k in self._flash_attn_kwargs:
+                ret[k] = data_cls(ret[k], dtype=dtype_32)
         if self.return_seq_idx:
-            ret["seq_idx"]= np.array(ret["seq_idx"], dtype=np.int32)
-        return default_data_collator([ret], return_tensors)
+            ret["seq_idx"] = data_cls(ret["seq_idx"], dtype=dtype_32)[None]
+        return ret
