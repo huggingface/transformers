@@ -2219,12 +2219,11 @@ class ModelTesterMixin:
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_model_set_vocab_size(self):
-        # Skipping tests that have test_resize_embeddings unset,
-        # as this function being tested is only called within resize_embeddings.
-        # Helps skip model configs that do not have vocab_size attribute.
-        if not self.test_resize_embeddings:
-            self.skipTest(reason="test_resize_embeddings is set to `False`")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        #if model has no vocab_size attribute in config, leave test.
+        if not hasattr(config.get_text_config(), "vocab_size"):
+            self.skipTest(reason="Config has no vocab size, not applicable.")
+
         for model_class in self.all_model_classes:
             model = model_class(config)
             new_vocab_size = config.get_text_config().vocab_size + 10
