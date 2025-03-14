@@ -54,7 +54,6 @@ def isolate_module_cache():
 
 def run_in_subprocess(func_name):
     """Run a test function in a separate subprocess to fully isolate it."""
-    file_path = os.path.abspath(__file__)
     test_script = f"""
 import os
 import sys
@@ -64,10 +63,10 @@ from transformers.utils.import_utils import clear_import_cache
 def {func_name}():
     # Import the function to test
     from transformers.utils.import_utils import clear_import_cache
-    
+
     # First, ensure we have some transformers modules loaded
     import transformers.models.auto.modeling_auto
-    
+
     # Save initial state
     initial_modules = {{name: mod for name, mod in sys.modules.items() if name.startswith("transformers.")}}
     assert len(initial_modules) > 0, "No transformers modules loaded before test"
@@ -83,7 +82,7 @@ def {func_name}():
     from transformers.models.auto import modeling_auto
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
-    
+
     return True
 
 # Run the test function directly
