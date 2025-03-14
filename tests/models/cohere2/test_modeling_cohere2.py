@@ -76,11 +76,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
