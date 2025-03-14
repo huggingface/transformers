@@ -41,8 +41,7 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     "ConnectionError",  # Connection transient error
     "FileNotFoundError",  # Raised by `datasets` on Hub failures
     "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
-    "HTTPError.*502",  # Hub-related
-    "HTTPError.*504",  # Hub-related
+    "HTTPError",  # Also catches HfHubHTTPError
     "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
     # TODO: error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
     # them under a single message.
