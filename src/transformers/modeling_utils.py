@@ -716,7 +716,7 @@ def _infer_parameter_dtype(
     model: "PreTrainedModel",
     param_name: str,
     empty_param: torch.Tensor,
-    keep_in_fp32_modules: Optional[List[str]] = None,
+    keep_in_fp32_regex: Optional[re.Pattern] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
     try:
@@ -733,7 +733,7 @@ def _infer_parameter_dtype(
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
         # First fp32 if part of the exception list
-        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
+        if keep_in_fp32_regex is not None and keep_in_fp32_regex.search(param_name):
             casting_dtype = torch.float32
         # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
         elif hf_quantizer is not None:
@@ -757,7 +757,7 @@ def _load_state_dict_into_meta_model(
     cpu_offload_index: Optional[Dict] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
     is_safetensors: bool = False,
-    keep_in_fp32_modules: Optional[List[str]] = None,
+    keep_in_fp32_regex: Optional[re.Pattern] = None,
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
@@ -795,7 +795,7 @@ def _load_state_dict_into_meta_model(
             model,
             param_name,
             empty_param,
-            keep_in_fp32_modules,
+            keep_in_fp32_regex,
             hf_quantizer,
         )
 
@@ -1284,7 +1284,7 @@ def _get_device_map(
     max_memory: Optional[Dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
-    keep_in_fp32_modules: Optional[List[str]],
+    keep_in_fp32_regex: Optional[re.Pattern],
 ) -> Dict:
     """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
     Otherwise, we check for any device inconsistencies in the device_map.
@@ -1293,13 +1293,9 @@ def _get_device_map(
         special_dtypes = {}
         if hf_quantizer is not None:
             special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
-        if keep_in_fp32_modules is not None:
+        if keep_in_fp32_regex is not None:
             special_dtypes.update(
-                {
-                    name: torch.float32
-                    for name, _ in model.named_parameters()
-                    if any(m in name for m in keep_in_fp32_modules)
-                }
+                {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
             )
 
         target_dtype = torch_dtype
@@ -4412,15 +4408,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config = model.config
 
         # Find fp32 modules if needed
-        keep_in_fp32_modules = None
-        if model._keep_in_fp32_modules is not None:
+        keep_in_fp32_regex = None
+        if model._keep_in_fp32_modules is not None and len(model._keep_in_fp32_modules) > 0:
             if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
-            keep_in_fp32_modules = model._keep_in_fp32_modules if len(model._keep_in_fp32_modules) > 0 else None
+            # We need to match exact layers, so we add either `.` on each side, or start/end of string
+            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules]))
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
+                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules
             )
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
@@ -4432,7 +4429,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(
-                model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_modules
+                model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex
             )
 
         # Finalize model weight initialization
@@ -4465,7 +4462,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
                 hf_quantizer=hf_quantizer,
-                keep_in_fp32_modules=keep_in_fp32_modules,
+                keep_in_fp32_regex=keep_in_fp32_regex,
                 device_mesh=device_mesh,
                 key_mapping=key_mapping,
                 weights_only=weights_only,
@@ -4674,7 +4671,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict: Optional[bool] = None,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_regex: Optional[re.Pattern] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[Dict[str, str]] = None,
         weights_only: bool = True,
@@ -4736,10 +4733,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
-        if keep_in_fp32_modules is not None:
-            keep_in_fp32_modules = re.compile("|".join([re.escape(module) for module in keep_in_fp32_modules]))
+        if keep_in_fp32_regex is not None:
             for name, param in model.named_parameters():
-                if keep_in_fp32_modules.search(name):
+                if keep_in_fp32_regex.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
@@ -4894,7 +4890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         cpu_offload_index=cpu_offload_index,
                         hf_quantizer=hf_quantizer,
                         is_safetensors=is_offloaded_safetensors,
-                        keep_in_fp32_modules=keep_in_fp32_modules,
+                        keep_in_fp32_regex=keep_in_fp32_regex,
                         unexpected_keys=unexpected_keys,
                         device_mesh=device_mesh,
                     )
@@ -4951,7 +4947,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 }
                 for name, param in parameters_to_initialize.items():
                     # First move data to correct
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_modules)
+                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_regex)
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
