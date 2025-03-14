@@ -78,7 +78,6 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def prepare_processor_dict(self):
         return {
-            "image_seq_len": self.image_seq_len,
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
 
