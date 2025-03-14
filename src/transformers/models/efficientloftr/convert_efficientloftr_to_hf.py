@@ -21,7 +21,7 @@ import torch
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
-from transformers import SuperGlueImageProcessor
+from transformers.models.efficientloftr.image_processing_efficientloftr import EfficientLoFTRImageProcessor
 from transformers.models.efficientloftr.modeling_efficientloftr import (
     EfficientLoFTRConfig,
     EfficientLoFTRForKeypointMatching,
@@ -41,62 +41,64 @@ def prepare_imgs():
 
 def verify_model_outputs(model, device):
     images = prepare_imgs()
-    preprocessor = SuperGlueImageProcessor()
+    preprocessor = EfficientLoFTRImageProcessor()
     inputs = preprocessor(images=images, return_tensors="pt").to(device)
     model.to(device)
     model.eval()
     with torch.no_grad():
         outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
-    predicted_matches_values = outputs.matches[0, 0, 20:30]
-    predicted_matching_scores_values = outputs.matching_scores[0, 0, 20:30]
+    predicted_number_of_matches = outputs.matches.shape[-1]
+    predicted_top10 = torch.topk(outputs.matching_scores[0, 0], k=10)
+    predicted_top10_matches_indices = predicted_top10.indices
+    predicted_top10_matching_scores = predicted_top10.values
 
-    predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
-
-    expected_number_of_matches = 383
+    expected_number_of_matches = 4800
     expected_matches_shape = torch.Size((len(images), 2, expected_number_of_matches))
     expected_matching_scores_shape = torch.Size((len(images), 2, expected_number_of_matches))
 
-    expected_matches_values = torch.tensor([20, 21, 22, 23, 24, 25, 26, 27, 28, 29], dtype=torch.int64).to(device)
-    expected_matching_scores_values = torch.tensor(
-        [0.3340, 0.7391, 0.2851, 0.2058, 0.2835, 0.92265, 0.3522, 0.2954, 0.3348, 0.6370]
+    expected_top10_matches_indices = torch.tensor(
+        [1798, 1639, 1401, 1559, 2596, 2362, 2441, 2605, 1643, 2607], dtype=torch.int64
+    ).to(device)
+    expected_top10_matching_scores = torch.tensor(
+        [0.9563, 0.9355, 0.9265, 0.9091, 0.9071, 0.9062, 0.9000, 0.8978, 0.8908, 0.8853]
     ).to(device)
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
 
-    torch.testing.assert_close(predicted_matches_values, expected_matches_values, rtol=5e-3, atol=5e-3)
-    torch.testing.assert_close(predicted_matching_scores_values, expected_matching_scores_values, rtol=5e-3, atol=5e-3)
+    torch.testing.assert_close(predicted_top10_matches_indices, expected_top10_matches_indices, rtol=5e-3, atol=5e-3)
+    torch.testing.assert_close(predicted_top10_matching_scores, expected_top10_matching_scores, rtol=5e-3, atol=5e-3)
 
     assert predicted_number_of_matches == expected_number_of_matches
 
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"matcher.backbone.layer(\d+).rbr_dense.conv": r"model.backbone.stages.\1.blocks.0.conv1.conv",
-    r"matcher.backbone.layer(\d+).rbr_dense.bn": r"model.backbone.stages.\1.blocks.0.conv1.norm",
-    r"matcher.backbone.layer(\d+).rbr_1x1.conv": r"model.backbone.stages.\1.blocks.0.conv2.conv",
-    r"matcher.backbone.layer(\d+).rbr_1x1.bn": r"model.backbone.stages.\1.blocks.0.conv2.norm",
-    r"matcher.backbone.layer(\d+).(\d+).rbr_dense.conv": r"model.backbone.stages.\1.blocks.\2.conv1.conv",
-    r"matcher.backbone.layer(\d+).(\d+).rbr_dense.bn": r"model.backbone.stages.\1.blocks.\2.conv1.norm",
-    r"matcher.backbone.layer(\d+).(\d+).rbr_1x1.conv": r"model.backbone.stages.\1.blocks.\2.conv2.conv",
-    r"matcher.backbone.layer(\d+).(\d+).rbr_1x1.bn": r"model.backbone.stages.\1.blocks.\2.conv2.norm",
-    r"matcher.backbone.layer(\d+).(\d+).rbr_identity": r"model.backbone.stages.\1.blocks.\2.identity",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).aggregate": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.q_aggregation",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).norm1": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.norm",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).q_proj": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.q_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).k_proj": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.k_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).v_proj": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.v_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).merge": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.o_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).mlp.(\d+)": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.fc{1 if m.group(2) == '0' else 2}",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).norm2": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.layer_norm",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).aggregate": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.q_aggregation",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).norm1": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.norm",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).q_proj": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.q_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).k_proj": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.k_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).v_proj": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.v_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).merge": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.o_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).mlp.(\d+)": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.fc{1 if m.group(2) == '0' else 2}",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).norm2": lambda m: f"model.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.layer_norm",
+    r"matcher.backbone.layer(\d+).rbr_dense.conv": r"efficientloftr.backbone.stages.\1.blocks.0.conv1.conv",
+    r"matcher.backbone.layer(\d+).rbr_dense.bn": r"efficientloftr.backbone.stages.\1.blocks.0.conv1.norm",
+    r"matcher.backbone.layer(\d+).rbr_1x1.conv": r"efficientloftr.backbone.stages.\1.blocks.0.conv2.conv",
+    r"matcher.backbone.layer(\d+).rbr_1x1.bn": r"efficientloftr.backbone.stages.\1.blocks.0.conv2.norm",
+    r"matcher.backbone.layer(\d+).(\d+).rbr_dense.conv": r"efficientloftr.backbone.stages.\1.blocks.\2.conv1.conv",
+    r"matcher.backbone.layer(\d+).(\d+).rbr_dense.bn": r"efficientloftr.backbone.stages.\1.blocks.\2.conv1.norm",
+    r"matcher.backbone.layer(\d+).(\d+).rbr_1x1.conv": r"efficientloftr.backbone.stages.\1.blocks.\2.conv2.conv",
+    r"matcher.backbone.layer(\d+).(\d+).rbr_1x1.bn": r"efficientloftr.backbone.stages.\1.blocks.\2.conv2.norm",
+    r"matcher.backbone.layer(\d+).(\d+).rbr_identity": r"efficientloftr.backbone.stages.\1.blocks.\2.identity",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).aggregate": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.q_aggregation",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).norm1": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.norm",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).q_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.q_proj",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).k_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.k_proj",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).v_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.v_proj",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).merge": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.o_proj",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).mlp.(\d+)": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.fc{1 if m.group(2) == '0' else 2}",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).norm2": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.layer_norm",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).aggregate": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.q_aggregation",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).norm1": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.norm",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).q_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.q_proj",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).k_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.k_proj",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).v_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.v_proj",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).merge": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.o_proj",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).mlp.(\d+)": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.fc{1 if m.group(2) == '0' else 2}",
+    r"matcher.loftr_coarse.layers.(\d*[13579]).norm2": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.layer_norm",
     r"matcher.fine_preprocess.layer3_outconv": "refinement_layer.out_conv",
     r"matcher.fine_preprocess.layer(\d+)_outconv.weight": lambda m: f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv1.weight",
     r"matcher.fine_preprocess.layer(\d+)_outconv2\.0": lambda m: f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv2",
@@ -199,7 +201,7 @@ def write_model(
 
 
 def write_image_processor(save_dir, model_name, organization, push_to_hub=False):
-    image_processor = SuperGlueImageProcessor()
+    image_processor = EfficientLoFTRImageProcessor()
     image_processor.save_pretrained(save_dir)
 
     if push_to_hub:

@@ -240,6 +240,13 @@ class DPTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class EfficientLoFTRImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class EfficientNetImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

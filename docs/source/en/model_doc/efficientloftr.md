@@ -95,6 +95,13 @@ The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 
 [[autodoc]] EfficientLoFTRConfig
 
+## EfficientLoFTRImageProcessor
+
+[[autodoc]] EfficientLoFTRImageProcessor
+
+- preprocess
+- post_process_keypoint_matching
+
 ## EfficientLoFTRModel
 
 [[autodoc]] EfficientLoFTRModel

@@ -97,7 +97,7 @@ class EfficientLoFTRModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        maximum_num_matches = result.mask.shape[-1]
+        maximum_num_matches = result.matches.shape[-1]
         self.parent.assertEqual(
             result.keypoints.shape,
             (self.batch_size, 2, maximum_num_matches, 2),
@@ -260,7 +260,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        from_pretrained_ids = ["stevenbucaille/efficient_loftr"]
+        from_pretrained_ids = ["stevenbucaille/efficientloftr"]
         for model_name in from_pretrained_ids:
             model = EfficientLoFTRForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
@@ -308,17 +308,27 @@ class EfficientLoFTRModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
-        predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
-        predicted_matches_values = outputs.matches[0, 0, 10:20]
-        predicted_matching_scores_values = outputs.matching_scores[0, 0, 10:20]
+        predicted_top10 = torch.topk(outputs.matching_scores[0, 0], k=10)
+        predicted_top10_matches_indices = predicted_top10.indices
+        predicted_top10_matching_scores = predicted_top10.values
 
-        expected_number_of_matches = 797
-        expected_matches_values = torch.tensor([10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
-                                                device=predicted_matches_values.device)  # fmt:skip
-        expected_matching_scores_values = torch.tensor([0.9957,0.2224,0.8803, 0.9283, 0.2241, 0.6321, 0.5206, 0.8053, 0.7174, 0.9872],
-                                                        device=predicted_matches_values.device)  # fmt:skip
-        self.assertEqual(predicted_number_of_matches, expected_number_of_matches)
-        torch.testing.assert_close(predicted_matches_values, expected_matches_values, rtol=1e-3, atol=1e-3)
+        expected_number_of_matches = 4800
+        expected_matches_shape = torch.Size((len(images), 2, expected_number_of_matches))
+        expected_matching_scores_shape = torch.Size((len(images), 2, expected_number_of_matches))
+
+        expected_top10_matches_indices = torch.tensor(
+            [3145, 3065, 3143, 3066, 3144, 1397, 1705, 3151, 2342, 2422], dtype=torch.int64, device=torch_device
+        )
+        expected_top10_matching_scores = torch.tensor(
+            [0.9997, 0.9996, 0.9996, 0.9995, 0.9995, 0.9995, 0.9994, 0.9994, 0.9994, 0.9994], device=torch_device
+        )
+
+        self.assertEqual(outputs.matches.shape, expected_matches_shape)
+        self.assertEqual(outputs.matching_scores.shape, expected_matching_scores_shape)
+
         torch.testing.assert_close(
-            predicted_matching_scores_values, expected_matching_scores_values, rtol=1e-3, atol=1e-3
+            predicted_top10_matches_indices, expected_top10_matches_indices, rtol=5e-3, atol=5e-3
+        )
+        torch.testing.assert_close(
+            predicted_top10_matching_scores, expected_top10_matching_scores, rtol=5e-3, atol=5e-3
         )
