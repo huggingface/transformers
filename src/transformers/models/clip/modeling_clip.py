@@ -15,7 +15,7 @@
 """PyTorch CLIP model."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -79,6 +79,33 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
     return normed_tensor
 
 
+def prepare_hidden_states_indices(
+    output_hidden_states: Union[bool, List[int]], num_hidden_layers: int
+) -> Dict[int, int]:
+    if not output_hidden_states:
+        return {}
+    elif output_hidden_states is True:
+        return dict(enumerate(range(num_hidden_layers + 1)))
+    elif isinstance(output_hidden_states, (list, tuple)):
+        if (
+            any(index > num_hidden_layers for index in output_hidden_states)
+            or any(num_hidden_layers + index + 1 < 0 if index < 0 else False for index in output_hidden_states)
+            or any(
+                num_hidden_layers + index + 1 > num_hidden_layers if index < 0 else False
+                for index in output_hidden_states
+            )
+        ):
+            raise ValueError("output_hidden_states index is out of range.")
+        return {
+            order_idx: num_hidden_layers + index + 1 if index < 0 else index
+            for order_idx, index in enumerate(output_hidden_states)
+        }
+    else:
+        raise ValueError(
+            f"Expected output_hidden_states to be `bool` or `list`/`tuple` of `int`, got {output_hidden_states=}"
+        )
+
+
 @dataclass
 class CLIPVisionModelOutput(ModelOutput):
     """
@@ -89,11 +116,15 @@ class CLIPVisionModelOutput(ModelOutput):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*,
+            returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`,
+            or when a list of selected indices e.g. `output_hidden_states=[-2]` is passed or when `config.output_hidden_states=[-2]`
+        ):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs, or
+            hidden-states of the model at the output of the selected layers.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -118,11 +149,15 @@ class CLIPTextModelOutput(ModelOutput):
             The text embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*,
+            returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`,
+            or when a list of selected indices e.g. `output_hidden_states=[-2]` is passed or when `config.output_hidden_states=[-2]`
+        ):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs, or
+            hidden-states of the model at the output of the selected layers.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -741,8 +776,10 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+        output_hidden_states (`Union[bool, List[int]]`, *optional*):
+            If `bool`, whether or not to return the hidden states of all layers.
+            If `List[int]`, the indices of layers to return.
+            See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
@@ -756,8 +793,10 @@ CLIP_VISION_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+        output_hidden_states (`Union[bool, List[int]]`, *optional*):
+            If `bool`, whether or not to return the hidden states of all layers.
+            If `List[int]`, the indices of layers to return.
+            See `hidden_states` under returned tensors for
             more detail.
         interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
             Whether to interpolate the pre-trained position encodings.
@@ -795,8 +834,10 @@ CLIP_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+        output_hidden_states (`Union[bool, List[int]]`, *optional*):
+            If `bool`, whether or not to return the hidden states of all layers.
+            If `List[int]`, the indices of layers to return.
+            See `hidden_states` under returned tensors for
             more detail.
         interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
             Whether to interpolate the pre-trained position encodings.
@@ -826,7 +867,7 @@ class CLIPEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
@@ -852,9 +893,11 @@ class CLIPEncoder(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
+            output_hidden_states (`Union[bool, List[int]]`, *optional*):
+                If `bool`, whether or not to return the hidden states of all layers.
+                If `List[int]`, the indices of layers to return.
+                See `hidden_states` under returned tensors for
+                more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
@@ -864,13 +907,17 @@ class CLIPEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_states = () if output_hidden_states else None
+        output_hidden_states_position_to_index = prepare_hidden_states_indices(
+            output_hidden_states, num_hidden_layers=self.config.num_hidden_layers
+        )
+
+        encoder_states = {}
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+            if idx in output_hidden_states_position_to_index.values():
+                encoder_states[idx] = hidden_states
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
@@ -892,9 +939,18 @@ class CLIPEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+        if self.config.num_hidden_layers in output_hidden_states_position_to_index.values():
+            encoder_states[self.config.num_hidden_layers] = hidden_states
 
+        # `None` when there are no `encoder_states` so it's not returned in `not return_dict` path.
+        encoder_states = (
+            tuple(
+                encoder_states[output_hidden_states_position_to_index[k]]
+                for k in output_hidden_states_position_to_index.keys()
+            )
+            if encoder_states
+            else None
+        )
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
@@ -925,7 +981,7 @@ class CLIPTextTransformer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1031,7 +1087,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1080,7 +1136,7 @@ class CLIPVisionTransformer(nn.Module):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
@@ -1146,7 +1202,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
@@ -1230,7 +1286,7 @@ class CLIPModel(CLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1275,7 +1331,7 @@ class CLIPModel(CLIPPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
@@ -1331,7 +1387,7 @@ class CLIPModel(CLIPPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPOutput]:
@@ -1454,7 +1510,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPTextModelOutput]:
         r"""
@@ -1530,7 +1586,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPVisionModelOutput]:
@@ -1618,7 +1674,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[Union[bool, List[int]]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
