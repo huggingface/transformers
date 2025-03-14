@@ -27,6 +27,8 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub import list_repo_tree
+from huggingface_hub.errors import EntryNotFoundError  # Should this be refactored into a util instead?
 
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
@@ -85,6 +87,8 @@ if sys.version_info >= (3, 11):
     Unpack = typing.Unpack
 else:
     Unpack = typing_extensions.Unpack
+
+LEGACY_CHAT_TEMPLATE_FILE = "chat_template.json"
 
 
 class TextKwargs(TypedDict, total=False):
@@ -748,6 +752,8 @@ class ProcessorMixin(PushToHubMixin):
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
 
+        additional_chat_template_files = {}
+        resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
             # cant't load chat-template when given a file as pretrained_model_name_or_path
@@ -761,9 +767,28 @@ class ProcessorMixin(PushToHubMixin):
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
         else:
+            if is_local:
+                template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                if template_dir.is_dir():
+                    for template_file in template_dir.glob("*.jinja"):
+                        template_name = template_file.name.removesuffix(".jinja")
+                        additional_chat_template_files[template_name] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+            else:
+                try:
+                    for template_file in list_repo_tree(
+                        pretrained_model_name_or_path,
+                        path_in_repo=CHAT_TEMPLATE_DIR,
+                        recursive=False,
+                        revision=revision,
+                    ):
+                        if not template_file.path.endswith(".jinja"):
+                            continue
+                        template_name = template_file.path.split("/")[-1].removesuffix(".jinja")
+                        additional_chat_template_files[template_name] = template_file.path
+                except EntryNotFoundError:
+                    pass  # No template dir means no template files
             processor_file = PROCESSOR_NAME
-            chat_template_file = "chat_template.json"
-            raw_chat_template_file = "chat_template.jinja"
+
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
@@ -786,7 +811,7 @@ class ProcessorMixin(PushToHubMixin):
                 # Processors in older version do not accept any kwargs
                 resolved_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    chat_template_file,
+                    LEGACY_CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -801,7 +826,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 resolved_raw_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    raw_chat_template_file,
+                    CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -813,6 +838,24 @@ class ProcessorMixin(PushToHubMixin):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                 )
+
+                resolved_additional_chat_template_files = {
+                    template_name: cached_file(
+                        pretrained_model_name_or_path,
+                        template_file,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
+                    for template_name, template_file in additional_chat_template_files.items()
+                }
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -829,13 +872,21 @@ class ProcessorMixin(PushToHubMixin):
         # Add chat template as kwarg before returning because most models don't have processor config
         if resolved_raw_chat_template_file is not None:
             with open(resolved_raw_chat_template_file, encoding="utf-8") as reader:
-                chat_template = reader.read()
-            kwargs["chat_template"] = chat_template
+                default_chat_template = reader.read()
         elif resolved_chat_template_file is not None:
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
                 text = reader.read()
-            chat_template = json.loads(text)["chat_template"]
-            kwargs["chat_template"] = chat_template
+            default_chat_template = json.loads(text)["chat_template"]
+        else:
+            default_chat_template = None
+        chat_templates = {
+            template_name: open(template_file, "r", encoding="utf-8").read()
+            for template_name, template_file in resolved_additional_chat_template_files.items()
+        }
+        if default_chat_template is not None:
+            chat_templates["default"] = default_chat_template
+
+        kwargs["chat_template"] = chat_templates
 
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
