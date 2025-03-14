@@ -1917,9 +1917,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for name, module in self.named_children():
                 if plan := getattr(module, "_tp_plan", None):
                     self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
-        for name, module in self.named_children():
-            if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
             for _, v in self._tp_plan.items():
