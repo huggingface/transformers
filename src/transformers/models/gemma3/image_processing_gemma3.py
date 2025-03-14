@@ -35,6 +35,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
+    make_flat_list_of_images,
     make_nested_list_of_images,
     to_numpy_array,
     valid_images,
@@ -358,7 +359,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(make_flat_list_of_images(images_list)[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -366,7 +367,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(make_flat_list_of_images(images_list)[0])
 
         if do_pan_and_scan:
             images_list_and_num_crops = [
