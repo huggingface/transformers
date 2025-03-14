@@ -321,6 +321,18 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_set_vocab_size_sets_language_model_config(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            new_vocab_size = config.get_text_config().vocab_size + 10
+            model.set_vocab_size(new_vocab_size)
+            self.assertEqual(model.language_model.config.get_text_config().vocab_size, new_vocab_size)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
