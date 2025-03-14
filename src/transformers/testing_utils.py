@@ -2518,6 +2518,11 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     """
     To decorate flaky tests. They will be retried on failures.
 
+    Please note that our push tests use `pytest-rerunfailures`, which prompts the CI to rerun certain types of
+    failed tests. More specifically, if the test exception contains any substring in `FLAKY_TEST_FAILURE_PATTERNS`
+    (in `.circleci/create_circleci_config.py`), it will be rerun. If you find a recurrent pattern of failures,
+    expand `FLAKY_TEST_FAILURE_PATTERNS` in our CI configuration instead of using `is_flaky`.
+
     Args:
         max_attempts (`int`, *optional*, defaults to 5):
             The maximum number of attempts to retry the flaky test.
