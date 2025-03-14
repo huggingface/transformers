@@ -111,8 +111,6 @@ class DeepseekV2Config(LlamaConfig):
             Rank of the LoRA decomposition for key-value projections.
         q_lora_rank (`int`, *optional*, defaults to 1536):
             Rank of the LoRA decomposition for query projections.
-        moe_layer_freq (`int`, *optional*, defaults to 1):
-            The frequency of inserting MoE layers within the Transformer architecture.
         n_group (`int`, *optional*):
             Number of groups for routed experts.
         n_routed_experts (`int`, *optional*):
@@ -141,8 +139,6 @@ class DeepseekV2Config(LlamaConfig):
             Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
-        ep_size (`int`, *optional*, defaults to 1):
-            The expert parallel size, which determines the number of expert shards used in distributed training.
 
     ```python
     >>> from transformers import DeepseekV2Model, DeepseekV2Config
@@ -174,7 +170,6 @@ class DeepseekV2Config(LlamaConfig):
         first_k_dense_replace=0,
         kv_lora_rank=512,
         q_lora_rank=1536,
-        moe_layer_freq=1,
         n_group=None,
         n_routed_experts=None,
         n_shared_experts=None,
@@ -189,7 +184,6 @@ class DeepseekV2Config(LlamaConfig):
         scoring_func="softmax",
         norm_topk_prob=False,
         moe_intermediate_size=1407,
-        ep_size=1,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
@@ -198,7 +192,6 @@ class DeepseekV2Config(LlamaConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
-        self.moe_layer_freq = moe_layer_freq
         self.n_group = n_group
         self.n_routed_experts = n_routed_experts
         self.n_shared_experts = n_shared_experts
@@ -213,7 +206,6 @@ class DeepseekV2Config(LlamaConfig):
         self.scoring_func = scoring_func
         self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
-        self.ep_size = ep_size
         self.head_dim = qk_rope_head_dim
 
 
@@ -423,7 +415,7 @@ class DeepseekV2Attention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-
+        self.head_dim = config.head_dim
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.q_lora_rank = config.q_lora_rank

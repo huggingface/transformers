@@ -393,7 +393,7 @@ class DeepseekV2Attention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-
+        self.head_dim = config.head_dim
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.q_lora_rank = config.q_lora_rank
