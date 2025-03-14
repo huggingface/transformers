@@ -23,6 +23,7 @@ from . import (
     aya_vision,
     bamba,
     bark,
+    style_text_to_speech_2,
     bart,
     barthez,
     bartpho,
