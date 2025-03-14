@@ -21,7 +21,6 @@ import gc
 import importlib
 import inspect
 import logging
-import math
 import multiprocessing
 import os
 import re
@@ -1443,9 +1442,15 @@ def get_tests_dir(append_path=None):
 
 
 def get_steps_per_epoch(trainer: Trainer) -> int:
+    training_args = trainer.args
     train_dataloader = trainer.get_train_dataloader()
-    batches_per_epoch = len(train_dataloader)
-    steps_per_epoch = math.ceil(batches_per_epoch / trainer.args.gradient_accumulation_steps)
+
+    initial_training_values = trainer.set_initial_training_values(
+        args=training_args,
+        dataloader=train_dataloader,
+        total_train_batch_size=training_args.per_device_train_batch_size,
+    )
+    steps_per_epoch = initial_training_values[1]
 
     return steps_per_epoch
 
