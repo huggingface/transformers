@@ -209,8 +209,8 @@ class CosmosCausalConv3d(nn.Module):
         hidden_states = torch.cat([hidden_states_prev, hidden_states], dim=2)
 
         hidden_states = F.pad(hidden_states, self.padding)
-        hidden_states_ = self.conv3d(hidden_states)
-        return hidden_states_
+        hidden_states = self.conv3d(hidden_states)
+        return hidden_states
 
 
 class CosmosVQVAETemporalNorm(nn.Module):
@@ -662,6 +662,7 @@ class CosmosVQVAEMiddleBlock(nn.Module):
 
     def forward(self, hidden_states: torch.FloatTensor):
         hidden_states = self.block_1(hidden_states)
+        torch.save(hidden_states, 'mid.pt')
         residual = hidden_states
         hidden_states = self.attn(hidden_states)
         hidden_states = residual + hidden_states
@@ -826,6 +827,7 @@ class CosmosVQVAEEncoder(nn.Module):
         hidden_states = self.norm_out(hidden_states)
         hidden_states *= torch.sigmoid(hidden_states)
         hidden_states = self.conv_out(hidden_states)
+        torch.save(hidden_states, "conv_out.pt")
         hidden_states = torch.load("/raid/raushan/Cosmos/conv_out.pt", weights_only=True)
 
         return hidden_states
@@ -984,64 +986,51 @@ class CosmosAbsolutePositionEmbedding(nn.Module):
         dim_spatial = hidden_size // 6 * 2
         dim_temporal = hidden_size - 2 * dim_spatial
         self.latent_shape = config.rope_latent_shape
-        T, H, W = self.latent_shape
-        self.pos_emb_h = self.get_1d_sincos_pos_embed_from_grid(dim_spatial, pos=H)
-        self.pos_emb_w = self.get_1d_sincos_pos_embed_from_grid(dim_spatial, pos=W)
-        self.pos_emb_t = self.get_1d_sincos_pos_embed_from_grid(dim_temporal, pos=T)
+        num_temporal_grid, num_height_grid, num_width_grid = self.latent_shape
+        self.pos_emb_h = self.get_1d_sincos_pos_embed_from_grid(dim_spatial, pos=num_height_grid)
+        self.pos_emb_w = self.get_1d_sincos_pos_embed_from_grid(dim_spatial, pos=num_width_grid)
+        self.pos_emb_t = self.get_1d_sincos_pos_embed_from_grid(dim_temporal, pos=num_temporal_grid)
 
-        emb = self._create_absolute_embeddings()
-        self.register_buffer("abs_emb", emb, persistent=False)
+        pos_embeddings = self._create_absolute_embeddings()
+        self.register_buffer("abs_pos_embeddings", pos_embeddings, persistent=False)
 
     @staticmethod
     def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-        """
-        embed_dim: output dimension for each position
-        pos: a list of positions to be encoded: size (M,)
-        out: (M, D)
-        """
-        assert embed_dim % 2 == 0
-        import numpy as np  # TODO; should be in torch
+        pos = torch.arange(pos, dtype=torch.float32)
+        omega = torch.arange(embed_dim // 2, dtype=torch.float32)
+        omega = 1.0 / (10000 ** (omega / (embed_dim / 2.0)))
 
-        pos = np.arange(pos)
-        omega = np.arange(embed_dim // 2, dtype=np.float64)
-        omega /= embed_dim / 2.0
-        omega = 1.0 / 10000**omega  # (D/2,)
-
-        pos = pos.reshape(-1)  # (M,)
-        out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
-
-        emb_sin = np.sin(out)  # (M, D/2)
-        emb_cos = np.cos(out)  # (M, D/2)
-
-        emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
-        emb = torch.tensor(emb, dtype=torch.bfloat16)
+        out = pos[:, None] * omega[None, :]
+        emb_sin = torch.sin(out)
+        emb_cos = torch.cos(out)
+        emb = torch.cat([emb_sin, emb_cos], dim=1)
         return emb
 
     def _create_absolute_embeddings(self, training_type=None) -> torch.Tensor:
-        T, H, W = self.latent_shape
-        emb = torch.cat(
+        num_temporal_grid, num_height_grid, num_width_grid = self.latent_shape
+        pos_embeddings = torch.cat(
             [
-                self.pos_emb_t[:, None, None, :].repeat(1, H, W, 1),
-                self.pos_emb_h[None, :, None, :].repeat(T, 1, W, 1),
-                self.pos_emb_w[None, None, :, :].repeat(T, H, 1, 1),
+                self.pos_emb_t[:, None, None, :].repeat(1, num_height_grid, num_width_grid, 1),
+                self.pos_emb_h[None, :, None, :].repeat(num_temporal_grid, 1, num_width_grid, 1),
+                self.pos_emb_w[None, None, :, :].repeat(num_temporal_grid, num_height_grid, 1, 1),
             ],
             dim=-1,
         )
 
-        # Flatten the T,H,W dimensions
-        emb = emb.flatten(0, 2)
-        bov_pe = torch.zeros((1, *emb.shape[1:]), device=emb.device, dtype=emb.dtype)
-        emb = torch.cat((bov_pe, emb), dim=0)
-
-        # Pad to multiple of 64
-        pad_len = 64 - emb.shape[0] % 64
-        emb = torch.cat((emb, torch.zeros((pad_len, *emb.shape[1:]), device=emb.device, dtype=emb.dtype)), dim=0)
-        seq_len, dim = emb.shape
-        emb = emb.reshape(1, seq_len, dim)
-        return emb
+        pos_embeddings = pos_embeddings.flatten(0, 2)
+        bov_embedding = torch.zeros(
+            (1, *pos_embeddings.shape[1:]), device=pos_embeddings.device, dtype=pos_embeddings.dtype
+        )
+        pos_embeddings = torch.cat((bov_embedding, pos_embeddings), dim=0)
+        return pos_embeddings.unsqueeze(0)
 
     def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor):
-        hidden_states = hidden_states + self.abs_emb[:, position_ids.squeeze(), :]
+        device_type = hidden_states.device.type
+        position_ids = position_ids.squeeze(0)
+        position_embeddings = self.abs_pos_embeddings[:, position_ids].to(dtype=hidden_states.dtype)
+        position_embeddings = position_embeddings.squeeze(0)
+        with torch.autocast(device_type=device_type, enabled=False):
+            hidden_states = hidden_states + position_embeddings
         return hidden_states
 
 
@@ -1054,18 +1043,14 @@ class CosmosTextRotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = self._compute_3d_rope_parameters
-        self.spatial_inv_freq, self.temporal_inv_freq = self.rope_init_fn(self.config, device)
-
-        emb = self._compute_emb()
-
-        self.register_buffer("cos_cached", torch.cos(emb), persistent=False)
-        self.register_buffer("sin_cached", torch.sin(emb), persistent=False)
+        spatial_inv_freq, temporal_inv_freq = self.rope_init_fn(self.config, device)
+        self.register_buffer("spatial_inv_freq", spatial_inv_freq, persistent=False)
+        self.register_buffer("temporal_inv_freq", temporal_inv_freq, persistent=False)
 
     @staticmethod
     def _compute_3d_rope_parameters(
         config: Optional[CosmosConfig] = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
     ) -> Tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original Cosmos RoPE implementation
@@ -1074,11 +1059,9 @@ class CosmosTextRotaryEmbedding(nn.Module):
                 The model configuration.
             device (`torch.device`):
                 The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+            Tuple of (`torch.Tensor`, `torch.Tensor`), containing the inverse frequencies for the RoPE embeddings for
+            spatial and temporal positions.
         """
         base = config.rope_theta
         latent_shape = getattr(config, "rope_latent_shape", None)
@@ -1096,42 +1079,36 @@ class CosmosTextRotaryEmbedding(nn.Module):
         spatial_inv_freq = 1.0 / (base**dim_spatial_range)
         dim_temporal_range = torch.arange(0, dim_temporal, 2)[: (dim_temporal // 2)].float().to(device) / dim_temporal
         temporal_inv_freq = 1.0 / (base**dim_temporal_range)
-        print(spatial_inv_freq.shape, temporal_inv_freq.shape)
         return spatial_inv_freq, temporal_inv_freq
-
-    def _compute_emb(self):
-        T, H, W = self.config.rope_latent_shape
-        seq = torch.arange(max(self.config.rope_latent_shape), dtype=torch.float)
-        half_emb_t = torch.outer(seq[:T], self.temporal_inv_freq)
-        half_emb_h = torch.outer(seq[:H], self.spatial_inv_freq)
-        half_emb_w = torch.outer(seq[:W], self.spatial_inv_freq)
-        emb = torch.cat(
-            [
-                half_emb_t[:, None, None, :].repeat(1, H, W, 1),
-                half_emb_h[None, :, None, :].repeat(T, 1, W, 1),
-                half_emb_w[None, None, :, :].repeat(T, H, 1, 1),
-            ]
-            * 2,
-            dim=-1,
-        )
-        emb = emb.view(1, 1, -1, emb.shape[-1]).float()
-        print(emb.shape)
-
-        if self.config.insert_cross_attn_layers:
-            # since we added <bov> token at the beginning of the video for text2world
-            # we also extend the position embedding by one token in the beginning
-            bov_pos_emb = torch.zeros((1, 1, 1, emb.shape[-1]), device=emb.device)
-            emb = torch.cat((bov_pos_emb, emb), dim=-2)
-        return emb
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        if x.dtype != self.cos_cached.dtype:
-            self.cos_cached = self.cos_cached.to(x.dtype)
-            self.sin_cached = self.sin_cached.to(x.dtype)
+        # Core RoPE block
+        # NOTE: Position ids are a 3D tensors of shape [bs, 3, seq_len] with different positions for THW grids
+        spatial_freq_expanded = self.spatial_inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        temporal_freq_expanded = self.temporal_inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_width = position_ids[:, 2:3, :].float()
+        position_height = position_ids[:, 1:2, :].float()
+        position_temporal = position_ids[:, 0:1, :].float()
 
-        cos = self.cos_cached[:, :, position_ids[0], :]
-        sin = self.sin_cached[:, :, position_ids[0], :]
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            width_freqs = (spatial_freq_expanded.float() @ position_width.float()).transpose(1, 2)
+            height_freqs = (spatial_freq_expanded.float() @ position_height.float()).transpose(1, 2)
+            temporal_freqs = (temporal_freq_expanded.float() @ position_temporal.float()).transpose(1, 2)
+            emb = torch.cat((temporal_freqs, height_freqs, width_freqs) * 2, dim=-1)
+
+            if self.config.is_video_to_world and emb.shape[1] != 1:
+                # since we added <bov> token at the beginning of the video for text2world
+                # we also extend the position embedding by one token in the beginning. Only in prefill stage,
+                # at decoding time we don't add more <bov> token
+                bov_pos_emb = torch.zeros((1, 1, emb.shape[-1]), device=emb.device)
+                emb = torch.cat((bov_pos_emb, emb), dim=-2)
+
+            cos = emb.cos()
+            sin = emb.sin()
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -1569,6 +1546,33 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    def _calculate_position_ids(self, seq_length: int, device: str = "cpu"):
+        """
+        Calculates positions ids for each grid separately for 3D RoPE. Given a sequence length,
+        the position ids will be calculated as follows:
+
+        For width grids, positions are constructed in vanilla way up to `num_width_grid`, after which
+        the counter startes from 0 again. As such with `num_width_grid=2` the width positions are `[0, 1, 0, 1, 0, 1, ...]`
+
+        For height grids, positions are constructed by keeping the same height position until the whole row of `num_width_grid`
+        is exhausted. After that height positions increases by `1`. For example with `num_width_grid=2`,
+        the height position ids will be `[0, 0, 1, 1, 2, 2, ..., `num_height_grid-1`]`
+
+        For temporal grids, positions are very much similar, but this time the counter is increased by `1` only when a new video frame
+        is reached. For example with `num_width_grid=2` and `num_height_grid=3`, the temporal position will be `[0, 0, 0, 0, 0, 0, 1, 1, ...]`.
+        In other words, the ids are updted every `num_width_grid * num_height_grid` positions.
+        """
+        num_temporal_grid, num_height_grid, num_width_grid = self.config.rope_latent_shape
+        one_frame_len = num_height_grid * num_width_grid
+        w_grids = math.ceil(seq_length / num_width_grid)
+        num_frames = math.ceil(seq_length / one_frame_len)
+        position_width = torch.tensor(list(range(64)) * w_grids)[:seq_length].unsqueeze(0)
+        position_height = torch.arange(w_grids).repeat_interleave(num_width_grid)[:seq_length].unsqueeze(0)
+        position_height = position_height % num_height_grid
+        position_temporal = torch.arange(num_frames).repeat_interleave(one_frame_len)[:seq_length].unsqueeze(0)
+        position_ids = torch.stack([position_temporal, position_height, position_width], dim=1).to(device)
+        return position_ids
+
     @add_start_docstrings_to_model_forward(COSMOS_TEXT_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1577,6 +1581,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1628,6 +1633,11 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if position_ids_rope is None:
+            seq_length_with_past = cache_position[-1]
+            position_ids_rope = self._calculate_position_ids(seq_length_with_past, device=cache_position.device)
+            position_ids_rope = position_ids_rope[..., -inputs_embeds.shape[1]:]
+
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
@@ -1643,8 +1653,11 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         if encoder_attention_mask is not None:
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
 
+        if encoder_hidden_states is not None:
+            encoder_hidden_states = encoder_hidden_states.to(inputs_embeds.dtype)
+
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids_rope)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1664,7 +1677,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
                     encoder_hidden_states,
                     causal_mask,
                     encoder_attention_mask,
-                    position_ids,
+                    position_ids_rope,
                     past_key_values,
                     output_attentions,
                     use_cache,
@@ -1677,7 +1690,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
                     encoder_hidden_states=encoder_hidden_states,
                     attention_mask=causal_mask,
                     cross_attention_mask=encoder_attention_mask,
-                    position_ids=position_ids,
+                    position_ids=position_ids_rope,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
@@ -1942,7 +1955,7 @@ class CosmosModel(CosmosPreTrainedModel):
         super().__init__(config)
         self.language_model = CosmosTextModel._from_config(config.text_config)
         self.vqmodel = CosmosVQVAE._from_config(config.vq_config)
-        if config.is_video_to_world:
+        if config.text_config.is_video_to_world:
             self.prompt_encoder = AutoModel.from_config(config.prompt_encoder).encoder
 
         # Initialize weights and apply final processing
@@ -1965,19 +1978,10 @@ class CosmosModel(CosmosPreTrainedModel):
         vq_tokens, _ = self.vqmodel.encode(pixel_values)
         vq_tokens = vq_tokens.flatten(1)  # (batch_size, seq_length)
         vq_tokens = vq_tokens[:, :-7680]  # remove pad tokens
-        if self.config.is_video_to_world:
+        if self.config.text_config.is_video_to_world:
             bov_tokens = [[self.config.get_text_config().bos_token_id] * vq_tokens.shape[0]]
             bov_tokens = torch.tensor(bov_tokens, device=vq_tokens.device, dtype=vq_tokens.dtype)
             vq_tokens = torch.cat([bov_tokens, vq_tokens], dim=-1)
-
-        # pad to multiple of 64
-        # if vq_tokens.shape[1] % 64 != 0:
-        #     max_length = ((vq_tokens.shape[1] // 64) * 64) + 64
-        #     pad_length = max_length - vq_tokens.shape[1]
-        #     pad_tokens = torch.ones(
-        #         vq_tokens.shape[0], pad_length, device=vq_tokens.device, dtype=vq_tokens.dtype
-        #     ) * 64002
-        #     vq_tokens = torch.cat([vq_tokens, pad_tokens], dim=-1)
 
         return vq_tokens
 
@@ -2004,6 +2008,7 @@ class CosmosModel(CosmosPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -2028,28 +2033,23 @@ class CosmosModel(CosmosPreTrainedModel):
         if pixel_values is not None:
             input_ids = self.get_image_tokens(pixel_values)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
         if encoder_hidden_states is None and encoder_input_ids is not None:
-            output = self.prompt_encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask)
+            output = self.prompt_encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask, output_hidden_states=True, output_attentions=True)
             encoder_hidden_states = output.last_hidden_state
-            encoder_hidden_states = encoder_hidden_states.to(inputs_embeds.dtype)
             if encoder_attention_mask is not None:
                 lengths = encoder_attention_mask.sum(dim=1)
                 for batch_id in range(encoder_hidden_states.shape[0]):
                     encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
-            torch.save(encoder_hidden_states, "encoder_hidden_states.pt")
-            torch.save(encoder_attention_mask, "encoder_attention_mask.pt")
-            encoder_hidden_states = torch.load("/raid/raushan/Cosmos/encoder_hidden_states.pt", weights_only=True)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
             input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             encoder_attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             position_ids=position_ids,
+            position_ids_rope=position_ids_rope,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -2090,6 +2090,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        position_ids_rope: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -2165,6 +2166,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             pixel_values=pixel_values,
             position_ids=position_ids,
+            position_ids_rope=position_ids_rope,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -2177,6 +2179,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        self.lm_head.weight.data = self.lm_head.weight.data.to(torch.bfloat16)
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
@@ -2199,6 +2202,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         )
         return output if return_dict else output.to_tuple()
 
+    @torch.no_grad()
     def generate(self, encoder_input_ids=None, pixel_values=None, **kwargs):
         # Generation from video input only, so we obtain video input ids and pass to generate
         input_ids = self.model.get_image_tokens(pixel_values)
@@ -2259,6 +2263,12 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             **kwargs,
         )
+
+        # Cosmos needs 3D positions constructed in custom way. DO NOT overwrite 1D positions, which are used in `AbsolutePosEmbLayer`
+        seq_length = cache_position[-1]
+        position_ids_rope = self.model.language_model._calculate_position_ids(seq_length, device=cache_position.device)
+        input_length = model_inputs["input_ids"].shape[1]
+        model_inputs["position_ids_rope"] = position_ids_rope[..., -input_length:]
 
         if cache_position[0] != 0:
             model_inputs["pixel_values"] = None

@@ -146,8 +146,8 @@ def convert_model(
     # Initialize Cosmos config
     orig_text_config = json.load(open(f"{llm_weights_path}/config.json", "r"))
 
-    config = {"is_video_to_world": "text_and_video" in orig_text_config["input_types"]}
     text_config = {
+        "is_video_to_world": "text_and_video" in orig_text_config["input_types"],
         "apply_abs_pos_emb": orig_text_config.get("apply_abs_pos_emb", False),
         "cross_attn_hidden_size": orig_text_config.get("context_dim", None),
         "vocab_size": orig_text_config["vocab_size"],

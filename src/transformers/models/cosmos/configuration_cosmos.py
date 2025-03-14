@@ -261,6 +261,7 @@ class CosmosTextConfig(PretrainedConfig):
         apply_abs_pos_emb: bool = False,
         cross_attn_hidden_size: int = 1024,
         insert_cross_attn_layers: List[int] = None,
+        is_video_to_world: bool = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -282,7 +283,7 @@ class CosmosTextConfig(PretrainedConfig):
         self.apply_abs_pos_emb = apply_abs_pos_emb
         self.cross_attn_hidden_size = cross_attn_hidden_size
         self.insert_cross_attn_layers = insert_cross_attn_layers or []
-        rope_config_validation(self)
+        self.is_video_to_world = is_video_to_world
 
         self.attention_dropout = attention_dropout
 
@@ -325,7 +326,6 @@ class CosmosConfig(PretrainedConfig):
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
         prompt_encoder: Union[Dict, AutoConfig] = None,
-        is_video_to_world: bool = False,
         image_token_id: int = 64000,
         **kwargs,
     ):
@@ -361,7 +361,6 @@ class CosmosConfig(PretrainedConfig):
         self.vq_config = vq_config
         self.text_config = text_config
         self.prompt_encoder = prompt_encoder
-        self.is_video_to_world = is_video_to_world
         self.image_token_id = image_token_id
 
         super().__init__(**kwargs)
