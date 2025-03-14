@@ -27,13 +27,28 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
     logging,
 )
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import (
+    CLIPMLP,
+    CLIPAttention,
+    CLIPEncoder,
+    CLIPEncoderLayer,
+    CLIPFlashAttention2,
+    CLIPSdpaAttention,
+    CLIPVisionEmbeddings,
+    CLIPVisionModel,
+    CLIPVisionTransformer,
+)
 from ..qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
     apply_rotary_pos_emb_vision,
 )
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -165,26 +180,10 @@ class MLCDRotaryEmbedding(VisionRotaryEmbedding):
         return rotary_pos_emb
 
 
-class MLCDVisionEmbeddings(nn.Module):
+class MLCDVisionEmbeddings(CLIPVisionEmbeddings):
     def __init__(self, config: MLCDVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches + 1
+        super().__init__(config)
+        del self.position_embedding
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -199,32 +198,13 @@ class MLCDVisionEmbeddings(nn.Module):
         return embeddings
 
 
-class MLCDAttention(nn.Module):
+class MLCDAttention(CLIPAttention):
     """Multi-headed attention with RoPE. Refer to papers:
     - Attention is all you need:
         https://arxiv.org/abs/1706.03762
     - RoFormer: Enhanced Transformer with Rotary Position Embedding:
         https://arxiv.org/abs/2104.09864
     """
-
-    def __init__(self, config: MLCDVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
         self,
@@ -234,8 +214,6 @@ class MLCDAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Seq x Hidden Size"""
-
         batch_size, seq_length, _ = hidden_states.size()
 
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
@@ -298,13 +276,103 @@ class MLCDAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MLCDSdpaAttention(MLCDAttention):
+class MLCDFlashAttention2(CLIPFlashAttention2):
     """
-    MLCD attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `MLCDAttention` as the weights of the module stays untouched. The only changes are on the forward pass to
-    adapt to SDPA API.
+    MLCDAttention flash attention module. This module inherits from `MLCDAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    is_causal = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        output_attentions = False
+
+        batch_size, seq_length, _ = hidden_states.size()
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos().unsqueeze(0).float()
+            sin = emb.sin().unsqueeze(0).float()
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        # Each of shape: [batch_size, num_heads, seq_length, head_dim]
+        query_states = query_states.permute(0, 2, 1, 3).contiguous()
+        key_states = key_states.permute(0, 2, 1, 3).contiguous()
+        value_states = value_states.permute(0, 2, 1, 3).contiguous()
+
+        dropout_rate = self.dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32.
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            seq_length,
+            dropout=dropout_rate,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.permute(2, 0, 1, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
+        attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
+        attn_output = self.out_proj(attn_output)
+        attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
+class MLCDSdpaAttention(CLIPSdpaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -367,14 +435,9 @@ class MLCDSdpaAttention(MLCDAttention):
         return attn_output, None
 
 
-class MLCDEncoderLayer(nn.Module):
+class MLCDEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MLCDVisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = MLCDSdpaAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MLCDMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        super().__init__(config)
 
     def forward(
         self,
@@ -426,19 +489,17 @@ class MLCDEncoderLayer(nn.Module):
         return outputs
 
 
-class MLCDEncoder(nn.Module):
+class MLCDEncoder(CLIPEncoder):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`MLCDEncoderLayer`].
+
     Args:
         config: MLCDVisionConfig
     """
 
     def __init__(self, config: MLCDVisionConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([MLCDEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+        super().__init__(config)
 
     def forward(
         self,
@@ -541,17 +602,9 @@ MLCD_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
-class MLCDVisionTransformer(nn.Module):
+class MLCDVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config: MLCDVisionConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = MLCDVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = MLCDEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
+        super().__init__(config)
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
@@ -563,10 +616,6 @@ class MLCDVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        twh = (1, pixel_values.size(3) // self.config.patch_size, pixel_values.size(2) // self.config.patch_size)
-        rotary_pos_emb = self.vision_rotary_embedding(torch.tensor([twh], device=pixel_values.device))
-        rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -575,6 +624,10 @@ class MLCDVisionTransformer(nn.Module):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
+
+        twh = (1, pixel_values.size(3) // self.config.patch_size, pixel_values.size(2) // self.config.patch_size)
+        rotary_pos_emb = self.vision_rotary_embedding(torch.tensor([twh], device=pixel_values.device))
+        rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
@@ -663,20 +716,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     "The bare MLCD vision encoder outputting raw hidden-states without any specific head on top.",
     MLCD_START_DOCSTRING,
 )
-class MLCDVisionModel(MLCDPreTrainedModel):
-    config_class = MLCDVisionConfig
-    main_input_name = "pixel_values"
-    _no_split_modules = ["MLCDEncoderLayer"]
-
-    def __init__(self, config: MLCDVisionConfig):
-        super().__init__(config)
-        self.vision_model = MLCDVisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
+class MLCDVisionModel(CLIPVisionModel):
     @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -686,7 +726,6 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
