@@ -63,16 +63,9 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
-        cls.image_token = processor.image_token
-        cls.fake_image_token = processor.fake_image_token
-        cls.global_img_token = processor.global_image_token
 
         cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
-        cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)
-        cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
-        cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
-        cls.image_seq_len = processor.image_seq_len
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
