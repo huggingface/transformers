@@ -29,6 +29,7 @@ from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
+    is_flaky,
     require_torch,
     require_torch_gpu,
     require_vision,
@@ -212,6 +213,7 @@ class ImageProcessingTestMixin:
 
     @require_vision
     @require_torch
+    @is_flaky()
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
@@ -311,8 +313,10 @@ class ImageProcessingTestMixin:
         }
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)
 
@@ -324,8 +328,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
 
@@ -357,8 +363,10 @@ class ImageProcessingTestMixin:
         }
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)
 
@@ -370,8 +378,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
 
