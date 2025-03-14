@@ -499,8 +499,9 @@ class EfficientLoFTRAggregationLayer(nn.Module):
 
         hidden_size = config.hidden_size
         aggregation_sizes = config.aggregation_sizes
-        self.q_aggregation = (
-            nn.Conv2d(
+
+        if aggregation_sizes[0] != 1:
+            self.q_aggregation = nn.Conv2d(
                 hidden_size,
                 hidden_size,
                 kernel_size=aggregation_sizes[0],
@@ -509,9 +510,8 @@ class EfficientLoFTRAggregationLayer(nn.Module):
                 bias=False,
                 groups=hidden_size,
             )
-            if aggregation_sizes[0] != 1
-            else nn.Identity()
-        )
+        else:
+            self.q_aggregation = nn.Identity()
 
         if aggregation_sizes[1] != 1:
             self.kv_aggregation = torch.nn.MaxPool2d(kernel_size=aggregation_sizes[1], stride=aggregation_sizes[1])
