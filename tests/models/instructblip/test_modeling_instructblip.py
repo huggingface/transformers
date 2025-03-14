@@ -791,18 +791,18 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             num_beams=5,
             max_length=256,
             min_length=1,
-            repetition_penalty=2.5,
+            repetition_penalty=1.5,
             length_penalty=1.0,
             temperature=1,
         )
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
-        expected_outputs = [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 216, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 34, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 1066, 145, 338, 3, 9, 50, 1106, 3522, 144, 42, 2192, 7919, 31, 7, 5, 1]  # fmt: skip
+        expected_outputs = [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 34, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 1066, 145, 338, 3, 9, 50, 1106, 3522, 144, 42, 2192, 7919, 31, 7, 5, 37, 1023, 92, 1267, 3, 9, 381, 13, 119, 3203, 16, 8, 2458, 6, 379, 14264, 6, 9256, 7, 6, 11, 11718, 7, 5, 1]  # fmt: skip
 
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. He is wearing a yellow shirt with an ironing board attached to it, suggesting that he is doing his own laundry at home rather than using a laundromat or dry cleaner's.",
+            "The unusual image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to it, suggesting that he is doing his own laundry at home rather than using a laundromat or dry cleaner's. The image also shows a number of other vehicles in the background, including buses, taxis, and motorcycles.",
         )
 
     def test_inference_interpolate_pos_encoding(self):
