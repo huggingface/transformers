@@ -26,6 +26,8 @@ import torch.distributed as dist
 from torch import nn
 from torch.nn import functional as F
 
+from transformers.generation.candidate_generator import AssistantVocabTranslatorCache
+
 from ..cache_utils import (
     Cache,
     DynamicCache,
@@ -56,6 +58,7 @@ from .candidate_generator import (
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
+    UniversalSpeculativeDecodingGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
@@ -858,16 +861,36 @@ class GenerationMixin:
                 max_length=generation_config.max_length,
             )
         elif different_tokenizers:
-            candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                generation_config=generation_config,
-                model_kwargs=model_kwargs,
-                inputs_tensor=inputs_tensor,
-                logits_processor=logits_processor,
-                target_tokenizer=target_tokenizer,
-                assistant_tokenizer=assistant_tokenizer,
-            )
+            if generation_config.do_sample is True:
+                atm_translator = AssistantVocabTranslatorCache.get_translator(
+                    target_tokenizer, assistant_tokenizer, self.config.vocab_size, assistant_model.device
+                )
+                candidate_generator = UniversalSpeculativeDecodingGenerator(
+                    input_ids=input_ids,
+                    assistant_model=assistant_model,
+                    generation_config=generation_config,
+                    model_kwargs=model_kwargs,
+                    inputs_tensor=inputs_tensor,
+                    logits_processor=logits_processor,
+                    target_tokenizer=target_tokenizer,
+                    assistant_tokenizer=assistant_tokenizer,
+                    atm_translator=atm_translator,
+                )
+            elif generation_config.do_sample is False:
+                candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
+                    input_ids=input_ids,
+                    assistant_model=assistant_model,
+                    generation_config=generation_config,
+                    model_kwargs=model_kwargs,
+                    inputs_tensor=inputs_tensor,
+                    logits_processor=logits_processor,
+                    target_tokenizer=target_tokenizer,
+                    assistant_tokenizer=assistant_tokenizer,
+                )
+            else:
+                raise ValueError(
+                    f"Invalid value for `do_sample`: expected a boolean, got {type(generation_config.do_sample).__name__}"
+                )
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,
@@ -1595,6 +1618,40 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
+    def _get_layer_device_map_for_cache_init(self):
+        """
+        Taken from `dispatch_model` from accelerate.
+        This is needed here if we don't want to make changes in accelerate in order to save execution_device
+        For offloaded case, we need to get the execution device, not just the device where it is offloaded
+        """
+        execution_device_map = None
+
+        if hasattr(self, "hf_device_map"):
+            if set(self.hf_device_map.values()) == {"cpu"} or set(self.hf_device_map.values()) == {"cpu", "disk"}:
+                main_device = "cpu"
+            else:
+                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
+            execution_device_map = {
+                name: main_device if device in ["cpu", "disk"] else device
+                for name, device in self.hf_device_map.items()
+            }
+
+        num_hidden_layers = self.config.get_text_config().num_hidden_layers
+        if execution_device_map is None:
+            return None
+        elif len(execution_device_map) == 1 and "" in execution_device_map:
+            return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
+        layer_device_map = {}
+        for layer in execution_device_map:
+            for idx in range(num_hidden_layers):
+                if f".{idx}." in f"{layer}.":
+                    layer_device_map[idx] = execution_device_map[layer]
+                    break
+        for idx in range(num_hidden_layers):
+            if idx not in layer_device_map:
+                raise RuntimeError(f"layer {idx} has not been mapped to a device.")
+        return layer_device_map
+
     def _get_cache(
         self, cache_implementation: str, batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
     ) -> Cache:
@@ -1641,12 +1698,14 @@ class GenerationMixin:
                     # models. May cause trobles with non-text modalities.
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
+            layer_device_map = self._get_layer_device_map_for_cache_init()
             cache_kwargs = {
                 "config": self.config.get_text_config(),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
                 "dtype": cache_dtype,
-                "device": device if cache_implementation == "offloaded_static" else None,
+                "device": device,
+                "layer_device_map": layer_device_map,
             }
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
@@ -4225,7 +4284,6 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
-
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)

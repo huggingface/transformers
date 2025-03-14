@@ -5,11 +5,8 @@ docs/source/en/add_new_pipeline.md
 docs/source/en/agents.md
 docs/source/en/agents.md
 docs/source/en/attention.md
-docs/source/en/bertology.md
-docs/source/en/big_models.md
 docs/source/en/community.md
 docs/source/en/contributing.md
-docs/source/en/create_a_model.md
 docs/source/en/custom_models.md
 docs/source/en/debugging.md
 docs/source/en/fast_tokenizers.md
@@ -273,7 +270,6 @@ docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
 docs/source/en/model_summary.md
-docs/source/en/multilingual.md
 docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
 docs/source/en/peft.md
@@ -287,14 +283,11 @@ docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
 docs/source/en/perf_train_tpu_tf.md
-docs/source/en/performance.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
 docs/source/en/pr_checks.md
-docs/source/en/preprocessing.md
 docs/source/en/run_scripts.md
-docs/source/en/sagemaker.md
 docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md

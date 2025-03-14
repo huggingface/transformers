@@ -149,7 +149,6 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
-_quanto_available = _is_package_available("quanto")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -203,6 +202,7 @@ _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
 _triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
+_rich_available = _is_package_available("rich")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -542,6 +542,12 @@ def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
 
+    if is_torch_hpu_available():
+        if is_habana_gaudi1():
+            return False
+        else:
+            return True
+
     import torch
 
     try:
@@ -572,6 +578,9 @@ def is_torch_bf16_available_on_device(device):
 
     if device == "cuda":
         return is_torch_bf16_gpu_available()
+
+    if device == "hpu":
+        return True
 
     try:
         x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
@@ -773,6 +782,61 @@ def is_torch_musa_available(check_device=False):
     return hasattr(torch, "musa") and torch.musa.is_available()
 
 
+@lru_cache
+def is_torch_hpu_available():
+    "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
+    if (
+        not _torch_available
+        or importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
+        return False
+
+    torch_hpu_min_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+        return False
+
+    import torch
+
+    if not hasattr(torch, "hpu") or not torch.hpu.is_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
+    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
+    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
+    # dl1.24xlarge Gaudi1 instances on AWS for testing.
+    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
+    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+        original_masked_fill_ = torch.Tensor.masked_fill_
+
+        def patched_masked_fill_(self, mask, value):
+            if self.dtype == torch.int64:
+                logger.warning(
+                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
+                    "This operation will be performed out-of-place using tensor[mask] = value."
+                )
+                self[mask] = value
+            else:
+                original_masked_fill_(self, mask, value)
+
+        torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    return True
+
+
+@lru_cache
+def is_habana_gaudi1():
+    if not is_torch_hpu_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
+    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
@@ -896,17 +960,19 @@ def is_ipex_available(min_version: str = ""):
 @lru_cache
 def is_torch_xpu_available(check_device=False):
     """
-    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
-    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
+    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
+    if a XPU is in the environment.
     """
     if not is_torch_available():
         return False
 
     torch_version = version.parse(_torch_version)
-    if is_ipex_available():
-        import intel_extension_for_pytorch  # noqa: F401
-    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
-        return False
+    if torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 6):
+        if is_ipex_available():
+            import intel_extension_for_pytorch  # noqa: F401
+        elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+            return False
 
     import torch
 
@@ -956,6 +1022,11 @@ def is_flash_attn_2_available():
     import torch
 
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
+        return False
+
+    # Ascend does not support "flash_attn".
+    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
+    if is_torch_npu_available():
         return False
 
     if torch.version.cuda:
@@ -1298,6 +1369,10 @@ def is_liger_kernel_available():
 
 def is_triton_available():
     return _triton_available
+
+
+def is_rich_available():
+    return _rich_available
 
 
 # docstyle-ignore
@@ -1659,6 +1734,11 @@ JINJA_IMPORT_ERROR = """
 jinja2`. Please note that you may need to restart your runtime after installation.
 """
 
+RICH_IMPORT_ERROR = """
+{0} requires the rich library but it was not found in your environment. You can install it with pip: `pip install
+rich`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("av", (is_av_available, AV_IMPORT_ERROR)),
@@ -1705,6 +1785,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
+        ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
     ]
 )
 

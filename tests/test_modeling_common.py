@@ -74,6 +74,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    hub_retry,
     is_flaky,
     require_accelerate,
     require_bitsandbytes,
@@ -213,6 +214,16 @@ class ModelTesterMixin:
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    # Note: for all mixins that utilize the Hub in some way, we should ensure that
+    # they contain the `hub_retry` decorator in case of failures.
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for attr_name in dir(cls):
+            if attr_name.startswith("test_"):
+                attr = getattr(cls, attr_name)
+                if callable(attr):
+                    setattr(cls, attr_name, hub_retry()(attr))
 
     @property
     def all_generative_model_classes(self):
@@ -1479,7 +1490,7 @@ class ModelTesterMixin:
             if model.config.is_encoder_decoder:
                 signature = inspect.signature(model.forward)
                 arg_names = [*signature.parameters.keys()]
-                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                if "decoder_head_mask" in arg_names:  # necessary differentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
                 if "cross_attn_head_mask" in arg_names:
                     inputs["cross_attn_head_mask"] = head_mask
@@ -1841,7 +1852,7 @@ class ModelTesterMixin:
                 cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the position embeddings with a larger max_position_embeddings increases
-            # the model's postion embeddings size
+            # the model's position embeddings size
             model.resize_position_embeddings(max_position_embeddings + 10)
             self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
 
@@ -2357,10 +2368,9 @@ class ModelTesterMixin:
                 safe_save_file(placeholder_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
-                prefix = f"{model_reloaded.base_model_prefix}."
                 params = dict(model_reloaded.named_parameters())
                 params.update(dict(model_reloaded.named_buffers()))
-                param_names = {k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys()}
+                param_names = set(params.keys())
 
                 missing_keys = set(infos["missing_keys"])
 
@@ -2372,9 +2382,8 @@ class ModelTesterMixin:
                     ptrs[id_tensor_storage(tensor)].append(name)
                 tied_params = [names for _, names in ptrs.items() if len(names) > 1]
                 for group in tied_params:
-                    group = {k[len(prefix) :] if k.startswith(prefix) else k for k in group}
                     # We remove the group from extra_missing if not all weights from group are in it
-                    if len(group - extra_missing) > 0:
+                    if len(set(group) - extra_missing) > 0:
                         extra_missing = extra_missing - set(group)
 
                 self.assertEqual(
@@ -2388,15 +2397,14 @@ class ModelTesterMixin:
                 # Remove nonpersistent buffers from missed_missing
                 buffers = [n for n, _ in model_reloaded.named_buffers()]
                 nonpersistent_buffers = {n for n in buffers if n not in model_reloaded.state_dict()}
-                nonpersistent_buffers = {
-                    k[len(prefix) :] if k.startswith(prefix) else k for k in nonpersistent_buffers
-                }
                 missed_missing = missed_missing - nonpersistent_buffers
 
                 if model_reloaded._keys_to_ignore_on_load_missing is None:
                     expected_missing = set()
                 else:
-                    expected_missing = set(model_reloaded._keys_to_ignore_on_load_missing)
+                    expected_missing = set()
+                    for pattern in model_reloaded._keys_to_ignore_on_load_missing:
+                        expected_missing.update({k for k in param_names if re.search(pattern, k) is not None})
                 self.assertEqual(
                     missed_missing,
                     expected_missing,
@@ -2759,7 +2767,7 @@ class ModelTesterMixin:
             elif param_device in ["mps"]:
                 self.assertEqual(param.device, torch.device("mps"))
             else:
-                # when loaded with device_map, `param_device` are integer values for cuda/xpu/npu/mlu
+                # when loaded with device_map, `param_device` are integer values for cuda/xpu/hpu/npu/mlu
                 self.assertEqual(param.device, torch.device(f"{torch_device}:{param_device}"))
 
     @require_accelerate
@@ -3987,7 +3995,7 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not self._is_composite:
-                self.skipTest("This model is not a composte model!")
+                self.skipTest("This model is not a composite model!")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -4400,9 +4408,9 @@ class ModelTesterMixin:
                     exported_outputs = exported_model.module().forward(**inputs_dict)
 
                 # Check if outputs are close:
-                # is_tested is a boolean flag idicating if we comapre any outputs,
+                # is_tested is a boolean flag indicating if we compare any outputs,
                 # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
-                # In case of outputs are different the error will be rasied in `recursively_check` function.
+                # In case of outputs are different the error will be raised in `recursively_check` function.
                 is_tested = recursively_check(eager_outputs, exported_outputs)
                 self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
 
