@@ -1872,6 +1872,11 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    def set_vocab_size(self, new_vocab_size: int):
+        super().set_vocab_size(new_vocab_size)
+        self.text_config.vocab_size = new_vocab_size
+        self.vocab_size = new_vocab_size
+
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -2011,6 +2016,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def set_vocab_size(self, new_vocab_size: int):
+        return self.language_model.set_vocab_size(new_vocab_size)
+
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
@@ -2135,9 +2143,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         if cross_attention_mask is not None and cache_position is not None:
             cross_attention_mask = cross_attention_mask[:, :, cache_position]
             full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
-
-        # if the vocab size was updated, it should propagate down to the language model
-        self.language_model.config.vocab_size = self.config.get_text_config().vocab_size
 
         outputs = self.language_model(
             input_ids=input_ids,
