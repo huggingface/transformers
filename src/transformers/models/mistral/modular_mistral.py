@@ -81,6 +81,12 @@ class MistralAttention(LlamaAttention):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        if self.config._attn_implementation == "flash_attention_2" and attention_mask.dim() == 4:
+            # for static cache, the attention mask is 4D, but flash_attention_2 expects 2D, so we recover the 2D mask
+            min_dtype = torch.finfo(query_states.dtype).min
+            query_length = attention_mask.size(2)
+            attention_mask = (attention_mask != min_dtype).int()[:, 0, query_length - 1, :query_length]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
