@@ -347,10 +347,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="RecurrentGemma only supports sdpa")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip(reason="RecurrentGemma does not return the cache")
     def test_contrastive_generate_low_memory(self):
         pass
