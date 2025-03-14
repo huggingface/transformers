@@ -1,11 +1,12 @@
 import importlib
 import os
-import sys
-import pytest
 import subprocess
+import sys
 
-from transformers.utils.import_utils import _LazyModule, clear_import_cache
+import pytest
+
 import transformers.utils.logging
+from transformers.utils.import_utils import _LazyModule
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -13,36 +14,36 @@ def isolate_module_cache():
     """Fixture to save and restore the module cache state before and after each test."""
     # Save initial state
     initial_modules = dict(sys.modules)
-    
+
     # Save logging state
     initial_verbosity = transformers.utils.logging.get_verbosity()
     initial_env_vars = {}
     for env_var in ["TRANSFORMERS_VERBOSITY"]:
         if env_var in os.environ:
             initial_env_vars[env_var] = os.environ[env_var]
-    
+
     yield
-    
+
     # Restore initial state after test
     current_modules = set(sys.modules.keys())
     added_modules = current_modules - set(initial_modules.keys())
-    
+
     # Remove any modules that were added during the test
     for name in added_modules:
         if name in sys.modules:
             del sys.modules[name]
-    
+
     # Restore original modules
     for name, module in initial_modules.items():
         sys.modules[name] = module
         if isinstance(module, _LazyModule):
             # Re-initialize lazy module cache
             importlib.reload(module)
-    
+
     # Restore logging state
     transformers.utils.logging.set_verbosity(initial_verbosity)
     transformers.utils.logging._reset_library_root_logger()
-    
+
     # Restore environment variables
     for env_var in ["TRANSFORMERS_VERBOSITY"]:
         if env_var in initial_env_vars:
@@ -91,10 +92,11 @@ sys.exit(0 if result else 1)
 """
     # Create a temporary script file
     import tempfile
-    with tempfile.NamedTemporaryFile(suffix='.py', delete=False) as f:
-        f.write(test_script.encode('utf-8'))
+
+    with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as f:
+        f.write(test_script.encode("utf-8"))
         temp_script = f.name
-    
+
     try:
         # Run the script in a subprocess
         result = subprocess.run([sys.executable, temp_script], capture_output=True, text=True)
@@ -111,4 +113,3 @@ sys.exit(0 if result else 1)
 def test_clear_import_cache():
     """Wrapper that runs the actual test in a subprocess."""
     assert run_in_subprocess("test_clear_import_cache_impl")
-            
