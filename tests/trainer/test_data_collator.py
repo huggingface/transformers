@@ -127,7 +127,6 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, torch.Size([2, 8]))
 
     def test_data_collator_with_flattening(self):
-        tokenizer = BertTokenizer(self.vocab_file)
         features = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
 
         data_collator = DataCollatorWithFlattening(return_tensors="pt")
