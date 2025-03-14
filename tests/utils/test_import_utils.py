@@ -1,11 +1,11 @@
-import importlib
 import os
 import sys
 
 import pytest
 
 from transformers.testing_utils import run_test_using_subprocess
-from transformers.utils.import_utils import _LazyModule
+from transformers.utils.import_utils import clear_import_cache
+
 
 
 @pytest.mark.skipif(
@@ -16,10 +16,8 @@ from transformers.utils.import_utils import _LazyModule
 def test_clear_import_cache():
     """Test the clear_import_cache function."""
     # Import the function to test
-    from transformers.utils.import_utils import clear_import_cache
 
     # First, ensure we have some transformers modules loaded
-    import transformers.models.auto.modeling_auto
 
     # Save initial state
     initial_modules = {name: mod for name, mod in sys.modules.items() if name.startswith("transformers.")}
