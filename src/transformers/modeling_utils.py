@@ -4409,7 +4409,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Find fp32 modules if needed
         keep_in_fp32_regex = None
-        keep_in_fp32_modules = None
         # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
         # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
         # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
@@ -4419,12 +4418,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Only the path with `low_cpu_mem_usage` will check every param for the correct dtype
             low_cpu_mem_usage = True
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
-            keep_in_fp32_modules = model._keep_in_fp32_modules
-            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
+            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules]))
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
+                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules
             )
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
