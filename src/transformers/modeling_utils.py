@@ -846,7 +846,8 @@ def _load_state_dict_into_meta_model(
                 if "dtype" in list(inspect.signature(set_module_tensor_to_device).parameters):
                     set_module_kwargs["dtype"] = torch.float32
             else:
-                param = param.to(dtype)
+                pass
+                # param = param.to(dtype)
 
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
@@ -903,6 +904,8 @@ def _load_state_dict_into_meta_model(
 
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
+            if "model.prompt_encoder.block.0.layer.0.SelfAttention.q.weight" == param_name:
+                print(param_name, set_module_kwargs['value'].dtype, model.state_dict()[param_name].dtype)
         else:
             hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
             # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
