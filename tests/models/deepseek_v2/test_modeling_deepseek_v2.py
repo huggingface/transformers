@@ -16,21 +16,17 @@
 
 import unittest
 
-from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DeepseekV2Config, is_torch_available, set_seed
+from transformers import DeepseekV2Config, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
-    require_torch_accelerator,
-    slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -359,24 +355,6 @@ class DeepseekV2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # we skip lambda and gate.weight parameters as these require special initial values
-                # determined by config
-                if "lambda" in name or "gate.weight" in name:
-                    continue
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
