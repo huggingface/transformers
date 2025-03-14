@@ -4413,7 +4413,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
-            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules]))
+            keep_in_fp32_regex = re.compile(
+                "|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules])
+            )
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
@@ -4428,9 +4430,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(
-                model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex
-            )
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
 
         # Finalize model weight initialization
         if from_tf:
