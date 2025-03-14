@@ -85,13 +85,13 @@ class Gemma3Processor(ProcessorMixin):
     ) -> BatchFeature:
         if text is None and images is None:
             raise ValueError("Provide at least one of `text` or `images`.")
-        
+
         output_kwargs = self._merge_kwargs(
             Gemma3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        
+
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
