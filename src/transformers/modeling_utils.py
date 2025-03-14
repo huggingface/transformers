@@ -4882,9 +4882,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     model_to_load.load_state_dict(state_dict, strict=False, assign=assign_params)
 
+            del state_dict
             # force memory release if loading multiple shards
             if has_multiple_shards:
-                del state_dict
                 gc.collect()
 
         # Adjust offloaded weights name and save if needed
