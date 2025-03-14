@@ -62,6 +62,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForMaskedLM.from_pretrained(
     "google-bert/bert-base-uncased",
     torch_dtype=torch.float16,
+    device_map="auto",
     attn_implementation="sdpa"
 )
 inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to("cuda")

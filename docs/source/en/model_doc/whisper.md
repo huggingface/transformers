@@ -28,12 +28,12 @@ rendered properly in your Markdown viewer.
 
 # Whisper
 
-[Whisper](https://hf.co/papers/2212.04356) is a encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. The magnitude of data the model is pretrained on enables zero-shot performance on audio tasks in English and many other languages. The addition of the decoder allows Whisper to take the speech representations learned by the encoder and map them to useful outputs, such as text, without additional fine-tuning for tasks like speech recognition. Whisper just works out of the box.
+[Whisper](https://hf.co/papers/2212.04356) is a encoder-decoder (sequence-to-sequence) transformer pretrained on 680,000 hours of labeled audio data. This amount of pretraining data enables zero-shot performance on audio tasks in English and many other languages. The addition of the decoder allows Whisper to map the encoders learned speech representations to useful outputs, such as text, without any more fine-tuning. Whisper just works out of the box.
 
 > [!TIP]
 > Click on the Whisper models in the right sidebar for more examples of how to apply Whisper to different audio tasks.
 
-The example below demonstrates how to use Whisper for automatic speech recognition with the high-level [`Pipeline`] or the [`AutoModel`] class. You can find all the original Whisper checkpoints under the [Whisper release](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
+The example below demonstrates how to use Whisper for automatic speech recognition with [`Pipeline`] or the [`AutoModel`] class. You can find all the original Whisper checkpoints under the [Whisper release](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -65,6 +65,7 @@ processor = AutoProcessor.from_pretrained(
 model = WhisperForConditionalGeneration.from_pretrained(
     "openai/whisper-large-v3-turbo",
     torch_dtype=torch.float16,
+    device_map="auto",
     attn_implementation="sdpa"
 ).to("cuda")
 
