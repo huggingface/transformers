@@ -597,24 +597,19 @@ class CacheIntegrationTest(unittest.TestCase):
         }
         original = GenerationConfig(**common)
         offloaded = GenerationConfig(cache_implementation="offloaded", **common)
+
+        torch_accelerator_module = None
         if device.type == "cuda":
-            torch.cuda.reset_peak_memory_stats(device)
+            torch_accelerator_module = torch.cuda
         elif device.type == "xpu":
-            torch.xpu.reset_peak_memory_stats(device)
+            torch_accelerator_module = torch.xpu
+
+        torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=original, **inputs)
-        original_peak_memory = 0
-        if device.type == "cuda":
-            original_peak_memory = torch.cuda.max_memory_allocated(device)
-            torch.cuda.reset_peak_memory_stats(device)
-        elif device.type == "xpu":
-            original_peak_memory = torch.xpu.max_memory_allocated(device)
-            torch.xpu.reset_peak_memory_stats(device)
+        original_peak_memory = torch_accelerator_module.max_memory_allocated(device)
+        torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=offloaded, **inputs)
-        offloaded_peak_memory = 0
-        if device.type == "cuda":
-            offloaded_peak_memory = torch.cuda.max_memory_allocated(device)
-        elif device.type == "xpu":
-            offloaded_peak_memory = torch.xpu.max_memory_allocated(device)
+        offloaded_peak_memory = torch_accelerator_module.max_memory_allocated(device)
         print(f"original_peak_memory: {original_peak_memory}, offloaded_peak_memory: {offloaded_peak_memory}")
         assert offloaded_peak_memory < original_peak_memory
 

@@ -550,19 +550,16 @@ class OffloadedCache(DynamicCache):
     """
 
     def __init__(self) -> None:
-        if is_torch_greater_or_equal_than_2_7:
-            if not torch.cuda.is_available() and not torch.xpu.is_available():
-                raise RuntimeError("OffloadedCache can only be used with a GPU or XPU")
-        else:
-            if not torch.cuda.is_available():
-                raise RuntimeError("OffloadedCache can only be used with a GPU")
+        if not (torch.cuda.is_available() or (is_torch_greater_or_equal_than_2_7 and torch.xpu.is_available())):
+            raise RuntimeError(
+                "OffloadedCache can only be used with a GPU"
+                + (" or XPU" if is_torch_greater_or_equal_than_2_7 else "")
+            )
+
         super().__init__()
         self.original_device = []
         self.prefetch_stream = None
-        if is_torch_greater_or_equal_than_2_7:
-            self.prefetch_stream = torch.Stream()
-        else:
-            self.prefetch_stream = torch.cuda.Stream()
+        self.prefetch_stream = torch.Stream() if is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
         self.beam_idx = None  # used to delay beam search operations
 
     def prefetch_layer(self, layer_idx: int):
