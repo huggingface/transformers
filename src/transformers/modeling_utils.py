@@ -4418,7 +4418,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Only the path with `low_cpu_mem_usage` will check every param for the correct dtype
             low_cpu_mem_usage = True
             # We need to match exact layers, so we add either `.` on each side, or start/end of string
-            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules]))
+            keep_in_fp32_regex = re.compile(
+                "|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules])
+            )
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
