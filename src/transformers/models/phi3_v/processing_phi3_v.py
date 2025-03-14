@@ -50,7 +50,7 @@ class Phi3VProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
     image_processor_class = "Phi3VImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = "LlamaTokenizerFast"
     special_image_token = "<|image|>"
 
     def __init__(self, image_processor, tokenizer, chat_template: str = None, **kwargs):
@@ -68,6 +68,7 @@ class Phi3VProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        add_special_tokens: bool = True,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -125,6 +126,7 @@ class Phi3VProcessor(ProcessorMixin):
             truncation=truncation,
             max_length=max_length,
             return_tensors=return_tensors,
+            add_special_tokens=add_special_tokens,
         )
         return inputs
 
@@ -155,11 +157,23 @@ class Phi3VProcessor(ProcessorMixin):
         return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
 
     def _convert_images_texts_to_inputs(
-        self, images, texts, padding=False, truncation=None, max_length=None, return_tensors=None
+        self,
+        images,
+        texts,
+        padding=False,
+        truncation=None,
+        max_length=None,
+        return_tensors=None,
+        add_special_tokens=True,
     ):
         if not len(images):
             model_inputs = self.tokenizer(
-                texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+                texts,
+                return_tensors=return_tensors,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                add_special_tokens=add_special_tokens,
             )
             return BatchFeature(data={**model_inputs})
 
