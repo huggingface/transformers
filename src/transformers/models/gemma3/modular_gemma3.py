@@ -57,7 +57,7 @@ _CONFIG_FOR_DOC = "Gemma3Config"
 
 logger = logging.get_logger(__name__)
 
-GEMMA3_INPUTS_DOCSTRING = ""
+GEMMA3_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
 class Gemma3TextConfig(Gemma2Config):
