@@ -1605,8 +1605,8 @@ class GenerationMixin:
                         setattr(generation_config, key, model_gen_config_value)
                 if len(modified_values) > 0:
                     logger.warning_once(
-                        f"Generation configuration has been modified to match the model-specific defaults: "
-                        f"{modified_values}. If this is not desired, please pass the desired values explicitly."
+                        f"`generation_config` default values have been modified to match model-specific defaults: "
+                        f"{modified_values}. If this is not desired, please set these values explicitly."
                     )
 
             # Finally, apply any passed kwargs
