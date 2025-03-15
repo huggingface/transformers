@@ -247,13 +247,13 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -433,10 +433,6 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                 "decoder_attention_mask",
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
 
 @require_tf
