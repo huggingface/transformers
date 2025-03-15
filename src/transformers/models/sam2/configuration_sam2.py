@@ -44,8 +44,10 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
             The number of point embeddings to be used.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
-        scale (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        scale (`float`, *optional*, defaults to 1):
+            The scale factor for the prompt encoder.
     """
 
     def __init__(
@@ -81,24 +83,38 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
         num_layers (`int`, *optional*, defaults to 4):
             The number of layers in the memory attention module.
         batch_first (`bool`, *optional*, defaults to `True`):
             Whether the input and output tensors are provided in batch-first format.
-        apply_pe_at_input (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        hidden_act (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
-        dim_feedforward (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        dropout (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
-        rope_theta (`<fill_type>`, *optional*, defaults to 10000): <fill_docstring>
-        rope_feat_sizes (`<fill_type>`, *optional*, defaults to `[32, 32]`): <fill_docstring>
-        rope_embedding_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        rope_num_heads (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        rope_downsample_rate (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        rope_dropout (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
-        apply_pe_at_self_attn (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        apply_pe_at_cross_attn_keys (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        apply_pe_at_cross_attn_queries (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        apply_pe_at_input (`bool`, *optional*, defaults to `True`):
+            Whether to apply positional encoding at the input of the memory attention module.
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the memory attention module.
+        dim_feedforward (`int`, *optional*, defaults to 2048):
+            The dimension of the feedforward network in the memory attention module.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout rate for the memory attention module.
+        rope_theta (`float`, *optional*, defaults to 10000):
+            The Rope theta parameter.
+        rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[32, 32]`):
+            The feature sizes for the Rope positional encoding.
+        rope_embedding_dim (`int`, *optional*, defaults to 256):
+            The dimension of the Rope positional encoding.
+        rope_num_heads (`int`, *optional*, defaults to 1):
+            The number of attention heads in the Rope positional encoding.
+        rope_downsample_rate (`int`, *optional*, defaults to 1):
+            The downsample rate for the Rope positional encoding.
+        rope_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout rate for the Rope positional encoding.
+        apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
+            Whether to apply positional encoding at the self-attention of the memory attention module.
+        apply_pe_at_cross_attn_keys (`bool`, *optional*, defaults to `True`):
+            Whether to apply positional encoding at the keys of the cross-attention of the memory attention module.
+        apply_pe_at_cross_attn_queries (`bool`, *optional*, defaults to `False`):
+            Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
 
     """
 
@@ -150,22 +166,38 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        output_channels (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
-        mask_downsampler_embed_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        mask_downsampler_kernel_size (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        mask_downsampler_stride (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        mask_downsampler_padding (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        mask_downsampler_total_stride (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
-        mask_downsampler_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
-        memory_fuser_num_layers (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        memory_fuser_embed_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        memory_fuser_input_projection (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        memory_fuser_kernel_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
-        memory_fuser_padding (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        memory_fuser_layer_scale_init_value (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
-        memory_fuser_use_depthwise_conv (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        memory_fuser_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        output_channels (`int`, *optional*, defaults to 64):
+            The number of output channels for the mask downsampler.
+        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the mask downsampler embedding.
+        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
+            The kernel size for the mask downsampler.
+        mask_downsampler_stride (`int`, *optional*, defaults to 2):
+            The stride for the mask downsampler.
+        mask_downsampler_padding (`int`, *optional*, defaults to 1):
+            The padding for the mask downsampler.
+        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
+            The total stride for the mask downsampler.
+        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the mask downsampler.
+        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
+            The number of layers in the memory fuser.
+        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the memory fuser embedding.
+        memory_fuser_input_projection (`bool`, *optional*, defaults to `False`):
+            Whether to use an input projection for the memory fuser.
+        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
+            The kernel size for the memory fuser.
+        memory_fuser_padding (`int`, *optional*, defaults to 3):
+            The padding for the memory fuser.
+        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+            The initial value for the layer scale in the memory fuser.
+        memory_fuser_use_depthwise_conv (`bool`, *optional*, defaults to `True`):
+            Whether to use a depthwise convolution for the memory fuser.
+        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the memory fuser.
 
     """
 
@@ -223,27 +255,46 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        num_multimask_outputs (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
-        iou_head_depth (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        iou_head_hidden_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        hidden_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden states.
+        num_multimask_outputs (`int`, *optional*, defaults to 3):
+            The number of multimask outputs.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the SAM mask decoder.
+        iou_head_depth (`int`, *optional*, defaults to 3):
+            The depth of the IoU head.
+        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+            The hidden dimension of the IoU head.
         use_high_resolution_features (`bool`, *optional*, defaults to `True`):
-            Whether to use high-resolution feature maps in the SAM mask decoder
-        iou_prediction_use_sigmoid (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        dynamic_multimask_via_stability (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        dynamic_multimask_stability_delta (`<fill_type>`, *optional*, defaults to 0.05): <fill_docstring>
-        dynamic_multimask_stability_thresh (`<fill_type>`, *optional*, defaults to 0.98): <fill_docstring>
-        pred_obj_scores (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        pred_obj_scores_mlp (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        use_multimask_token_for_object_pointer (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        feed_forward_hidden_act (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
-        two_way_transformer_depth (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        two_way_transformer_embedding_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        two_way_transformer_num_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
-        two_way_transformer_mlp_dim (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        two_way_transformer_activation (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
-        two_way_transformer_attention_downsample_rate (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+            Whether to use high-resolution feature maps in the SAM mask decoder.
+        iou_prediction_use_sigmoid (`bool`, *optional*, defaults to `True`):
+            Whether to use a sigmoid function for the IoU prediction.
+        dynamic_multimask_via_stability (`bool`, *optional*, defaults to `True`):
+            Whether to use dynamic multimask via stability.
+        dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
+            The stability delta for the dynamic multimask.
+        dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
+            The stability threshold for the dynamic multimask.
+        pred_obj_scores (`bool`, *optional*, defaults to `True`):
+            Whether to predict object scores.
+        pred_obj_scores_mlp (`bool`, *optional*, defaults to `True`):
+            Whether to use a MLP for the object scores.
+        use_multimask_token_for_object_pointer (`bool`, *optional*, defaults to `True`):
+            Whether to use the multimask token for the object pointer.
+        feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the feed-forward network.
+        two_way_transformer_depth (`int`, *optional*, defaults to 2):
+            The depth of the two-way transformer.
+        two_way_transformer_embedding_dim (`int`, *optional*, defaults to 256):
+            The embedding dimension of the two-way transformer.
+        two_way_transformer_num_heads (`int`, *optional*, defaults to 8):
+            The number of attention heads in the two-way transformer.
+        two_way_transformer_mlp_dim (`int`, *optional*, defaults to 2048):
+            The dimension of the feed-forward network in the two-way transformer.
+        two_way_transformer_activation (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the two-way transformer.
+        two_way_transformer_attention_downsample_rate (`int`, *optional*, defaults to 2):
+            The downsample rate of the attention in the two-way transformer.
 
     """
 
@@ -309,47 +360,58 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`<fill_type>`, *optional*, defaults to 96): <fill_docstring>
+        hidden_size (`int`, *optional*, defaults to 96):
+            The hidden dimension of the image encoder.
         num_heads (`int`, *optional*, defaults to 1):
             Initial number of attention heads.
-        num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        image_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        patch_kernel_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
-        patch_stride (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-        patch_padding (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of channels in the image.
+        image_size (`int`, *optional*, defaults to 1024):
+            The size of the image.
+        patch_kernel_size (`int`, *optional*, defaults to 7):
+            The kernel size of the patch.
+        patch_stride (`int`, *optional*, defaults to 4):
+            The stride of the patch.
+        patch_padding (`int`, *optional*, defaults to 3):
+            The padding of the patch.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate.
+            The stochastic depth rate.
         q_pool (`int`, *optional*, defaults to 3):
-            Number of q_pool stages.
+            The number of q_pool stages.
         q_stride (`Tuple[int, int]`, *optional*, defaults to `(2, 2)`):
-            Downsample stride between stages.
+            The downsample stride between stages.
         stages (`Tuple[int, ...]`, *optional*, defaults to `(1, 2, 7, 2)`):
-            Number of blocks per stage.
+            The number of blocks per stage.
         dim_mul (`float`, *optional*, defaults to 2.0):
-            Dimension multiplier factor at stage shift.
+            The dimension multiplier factor at stage shift.
         head_mul (`float`, *optional*, defaults to 2.0):
-            Head multiplier factor at stage shift.
+            The head multiplier factor at stage shift.
         window_positional_embedding_background_size (`Tuple[int, int]`, *optional*, defaults to `(7, 7)`):
-            Window size per stage when not using global attention.
+            The window size per stage when not using global attention.
         window_spec (`Tuple[int, ...]`, *optional*, defaults to `(8, 4, 14, 7)`):
-            Window specifications for each stage.
+            The window specifications for each stage.
         global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `(5, 7, 9)`):
-            Blocks where global attention is used.
+            The blocks where global attention is used.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
-            List of channel dimensions for the backbone.
-        fpn_hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+            The list of channel dimensions for the backbone.
+        fpn_hidden_size (`int`, *optional*, defaults to 256):
+            The hidden dimension of the FPN.
         fpn_kernel_size (`int`, *optional*, defaults to 1):
-            Kernel size for convolutions in the neck.
-        fpn_stride (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        fpn_padding (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+            The kernel size for the convolutions in the neck.
+        fpn_stride (`int`, *optional*, defaults to 1):
+            The stride for the convolutions in the neck.
+        fpn_padding (`int`, *optional*, defaults to 0):
+            The padding for the convolutions in the neck.
         fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
-            Levels for top-down FPN connections.
+            The levels for the top-down FPN connections.
         fpn_interpolation_mode (`str`, *optional*, defaults to `"nearest"`):
-            Interpolation model for FPN.
+            The interpolation model for the FPN.
         fuse_type (`str`, *optional*, defaults to `"sum"`):
-            Type of fusion to use in the neck.
-        hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
-        layer_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+            The type of fusion to use in the neck.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the neck.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon for the layer normalization.
 
     """
 
@@ -432,8 +494,10 @@ class Sam2Config(PretrainedConfig):
     Args:
         image_encoder_config (Union[`dict`, `Sam2ImageEncoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2ImageEncoderConfig`].
-        prompt_encoder_config (`<fill_type>`, *optional*): <fill_docstring>
-        mask_decoder_config (`<fill_type>`, *optional*): <fill_docstring>
+        prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
         memory_attention_config (Union[`dict`, `Sam2MemoryAttentionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2MemoryAttentionConfig`].
         memory_encoder_config (Union[`dict`, `Sam2MemoryEncoderConfig`], *optional*):
