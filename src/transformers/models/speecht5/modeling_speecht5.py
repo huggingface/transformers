@@ -39,6 +39,10 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
+if is_deepspeed_zero3_enabled():
+    import deepspeed
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -369,8 +373,6 @@ class SpeechT5PositionalConvEmbedding(nn.Module):
             weight_norm = nn.utils.parametrizations.weight_norm
 
         if is_deepspeed_zero3_enabled():
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):

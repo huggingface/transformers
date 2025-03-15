@@ -55,10 +55,10 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
     )
+    from transformers.models.wav2vec2.modeling_wav2vec2 import _sample_negative_indices
     from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
         Wav2Vec2ConformerGumbelVectorQuantizer,
         _compute_mask_indices,
-        _sample_negative_indices,
     )
 
 

@@ -79,8 +79,11 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
 
 def get_cased_name(lowercase_name: str) -> str:
     """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
+    alt_lowercase_name = lowercase_name.replace("_", "-")
     if lowercase_name in CONFIG_MAPPING_NAMES:
         return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
+    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
     else:
         return "".join(x.title() for x in lowercase_name.split("_"))
 
@@ -106,6 +109,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
+        old_name = old_name.replace("-", "_")
+        new_name = new_name.replace("-", "_")
         self.old_name = old_name
         self.new_name = new_name
         self.cased_new_name = get_cased_name(self.new_name)
@@ -535,7 +540,7 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_HIDDEN_STATES_START_POSITION"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -855,10 +860,17 @@ class ModelFileMapper(ModuleMapper):
 
         Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
         a pattern in `ASSIGNMENTS_REGEX_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
-        big docstrings.
+        big docstrings. If the assignment is a DOCSTRING var and is assigned to None, the parent's docstring is kept.
         """
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
+
+            # If it's a DOCSTRING var and is assigned to None, the parent's docstring is kept.
+            # Otherwise, the assignment from modular file is kept.
+            if "DOCSTRING" in assignment:
+                assigned_value = node.body[0].value
+                is_assigned_none = isinstance(assigned_value, cst.Name) and assigned_value.value == "None"
+                should_keep = not is_assigned_none
 
             if should_keep or assignment not in self.assignments:
                 self.assignments[assignment] = node
@@ -1017,11 +1029,20 @@ def replace_class_node(
             new_decorators = (
                 updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
             )
+
+            # Keep return annotation in `modular_xxx.py` if any, else original return annotation
+            new_return_annotation = updated_methods[name].returns if updated_methods[name].returns else func.returns
+
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 mapper.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params, decorators=new_decorators)
+                func = func.with_changes(
+                    body=updated_methods[name].body,
+                    params=new_params,
+                    decorators=new_decorators,
+                    returns=new_return_annotation,
+                )
             else:
                 continue
 
@@ -1129,7 +1150,7 @@ def append_new_import_node(
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
-        name_value = name.evaluated_name
+        name_value = name.evaluated_alias or name.evaluated_name
         if name_value not in unused_imports and name_value not in added_names:
             names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
             added_names.add(name_value)
