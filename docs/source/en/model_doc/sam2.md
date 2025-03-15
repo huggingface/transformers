@@ -37,8 +37,8 @@ Tips:
 - According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
 
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/facebookresearch/segment-anything).
+This model was contributed by [sangbumchoi](https://github.com/SangbumChoi).
+The original code can be found [here](https://github.com/facebookresearch/sam2/tree/main).
 
 Below is an example on how to run mask generation given an image and a 2D point:
 
@@ -46,11 +46,11 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import Sam2Model, Sam2Processor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+model = SamModel.from_pretrained("danelcsb/sam2.1_heira_tiny").to(device)
+processor = SamProcessor.from_pretrained("danelcsb/sam2.1_heira_tiny")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -72,11 +72,11 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import Sam2Model, Sam2Processor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
+model = Sam2odel.from_pretrained("danelcsb/sam2.1_heira_tiny").to(device)
+processor = Sam2Processor.from_pretrained("fdanelcsb/sam2.1_heira_tiny")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -103,55 +103,41 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Run_inference_with_MedSAM_using_HuggingFace_Transformers.ipynb) for inference with MedSAM, a fine-tuned version of SAM on the medical domain. 🌎
 - [Demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SAM/Fine_tune_SAM_(segment_anything)_on_a_custom_dataset.ipynb) for fine-tuning the model on custom data. 🌎
 
-## SlimSAM
+## Sam2Config
 
-SlimSAM, a pruned version of SAM, was proposed in [0.1% Data Makes Segment Anything Slim](https://arxiv.org/abs/2312.05284) by Zigeng Chen et al. SlimSAM reduces the size of the SAM models considerably while maintaining the same performance.
+[[autodoc]] Sam2Config
 
-Checkpoints can be found on the [hub](https://huggingface.co/models?other=slimsam), and they can be used as a drop-in replacement of SAM.
+## Sam2ImageEncoderConfig
 
-## Grounded SAM
+[[autodoc]] Sam2ImageEncoderConfig
 
-One can combine [Grounding DINO](grounding-dino) with SAM for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://arxiv.org/abs/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
+## Sam2MaskDecoderConfig
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grounded_sam.png"
-alt="drawing" width="900"/>
+[[autodoc]] Sam2MaskDecoderConfig
 
-<small> Grounded SAM overview. Taken from the <a href="https://github.com/IDEA-Research/Grounded-Segment-Anything">original repository</a>. </small>
+## Sam2PromptEncoderConfig
 
-## SamConfig
+[[autodoc]] Sam2PromptEncoderConfig
 
-[[autodoc]] SamConfig
+## Sam2MemoryAttentionConfig
 
-## SamVisionConfig
+[[autodoc]] Sam2MemoryAttentionConfig
 
-[[autodoc]] SamVisionConfig
+## Sam2MemoryEncoderConfig
 
-## SamMaskDecoderConfig
+[[autodoc]] Sam2MemoryEncoderConfig
 
-[[autodoc]] SamMaskDecoderConfig
+## Sam2Processor
 
-## SamPromptEncoderConfig
-
-[[autodoc]] SamPromptEncoderConfig
+[[autodoc]] Sam2Processor
 
 
-## SamProcessor
+## Sam2ImageProcessor
 
-[[autodoc]] SamProcessor
-
-
-## SamImageProcessor
-
-[[autodoc]] SamImageProcessor
+[[autodoc]] Sam2ImageProcessor
 
 
-## SamModel
+## Sam2Model
 
-[[autodoc]] SamModel
+[[autodoc]] Sam2Model
     - forward
-
-
-## TFSamModel
-
-[[autodoc]] TFSamModel
-    - call

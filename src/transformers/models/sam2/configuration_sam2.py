@@ -150,10 +150,22 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        in_dim (`int`, *optional*, defaults to 256):
-            Input dimension of the memory encoder.
-        out_dim (`int`, *optional*, defaults to 64):
-            Output dimension of the memory encoder.
+        hidden_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        output_channels (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        mask_downsampler_embed_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        mask_downsampler_kernel_size (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        mask_downsampler_stride (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        mask_downsampler_padding (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        mask_downsampler_total_stride (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
+        mask_downsampler_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        memory_fuser_num_layers (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        memory_fuser_embed_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        memory_fuser_input_projection (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        memory_fuser_kernel_size (`<fill_type>`, *optional*, defaults to 7): <fill_docstring>
+        memory_fuser_padding (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        memory_fuser_layer_scale_init_value (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+        memory_fuser_use_depthwise_conv (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        memory_fuser_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
 
     """
 

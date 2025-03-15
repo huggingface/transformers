@@ -27,9 +27,9 @@ _import_structure = {
         "Sam2Config",
         "Sam2ImageEncoderConfig",
         "Sam2MaskDecoderConfig",
-        "Sam2PromptEncoderConfig",
         "Sam2MemoryAttentionConfig",
         "Sam2MemoryEncoderConfig",
+        "Sam2PromptEncoderConfig",
     ],
     "processing_sam2": ["Sam2Processor"],
 }
