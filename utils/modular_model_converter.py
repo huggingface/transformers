@@ -535,7 +535,7 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_DOCSTRING"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -859,8 +859,9 @@ class ModelFileMapper(ModuleMapper):
         """
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
-
-            if should_keep or assignment not in self.assignments:
+            if (
+                should_keep and (not hasattr(node.body[0].value, "value") or node.body[0].value.value != "None")
+            ) or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
