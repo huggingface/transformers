@@ -389,6 +389,8 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=128256,
+        audio_vocab_size=2048,
+        audio_num_codebooks=32,
         hidden_size=2048,
         intermediate_size=8192,
         num_hidden_layers=16,
@@ -420,6 +422,8 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
+        self.audio_vocab_size = audio_vocab_size
+        self.audio_num_codebooks = audio_num_codebooks
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size

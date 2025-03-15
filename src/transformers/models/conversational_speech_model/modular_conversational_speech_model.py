@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from typing import Optional, Union, List, Tuple
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -30,7 +31,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...processing_utils import Unpack
 from ...cache_utils import Cache
 from ...utils import (
-    LossKwargs,
+    ModelOutput,
 )
 
 
@@ -107,6 +108,8 @@ class ConversationalSpeechModelConfig(LlamaConfig):
     def __init__(
         self,
         vocab_size=128256,
+        audio_vocab_size=2048,
+        audio_num_codebooks=32,
         hidden_size=2048,
         intermediate_size=8192,
         num_hidden_layers=16,
@@ -131,6 +134,8 @@ class ConversationalSpeechModelConfig(LlamaConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
+        self.audio_vocab_size = audio_vocab_size
+        self.audio_num_codebooks = audio_num_codebooks
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -218,25 +223,176 @@ class ConversationalSpeechModelDepthDecoder(LlamaForCausalLM):
         self.lm_head = None 
         self.register_forward_pre_hook(_codebook_head_selector, with_kwargs=True)
 
+
+class ConversationalSpeechModelEmbeddings(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_codebooks = config.audio_num_codebooks
+        self.embed_text_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_audio_tokens = nn.Embedding((config.audio_vocab_size + 3) * config.audio_num_codebooks, config.hidden_size)
+
+        audio_tokens_offsets = torch.arange(self.num_codebooks) * (config.audio_vocab_size + 3)
+        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets)
+
+    def forward(self, input_ids):
+        # input_ids should be of shape (batch_size, seq_length, num_codebooks)
+        text_tokens = input_ids[:, :, -1:]
+        audio_tokens = input_ids[:, :, :-1]
+
+        # id 0 means it should be masked in the sum
+        text_embeds = self.embed_text_tokens(text_tokens)
+        text_embeds = text_embeds * text_tokens.bool().unsqueeze(-1)
+
+        audio_embeds = self.embed_audio_tokens(audio_tokens + self.audio_tokens_offsets)
+        audio_embeds = audio_embeds * audio_tokens.bool().unsqueeze(-1)
+
+        inputs_embeds = torch.cat([text_embeds, audio_embeds], dim=-2)
+        inputs_embeds = inputs_embeds.sum(dim=-2)
+
+        return inputs_embeds
+
+
+class ConversationalSpeechModelModel(LlamaModel):
+    # TODO: change docstring input_ids, should have shape (batch_size, seq_length, num_codebooks) and not (batch_size, seq_length)
+    # Likewise, the labels should have shape (batch_size, num_codebooks)
+    # when doing the forward pass, 
+    
+    def __init__(self, config):
+        super().__init__(config)
+        self.embed_tokens = ConversationalSpeechModelEmbeddings(config)
+    
+
 class ConversationalSpeechModelForCausalLM(LlamaForCausalLM):
-    pass 
+    pass
 
 
-class ConversationalSpeechModelForConditionalGeneration(PreTrainedModel):
+@dataclass
+class ConversationalSpeechModelOutputWithPast(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_loss: Optional[torch.FloatTensor] = None
+    audio_logits: torch.FloatTensor = None
+    depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+class ConversationalSpeechModelForConditionalGeneration(LlamaForCausalLM):
+    # TODO: not sure about the class naming here...
+    # TODO: modifications to the forward could be simply replaced by a forward hook
 
     def __init__(self, config):
         super().__init__(config)
         self.audio_encoder = AutoModel.from_config(config.audio_encoder_config)
         self.depth_decoder = ConversationalSpeechModelDepthDecoder(config.depth_decoder_config)
-        self.audio_inputs_embeds = nn.Linear(config.audio_encoder_config.hidden_size, config.depth_decoder_config.hidden_size)
+        self.embed_text_tokens = nn.Linear(config.audio_encoder_config.hidden_size, config.depth_decoder_config.hidden_size)
+        self.first_codebook_head = nn.Linear(config.depth_decoder_config.hidden_size, config.audio_vocab_size + 3, bias=False)
+        self.model = ConversationalSpeechModelModel(config.depth_decoder_config)
 
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs, #: Unpack[KwargsForCausalLM],
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        #TODO: add docstring
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+        
+        if labels is not None:
+            last_hidden_state = hidden_states[:, -1, :]
+            projected_last_hidden_state = self.depth_decoder.embed_tokens.projector(last_hidden_state)
+
+            codebook_embeds = self.depth_decoder.embed_tokens(labels)
+            depth_decoder_inputs_embeds = torch.cat([projected_last_hidden_state, codebook_embeds], dim=-2)
+
+            depth_decoder_outputs = self.depth_decoder(
+                inputs_embeds=depth_decoder_inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                labels=labels,
+            )
+            loss += depth_decoder_outputs.loss
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+        
+        # return CausalLMOutputWithPast(
+        #     loss=loss,
+        #     logits=logits,
+        #     past_key_values=outputs.past_key_values,
+        #     hidden_states=outputs.hidden_states,
+        #     attentions=outputs.attentions,
+        # )
+
+        return ConversationalSpeechModelOutputWithPast(
+            loss=loss,
+            logits=logits,
+            last_hidden_state=hidden_states,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            depth_loss=None if depth_decoder_outputs is None else depth_decoder_outputs.loss,
+            audio_logits=None if depth_decoder_outputs is None else depth_decoder_outputs.logits,
+            depth_past_key_values=None if outputs is None else outputs.past_key_values,
+            depth_hidden_states=None if outputs is None else outputs.hidden_states,
+            depth_attentions=None if outputs is None else outputs.attentions,
+        ) 
+        
 
 __all__ = [
     "ConversationalSpeechModelDepthDecoderConfig",
     "ConversationalSpeechModelConfig",
     "ConversationalSpeechModelDepthDecoder",
-    "ConversationalSpeechModelEmbeddings",
     "ConversationalSpeechModelModel",
     "ConversationalSpeechModelForCausalLM",
     "ConversationalSpeechModelForConditionalGeneration",
