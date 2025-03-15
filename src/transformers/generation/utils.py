@@ -1180,6 +1180,8 @@ class GenerationMixin:
         """
         Merge user-defined processors/criteria with the ones instantiated inside `generate`. In case the same
         processor/criteria is present on both lists, use the user-defined one.
+
+        (Note: up to v4.49.0, this funtion threw an exception is the same logit processor was found twice.)
         """
         if len(custom_list) == 0:
             return default_list
@@ -1589,15 +1591,23 @@ class GenerationMixin:
             generation_config = copy.deepcopy(generation_config)
 
             # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
-            # TODO (joao): migrate the defaults in `GenerationConfig` to None, so we can safely know when a user has
-            # explicitly set them. E.g. boolean args with non-None default can easily result in unexpected behavior.
+            # TODO (joao): per-model generation config classes.
             if not using_model_generation_config:
+                modified_values = {}
                 default_generation_config = GenerationConfig()
                 for key, default_value in default_generation_config.__dict__.items():
+                    if key.startswith("_"):  # metadata
+                        continue
                     custom_gen_config_value = getattr(generation_config, key)
                     model_gen_config_value = getattr(self.generation_config, key)
                     if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                        modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
+                if len(modified_values) > 0:
+                    logger.warning_once(
+                        f"Generation configuration has been modified to match the model-specific defaults: "
+                        f"{modified_values}. If this is not desired, please pass the desired values explicitly."
+                    )
 
             # Finally, apply any passed kwargs
             model_kwargs = generation_config.update(**kwargs)
@@ -1854,6 +1864,8 @@ class GenerationMixin:
                 model_kwargs[cache_name] = cache_class(cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
+            elif generation_config.cache_implementation == "dynamic":
+                model_kwargs[cache_name] = DynamicCache()
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
