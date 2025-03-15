@@ -35,7 +35,7 @@ if is_torch_available():
 
 class TestTensorParallel(TestCasePlus):
     def torchrun(self, script: str):
-        """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necesary."""
+        """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
             tmp.write(script)
             tmp.flush()

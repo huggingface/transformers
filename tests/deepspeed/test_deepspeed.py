@@ -405,7 +405,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demostrating that this issue is
+        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
         # exclusive to DeepSpeed
         bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
