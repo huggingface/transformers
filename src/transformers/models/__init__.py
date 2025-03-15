@@ -107,6 +107,7 @@ from . import (
     fuyu,
     gemma,
     gemma2,
+    gemma3,
     git,
     glm,
     glpn,
