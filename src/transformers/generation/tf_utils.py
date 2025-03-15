@@ -2118,7 +2118,7 @@ class TFGenerationMixin:
         a greedy approach, otherwise does multinomial sampling without replacement.
 
         Parameters:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`tf.Tensor` of shape `(batch_size, num_beams, sequence_length)`):
                 The sequence used as a prompt for the generation.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.

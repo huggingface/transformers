@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import BeamSearchScorer, GenerationConfig, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -1563,18 +1563,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         elif generation_config.num_beams > 1:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=self.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                max_length=generation_config.max_length,
-            )
             return self._beam_search(
                 input_ids,
-                beam_scorer,
                 logits_processor=pre_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
