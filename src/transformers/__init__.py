@@ -823,6 +823,7 @@ _import_structure = {
     ],
     "models.textnet": ["TextNetConfig"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
+    "models.timesfm": ["TimesFmConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.timm_wrapper": ["TimmWrapperConfig"],
@@ -1548,6 +1549,7 @@ else:
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
             "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING",
             "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
@@ -3753,6 +3755,13 @@ else:
             "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.timesfm"].extend(
+        [
+            "TimesFmModel",
+            "TimesFmModelForPrediction",
+            "TimesFmPreTrainedModel",
         ]
     )
     _import_structure["models.timesformer"].extend(
@@ -6033,6 +6042,7 @@ if TYPE_CHECKING:
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
+    from .models.timesfm import TimesFmConfig
     from .models.timesformer import (
         TimesformerConfig,
     )
@@ -6734,6 +6744,7 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
             MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING,
             MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
@@ -8477,6 +8488,11 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
+        )
+        from .models.timesfm import (
+            TimesFmModel,
+            TimesFmModelForPrediction,
+            TimesFmPreTrainedModel,
         )
         from .models.timesformer import (
             TimesformerForVideoClassification,
