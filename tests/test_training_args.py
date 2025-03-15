@@ -40,3 +40,28 @@ class TestTrainingArguments(unittest.TestCase):
             self.assertFalse(os.path.exists(output_dir))  # Still shouldn't exist
 
             # Directory should be created when actually needed (e.g. in Trainer)
+
+    def test_torch_empty_cache_steps_requirements(self):
+        """Test that torch_empty_cache_steps is a positive integer or None."""
+
+        # None is acceptable (feature is disabled):
+        args = TrainingArguments(torch_empty_cache_steps=None)
+        self.assertIsNone(args.torch_empty_cache_steps)
+
+        # non-int is unacceptable:
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps=1.0)
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps="none")
+
+        # negative int is unacceptable:
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps=-1)
+
+        # zero is unacceptable:
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps=0)
+
+        # positive int is acceptable:
+        args = TrainingArguments(torch_empty_cache_steps=1)
+        self.assertEqual(args.torch_empty_cache_steps, 1)
