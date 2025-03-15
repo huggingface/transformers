@@ -380,7 +380,9 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ):
         # Similar to llava; if we have input IDs, we encode them into embeddings.
         # On the first pass, we should have no input embeddings, and only input features,
@@ -413,21 +415,46 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
             )
 
         outputs = self.language_model(
-            inputs_embeds=inputs_embeds, 
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
             position_ids=position_ids,
-            labels=labels, 
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states, 
             return_dict=return_dict,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            labels=labels,
+            **lm_kwargs,
         )
 
         logits = outputs[0]
 
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            if attention_mask is not None:
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
+                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+            else:
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            )
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
         return GraniteSpeechCausalLMOutputWithPast(
-            loss=None, # TODO 
+            loss=loss
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
