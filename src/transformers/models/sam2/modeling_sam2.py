@@ -491,7 +491,6 @@ class Sam2MaskEmbedding(nn.Module):
         return dense_embeddings
 
 
-# Copied from transformers.models.sam.modeling_sam.SamPromptEncoder with Sam->Sam2
 class Sam2PromptEncoder(nn.Module):
     def __init__(self, config: Sam2PromptEncoderConfig, shared_patch_embedding):
         super().__init__()
