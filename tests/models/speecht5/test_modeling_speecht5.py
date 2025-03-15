@@ -881,6 +881,7 @@ class SpeechT5ForTextToSpeechTester:
 @require_torch
 class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
+    all_generative_model_classes = ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -891,6 +892,12 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_model_can_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertTrue(model.can_generate())
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

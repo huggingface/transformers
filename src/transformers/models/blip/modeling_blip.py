@@ -1233,7 +1233,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     """,
     BLIP_START_DOCSTRING,
 )
-class BlipForQuestionAnswering(BlipPreTrainedModel):
+class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
 
