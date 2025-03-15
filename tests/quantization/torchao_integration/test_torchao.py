@@ -85,7 +85,7 @@ class TorchAoConfigTest(unittest.TestCase):
         Test kwargs validations in TorchAoConfig
         """
         _ = TorchAoConfig("int4_weight_only")
-        with self.assertRaisesRegex(ValueError, "is not supported yet"):
+        with self.assertRaisesRegex(ValueError, "Unsupported string quantization type"):
             _ = TorchAoConfig("fp6")
 
         with self.assertRaisesRegex(ValueError, "Unexpected keyword arg"):
@@ -403,6 +403,32 @@ class TorchAoSerializationW8A8GPUTest(TorchAoSerializationTest):
 @require_torch_gpu
 class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
+    ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+    SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
+    device = "cuda:0"
+
+
+@require_torch_gpu
+@require_torchao_version_greater_or_equal("0.10.0")
+class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
+    if torch.cuda.get_device_capability()[0] < 9:
+        unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
+    from torchao.quantization import Float8WeightOnlyConfig
+
+    quant_scheme, quant_scheme_kwargs = Float8WeightOnlyConfig(), {}
+    ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+    SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
+    device = "cuda:0"
+
+
+@require_torch_gpu
+@require_torchao_version_greater_or_equal("0.10.0")
+class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
+    if torch.cuda.get_device_capability()[0] < 9:
+        unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
+    from torchao.quantization import Int8DynamicActivationInt4WeightConfig
+
+    quant_scheme, quant_scheme_kwargs = Int8DynamicActivationInt4WeightConfig(), {}
     ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
     device = "cuda:0"
