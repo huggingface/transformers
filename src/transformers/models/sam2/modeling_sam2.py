@@ -422,8 +422,8 @@ class Sam2ImageEncoder(nn.Module):
         # Forward through backbone
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
         fpn_hidden_states, fpn_position_encoding = (
-            fpn_hidden_states[-self.num_feature_levels:][::-1],
-            fpn_position_encoding[-self.num_feature_levels:][::-1],
+            fpn_hidden_states[-self.num_feature_levels :][::-1],
+            fpn_position_encoding[-self.num_feature_levels :][::-1],
         )
 
         if not return_dict:
