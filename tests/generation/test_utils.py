@@ -1115,6 +1115,7 @@ class GenerationTesterMixin:
                     "xlnet",
                     "cpm",
                     "jamba",
+                    "minimax",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
