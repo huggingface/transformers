@@ -1657,7 +1657,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
 
     @classmethod
-    def prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
         """
         Additional autoclass-specific config post-loading manipulation. In this specific autoclass, if the config has
         a nested text decoder section, uses that section instead.
