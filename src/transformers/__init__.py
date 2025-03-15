@@ -332,6 +332,7 @@ _import_structure = {
     ],
     "models.cvt": ["CvtConfig"],
     "models.dab_detr": ["DabDetrConfig"],
+    "models.dino_detr": ["DinoDetrConfig"],
     "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
         "Data2VecAudioConfig",
@@ -1248,6 +1249,7 @@ else:
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
+    _import_structure["models.dino_detr"].extend(["DinoDetrFeatureExtractor", "DinoDetrImageProcessor"])
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.deprecated.deta"].append("DetaImageProcessor")
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
@@ -1937,6 +1939,13 @@ else:
             "DabDetrForObjectDetection",
             "DabDetrModel",
             "DabDetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dino_detr"].extend(
+        [
+            "DinoDetrForObjectDetection",
+            "DinoDetrModel",
+            "DinoDetrPreTrainedModel",
         ]
     )
     _import_structure["models.dac"].extend(
@@ -3764,7 +3773,11 @@ else:
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
     _import_structure["models.timm_wrapper"].extend(
-        ["TimmWrapperForImageClassification", "TimmWrapperModel", "TimmWrapperPreTrainedModel"]
+        [
+            "TimmWrapperForImageClassification",
+            "TimmWrapperModel",
+            "TimmWrapperPreTrainedModel",
+        ]
     )
     _import_structure["models.trocr"].extend(
         [
@@ -4547,7 +4560,12 @@ else:
         ["TFMBartForConditionalGeneration", "TFMBartModel", "TFMBartPreTrainedModel"]
     )
     _import_structure["models.mistral"].extend(
-        ["TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralModel", "TFMistralPreTrainedModel"]
+        [
+            "TFMistralForCausalLM",
+            "TFMistralForSequenceClassification",
+            "TFMistralModel",
+            "TFMistralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -5574,6 +5592,9 @@ if TYPE_CHECKING:
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
+    from .models.dino_detr import (
+        DinoDetrConfig,
+    )
     from .models.dinov2 import Dinov2Config
     from .models.dinov2_with_registers import Dinov2WithRegistersConfig
     from .models.distilbert import (
@@ -6446,7 +6467,10 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
+        from .models.deformable_detr import (
+            DeformableDetrFeatureExtractor,
+            DeformableDetrImageProcessor,
+        )
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
@@ -6454,6 +6478,10 @@ if TYPE_CHECKING:
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
         from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
+        from .models.dino_detr import (
+            DinoDetrFeatureExtractor,
+            DinoDetrImageProcessor,
+        )
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
@@ -6485,7 +6513,10 @@ if TYPE_CHECKING:
         from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
-        from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
+        from .models.llava_onevision import (
+            LlavaOnevisionImageProcessor,
+            LlavaOnevisionVideoProcessor,
+        )
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
             MaskFormerFeatureExtractor,
@@ -6789,7 +6820,10 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
-        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel
+        from .models.aya_vision import (
+            AyaVisionForConditionalGeneration,
+            AyaVisionPreTrainedModel,
+        )
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
@@ -7296,6 +7330,11 @@ if TYPE_CHECKING:
             DinatModel,
             DinatPreTrainedModel,
         )
+        from .models.dino_detr import (
+            DinoDetrForObjectDetection,
+            DinoDetrModel,
+            DinoDetrPreTrainedModel,
+        )
         from .models.dinov2 import (
             Dinov2Backbone,
             Dinov2ForImageClassification,
@@ -7788,7 +7827,12 @@ if TYPE_CHECKING:
             Mamba2Model,
             Mamba2PreTrainedModel,
         )
-        from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel, MarianPreTrainedModel
+        from .models.marian import (
+            MarianForCausalLM,
+            MarianModel,
+            MarianMTModel,
+            MarianPreTrainedModel,
+        )
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,
             MarkupLMForSequenceClassification,
@@ -8285,7 +8329,11 @@ if TYPE_CHECKING:
             RTDetrResNetBackbone,
             RTDetrResNetPreTrainedModel,
         )
-        from .models.rt_detr_v2 import RTDetrV2ForObjectDetection, RTDetrV2Model, RTDetrV2PreTrainedModel
+        from .models.rt_detr_v2 import (
+            RTDetrV2ForObjectDetection,
+            RTDetrV2Model,
+            RTDetrV2PreTrainedModel,
+        )
         from .models.rwkv import (
             RwkvForCausalLM,
             RwkvModel,
@@ -8598,7 +8646,10 @@ if TYPE_CHECKING:
             VitPoseForPoseEstimation,
             VitPosePreTrainedModel,
         )
-        from .models.vitpose_backbone import VitPoseBackbone, VitPoseBackbonePreTrainedModel
+        from .models.vitpose_backbone import (
+            VitPoseBackbone,
+            VitPoseBackbonePreTrainedModel,
+        )
         from .models.vits import (
             VitsModel,
             VitsPreTrainedModel,
@@ -9361,7 +9412,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_torchaudio_objects import *
     else:
-        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
+        from .models.musicgen_melody import (
+            MusicgenMelodyFeatureExtractor,
+            MusicgenMelodyProcessor,
+        )
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
