@@ -752,6 +752,18 @@ class ProcessorTesterMixin:
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor.chat_template = {"default": "a", "secondary": "b"}
+            processor.save_pretrained(tmpdirname, save_raw_chat_template=True)
+            self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+            self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+            self.assertTrue(Path(tmpdirname, "additional_chat_templates").is_dir())
+            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+            # When we save as single files, tokenizers and processors share a chat template, which means
+            # the reloaded tokenizer should get the chat template as well
+            self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
+
     def test_chat_template_single(self):
         processor = self.get_processor()
         if processor.chat_template is None:
