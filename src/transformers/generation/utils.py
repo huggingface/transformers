@@ -1613,7 +1613,6 @@ class GenerationMixin:
             model_kwargs = generation_config.update(**kwargs)
         else:
             model_kwargs = kwargs
-
         return generation_config, model_kwargs
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
@@ -3281,7 +3280,9 @@ class GenerationMixin:
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), Cache):
             is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-            is_compileable = is_compileable and not self.generation_config.disable_compile
+            if getattr(self, "hf_quantizer", None) is not None:
+                is_compileable &= self.hf_quantizer.is_compileable
+            is_compileable = is_compileable and not generation_config.disable_compile
             if is_compileable and (
                 self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
             ):

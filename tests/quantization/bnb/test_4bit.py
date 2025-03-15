@@ -771,3 +771,36 @@ class Bnb4BitTestBasicConfigTest(unittest.TestCase):
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
         with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
             quantization_config.load_in_8bit = True
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
+@slow
+@apply_skip_if_not_implemented
+class Bnb4bitCompile(unittest.TestCase):
+    model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    input_text = "Hello my name is"
+
+    def setUp(self):
+        # Models and tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
+
+    def test_generate_compile(self):
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # if nothing is set, compile will be disabled for bnb
+        self.model_4bit.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_4bit.device),
+            max_new_tokens=10,
+            cache_implementation="static",
+        )
+        with self.assertRaises(Exception):
+            # overwrite property
+            object.__setattr__(self.model_4bit.hf_quantizer, "is_compileable", True)
+            self.model_4bit.generate(
+                input_ids=encoded_input["input_ids"].to(self.model_4bit.device),
+                max_new_tokens=10,
+                cache_implementation="static",
+            )

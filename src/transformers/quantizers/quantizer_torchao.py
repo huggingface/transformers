@@ -243,3 +243,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             "int8_dynamic_activation_int8_weight",
         ]
         return self.quantization_config.quant_type in supported_quant_types_for_training
+
+    @property
+    def is_compileable(self) -> bool:
+        return True
