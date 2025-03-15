@@ -146,7 +146,6 @@ class OptimizerNames(ExplicitEnum):
     Stores the acceptable string identifiers for optimizers.
     """
 
-    ADAMW_HF = "adamw_hf"
     ADAMW_TORCH = "adamw_torch"
     ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
@@ -628,7 +627,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-            The optimizer to use, such as "adamw_hf", "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
+            The optimizer to use, such as "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
             "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
             for a full list of optimizers.
         optim_args (`str`, *optional*):
@@ -2986,7 +2985,7 @@ class TrainingArguments:
 
         Args:
             name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
+                The optimizer to use: `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
                 `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):
                 The initial learning rate.
