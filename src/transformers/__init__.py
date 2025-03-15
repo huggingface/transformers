@@ -763,6 +763,15 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.sam2": [
+        "Sam2Config",
+        "Sam2ImageEncoderConfig",
+        "Sam2MaskDecoderConfig",
+        "Sam2MemoryAttentionConfig",
+        "Sam2MemoryEncoderConfig",
+        "Sam2Processor",
+        "Sam2PromptEncoderConfig",
+    ],
     "models.seamless_m4t": [
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
@@ -1297,6 +1306,7 @@ else:
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
+    _import_structure["models.sam2"].extend(["Sam2ImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
@@ -3516,6 +3526,12 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sam2"].extend(
+        [
+            "Sam2Model",
+            "Sam2PreTrainedModel",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -5963,6 +5979,15 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.sam2 import (
+        Sam2Config,
+        Sam2ImageEncoderConfig,
+        Sam2MaskDecoderConfig,
+        Sam2MemoryAttentionConfig,
+        Sam2MemoryEncoderConfig,
+        Sam2Processor,
+        Sam2PromptEncoderConfig,
+    )
     from .models.seamless_m4t import (
         SeamlessM4TConfig,
         SeamlessM4TFeatureExtractor,
@@ -6516,6 +6541,7 @@ if TYPE_CHECKING:
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
+        from .models.sam2 import Sam2ImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
@@ -8294,6 +8320,10 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+        )
+        from .models.sam2 import (
+            Sam2Model,
+            Sam2PreTrainedModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
