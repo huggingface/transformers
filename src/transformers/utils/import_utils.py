@@ -1018,15 +1018,14 @@ def is_flash_attn_2_available():
     if not _is_package_available("flash_attn"):
         return False
 
+    # package `flash-attn` is not supported on Ascend NPU, return `False` when detecting this package on Ascend NPU.
+    if is_torch_npu_available():
+        return False
+
     # Let's add an extra check to see if cuda is available
     import torch
 
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
-        return False
-
-    # Ascend does not support "flash_attn".
-    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
-    if is_torch_npu_available():
         return False
 
     if torch.version.cuda:

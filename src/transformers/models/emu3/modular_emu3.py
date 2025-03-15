@@ -33,6 +33,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_torch_npu_available,
     logging,
     replace_return_docstrings,
 )
@@ -52,6 +53,10 @@ from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+
+if is_torch_npu_available():
+    from ...utils.npu_flash_attention_utils import index_first_axis, pad_input, unpad_input  # noqa
 
 
 _CONFIG_FOR_DOC = "Emu3Config"

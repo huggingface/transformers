@@ -29,6 +29,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_npu_available
+
+
+if is_torch_npu_available():
+    pass
 
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):

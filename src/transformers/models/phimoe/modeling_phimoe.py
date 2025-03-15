@@ -37,6 +37,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_torch_npu_available,
     logging,
     replace_return_docstrings,
 )
@@ -45,7 +46,7 @@ from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_2_available() or is_torch_npu_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.

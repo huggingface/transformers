@@ -49,7 +49,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_flash_attn_2_available, logging
+from ...utils import is_flash_attn_2_available, is_torch_npu_available, logging
 
 
 if is_flash_attn_2_available():
@@ -59,6 +59,12 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
+
+
+if is_torch_npu_available():
+    from torch_npu import npu_rotary_mul as apply_rotary_emb
+
+    from ...utils.npu_flash_attention_utils import npu_flash_attn_varlen_func as flash_attn_varlen_func
 
 
 logger = logging.get_logger(__name__)

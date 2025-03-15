@@ -45,9 +45,11 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torch_npu_available,
     logging,
     replace_return_docstrings,
 )
+from ...utils.npu_flash_attention_utils import is_npu_fa2_top_left_aligned_causal_mask
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
 
 
@@ -60,10 +62,20 @@ else:
     apply_rotary_emb = None
 
 
+if is_torch_npu_available():
+    from torch_npu import npu_rotary_mul as apply_rotary_emb
+
+    from ...utils.npu_flash_attention_utils import npu_flash_attn_varlen_func as flash_attn_varlen_func
+
+
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+elif is_torch_npu_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+    from ...utils.npu_flash_attention_utils import npu_flash_attn_varlen_func as flash_attn_varlen_func
 else:
     flash_attn_varlen_func = None
+    _flash_attention_forward = None
 
 
 logger = logging.get_logger(__name__)
@@ -817,7 +829,9 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = (
+            not is_flash_attn_greater_or_equal_2_10() or is_npu_fa2_top_left_aligned_causal_mask()
+        )
 
     def forward(
         self,

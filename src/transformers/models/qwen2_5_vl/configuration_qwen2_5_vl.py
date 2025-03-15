@@ -25,6 +25,11 @@
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
+from ...utils import is_torch_npu_available
+
+
+if is_torch_npu_available():
+    pass
 
 
 class Qwen2_5_VLVisionConfig(PretrainedConfig):
