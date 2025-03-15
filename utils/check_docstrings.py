@@ -388,6 +388,7 @@ OBJECTS_TO_IGNORE = [
     "MegatronBertConfig",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
+    "MLCDVisionConfig",
     "MobileBertConfig",
     "MobileBertModel",
     "MobileBertTokenizerFast",
