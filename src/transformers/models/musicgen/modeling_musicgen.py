@@ -707,6 +707,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -1002,7 +1003,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
 
-        if self.attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.attn_implementation:
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.attn_implementation == "sdpa" and head_mask is None and not output_attentions:
             # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
@@ -1020,7 +1021,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.attn_implementation == "flash_attention_2":
+            if "flash_attention" in self.attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.attn_implementation == "sdpa" and cross_attn_head_mask is None and not output_attentions:
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
@@ -1671,6 +1672,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
 
     def __init__(
