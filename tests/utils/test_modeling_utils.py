@@ -14,12 +14,13 @@
 # limitations under the License.
 import copy
 import glob
-import itertools
 import json
 import os
 import os.path
+import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import unittest
 import unittest.mock as mock
@@ -29,6 +30,7 @@ from pathlib import Path
 
 import requests
 from huggingface_hub import HfApi, HfFolder
+from parameterized import parameterized
 from pytest import mark
 from requests.exceptions import HTTPError
 
@@ -37,7 +39,10 @@ from transformers import (
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    CLIPTextModelWithProjection,
+    DynamicCache,
     LlavaForConditionalGeneration,
+    MistralForCausalLM,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -49,13 +54,16 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    hub_retry,
     is_staging_test,
     require_accelerate,
     require_flax,
+    require_read_token,
     require_safetensors,
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
@@ -317,6 +325,26 @@ def check_models_equal(model1, model2):
 
 @require_torch
 class ModelUtilsTest(TestCasePlus):
+    def setUp(self):
+        self.old_dtype = torch.get_default_dtype()
+        super().setUp()
+
+    def tearDown(self):
+        torch.set_default_dtype(self.old_dtype)
+        super().tearDown()
+
+    def test_hub_retry(self):
+        @hub_retry(max_attempts=2)
+        def test_func():
+            # First attempt will fail with a connection error
+            if not hasattr(test_func, "attempt"):
+                test_func.attempt = 1
+                raise requests.exceptions.ConnectionError("Connection failed")
+            # Second attempt will succeed
+            return True
+
+        self.assertTrue(test_func())
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-bert/bert-base-uncased"
@@ -465,13 +493,14 @@ class ModelUtilsTest(TestCasePlus):
     def test_model_from_config_torch_dtype_composite(self):
         """
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
+        Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
 
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float16")
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
 
@@ -514,19 +543,6 @@ class ModelUtilsTest(TestCasePlus):
             model = LlavaForConditionalGeneration.from_pretrained(
                 TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
-
-    @require_torch
-    def test_model_from_pretrained_meta_device(self):
-        def is_on_meta(model_id, dtype):
-            with torch.device("meta"):
-                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-                return all(value.device.type == "meta" for value in model.state_dict().values())
-
-        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
-        dtypes = (None, "auto", torch.float16)
-
-        for model_id, dtype in itertools.product(model_ids, dtypes):
-            self.assertTrue(is_on_meta(model_id, dtype))
 
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
@@ -606,6 +622,14 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+
+        # test model that init the model with _from_config
+        model = CLIPTextModelWithProjection.from_pretrained(
+            "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+            subfolder="text_encoder",
+            torch_dtype=torch.bfloat16,
+        )
+        self.assertEqual(model.dtype, torch.bfloat16)
 
     def test_model_from_pretrained_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either
@@ -741,14 +765,14 @@ class ModelUtilsTest(TestCasePlus):
                 # Finally, check the model can be reloaded
                 new_model = BertModel.from_pretrained(tmp_dir)
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.allclose(p1, p2))
+                    torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_sharding_from_hub(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
         ref_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_variant_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -768,7 +792,7 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_variant_local_sharded_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -792,7 +816,7 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     @require_safetensors
     def test_checkpoint_variant_local_safe(self):
@@ -813,7 +837,7 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     @require_safetensors
     def test_checkpoint_variant_local_sharded_safe(self):
@@ -838,7 +862,7 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_loading_only_safetensors_available(self):
         # Test that the loading behaviour is as expected when only safetensor checkpoints are available
@@ -871,7 +895,7 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir)
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_loading_only_pytorch_bin_available(self):
         # Test that the loading behaviour is as expected when only pytorch checkpoints are available
@@ -904,7 +928,7 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir)
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_variant_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -982,6 +1006,7 @@ class ModelUtilsTest(TestCasePlus):
         for mname in mnames:
             _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
 
+    @slow
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
@@ -990,30 +1015,29 @@ class ModelUtilsTest(TestCasePlus):
         # Now though these should be around the same.
         # TODO: Look for good bounds to check that their timings are near the same
 
-        mname = "hf-internal-testing/tiny-random-bert"
+        mname = "HuggingFaceTB/SmolLM-135M"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
         # Save this output as `max_rss_normal` if testing memory results
         max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
-        # print(f"{max_rss_normal=}")
 
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
         # Save this output as `max_rss_low_mem` if testing memory results
         max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
 
-        # Should be within 2MBs of each other (overhead)
+        # Should be within 5MBs of each other (overhead)
         self.assertAlmostEqual(
             max_rss_normal / 1024 / 1024,
             max_rss_low_mem / 1024 / 1024,
-            delta=2,
+            delta=5,
             msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
         )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
-        # model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
+        # model = AutoModel.from_pretrained(mname, low_cpu_mem_usage=False)
         # total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        # total_bytes = total_numel * 4  # 420MB
+        # total_bytes = total_numel * 4
         # Now the diff_bytes should be very close to total_bytes, but the reports are inconsistent.
         # The easiest way to test this is to switch the model and torch.load to do all the work on
         # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
@@ -1067,7 +1091,7 @@ class ModelUtilsTest(TestCasePlus):
             )
             outputs2 = new_model_with_offload(inputs)
 
-            self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
+            torch.testing.assert_close(outputs1.logits.cpu(), outputs2.logits.cpu())
 
             # With state dict temp offload
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
@@ -1077,7 +1101,7 @@ class ModelUtilsTest(TestCasePlus):
                 offload_state_dict=True,
             )
             outputs2 = new_model_with_offload(inputs)
-            self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
+            torch.testing.assert_close(outputs1.logits.cpu(), outputs2.logits.cpu())
 
     @require_accelerate
     @mark.accelerate_tests
@@ -1107,7 +1131,7 @@ class ModelUtilsTest(TestCasePlus):
                 tmp_dir, device_map=device_map, offload_folder=offload_folder
             )
             outputs2 = base_model_with_offload(inputs)
-            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+            torch.testing.assert_close(outputs1[0].cpu(), outputs2[0].cpu())
 
             # With state dict temp offload
             new_model_with_offload = AutoModel.from_pretrained(
@@ -1117,7 +1141,7 @@ class ModelUtilsTest(TestCasePlus):
                 offload_state_dict=True,
             )
             outputs2 = new_model_with_offload(inputs)
-            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+            torch.testing.assert_close(outputs1[0].cpu(), outputs2[0].cpu())
 
     @slow
     @require_torch
@@ -1168,7 +1192,7 @@ class ModelUtilsTest(TestCasePlus):
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="cpu")
             saved_model_output = saved_model(inputs)[0]
 
-        self.assertTrue(torch.allclose(output, saved_model_output))
+        torch.testing.assert_close(output, saved_model_output)
 
     @require_accelerate
     @mark.accelerate_tests
@@ -1204,8 +1228,8 @@ class ModelUtilsTest(TestCasePlus):
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
             postsaved_output = saved_model(inputs)[0]
 
-        self.assertTrue(torch.allclose(output, presaved_output, atol=1e-4))
-        self.assertTrue(torch.allclose(presaved_output, postsaved_output))
+        torch.testing.assert_close(output, presaved_output, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(presaved_output, postsaved_output)
 
     @require_safetensors
     def test_use_safetensors(self):
@@ -1277,7 +1301,7 @@ class ModelUtilsTest(TestCasePlus):
 
             # Check models are equal
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.allclose(p1, p2))
+                torch.testing.assert_close(p1, p2)
 
     @require_safetensors
     def test_safetensors_load_from_hub(self):
@@ -1286,7 +1310,7 @@ class ModelUtilsTest(TestCasePlus):
 
         # Check models are equal
         for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     @require_safetensors
     def test_safetensors_save_and_load_sharded(self):
@@ -1304,7 +1328,7 @@ class ModelUtilsTest(TestCasePlus):
 
             # Check models are equal
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.allclose(p1, p2))
+                torch.testing.assert_close(p1, p2)
 
     @require_safetensors
     def test_safetensors_load_from_hub_sharded(self):
@@ -1313,7 +1337,7 @@ class ModelUtilsTest(TestCasePlus):
 
         # Check models are equal
         for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
-            self.assertTrue(torch.allclose(p1, p2))
+            torch.testing.assert_close(p1, p2)
 
     def test_base_model_to_head_model_load(self):
         base_model = BaseModel(PretrainedConfig())
@@ -1323,7 +1347,7 @@ class ModelUtilsTest(TestCasePlus):
             # Can load a base model in a model with head
             model = ModelWithHead.from_pretrained(tmp_dir)
             for p1, p2 in zip(model.base.parameters(), base_model.parameters()):
-                self.assertTrue(torch.allclose(p1, p2))
+                torch.testing.assert_close(p1, p2)
 
             # It doesn't work if the state dict has a mix of keys of the head and base without prefix though.
             base_state_dict = base_model.state_dict()
@@ -1614,60 +1638,50 @@ class ModelUtilsTest(TestCasePlus):
         with torch.no_grad():
             outputs = model(input_ids)
             outputs_from_saved = new_model(input_ids)
-            self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
+            torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
 
     def test_warning_for_beta_gamma_parameters(self):
-        class TestModelGamma(PreTrainedModel):
+        class TestGammaBetaNorm(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gamma = torch.nn.Parameter(torch.ones(1))
+                self.beta = torch.nn.Parameter(torch.zeros(1))
+
+            def forward(self):
+                return self.gamma.sum() + self.beta.sum()
+
+        class TestModelGammaBeta(PreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
-                self.gamma_param = nn.Parameter(torch.ones(10))
+                self.LayerNorm = TestGammaBetaNorm()
                 self.post_init()
 
             def forward(self):
-                return self.gamma_param.sum()
+                return self.LayerNorm()
 
         logger = logging.get_logger("transformers.modeling_utils")
         config = PretrainedConfig()
-        warning_msg_gamma = "`gamma_param` -> `weight_param`"
-        model = TestModelGamma(config)
+        warning_msg_gamma = "`LayerNorm.gamma` -> `LayerNorm.weight`"
+        warning_msg_beta = "`LayerNorm.beta` -> `LayerNorm.bias`"
+        model = TestModelGammaBeta(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
             with LoggingLevel(logging.INFO):
                 with CaptureLogger(logger) as cl1:
-                    _, loading_info = TestModelGamma.from_pretrained(tmp_dir, config=config, output_loading_info=True)
+                    _, loading_info = TestModelGammaBeta.from_pretrained(
+                        tmp_dir, config=config, output_loading_info=True
+                    )
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
-        self.assertIn("`TestModelGamma`", cl1.out)
+        self.assertIn("`TestModelGammaBeta`", cl1.out)
         self.assertIn(warning_msg_gamma, cl1.out)
-        self.assertIn("gamma_param", missing_keys)
-        self.assertIn("weight_param", unexpected_keys)
-
-        class TestModelBeta(PreTrainedModel):
-            def __init__(self, config):
-                super().__init__(config)
-                self.beta_param = nn.Parameter(torch.ones(10))
-                self.post_init()
-
-            def forward(self):
-                return self.beta_param.sum()
-
-        warning_msg_beta = "`beta_param` -> `bias_param`"
-        model = TestModelBeta(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.INFO):
-                with CaptureLogger(logger) as cl2:
-                    _, loading_info = TestModelBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
-
-        missing_keys = loading_info["missing_keys"]
-        unexpected_keys = loading_info["unexpected_keys"]
-        self.assertIn("`TestModelBeta`", cl2.out)
-        self.assertIn(warning_msg_beta, cl2.out)
-        self.assertIn("beta_param", missing_keys)
-        self.assertIn("bias_param", unexpected_keys)
+        self.assertIn(warning_msg_beta, cl1.out)
+        self.assertIn("LayerNorm.gamma", missing_keys)
+        self.assertIn("LayerNorm.weight", unexpected_keys)
+        self.assertIn("LayerNorm.beta", missing_keys)
+        self.assertIn("LayerNorm.bias", unexpected_keys)
 
     def test_isin_mps_friendly(self):
         """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
@@ -1708,17 +1722,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 3 - Alternatively, a model can implement a `generate` method
-        class DummyBertWithGenerate(BertModel):
-            def generate(self):
-                pass
-
-        with CaptureLogger(logger) as cl:
-            can_generate = DummyBertWithGenerate.can_generate()
-        self.assertTrue("" == cl.out)
-        self.assertTrue(can_generate)
-
-        # 4 - Finally, it can inherit from a model that can generate
+        # 3 - Finally, it can inherit from a model that can generate
         class DummyBertWithParent(DummyBertWithMixin):
             pass
 
@@ -1727,7 +1731,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 5 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
+        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
         # `GenerationMixin`)
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
@@ -1789,6 +1793,172 @@ class ModelUtilsTest(TestCasePlus):
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict, low_cpu_mem_usage=True
         )
         self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_cache_when_needed_at_train_time(self):
+        """
+        Some fine-tuning methods require the use of cache, like prefix tuning in PEFT. This test checks that a cache
+        is at train time used if we request it. Related issue: #35648
+        """
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL)
+        tokenizer = AutoTokenizer.from_pretrained(TINY_MISTRAL)
+        model_inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        # By default it is not training, we have to set it
+        self.assertFalse(model.training)
+        model.train()
+
+        # If we set `use_cache=True` while training, then a cache is returned
+        model_outputs = model(**model_inputs, use_cache=True)
+        self.assertIsInstance(model_outputs.past_key_values, DynamicCache)
+        self.assertTrue(model.training)
+
+        # simulate injecting virtual tokens like in prefix tuning
+        num_virtual_tokens = 3
+        past_key_values = [torch.randn(2, 1, 2, num_virtual_tokens, 8)] * 2
+        past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        model_inputs["attention_mask"] = torch.cat(
+            (
+                model_inputs["attention_mask"],
+                torch.ones(1, num_virtual_tokens).to(model_inputs["attention_mask"].device),
+            ),
+            dim=1,
+        )
+        model_outputs = model(**model_inputs, past_key_values=past_key_values, use_cache=True)
+        self.assertTrue(model.training)
+
+        # We can also disable the cache to skip a few operations, if the training loop doesn't need cache
+        model_outputs = model(**model_inputs, use_cache=False)
+        self.assertIsNone(model_outputs.past_key_values)
+        self.assertTrue(model.training)
+
+    def test_restore_default_torch_dtype_from_pretrained(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
+            with self.assertRaises(RuntimeError):
+                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_restore_default_torch_dtype_from_config(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        config = AutoConfig.from_pretrained(
+            TINY_MISTRAL,
+        )
+
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
+            with self.assertRaises(RuntimeError):
+                config.torch_dtype = torch.float16
+                _ = AutoModelForCausalLM.from_config(
+                    config,
+                )
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_unknown_quantization_config(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            config.quantization_config = {"quant_method": "unknown"}
+            model.save_pretrained(tmpdir)
+            with self.assertLogs("transformers", level="WARNING") as cm:
+                BertModel.from_pretrained(tmpdir)
+            self.assertEqual(len(cm.records), 1)
+            self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
+
+    @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
+    @slow
+    @require_read_token
+    @require_torch_gpu
+    def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
+        """
+        This test is used to avoid regresion on https://github.com/huggingface/transformers/pull/36380.
+        10s should be more than enough for both models, and allows for some margin as loading time are quite
+        unstable. Before #36380, it used to take more than 40s, so 10s is still reasonable.
+        Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up.
+        """
+        # First download the weights if not already on disk
+        _ = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            import time
+            import argparse
+            from transformers import AutoModelForCausalLM
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("model_id", type=str)
+            parser.add_argument("max_loading_time", type=float)
+            args = parser.parse_args()
+
+            device = torch.device("cuda:0")
+
+            torch.cuda.synchronize(device)
+            t0 = time.time()
+            model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.float16, device_map=device)
+            torch.cuda.synchronize(device)
+            dt = time.time() - t0
+
+            # Assert loading is faster (it should be more than enough in both cases)
+            if dt > args.max_loading_time:
+                raise ValueError(f"Loading took {dt:.2f}s! It should not take more than {args.max_loading_time}s")
+            # Ensure everything is correctly loaded on gpu
+            bad_device_params = {k for k, v in model.named_parameters() if v.device != device}
+            if len(bad_device_params) > 0:
+                raise ValueError(f"The following parameters are not on GPU: {bad_device_params}")
+            """
+        )
+
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+            tmp.write(script_to_run)
+            tmp.flush()
+            tmp.seek(0)
+            cmd = f"python {tmp.name} {model_id} {max_loading_time}".split()
+            try:
+                # We cannot use a timeout of `max_loading_time` as cuda initialization can take up to 15-20s
+                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True, timeout=60)
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"The following error was captured: {e.stderr}")
 
 
 @slow
@@ -1952,7 +2122,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
-        self.api.update_repo_visibility(self.repo_name, private=False)
+        self.api.update_repo_settings(self.repo_name, private=False)
 
         # We once again call from_pretrained, which should call the bot to open a PR
         BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)

@@ -52,6 +52,11 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         processor.save_pretrained(self.tmpdirname)
 
+    def prepare_processor_dict(self):
+        return {
+            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
+        }  # fmt: skip
+
     def test_processor_for_generation(self):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)

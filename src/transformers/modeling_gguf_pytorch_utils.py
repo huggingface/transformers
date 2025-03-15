@@ -18,7 +18,7 @@ import re
 from typing import Dict, NamedTuple, Optional
 
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from .integrations import (
     GGUF_CONFIG_MAPPING,
@@ -369,14 +369,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     architecture = read_field(reader, "general.architecture")[0]
     model_name = read_field(reader, "general.name")
 
+    updated_architecture = None
     # in llama.cpp mistral models use the same architecture as llama. We need
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
         updated_architecture = "mistral"
-    # FIXME: Currnetly this implementation is only for flan-t5 architecture.
+    # FIXME: Currently this implementation is only for flan-t5 architecture.
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
+        if "t5encoder" in architecture:
+            parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
         updated_architecture = "t5"
     else:
         updated_architecture = architecture
@@ -395,13 +398,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
-    if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
+    if architecture not in GGUF_SUPPORTED_ARCHITECTURES and updated_architecture not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"GGUF model with architecture {architecture} is not supported yet.")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
     # tie_word_embeddings is true otherwise false
-    parsed_parameters["config"]["tie_word_embeddings"] = all(
-        "output.weight" != tensor.name for tensor in reader.tensors
+    exceptions = ["falcon", "bloom"]
+    parsed_parameters["config"]["tie_word_embeddings"] = (
+        all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
     )
 
     # List all key-value pairs in a columnized format
@@ -436,7 +440,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
 
     # retrieve config vocab_size from tokenizer
-    # Pleas refer to https://github.com/huggingface/transformers/issues/32526 for more details
+    # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
         tokenizer_parameters = parsed_parameters["tokenizer"]
         if "tokens" in tokenizer_parameters:

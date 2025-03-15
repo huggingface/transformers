@@ -100,7 +100,11 @@ class GptqHfQuantizer(HfQuantizer):
             raise RuntimeError("We can only quantize pure text model.")
 
         if self.pre_quantized:
-            model = self.optimum_quantizer.convert_model(model, **kwargs)
+            # compat: latest optimum has gptqmodel refactor
+            if version.parse(importlib.metadata.version("optimum")) <= version.parse("1.23.99"):
+                model = self.optimum_quantizer.convert_model(model)
+            else:
+                model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:
