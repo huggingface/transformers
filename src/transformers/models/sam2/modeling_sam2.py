@@ -17,21 +17,17 @@
 import collections
 import copy
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from threading import Thread
-from typing import Dict, List, Optional, OrderedDict, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from PIL import Image
 from torch import Tensor, nn
-from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
