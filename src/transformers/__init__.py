@@ -159,6 +159,7 @@ _import_structure = {
     ],
     # Models
     "models": [],
+    "models.aimv2": ["AIMv2Config"],
     "models.albert": ["AlbertConfig"],
     "models.align": [
         "AlignConfig",
@@ -1465,6 +1466,13 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.aimv2"].extend(
+        [
+            "AIMv2Model",
+            "AIMv2PreTrainedModel",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -5298,6 +5306,7 @@ if TYPE_CHECKING:
         load_tf2_model_in_pytorch_model,
         load_tf2_weights_in_pytorch_model,
     )
+    from .models.aimv2 import AIMv2Config
     from .models.albert import AlbertConfig
     from .models.align import (
         AlignConfig,
@@ -6664,6 +6673,10 @@ if TYPE_CHECKING:
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
+        from .models.aimv2 import (
+            AIMv2Model,
+            AIMv2PreTrainedModel,
+        )
         from .models.albert import (
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
