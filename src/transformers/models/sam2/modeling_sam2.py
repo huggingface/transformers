@@ -499,7 +499,7 @@ class Sam2PromptEncoder(nn.Module):
         self.mask_embed = Sam2MaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
-        self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
+        self.image_embedding_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
         self.input_image_size = config.image_size
 
         self.point_embed = nn.ModuleList(

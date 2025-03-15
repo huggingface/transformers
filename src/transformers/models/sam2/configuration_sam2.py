@@ -66,7 +66,6 @@ class Sam2PromptEncoderConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.image_size = image_size
         self.patch_size = patch_size
-        self.image_embedding_size = image_size // patch_size
         self.mask_input_channels = mask_input_channels
         self.num_point_embeddings = num_point_embeddings
         self.hidden_act = hidden_act
