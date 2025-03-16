@@ -1162,8 +1162,8 @@ class GenerationTesterMixin:
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(low_output, high_output)
 
-    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535 for more info.
