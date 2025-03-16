@@ -72,17 +72,29 @@ VOCAB_FILES_NAMES = {
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class ArlowTokenizer(PreTrainedTokenizerBase):
     """
-    ArlowTokenizer is a custom "fast" tokenizer class (wrapping the Hugging Face
-    `tokenizers` library) that functions like a PreTrainedTokenizerFast but bears
-    the custom architecture name "ArlowTokenizer". This allows you to do:
-
-        tokenizer = ArlowTokenizer.from_pretrained(...)
+    ArlowTokenizer is a BPE-based tokenizer optimized for large language models.
 
     The implementation copies the functionality of PreTrainedTokenizerFast, including
     training from scratch, saving, loading, handling special tokens, pre/post-processing,
     etc.
 
     Inherits from [`~tokenization_utils_base.PreTrainedTokenizerBase`].
+
+    Args:
+        tokenizer_file (str, optional): 
+            Path to the JSON file containing the trained tokenizer (e.g., "tokenizer.json").
+        bos_token (str, optional, default="<|startoftext|>"): 
+            Beginning-of-sequence token.
+        eos_token (str, optional, default="<|endoftext|>"): 
+            End-of-sequence token.
+        unk_token (str, optional, default="<|unk|>"): 
+            Unknown token.
+        pad_token (str, optional, default="<|pad|>"): 
+            Padding token.
+        mask_token (str, optional, default="<|mask|>"): 
+            Masking token for masked language modeling.
+        additional_special_tokens (List[str], optional): 
+            Additional special tokens for roles, delimiters, etc.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
