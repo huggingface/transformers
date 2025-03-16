@@ -187,6 +187,7 @@ _deps = [
     "tokenizers>=0.21,<0.22",
     "torch>=2.0",
     "torchaudio",
+    "torchdiffeq",
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",

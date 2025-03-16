@@ -92,6 +92,7 @@ deps = {
     "tokenizers": "tokenizers>=0.21,<0.22",
     "torch": "torch>=2.0",
     "torchaudio": "torchaudio",
+    "torchdiffeq": "torchdiffeq",
     "torchvision": "torchvision",
     "pyctcdecode": "pyctcdecode>=0.4.0",
     "tqdm": "tqdm>=4.27",
