@@ -2,6 +2,7 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import AutoConfig
 from transformers.models.blip_2.configuration_blip_2 import Blip2QFormerConfig
 from transformers.models.granite.configuration_granite import GraniteConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
     model_type = "granite_speech_encoder"
@@ -83,14 +84,15 @@ class GraniteSpeechConfig(PretrainedConfig):
         encoder_config=None,
         llm_config=None,
         projector_config=None,
-        # TODO - we should use a text config here instead of the direct model, then use from_config()
-        llm_name="ibm-granite/granite-3.1-8b-instruct",
         audio_token_index=49155,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        # TODO - clean this up
-        if not isinstance(llm_config, AutoConfig):
-            llm_config = AutoConfig.from_pretrained(llm_name)
+        if isinstance(llm_config, dict):
+            llm_config["model_type"] = llm_config["model_type"] if "model_type" in llm_config else "granite"
+            llm_config = CONFIG_MAPPING[llm_config["model_type"]](**llm_config)
+        elif llm_config is None:
+            llm_config = CONFIG_MAPPING["granite"]()
 
         if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
             encoder_config = dict() if encoder_config is None else encoder_config
@@ -100,11 +102,10 @@ class GraniteSpeechConfig(PretrainedConfig):
             projector_config = dict() if projector_config is None else projector_config
             projector_config = GraniteSpeechProjectorConfig(**projector_config)
 
-        self.encoder_config = encoder_config
         self.llm_config = llm_config
+        self.encoder_config = encoder_config
         self.projector_config = projector_config
-        self.llm_name = llm_name
         self.audio_token_index = audio_token_index
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechProjectorConfig", "GraniteSpeechConfig"]
