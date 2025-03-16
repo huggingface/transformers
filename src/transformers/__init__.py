@@ -721,11 +721,11 @@ _import_structure = {
         "Qwen2Tokenizer",
     ],
     "models.qwen2_5_omni": [
-        "Qwen2_5OmniThinkerConfig",
-        "Qwen2_5OmniTalkerConfig",
-        "Qwen2_5OmniToken2WavConfig",
         "Qwen2_5OmniConfig",
         "Qwen2_5OmniProcessor",
+        "Qwen2_5OmniTalkerConfig",
+        "Qwen2_5OmniThinkerConfig",
+        "Qwen2_5OmniToken2WavConfig",
     ],
     "models.qwen2_5_vl": [
         "Qwen2_5_VLConfig",
