@@ -7,12 +7,12 @@ import torch.utils.checkpoint
 from torch import nn, einsum
 import torch.nn.functional as F
 
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import ModelOutput
 
-from transformers import Blip2QFormerModel
+from transformers import Blip2QFormerModel, GraniteForCausalLM
 from transformers.generation import GenerationMixin
 from transformers.modeling_utils import PreTrainedModel
-from transformers.models.granite import GraniteForCausalLM
+from ..auto import AutoModelForCausalLM
 from .configuration_granite_speech import (
     GraniteSpeechConfig,
     GraniteSpeechEncoderConfig,
@@ -318,18 +318,21 @@ class ConformerBlock(nn.Module):
 
 
 class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
+    config_class = GraniteSpeechConfig
     _supports_cache_class = True
+
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
 
+        # self.language_model = GraniteForCausalLM.from_config(config.llm_name)
         self.language_model = GraniteForCausalLM.from_pretrained(config.llm_name)
         # TODO - See if we can use lora layers or this can be moved out to a conditional wrapper
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=True,
-            r=config.lora_r,
-            lora_alpha=config.lora_alpha,
-            target_modules=config.lora_modules,
+            r=64,
+            lora_alpha=32,
+            target_modules=["q_proj", "v_proj"],
         )
         self.language_model = get_peft_model(self.language_model, peft_config)
 
@@ -454,7 +457,7 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
             return (loss,) + output if loss is not None else output
 
         return GraniteSpeechCausalLMOutputWithPast(
-            loss=loss
+            loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
