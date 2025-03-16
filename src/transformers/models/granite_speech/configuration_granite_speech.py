@@ -1,9 +1,11 @@
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import AutoConfig
 from transformers.models.blip_2.configuration_blip_2 import Blip2QFormerConfig
-
+from transformers.models.granite.configuration_granite import GraniteConfig
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
+    model_type = "granite_speech_encoder"
+
     def __init__(
         self,
         input_dim=160,
@@ -17,7 +19,9 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         dropout=0.1,
         conv_kernel_size=15,
         conv_expansion_factor=2,
+        **kwargs,
     ):
+        super().__init__(**kwargs)
         self.input_dim = input_dim
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
@@ -46,6 +50,7 @@ class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
         cross_attention_frequency=1,
         max_position_embeddings=2048,
         use_qformer_text_input=False,
+        **kwargs,
     ):
         super().__init__(
             hidden_size=hidden_size,
@@ -56,6 +61,7 @@ class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
             cross_attention_frequency=cross_attention_frequency,
             max_position_embeddings=max_position_embeddings,
             use_qformer_text_input=use_qformer_text_input,
+            **kwargs,
         )
 
         self.downsample_rate = downsample_rate
@@ -64,7 +70,7 @@ class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
 
 
 class GraniteSpeechConfig(PretrainedConfig):
-    model_type = "speech_granite"
+    model_type = "granite_speech"
     # TODO - Probably should consolidate these into a single config
     sub_configs = {
         "llm_config": AutoConfig,
@@ -77,29 +83,28 @@ class GraniteSpeechConfig(PretrainedConfig):
         encoder_config=None,
         llm_config=None,
         projector_config=None,
-        # TODO - need to figure out how to handle lora here / separation of peft integration with peft
-        # Keeping it here during the initial porting
-        lora_r=64,
-        lora_alpha=32,
-        lora_modules=["q_proj", "v_proj"],
         # TODO - we should use a text config here instead of the direct model, then use from_config()
         llm_name="ibm-granite/granite-3.1-8b-instruct",
         audio_token_index=49155,
         **kwargs,
     ):
-        if llm_config is None:
+        # TODO - clean this up
+        if not isinstance(llm_config, AutoConfig):
             llm_config = AutoConfig.from_pretrained(llm_name)
-        if encoder_config is None:
-            encoder_config = GraniteSpeechEncoderConfig()
-        if projector_config is None:
-            projector_config = GraniteSpeechProjectorConfig()
+
+        if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
+            encoder_config = dict() if encoder_config is None else encoder_config
+            encoder_config = GraniteSpeechEncoderConfig(**encoder_config)
+
+        if not isinstance(projector_config, GraniteSpeechProjectorConfig):
+            projector_config = dict() if projector_config is None else projector_config
+            projector_config = GraniteSpeechProjectorConfig(**projector_config)
 
         self.encoder_config = encoder_config
         self.llm_config = llm_config
         self.projector_config = projector_config
-        self.lora_r = lora_r
-        self.lora_alpha = lora_alpha
-        self.lora_modules = lora_modules
         self.llm_name = llm_name
         self.audio_token_index = audio_token_index
         super().__init__(**kwargs)
+
+__all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechProjectorConfig", "GraniteSpeechConfig"]
