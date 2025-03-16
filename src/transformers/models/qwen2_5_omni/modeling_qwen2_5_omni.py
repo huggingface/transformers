@@ -25,7 +25,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from einops import rearrange
 from torch import nn
 from torch.amp import autocast
 from torch.nn import ConvTranspose1d, Parameter
@@ -4290,24 +4289,25 @@ class RotaryEmbedding(nn.Module):
 
         freqs = torch.einsum("i , j -> i j", t.type_as(self.inv_freq), self.inv_freq) / self.interpolation_factor
         freqs = torch.stack((freqs, freqs), dim=-1)
-        freqs = rearrange(freqs, "... d r -> ... (d r)")
+        freqs = freqs.reshape(*freqs.shape[:-2], -1)
 
         if self.scale is None:
             return freqs, 1.0
 
         power = (t - (max_pos // 2)) / self.scale_base
-        scale = self.scale ** rearrange(power, "n -> n 1")
+        scale = self.scale ** power.unsqueeze(-1)
         scale = torch.stack((scale, scale), dim=-1)
-        scale = rearrange(scale, "... d r -> ... (d r)")
+        scale = freqs.reshape(*freqs.shape[:-2], -1)
 
         return freqs, scale
 
 
 def rotate_half_codec(x):
-    x = rearrange(x, "... (d r) -> ... d r", r=2)
+    # x = rearrange(x, "... (d r) -> ... d r", r=2)
+    x = x.reshape(*x.shape[:-1], -1, 2)
     x1, x2 = x.unbind(dim=-1)
     x = torch.stack((-x2, x1), dim=-1)
-    return rearrange(x, "... d r -> ... (d r)")
+    return x.reshape(*x.shape[:-2], -1)
 
 
 @autocast("cuda", enabled=False)
@@ -4318,7 +4318,8 @@ def apply_rotary_pos_emb_codec(t, freqs, scale=1):
     scale = scale[-seq_len:, :] if isinstance(scale, torch.Tensor) else scale
 
     if t.ndim == 4 and freqs.ndim == 3:
-        freqs = rearrange(freqs, "b n d -> b 1 n d")
+        # freqs = rearrange(freqs, "b n d -> b 1 n d")
+        freqs = freqs.unsqueeze(1)
 
     # partial rotary embeddings, Wang et al. GPT-J
     t, t_unrotated = t[..., :rot_dim], t[..., rot_dim:]
