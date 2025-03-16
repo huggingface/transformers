@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [],
+  "model": {
+    "type": "BPE",
+    "unk_token": "<|unk|>",
+    "vocab": {
+      "<|unk|>": 0,
+      "hello": 1,
+      "world": 2
+    },
+    "merges": []
+  },
+  "post_processor": null,
+  "decoder": null
+}

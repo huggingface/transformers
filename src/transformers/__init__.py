@@ -1176,6 +1176,7 @@ else:
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
+    _import_structure["tokenization_arlow"] = ["ArlowTokenizer"]
 
 
 try:
@@ -6178,6 +6179,7 @@ if TYPE_CHECKING:
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
+    from .tokenization_arlow import ArlowTokenizer
     from .tokenization_utils_base import (
         AddedToken,
         BatchEncoding,
@@ -6393,7 +6395,7 @@ if TYPE_CHECKING:
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
-
+        from .tokenization_arlow import ArlowTokenizer
     try:
         if not (is_sentencepiece_available() and is_tokenizers_available()):
             raise OptionalDependencyNotAvailable()
@@ -9674,3 +9676,4 @@ if not is_tf_available() and not is_torch_available() and not is_flax_available(
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
+
