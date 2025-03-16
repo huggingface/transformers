@@ -530,4 +530,16 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
         )
         return inputs_embeds
 
+    def generate(self, input_features=None, **kwargs):
+        """This model is expected to have a lora adapater, which is only
+        enabled when considering audio inputs. As such, we override generate
+        to conditionally enable / disable the lora adapter based on whether
+        or not any input features were provided.
+        """
+        if input_features is not None:
+            self.enable_adapters()
+        else:
+            self.disable_adapters()
+        return super().generate(input_features=input_features, **kwargs)
+
 __all__ = ["GraniteSpeechForConditionalGeneration"]
