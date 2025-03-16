@@ -21,10 +21,10 @@ from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
+from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -582,6 +582,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # num_items_in_batch is only needed for loss computation
+        num_items_in_batch = kwargs.pop("num_items_in_batch", None)
+
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
@@ -638,8 +641,12 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
+
+            loss = fixed_cross_entropy(
+                logits.reshape(-1, self.decoder.config.vocab_size),
+                labels.reshape(-1),
+                num_items_in_batch=num_items_in_batch,
+            )
 
         if not return_dict:
             if loss is not None:
