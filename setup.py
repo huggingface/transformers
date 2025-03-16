@@ -321,6 +321,7 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
+extras["diffeq"] = deps_list("torchdiffeq")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -371,6 +372,7 @@ extras["all"] = (
     + extras["accelerate"]
     + extras["video"]
     + extras["num2words"]
+    + extras["diffeq"]
 )
 
 
