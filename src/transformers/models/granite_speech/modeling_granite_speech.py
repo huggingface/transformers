@@ -322,11 +322,38 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
     _supports_cache_class = True
 
     def __init__(self, config: GraniteSpeechConfig):
-        super().__init__(config)
+        is_legacy=False
+        if is_legacy:
+            self._legacy_load(config)
+        else:
+            self._transformers_load(config)
 
-        # self.language_model = GraniteForCausalLM.from_config(config.llm_name)
-        self.language_model = GraniteForCausalLM.from_pretrained(config.llm_name)
-        # TODO - See if we can use lora layers or this can be moved out to a conditional wrapper
+
+    def _transformers_load(self, config: GraniteSpeechConfig):
+        super().__init__(config)
+        self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
+
+        if self.language_model._tied_weights_keys is not None:
+            # Need to fix uninitialized lm head issues
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
+        # TODO - Add this to the exported config and a conditional generation wrapper for peft.
+        peft_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            inference_mode=True,
+            r=64,
+            lora_alpha=32,
+            target_modules=["q_proj", "v_proj"],
+        )
+        self.language_model = get_peft_model(self.language_model, peft_config)
+        self.encoder = CTCModel(config.encoder_config)
+        self.projector = EncoderProjectorQFormer(config.projector_config)
+        self.post_init()
+
+    def _legacy_load(self, config: GraniteSpeechConfig):
+        super().__init__(config)
+        self.language_model = GraniteForCausalLM.from_pretrained("ibm-granite/granite-3.1-8b-instruct")
+
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=True,
@@ -336,7 +363,6 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
         )
         self.language_model = get_peft_model(self.language_model, peft_config)
 
-        # TODO - move all of this stuff out
         self.encoder = CTCModel(config.encoder_config)
         self.projector = EncoderProjectorQFormer(config.projector_config)
         encoder_state_dict = torch.load(
@@ -431,7 +457,6 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
             labels=labels,
             **lm_kwargs,
         )
-
         logits = outputs[0]
 
         loss = None
