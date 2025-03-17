@@ -385,10 +385,6 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
                     val_loss2 = history2.history["val_loss"][0]
                     self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     # Overriding this method since the base method won't be compatible with Data2VecVision.
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

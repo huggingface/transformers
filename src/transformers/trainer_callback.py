@@ -74,6 +74,9 @@ class TrainerState:
             The list of logs done since the beginning of training.
         best_metric (`float`, *optional*):
             When tracking the best model, the value of the best metric encountered so far.
+        best_global_step (`int`, *optional*):
+            When tracking the best model, the step at which the best metric was encountered.
+            Used for setting `best_model_checkpoint`.
         best_model_checkpoint (`str`, *optional*):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
             far.
@@ -88,7 +91,7 @@ class TrainerState:
             impact the way data will be logged in TensorBoard.
         stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
-            Relevent callbacks should implement a `state` and `from_state` function.
+            Relevant callbacks should implement a `state` and `from_state` function.
     """
 
     epoch: Optional[float] = None
@@ -103,6 +106,7 @@ class TrainerState:
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
+    best_global_step: Optional[int] = None
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
@@ -164,14 +168,10 @@ class TrainerState:
                     num_steps = math.ceil(max_steps * num_steps)
                 setattr(self, f"{step_kind}_steps", num_steps)
 
-    def init_training_references(self, trainer, train_dataloader, max_steps, num_train_epochs, trial):
+    def init_training_references(self, trainer, max_steps, num_train_epochs, trial):
         """
         Stores the initial training references needed in `self`
         """
-        for attr in ("model", "optimizer", "lr_scheduler"):
-            setattr(self, attr, getattr(trainer, attr))
-
-        self.train_dataloader = train_dataloader
         if trainer.hp_name is not None and trainer._trial is not None:
             # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
             # parameter to Train when using DDP.
@@ -604,7 +604,7 @@ class DefaultFlowCallback(TrainerCallback):
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy not in [SaveStrategy.NO, SaveStrategy.BEST]:
+            if args.save_strategy == SaveStrategy.STEPS:
                 control.should_save = True
 
         return control
