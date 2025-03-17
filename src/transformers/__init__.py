@@ -565,6 +565,10 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
+    "models.mistral3": [
+        "Mistral3Config",
+        "Mistral3Processor",
+    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -1274,6 +1278,7 @@ else:
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava"].append("LlavaImageProcessor")
+    _import_structure["models.mistral3"].append("Mistral3ImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
@@ -1338,6 +1343,7 @@ else:
     _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
+    _import_structure["models.mistral3"].append("Mistral3ImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
@@ -2784,6 +2790,12 @@ else:
             "LlavaPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral3"].extend(
+    [
+        "Mistral3ForConditionalGeneration",
+        "Mistral3PreTrainedModel",
+    ]
+)
     _import_structure["models.llava_next"].extend(
         [
             "LlavaNextForConditionalGeneration",
@@ -5733,6 +5745,10 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
+    from .models.mistral3 import (
+        Mistral3Config,
+        Mistral3Processor,
+    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -6483,6 +6499,7 @@ if TYPE_CHECKING:
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.llava import LlavaImageProcessor
+        from .models.mistral3 import Mistral3ImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
@@ -6553,6 +6570,7 @@ if TYPE_CHECKING:
         from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
+        from .models.mistral3 import Mistral3ImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
@@ -7725,6 +7743,10 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
+        )
+        from .models.mistral3 import (
+            Mistral3ForConditionalGeneration,
+            Mistral3PreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,

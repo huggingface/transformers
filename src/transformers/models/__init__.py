@@ -282,6 +282,7 @@ from . import (
     video_llava,
     videomae,
     vilt,
+    mistral3,
     vipllava,
     vision_encoder_decoder,
     vision_text_dual_encoder,
