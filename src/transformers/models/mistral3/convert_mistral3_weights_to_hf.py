@@ -227,7 +227,7 @@ def main():
     args = parser.parse_args()
 
     if not args.tokenizer_only:
-        convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings, args.modules_are_split)
+        convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings)
     convert_and_write_tokenizer(args.input_dir, args.output_dir, args.template_name)
 
 
