@@ -2147,6 +2147,7 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
         ignore_keys_for_eval: Optional[List[str]] = None,
+        strict: bool = False,
         **kwargs,
     ):
         """
@@ -2162,6 +2163,8 @@ class Trainer:
             ignore_keys_for_eval (`List[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
+            strict (`bool`, *optional*)
+                Defaults to False. If True, an error will be raised if the checkpoint is invalid/incomplete (has missing layers, etc.)
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments used to hide deprecated arguments
         """
@@ -2220,7 +2223,7 @@ class Trainer:
 
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                self._load_from_checkpoint(resume_from_checkpoint)
+                self._load_from_checkpoint(resume_from_checkpoint, strict=strict)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None:
@@ -2253,10 +2256,17 @@ class Trainer:
                 resume_from_checkpoint=resume_from_checkpoint,
                 trial=trial,
                 ignore_keys_for_eval=ignore_keys_for_eval,
+                strict=strict,
             )
 
     def _inner_training_loop(
-        self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
+        self,
+        batch_size=None,
+        args=None,
+        resume_from_checkpoint=None,
+        trial=None,
+        ignore_keys_for_eval=None,
+        strict=False,
     ):
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
@@ -2400,7 +2410,7 @@ class Trainer:
                     self.model_wrapped, resume_from_checkpoint, load_module_strict=not _is_peft_model(self.model)
                 )
             elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
-                self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
+                self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped, strict=strict)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
@@ -2744,7 +2754,7 @@ class Trainer:
             run_dir = self.args.output_dir
         return run_dir
 
-    def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
+    def _load_from_checkpoint(self, resume_from_checkpoint, model=None, strict=False):
         if model is None:
             model = self.model
 
@@ -2860,7 +2870,7 @@ class Trainer:
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
-                load_result = model.load_state_dict(state_dict, False)
+                load_result = model.load_state_dict(state_dict, strict=strict)
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
