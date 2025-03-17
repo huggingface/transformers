@@ -13,16 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Dict, List, Optional, Union, Tuple
+import math
+
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
-
 from ...utils import logging
 from ..mistral.modeling_mistral import MistralRMSNorm
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaMultiModalProjector
-from ..pixtral.image_processing_pixtral import PixtralImageProcessor
 from ..pixtral.image_processing_pixtral_fast import PixtralImageProcessorFast
 from ..pixtral.processing_pixtral import PixtralProcessor
 
@@ -47,10 +48,6 @@ class Mistral3Config(LlavaConfig):
     ):
         super().__init__(vision_config, text_config)
         self.spatial_merge_size = spatial_merge_size
-
-
-class Mistral3ImageProcessor(PixtralImageProcessor):
-    pass
 
 
 class Mistral3ImageProcessorFast(PixtralImageProcessorFast):
@@ -193,7 +190,6 @@ __all__ = [
     "Mistral3PreTrainedModel",  # noqa
     "Mistral3ForConditionalGeneration",
     "Mistral3Config",
-    "Mistral3ImageProcessor",
     "Mistral3ImageProcessorFast",
     "Mistral3Processor",
 ]

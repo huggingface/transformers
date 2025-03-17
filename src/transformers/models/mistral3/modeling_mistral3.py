@@ -33,18 +33,12 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
-    is_torchvision_v2_available,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_mistral3 import Mistral3Config
 
-
-if is_torchvision_v2_available():
-    pass
-else:
-    pass
 
 _CONFIG_FOR_DOC = "Mistral3Config"
 
