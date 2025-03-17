@@ -97,9 +97,9 @@ class GraniteSpeechConfig(PretrainedConfig):
             # TODO - Make this generic after blip2qformer is moved out to its own model dir.
             if projector_config["model_type"] != "blip_2_qformer":
                 raise ValueError("Granite speech currently requires blip2 qformer as its encoder!")
-            projector_config = Blip2QFormerConfig(**projector_config)
+            projector_config = GraniteSpeechProjectorConfig(**projector_config)
         elif projector_config is None:
-            projector_config = Blip2QFormerConfig()
+            projector_config = GraniteSpeechProjectorConfig()
 
         if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
             encoder_config = dict() if encoder_config is None else encoder_config
