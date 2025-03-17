@@ -586,7 +586,6 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
 
 class DogeModel(DogePreTrainedModel, LlamaModel):
-
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
