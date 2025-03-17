@@ -1970,6 +1970,8 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertNotIn("cu_seq_lens_q", batch)
         self.assertNotIn("max_length_k", batch)
         self.assertNotIn("max_length_q", batch)
+        self.assertEqual(batch["position_ids"].shape, (1, 16))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(batch["seq_idx"].shape, batch["input_ids"].shape)
         self.assertEqual(batch["seq_idx"][0].tolist(), [0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2])
 
