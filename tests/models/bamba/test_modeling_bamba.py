@@ -20,7 +20,7 @@ import unittest
 import pytest
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
-from transformers.testing_utils import Expectation, Expectations, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -499,16 +499,16 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
     def test_simple_generate(self):
         expectations = Expectations(
-            Expectation(
-                "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-                "cuda",
-                8,
-            ),
-            Expectation(
-                "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
-                "rocm",
-                9,
-            ),
+            {
+                (
+                    "cuda",
+                    8,
+                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
+                (
+                    "rocm",
+                    9,
+                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+            }
         )
 
         self.model.to(torch_device)
@@ -518,7 +518,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
-        expected = expectations.get()
+        expected = expectations.get_expectation()
         self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
