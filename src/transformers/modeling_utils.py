@@ -4163,7 +4163,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
-            import pdb; pdb.set_trace()
             resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
@@ -4284,7 +4283,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 (torch_dtype == torch.float16) or hasattr(hf_quantizer, "use_keep_in_fp32_modules")
             )
 
-            import pdb; pdb.set_trace()
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
@@ -4443,7 +4441,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
-            import pdb; pdb.set_trace()
             (
                 model,
                 missing_keys,
@@ -4706,7 +4703,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
-        import pdb; pdb.set_trace()
         prefix = model.base_model_prefix
 
         if hf_quantizer is not None:
@@ -4893,7 +4889,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         model_to_load.expected_keys = expected_keys
         if device_map is not None:
-            expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
+            expanded_device_map = expand_device_map(device_map, expected_keys, start_prefix)
             if hf_quantizer is None:
                 caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
@@ -5905,13 +5901,11 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
         allocation_factor = 2
 
-    # import pdb; pdb.set_trace()
     for param_name, device in accelerator_device_map.items():
         try:
             param = model.get_parameter(param_name)
         except AttributeError:
             if "." in param_name:
-                import pdb; pdb.set_trace()
                 param_name, param_type = param_name.rsplit(".", 1)
                 param = model.get_submodule(param_name).get_parameter(param_type)
             else:
