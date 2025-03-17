@@ -54,12 +54,12 @@ from transformers.utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _deepspeed_zero3,
     floats_tensor,
     ids_tensor,
     sdpa_kernel,
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION
 )
 
 
