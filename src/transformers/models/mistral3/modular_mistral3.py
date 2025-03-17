@@ -74,7 +74,7 @@ class Mistral3PatchMerger(nn.Module):
         super().__init__()
         self.config = config
 
-        vision_encoder_dim = config.vision_args.hidden_size
+        vision_encoder_dim = config.vision_config.hidden_size
         spatial_merge_size = config.spatial_merge_size
 
         mlp_input_dim = vision_encoder_dim * (spatial_merge_size**2)
