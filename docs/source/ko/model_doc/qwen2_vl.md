@@ -14,14 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Qwen2-VL
+# Qwen2-VL[[Qwen2-VL]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 </div>
 
-## Overview
+## Overview[[Overview]]
 
 [Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) 모델은 알리바바 리서치의 Qwen팀에서 개발한 [Qwen-VL](https://arxiv.org/pdf/2308.12966) 모델의 주요 업데이트 버전입니다.
 
@@ -36,9 +36,9 @@ alt="drawing" width="600"/>
 
 이 모델은 [simonJJJ](https://huggingface.co/simonJJJ)에 의해 기여되었습니다.
 
-## 사용 예시
+## 사용 예시[[Usage example]]
 
-### 단일 미디어 추론
+### 단일 미디어 추론[[Single Media inference]]
 
 이 모델은 이미지와 비디오를 모두 인풋으로 받을 수 있습니다. 다음은 추론을 위한 예제 코드입니다.
 
@@ -112,7 +112,7 @@ output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, cl
 print(output_text)
 ```
 
-### 배치 혼합 미디어 추론
+### 배치 혼합 미디어 추론[[Batch Mixed Media Inference]]
 
 이 모델은 이미지, 비디오, 텍스트 등 다양한 유형의 데이터를 혼합하여 배치 입력으로 처리할 수 있습니다. 다음은 예제입니다.
 
@@ -182,9 +182,9 @@ output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, cl
 print(output_text)
 ```
 
-### 사용 팁
+### 사용 팁[[Usage Tips]]
 
-#### 이미지 해상도 트레이드오프
+#### 이미지 해상도 트레이드오프[[Image Resolution trade-off]]
 
 이 모델은 다양한 해상도의 입력을 지원합니다. 디폴트로 입력에 대해 네이티브(native) 해상도를 사용하지만, 더 높은 해상도를 적용하면 성능이 향상될 수 있습니다. 다만, 이는 더 많은 연산 비용을 초래합니다. 사용자는 최적의 설정을 위해 최소 및 최대 픽셀 수를 조정할 수 있습니다.
 
@@ -204,7 +204,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixel
 이렇게 하면 각 이미지가 256~1024개의 토큰으로 인코딩됩니다. 여기서 28은 모델이 14 크기의 패치(patch)와 2의 시간 패치(temporal patch size)를 사용하기 때문에 나온 값입니다 (14 × 2 = 28).
 
 
-#### 다중 이미지 인풋
+#### 다중 이미지 인풋[[Multiple Image Inputs]]
 
 기본적으로 이미지와 비디오 콘텐츠는 대화에 직접 포함됩니다. 여러 개의 이미지를 처리할 때는 이미지 및 비디오에 라벨을 추가하면 참조하기가 더 쉬워집니다. 사용자는 다음 설정을 통해 이 동작을 제어할 수 있습니다:
 
@@ -252,7 +252,7 @@ prompt_with_id = processor.apply_chat_template(conversation, add_generation_prom
 
 ```
 
-#### 빠른 생성을 위한 Flash-Attention 2
+#### 빠른 생성을 위한 Flash-Attention 2[[Flash-Attention 2 to speed up generation]]
 
 첫번째로, Flash Attention 2의 최신 버전을 설치합니다:
 
