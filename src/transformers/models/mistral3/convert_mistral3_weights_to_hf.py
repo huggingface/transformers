@@ -234,16 +234,10 @@ def main():
         default=131072,
         help="`max_position_embeddings` field in the config. This needs to be manually passed (not present anywhere otherwise).",
     )
-    parser.add_argument(
-        "--tokenizer_only",
-        action="store_true",
-        help="If passed, will only convert the tokenizer.",
-    )
 
     args = parser.parse_args()
 
-    if not args.tokenizer_only:
-        convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings)
+    convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings)
     convert_and_write_processor(args.input_dir, args.output_dir)
 
 

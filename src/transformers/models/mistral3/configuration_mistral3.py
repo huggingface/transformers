@@ -94,10 +94,10 @@ class Mistral3Config(PretrainedConfig):
         text_config=None,
         image_token_index=32000,
         projector_hidden_act="gelu",
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-2,
+        vision_feature_select_strategy="full",
+        vision_feature_layer=-1,
         image_seq_length=576,
-        multimodal_projector_bias=True,
+        multimodal_projector_bias=False,
         spatial_merge_size=2,
         **kwargs,
     ):
