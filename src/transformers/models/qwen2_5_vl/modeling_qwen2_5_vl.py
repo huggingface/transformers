@@ -1523,8 +1523,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         # Initialize weights and apply final processing
         self.post_init()
-        del self.lm_head
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
