@@ -4163,6 +4163,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+            import pdb; pdb.set_trace()
             resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
@@ -4283,6 +4284,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 (torch_dtype == torch.float16) or hasattr(hf_quantizer, "use_keep_in_fp32_modules")
             )
 
+            import pdb; pdb.set_trace()
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
@@ -4441,6 +4443,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
+            import pdb; pdb.set_trace()
             (
                 model,
                 missing_keys,
@@ -4703,6 +4706,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
+        import pdb; pdb.set_trace()
         prefix = model.base_model_prefix
 
         if hf_quantizer is not None:
