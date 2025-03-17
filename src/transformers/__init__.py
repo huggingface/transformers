@@ -3370,7 +3370,11 @@ else:
         [
             "Qwen2_5OmniModel",
             "Qwen2_5OmniTalkerForConditionalGeneration",
+            "Qwen2_5OmniTalkerModel",
+            "Qwen2_5OmniTalkerPretrainedModel",
             "Qwen2_5OmniThinkerForConditionalGeneration",
+            "Qwen2_5OmniThinkerModel",
+            "Qwen2_5OmniThinkerPreTrainedModel",
             "Qwen2_5OmniToken2WavModel",
         ]
     )
@@ -8198,7 +8202,11 @@ if TYPE_CHECKING:
         from .models.qwen2_5_omni import (
             Qwen2_5OmniModel,
             Qwen2_5OmniTalkerForConditionalGeneration,
+            Qwen2_5OmniTalkerModel,
+            Qwen2_5OmniTalkerPretrainedModel,
             Qwen2_5OmniThinkerForConditionalGeneration,
+            Qwen2_5OmniThinkerModel,
+            Qwen2_5OmniThinkerPreTrainedModel,
             Qwen2_5OmniToken2WavModel,
         )
         from .models.qwen2_5_vl import (

@@ -250,8 +250,7 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
 
-    #TODO: Change example link
-    e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -491,8 +490,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     Qwen2.5-Omni-Talker model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
 
-    #TODO: Change example link
-    e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

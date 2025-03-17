@@ -6319,7 +6319,9 @@ class Qwen2_5OmniModel(PreTrainedModel):
 __all__ = [
     Qwen2_5OmniModel,
     Qwen2_5OmniThinkerModel,
+    Qwen2_5OmniThinkerPreTrainedModel,
     Qwen2_5OmniTalkerModel,
+    Qwen2_5OmniTalkerPretrainedModel,
     Qwen2_5OmniToken2WavModel,
     Qwen2_5OmniThinkerForConditionalGeneration,
     Qwen2_5OmniTalkerForConditionalGeneration,

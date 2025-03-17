@@ -257,3 +257,30 @@ model = Qwen2_5OmniModel.from_pretrained(
 
 [[autodoc]] Qwen2_5OmniModel
     - forward
+
+## Qwen2_5OmniTalkerConfig
+[[autodoc]] Qwen2_5OmniTalkerConfig
+
+## Qwen2_5OmniTalkerForConditionalGeneration
+[[autodoc]] Qwen2_5OmniTalkerForConditionalGeneration
+
+## Qwen2_5OmniTalkerModel
+[[autodoc]] Qwen2_5OmniTalkerModel
+
+## Qwen2_5OmniTalkerPretrainedModel
+[[autodoc]] Qwen2_5OmniTalkerPretrainedModel
+
+## Qwen2_5OmniThinkerConfig
+[[autodoc]] Qwen2_5OmniThinkerConfig
+
+## Qwen2_5OmniThinkerForConditionalGeneration
+[[autodoc]] Qwen2_5OmniThinkerForConditionalGeneration
+
+## Qwen2_5OmniThinkerModel
+[[autodoc]] Qwen2_5OmniThinkerModel
+
+## Qwen2_5OmniToken2WavConfig
+[[autodoc]] Qwen2_5OmniToken2WavConfig
+
+## Qwen2_5OmniToken2WavModel
+[[autodoc]] Qwen2_5OmniToken2WavModel
