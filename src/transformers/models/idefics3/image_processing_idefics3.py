@@ -525,7 +525,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images_list: List[np.ndarray],
+        images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -536,7 +536,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
         Args:
-            images_list (`List[np.ndarray]`):
+            images (`List[List[np.ndarray]]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -554,17 +554,17 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        pad_size = get_max_height_width(images_list, input_data_format=input_data_format)
+        pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        batch_size = len(images_list)
-        max_num_images = max(len(images) for images in images_list)
+        batch_size = len(images)
+        max_num_images = max(len(images_) for images_ in images)
         input_data_format = (
-            infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            infer_channel_dimension_format(images[0][0], num_channels=(1, 3, 4))
             if input_data_format is None
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
-        first_image_in_list = [images for images in images_list if images][0][0]
+        first_image_in_list = [images_ for images_ in images if images][0][0]
 
         if input_data_format == ChannelDimension.FIRST:
             n_channels = first_image_in_list.shape[0]
@@ -585,7 +585,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
 
         for batch_idx in range(batch_size):
-            for sample_idx, image in enumerate(images_list[batch_idx]):
+            for sample_idx, image in enumerate(images[batch_idx]):
                 padded_images_list[batch_idx][sample_idx] = self._pad_image(
                     image,
                     pad_size,
