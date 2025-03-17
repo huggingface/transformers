@@ -1095,13 +1095,12 @@ class SamHQMaskDecoder(nn.Module):
         upscaled_embedding_hq = upscaled_embedding_hq + hq_features
 
         hyper_in_list = []
-        for i in range(self.num_mask_tokens):
-            if i < self.num_mask_tokens - 1:
-                current_mlp = self.output_hypernetworks_mlps[i]
-                hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
+        for mask_token_index in range(self.num_mask_tokens):
+            if mask_token_index < self.num_mask_tokens - 1:
+                current_mlp = self.output_hypernetworks_mlps[mask_token_index]
             else:
                 current_mlp = self.hq_mask_mlp
-                hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
+            hyper_in_list += [current_mlp(mask_tokens_out[:, :, mask_token_index, :])]
 
         hyper_in = torch.stack(hyper_in_list, dim=2)
         _, num_channels, height, width = upscaled_embedding.shape
