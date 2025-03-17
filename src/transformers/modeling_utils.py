@@ -4679,6 +4679,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict_folder = None
         state_dict_index = None
 
+        import pdb;pdb.set_trace()
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
                 resolved_archive_file[0] if isinstance(resolved_archive_file, (list, tuple)) else resolved_archive_file
@@ -4889,6 +4890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         model_to_load.expected_keys = expected_keys
         if device_map is not None:
+            # import pdb; pdb.set_trace()
             expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
             if hf_quantizer is None:
                 caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
@@ -5874,6 +5876,7 @@ def expand_device_map(device_map, param_names, start_prefix):
     """
     Expand a device map to return the correspondence parameter name to device.
     """
+    import pdb; pdb.set_trace()
     new_device_map = {}
     param_names = [p[len(start_prefix) :] for p in param_names if p.startswith(start_prefix)]
     for module, device in device_map.items():
@@ -5893,6 +5896,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
     }
+    # import pdb; pdb.set_trace()
     if not len(accelerator_device_map):
         return
 
@@ -5901,6 +5905,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
         allocation_factor = 2
 
+    # import pdb; pdb.set_trace()
     for param_name, device in accelerator_device_map.items():
         try:
             param = getattr(model, param_name)
