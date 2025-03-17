@@ -2147,7 +2147,7 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
         ignore_keys_for_eval: Optional[List[str]] = None,
-        strict: bool = False,
+        strict_model_loading: bool = False,
         **kwargs,
     ):
         """
@@ -2163,8 +2163,8 @@ class Trainer:
             ignore_keys_for_eval (`List[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
-            strict (`bool`, *optional*)
-                Defaults to False. If True, an error will be raised if the checkpoint is invalid/incomplete (has missing layers, etc.)
+            strict_model_loading (`bool`, *optional*)
+                Defaults to False. If True, an error will be raised if the checkpoint is invalid/incomplete (missing some layers, etc.)
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments used to hide deprecated arguments
         """
@@ -2223,7 +2223,7 @@ class Trainer:
 
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                self._load_from_checkpoint(resume_from_checkpoint, strict=strict)
+                self._load_from_checkpoint(resume_from_checkpoint, strict=strict_model_loading)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None:
@@ -2256,7 +2256,7 @@ class Trainer:
                 resume_from_checkpoint=resume_from_checkpoint,
                 trial=trial,
                 ignore_keys_for_eval=ignore_keys_for_eval,
-                strict=strict,
+                strict=strict_model_loading,
             )
 
     def _inner_training_loop(
