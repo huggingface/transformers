@@ -155,9 +155,7 @@ def get_max_height_width(
     Get the maximum height and width across all images in a batch.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(
-            make_flat_list_of_images(images_list)[0], num_channels=(1, 3, 4)
-        )
+        input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
 
     max_height = max_width = float("-inf")
     for images in images_list:
@@ -559,16 +557,17 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         batch_size = len(images)
         max_num_images = max(len(images_) for images_ in images)
         input_data_format = (
-            infer_channel_dimension_format(make_flat_list_of_images(images)[0], num_channels=(1, 3, 4))
+            infer_channel_dimension_format(images[0][0], num_channels=(1, 3, 4))
             if input_data_format is None
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
+        first_image_in_list = make_flat_list_of_images(images)[0]
 
         if input_data_format == ChannelDimension.FIRST:
-            n_channels = make_flat_list_of_images(images)[0].shape[0]
+            n_channels = first_image_in_list.shape[0]
         elif input_data_format == ChannelDimension.LAST:
-            n_channels = make_flat_list_of_images(images)[0].shape[-1]
+            n_channels = first_image_in_list.shape[-1]
         else:
             raise ValueError("Invalid channel dimension format.")
 
@@ -713,6 +712,8 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        first_image_in_list = make_flat_list_of_images(images_list)[0]
 
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
@@ -724,7 +725,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
             ]
 
-        if do_rescale and is_scaled_image(make_flat_list_of_images(images_list)[0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -732,9 +733,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(
-                make_flat_list_of_images(images_list)[0], num_channels=(1, 3, 4)
-            )
+            input_data_format = infer_channel_dimension_format(first_image_in_list, num_channels=(1, 3, 4))
 
         if do_resize:
             images_list = [
