@@ -69,31 +69,6 @@ class Mistral3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def get_sub_grids(
-    x: torch.Tensor,
-    image_sizes: list[tuple[int, int]],
-    spatial_merge_size: int,
-) -> list[torch.Tensor]:
-    # image_sizes specified in tokens
-    tokens_per_image = [h * w for h, w in image_sizes]
-    d = x.shape[-1]
-    all_img_sub_grids: list[torch.Tensor] = []
-    sub_grid_size = spatial_merge_size
-
-    for image_index, image_tokens in enumerate(x.split(tokens_per_image)):
-        # Reshape image_tokens into a 2D grid
-        h, w = image_sizes[image_index]
-        image_grid = image_tokens.view(h, w, d).permute(2, 0, 1)[None, :, :, :]  # 1 x d x h x w
-        sub_grids = torch.nn.functional.unfold(image_grid, kernel_size=sub_grid_size, stride=sub_grid_size)
-        sub_grids = sub_grids.view(
-            1, d, sub_grid_size, sub_grid_size, -1
-        )  # 1 x d x sub_grid_size x sub_grid_size x n_patches
-
-        all_img_sub_grids.append(sub_grids[0])
-
-    return all_img_sub_grids
-
-
 class Mistral3PatchMerger(nn.Module):
     """
     Learned merging of spatial_merge_size ** 2 patches
@@ -103,49 +78,33 @@ class Mistral3PatchMerger(nn.Module):
         super().__init__()
         self.config = config
 
-        vision_encoder_dim = config.vision_config.hidden_size
-        spatial_merge_size = config.spatial_merge_size
+        hidden_size = config.vision_config.hidden_size
+        self.spatial_merge_size = config.spatial_merge_size
+        self.patch_size = self.config.vision_config.patch_size
+        self.merging_layer = nn.Linear(hidden_size * self.spatial_merge_size**2, hidden_size, bias=False)
 
-        mlp_input_dim = vision_encoder_dim * (spatial_merge_size**2)
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
+        image_sizes = [
+            (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
+        ]
 
-        self.spatial_merge_size = spatial_merge_size
-        self.mlp_input_dim = mlp_input_dim
+        tokens_per_image = [h * w for h, w in image_sizes]
+        d = image_features.shape[-1]
 
-        self.merging_layer = nn.Linear(mlp_input_dim, vision_encoder_dim, bias=False)
+        permuted_tensor = []
+        for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
+            # Reshape image_tokens into a 2D grid
+            h, w = image_sizes[image_index]
+            image_grid = image_tokens.view(h, w, d).permute(2, 0, 1).unsqueeze(0)
+            grid = torch.nn.functional.unfold(
+                image_grid, kernel_size=self.spatial_merge_size, stride=self.spatial_merge_size
+            )
+            grid = grid.view(d * self.spatial_merge_size**2, -1).t()
+            permuted_tensor.append(grid)
 
-    def forward(self, x: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
-        patch_size = self.config.vision_config.patch_size
-        image_sizes = [(image_size[0] // patch_size, image_size[1] // patch_size) for image_size in image_sizes]
-
-        x = self.permute(x, image_sizes)
-        x = self.merging_layer(x)
-        return x
-
-    def permute(
-        self,
-        x: torch.Tensor,
-        image_sizes: list[tuple[int, int]],
-    ) -> torch.Tensor:
-        """
-        Args:
-            x: (N, D) where N is flattened and concatenated patch tokens
-                for all images
-            image_sizes: list of tuple of (height, width) in tokens for
-                each image
-        Returns:
-            image_features: reorders patch tokens so each grid of
-                (spatial_merge_size, spatial_merge_size) is contiguous.
-                now (N / spatial_merge_size ** 2, D * spatial_merge_size ** 2)
-        """
-
-        sub_grids = get_sub_grids(
-            x=x, image_sizes=image_sizes, spatial_merge_size=self.spatial_merge_size
-        )  # list of [d x sub_grid_size x sub_grid_size x n_patches]
-        permuted_tensor: list[torch.Tensor] = []
-        for grid in sub_grids:
-            n_patches = grid.shape[-1]
-            permuted_tensor.append(grid.view(-1, n_patches).t())  # n_patches x d * sub_grid_size * sub_grid_size
-        return torch.cat(permuted_tensor, dim=0)  # (N / spatial_merge_size ** 2, d * spatial_merge_size ** 2)
+        image_features = torch.cat(permuted_tensor, dim=0)
+        image_features = self.merging_layer(image_features)
+        return image_features
 
 
 class Mistral3MultiModalProjector(nn.Module):
@@ -165,7 +124,7 @@ class Mistral3MultiModalProjector(nn.Module):
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
         )
 
-    def forward(self, image_features, image_sizes):
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor):
         image_features = self.norm(image_features)
         image_features = self.patch_merger(image_features, image_sizes)
         hidden_states = self.linear_1(image_features)
