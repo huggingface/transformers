@@ -47,7 +47,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 
 @dataclass
-class TFSamVisionEncoderOutput(ModelOutput):
+class TFSamVisionModelOutput(ModelOutput):
     """
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -1319,7 +1319,7 @@ SAM_VISION_INPUTS_DOCSTRING = r"""
     """The vision model from Sam without any head or projection on top.""",
     SAM_START_DOCSTRING,
 )
-class TFSamVisionEncoder(TFSamPreTrainedModel):
+class TFSamVisionModel(TFSamPreTrainedModel):
     config_class = SamVisionConfig
     main_input_name = "pixel_values"
 
@@ -1376,7 +1376,7 @@ class TFSamVisionEncoder(TFSamPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSamVisionEncoderOutput, config_class=SamVisionConfig)
+    @replace_return_docstrings(output_type=TFSamVisionModelOutput, config_class=SamVisionConfig)
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
@@ -1385,7 +1385,7 @@ class TFSamVisionEncoder(TFSamPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFSamVisionEncoderOutput | Tuple[tf.Tensor]:
+    ) -> TFSamVisionModelOutput | Tuple[tf.Tensor]:
         r"""
         Returns:
 
@@ -1430,7 +1430,7 @@ class TFSamVisionEncoder(TFSamPreTrainedModel):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return TFSamVisionEncoderOutput(
+        return TFSamVisionModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -1449,7 +1449,7 @@ class TFSamModel(TFSamPreTrainedModel):
         super().__init__(config, **kwargs)
         self.shared_image_embedding = TFSamPositionalEmbedding(config.vision_config, name="shared_image_embedding")
 
-        self.vision_encoder = TFSamVisionEncoder(config.vision_config, name="vision_encoder")
+        self.vision_encoder = TFSamVisionModel(config.vision_config, name="vision_encoder")
         self.prompt_encoder = TFSamPromptEncoder(
             config.prompt_encoder_config, self.shared_image_embedding, name="prompt_encoder"
         )
@@ -1690,4 +1690,4 @@ class TFSamModel(TFSamPreTrainedModel):
                 self.mask_decoder.build(None)
 
 
-__all__ = ["TFSamVisionEncoder", "TFSamModel", "TFSamPreTrainedModel"]
+__all__ = ["TFSamVisionModel", "TFSamModel", "TFSamPreTrainedModel"]

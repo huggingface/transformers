@@ -406,7 +406,7 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class GotOcr2VisionEncoderOutput(ModelOutput):
+class GotOcr2VisionModelOutput(ModelOutput):
     """
     Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -582,14 +582,14 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
         return self.patch_embed
 
     @add_start_docstrings_to_model_forward(GOT_OCR2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GotOcr2VisionEncoderOutput, config_class=GotOcr2VisionConfig)
+    @replace_return_docstrings(output_type=GotOcr2VisionModelOutput, config_class=GotOcr2VisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, GotOcr2VisionEncoderOutput]:
+    ) -> Union[Tuple, GotOcr2VisionModelOutput]:
         r"""
         Returns:
 
@@ -640,7 +640,7 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return GotOcr2VisionEncoderOutput(
+        return GotOcr2VisionModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,

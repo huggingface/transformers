@@ -32,14 +32,14 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SamModel, SamProcessor, SamVisionEncoder
+    from transformers import SamModel, SamProcessor, SamVisionModel
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class SamVisionTester:
+class SamVisionModelTester:
     def __init__(
         self,
         parent,
@@ -133,7 +133,7 @@ class SamVisionTester:
         return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values):
-        model = SamVisionEncoder(config=config)
+        model = SamVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -151,13 +151,13 @@ class SamVisionTester:
 
 
 @require_torch
-class SamVisionTest(ModelTesterMixin, unittest.TestCase):
+class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SamVisionEncoder,) if is_torch_available() else ()
+    all_model_classes = (SamVisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -166,7 +166,7 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = SamVisionTester(self)
+        self.model_tester = SamVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
 
     def test_config(self):
@@ -228,11 +228,11 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamVisionEncoder does not support training")
+    @unittest.skip(reason="SamVisionModel does not support training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamVisionEncoder does not support training")
+    @unittest.skip(reason="SamVisionModel does not support training")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -248,15 +248,15 @@ class SamVisionTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SamVisionEncoder has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="SamVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="SamVisionEncoder has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="SamVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="SamVisionEncoder does not support training")
+    @unittest.skip(reason="SamVisionModel does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -413,7 +413,7 @@ class SamModelTester:
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
-        self.vision_tester = SamVisionTester(parent)
+        self.vision_tester = SamVisionModelTester(parent)
         self.prompt_encoder_tester = SamPromptEncoderTester()
         self.mask_decoder_tester = SamMaskDecoderTester()
 

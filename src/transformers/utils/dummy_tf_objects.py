@@ -2375,7 +2375,7 @@ class TFSamPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFSamVisionEncoder(metaclass=DummyObject):
+class TFSamVisionModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

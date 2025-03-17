@@ -25,7 +25,7 @@ from transformers.models.llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaPreTrainedModel,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
+from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionModel, SamVisionLayer
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import (
@@ -276,7 +276,7 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     pass
 
 
-class GotOcr2VisionEncoder(SamVisionEncoder):
+class GotOcr2VisionEncoder(SamVisionModel):
     pass
 
 

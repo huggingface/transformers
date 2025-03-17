@@ -34,14 +34,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import SamProcessor, TFSamModel, TFSamVisionEncoder
+    from transformers import SamProcessor, TFSamModel, TFSamVisionModel
     from transformers.modeling_tf_utils import keras
 
 if is_vision_available():
     from PIL import Image
 
 
-class TFSamVisionTester:
+class TFSamVisionModelTester:
     def __init__(
         self,
         parent,
@@ -131,7 +131,7 @@ class TFSamVisionTester:
         return config, pixel_values
 
     def create_and_check_model(self, config, pixel_values):
-        model = TFSamVisionEncoder(config=config)
+        model = TFSamVisionModel(config=config)
         result = model(pixel_values)
         output_size = self.image_size // self.patch_size
         self.parent.assertEqual(
@@ -146,20 +146,20 @@ class TFSamVisionTester:
 
 
 @require_tf
-class TFSamVisionTest(TFModelTesterMixin, unittest.TestCase):
+class TFSamVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TFSamVisionEncoder,) if is_tf_available() else ()
+    all_model_classes = (TFSamVisionModel,) if is_tf_available() else ()
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
 
     def setUp(self):
-        self.model_tester = TFSamVisionTester(self)
+        self.model_tester = TFSamVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
 
     def test_config(self):
@@ -376,7 +376,7 @@ class TFSamModelTester:
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
-        self.vision_tester = TFSamVisionTester(parent)
+        self.vision_tester = TFSamVisionModelTester(parent)
         self.prompt_encoder_tester = TFSamPromptEncoderTester()
         self.mask_decoder_tester = TFSamMaskDecoderTester()
 

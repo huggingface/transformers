@@ -44,7 +44,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 
 @dataclass
-class SamVisionEncoderOutput(ModelOutput):
+class SamVisionModelOutput(ModelOutput):
     """
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -1211,7 +1211,7 @@ SAM_VISION_INPUTS_DOCSTRING = r"""
     """The vision model from Sam without any head or projection on top.""",
     SAM_START_DOCSTRING,
 )
-class SamVisionEncoder(SamPreTrainedModel):
+class SamVisionModel(SamPreTrainedModel):
     config_class = SamVisionConfig
     main_input_name = "pixel_values"
 
@@ -1253,14 +1253,14 @@ class SamVisionEncoder(SamPreTrainedModel):
         return self.patch_embed
 
     @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SamVisionEncoderOutput, config_class=SamVisionConfig)
+    @replace_return_docstrings(output_type=SamVisionModelOutput, config_class=SamVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionEncoderOutput]:
+    ) -> Union[Tuple, SamVisionModelOutput]:
         r"""
         Returns:
 
@@ -1311,7 +1311,7 @@ class SamVisionEncoder(SamPreTrainedModel):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return SamVisionEncoderOutput(
+        return SamVisionModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -1330,7 +1330,7 @@ class SamModel(SamPreTrainedModel):
         super().__init__(config)
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 
-        self.vision_encoder = SamVisionEncoder(config.vision_config)
+        self.vision_encoder = SamVisionModel(config.vision_config)
         self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
@@ -1560,4 +1560,4 @@ class SamModel(SamPreTrainedModel):
         )
 
 
-__all__ = ["SamVisionEncoder", "SamModel", "SamPreTrainedModel"]
+__all__ = ["SamVisionModel", "SamModel", "SamPreTrainedModel"]
