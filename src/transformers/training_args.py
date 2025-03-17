@@ -739,7 +739,7 @@ class TrainingArguments:
             The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
             then use the last checkpoint of all trials, compare those, and select the best one. However, other options
             are also available. See the [Ray documentation](
-            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
+            https://docs.ray.io/en/latest/tune/api/doc/ray.tune.ExperimentAnalysis.get_best_trial.html) for
             more options.
         ddp_timeout (`int`, *optional*, defaults to 1800):
             The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
