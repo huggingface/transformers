@@ -63,7 +63,6 @@ class MiniMaxModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
-        head_dim=6,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -92,7 +91,6 @@ class MiniMaxModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -140,7 +138,6 @@ class MiniMaxModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
-            head_dim=self.head_dim,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
