@@ -469,13 +469,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
         # model; don't need to consider it twice
         self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
 
-        if self.language_model._tied_weights_keys is not None:
-            # TODO - fix uninitialized lm head issues
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.encoder = CTCModel(config.encoder_config)
         self.projector = EncoderProjectorQFormer(config.projector_config)
         self.post_init()
+
+    def tie_weights(self):
+        return self.language_model.tie_weights()
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
