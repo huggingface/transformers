@@ -10,8 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
     customize_docstrings,
     get_image_size_for_max_height_width,
@@ -56,21 +55,12 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class DeformableDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
-
-
-class DeformableDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
-    format: Optional[AnnotationFormat]
-    annotations: Optional[Dict]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
@@ -291,6 +281,8 @@ def prepare_coco_panoptic_annotation(
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
     """,
     custom_preprocess_docstring="""
         annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
@@ -337,10 +329,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = DeformableDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = DeformableDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = DeformableDetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -599,7 +590,11 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask, annotation
 
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[DeformableDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
@@ -615,7 +610,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
@@ -690,15 +685,8 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                         target_size=resized_image.size()[-2:],
                     )
                 image = resized_image
-
-            if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                image = image * rescale_factor
-            elif do_normalize:
-                image = F.normalize(image, image_mean, image_std)
-
+            # Fused rescale and normalize
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 

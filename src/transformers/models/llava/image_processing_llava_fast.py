@@ -21,8 +21,7 @@ from ...image_processing_utils import (
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     customize_docstrings,
     group_images_by_shape,
     reorder_images,
@@ -59,11 +58,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class LlavaFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    do_pad: Optional[bool]
-
-
-class LlavaFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_pad: Optional[bool]
 
 
@@ -87,15 +82,12 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_init_kwargs = LlavaFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = LlavaFastImageProcessorPreprocessKwargs
+    valid_kwargs = LlavaFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LlavaFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[LlavaFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[LlavaFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def pad_to_square(

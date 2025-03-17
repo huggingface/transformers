@@ -39,7 +39,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_gpu_if_bnb_not_multi_backend_enabled,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -274,7 +274,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = self.model_8bit.generate(
-            input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(self.model_8bit.device), max_new_tokens=10
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -292,7 +292,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_8bit_from_config.generate(
-            input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(model_8bit_from_config.device), max_new_tokens=10
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -311,7 +311,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_8bit.generate(
-            input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(model_8bit.device), max_new_tokens=10
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -362,7 +362,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
-        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
+        _ = self.model_fp16.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_fp16.device), max_new_tokens=10
+        )
 
         # Check this does not throw an error
         _ = self.model_fp16.to("cpu")
@@ -402,7 +404,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
             output_sequences = model_from_saved.generate(
-                input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10
+                input_ids=encoded_input["input_ids"].to(model_from_saved.device), max_new_tokens=10
             )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -429,7 +431,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
             output_sequences = model_from_saved.generate(
-                input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10
+                input_ids=encoded_input["input_ids"].to(model_from_saved.device), max_new_tokens=10
             )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
@@ -669,7 +671,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
 
 
-@require_torch_multi_gpu
+@require_torch_multi_accelerator
 @apply_skip_if_not_implemented
 class MixedInt8TestMultiGpu(BaseMixedInt8Test):
     def setUp(self):
@@ -698,7 +700,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         self.assertIn(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
-@require_torch_multi_gpu
+@require_torch_multi_accelerator
 @apply_skip_if_not_implemented
 class MixedInt8TestCpuGpu(BaseMixedInt8Test):
     def setUp(self):
@@ -964,3 +966,37 @@ class MixedInt8LlamaTest(MixedInt8Test):
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
+@slow
+@apply_skip_if_not_implemented
+class Bnb8bitCompile(unittest.TestCase):
+    model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    input_text = "Hello my name is"
+
+    def setUp(self):
+        # Models and tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+
+    def test_generate_compile(self):
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # if nothing is set, compile will be disabled for bnb
+        self.model_8bit.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
+            max_new_tokens=10,
+            cache_implementation="static",
+        )
+
+        with self.assertRaises(Exception):
+            object.__setattr__(self.model_8bit.hf_quantizer, "is_compileable", True)
+            self.model_8bit.generate(
+                input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
+                max_new_tokens=10,
+                cache_implementation="static",
+            )

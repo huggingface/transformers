@@ -23,10 +23,8 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
-    is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -35,7 +33,13 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -312,21 +316,19 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @require_torch_sdpa
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_generate(self):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
 
 
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
+    # Doesn't run generation tests here -- idefics has a dedicated tester for generation tests below
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
         if is_torch_available()
@@ -348,10 +350,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         return inputs_dict
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self):
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -477,13 +480,13 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -574,11 +577,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        self.has_attentions = False
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "HuggingFaceM4/idefics-9b"
@@ -601,10 +599,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self, torch_dtype):
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @pytest.mark.generate
@@ -859,19 +858,25 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip("Idefics has a hard requirement on SDPA")
     def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
+    @unittest.skip(
+        "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+    )
+    def test_generation_tester_mixin_inheritance(self):
         pass
 
 

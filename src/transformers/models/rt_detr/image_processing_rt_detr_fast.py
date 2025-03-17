@@ -10,8 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
     customize_docstrings,
     get_image_size_for_max_height_width,
@@ -51,21 +50,12 @@ elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
-class RTDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
-
-
-class RTDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
-    format: Optional[AnnotationFormat]
-    annotations: Optional[Dict]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
@@ -148,6 +138,8 @@ def prepare_coco_detection_annotation(
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
     """,
     custom_preprocess_docstring="""
         annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
@@ -194,11 +186,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = RTDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = RTDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = RTDetrFastImageProcessorKwargs
     do_convert_annotations = True
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
@@ -418,9 +409,13 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask, annotation
 
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
@@ -485,15 +480,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                         target_size=resized_image.size()[-2:],
                     )
                 image = resized_image
-
-            if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                image = image * rescale_factor
-            elif do_normalize:
-                image = F.normalize(image, image_mean, image_std)
-
+            # Fused rescale and normalize
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 

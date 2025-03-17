@@ -20,12 +20,15 @@ from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.testing_utils import (
+    CaptureStderr,
+    get_gpu_count,
     is_torch_available,
     require_gptq,
     require_non_xpu,
     require_read_token,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -215,11 +218,11 @@ class CacheTest(unittest.TestCase):
         # Check if the exported model is configured with the `StaticCache` correctly
         n_static_key_caches = n_static_value_caches = 0
         for buffer_name, buffer in exported_program.named_buffers():
-            if buffer_name.startswith("static_cache.key_cache"):
+            if buffer_name.startswith("key_cache"):
                 self.assertTrue(buffer.shape[0] == batch_size)
                 self.assertTrue(buffer.shape[2] == max_cache_len)
                 n_static_key_caches = n_static_key_caches + 1
-            if buffer_name.startswith("static_cache.value_cache"):
+            if buffer_name.startswith("value_cache"):
                 self.assertTrue(buffer.shape[0] == batch_size)
                 self.assertTrue(buffer.shape[2] == max_cache_len)
                 n_static_value_caches = n_static_value_caches + 1
@@ -619,4 +622,75 @@ class CacheIntegrationTest(unittest.TestCase):
             "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is an enriching experience that broadens our horizons and exposes us to new cultures, landscapes, and people. Whether it's a week",
             'You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital of France.\n\n\n\n\n\n## Query:\n\nIn a detailed analysis, compare the economic impacts of the introduction of the'
         ]  # fmt: skip
-        self.assertTrue(responses == EXPECTED_DECODED_TEXT)
+        self.assertEqual(responses, EXPECTED_DECODED_TEXT)
+
+    @require_torch_multi_gpu
+    def test_data_parallel_dynamic_cache(self):
+        """
+        Tests that the dynamic cache works with nn.DataParallel. Under the hood, `DynamicCache` is rebuilt from
+        multiple `DynamicCache` in the gather step.
+        """
+
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+
+        # w/o DP: batch_size = num_gpu
+        # w DP: batch_size = 1 (with num_gpus replicas)
+        num_gpus = get_gpu_count()
+        model_inputs = tokenizer(["foo bar"] * num_gpus, return_tensors="pt").to(model.device)
+
+        # w/o DP
+        no_parallelism_cache = model(**model_inputs).past_key_values
+        self.assertIsInstance(no_parallelism_cache, DynamicCache)
+
+        # w DP
+        model = torch.nn.DataParallel(model)
+        parallelism_cache = model(**model_inputs).past_key_values
+        self.assertIsInstance(parallelism_cache, DynamicCache)
+
+        # Check that the caches are the same
+        for layer_idx in range(len(no_parallelism_cache)):
+            for kv_idx in range(2):  # 0 = key, 1 = value
+                torch.testing.assert_close(
+                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
+                )
+
+    @require_torch_gpu
+    def test_static_cache_no_cuda_graph_skips(self):
+        """
+        Tests generating with static cache and compilation doesn't skip cuda graphs. Regression test for #36543.
+
+        (? We set `fullgraph=True`, which according to torch docs means it should raise an exception. Instead,
+        messages are being thrown to stderr?)
+        """
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["foo bar"], return_tensors="pt").to(torch_device)
+
+        # on `main`, prior to #36543, this would send stderr messages about cuda graphs being skipped.
+        with CaptureStderr() as cap:
+            model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
+        self.assertEqual(cap.err, "")
+
+    @require_torch_multi_gpu
+    def test_static_cache_multi_gpu(self):
+        """Regression test for #35164: static cache with multi-gpu"""
+
+        model_id = "google/gemma-2-2b-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        device_map = {"model.embed_tokens": 0, "model.norm": 1, "model.rotary_emb": 1, "lm_head": 0}
+        num_hidden_layers = 26
+        for i in range(num_hidden_layers):
+            device_map[f"model.layers.{i}"] = 0 if i < 13 else 1
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype="bfloat16",
+            device_map=device_map,
+        )
+        inputs = tokenizer("Today is a beautiful day!", return_tensors="pt").to(0)
+        _ = model(**inputs)
+        _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")

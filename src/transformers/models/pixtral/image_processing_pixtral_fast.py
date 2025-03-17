@@ -19,8 +19,7 @@ from typing import Dict, List, Optional, Union
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     customize_docstrings,
     group_images_by_shape,
     reorder_images,
@@ -59,11 +58,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class PixtralFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    patch_size: Optional[Dict[str, int]]
-
-
-class PixtralFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     patch_size: Optional[Dict[str, int]]
 
 
@@ -85,15 +80,12 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_init_kwargs = PixtralFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = PixtralFastImageProcessorPreprocessKwargs
+    valid_kwargs = PixtralFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

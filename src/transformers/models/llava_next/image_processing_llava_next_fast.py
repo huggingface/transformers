@@ -19,8 +19,7 @@ from typing import List, Optional, Union
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     customize_docstrings,
     divide_to_patches,
     group_images_by_shape,
@@ -55,12 +54,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class LlavaNextFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
-    image_grid_pinpoints: Optional[List[List[int]]]
-    do_pad: Optional[bool]
-
-
-class LlavaNextFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_grid_pinpoints: Optional[List[List[int]]]
     do_pad: Optional[bool]
 
@@ -93,15 +87,12 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-    valid_init_kwargs = LlavaNextFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = LlavaNextFastImageProcessorPreprocessKwargs
+    valid_kwargs = LlavaNextFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(

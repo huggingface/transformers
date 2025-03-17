@@ -249,7 +249,7 @@ class ReformerModelTester:
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        # set all position encodings to zero so that postions don't matter
+        # set all position encodings to zero so that positions don't matter
         with torch.no_grad():
             embedding = model.embeddings.position_embeddings.embedding
             embedding.weight = nn.Parameter(torch.zeros(embedding.weight.shape).to(torch_device))
