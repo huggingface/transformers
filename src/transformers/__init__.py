@@ -177,6 +177,10 @@ _import_structure = {
         "AriaProcessor",
         "AriaTextConfig",
     ],
+    "models.arlow": [
+        "ArlowTokenizer",
+	# More coming
+    ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
         "ASTFeatureExtractor",
@@ -1108,6 +1112,7 @@ except OptionalDependencyNotAvailable:
 else:
     # Fast tokenizers structure
     _import_structure["models.albert"].append("AlbertTokenizerFast")
+    _import_structure["models.arlow"].append("ArlowTokenizer")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
@@ -1176,7 +1181,6 @@ else:
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
-    _import_structure["tokenization_arlow"] = ["ArlowTokenizer"]
 
 
 try:
@@ -1506,6 +1510,11 @@ else:
             "AriaTextPreTrainedModel",
         ]
     )
+    _import_structure["models.arlow"].extend(
+        [
+            # Empty for future release
+        ]
+   )
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "ASTForAudioClassification",
@@ -6179,7 +6188,6 @@ if TYPE_CHECKING:
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
-    from .tokenization_arlow import ArlowTokenizer
     from .tokenization_utils_base import (
         AddedToken,
         BatchEncoding,
@@ -6329,6 +6337,7 @@ if TYPE_CHECKING:
     else:
         # Fast tokenizers imports
         from .models.albert import AlbertTokenizerFast
+        from .models.arlow import ArlowTokenizer
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
@@ -6395,7 +6404,6 @@ if TYPE_CHECKING:
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
-        from .tokenization_arlow import ArlowTokenizer
     try:
         if not (is_sentencepiece_available() and is_tokenizers_available()):
             raise OptionalDependencyNotAvailable()
@@ -6696,6 +6704,9 @@ if TYPE_CHECKING:
             AriaTextModel,
             AriaTextPreTrainedModel,
         )
+#       from .models.arlow import (
+            # Empty for future release
+#       )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,
             ASTModel,
