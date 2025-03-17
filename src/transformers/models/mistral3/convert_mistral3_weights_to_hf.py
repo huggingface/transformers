@@ -193,10 +193,17 @@ def convert_and_write_processor(input_dir: str, output_dir: str, tokenizer_templ
 
     config = read_json(os.path.join(input_dir, "params.json"))
     patch_size = config["vision_encoder"]["patch_size"]
+    spatial_merge_size = config["vision_encoder"]["spatial_merge_size"]
     image_processor = Mistral3ImageProcessor(patch_size=patch_size)
 
-    processor = Mistral3Processor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]", patch_size=patch_size)
-    processor.chat_template = chat_template
+    processor = Mistral3Processor(
+        tokenizer=tokenizer,
+        image_processor=image_processor,
+        image_token="[IMG]",
+        patch_size=patch_size,
+        chat_template=chat_template,
+        spatial_merge_size=spatial_merge_size,
+    )
 
     # Finally save it
     processor.save_pretrained(output_dir)

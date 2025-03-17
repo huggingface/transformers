@@ -85,6 +85,7 @@ class Mistral3Processor(ProcessorMixin):
         "image_token",
         "image_break_token",
         "image_end_token",
+        "spatial_merge_size",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
