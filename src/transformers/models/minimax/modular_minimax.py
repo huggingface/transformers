@@ -132,17 +132,17 @@ class MiniMaxConfig(MixtralConfig):
             are grouped and processed for intra- and inter-block attention.
         postnorm (`bool`, *optional*, defaults to `False`):
             Use residual connections post-normalization.
-        layernorm_full_attention_alpha (`float`, *optional*, defaults to 1):
+        full_attn_alpha_factor (`float`, *optional*, defaults to 1):
             Weight for residual value in residual connection after normal attention.
-        layernorm_full_attention_beta (`float`, *optional*, defaults to 1):
+        full_attn_beta_factor (`float`, *optional*, defaults to 1):
             Weight for hidden state value in residual connection after normal attention.
-        layernorm_linear_attention_alpha (`float`, *optional*, defaults to 1):
+        linear_attn_alpha_factor (`float`, *optional*, defaults to 1):
             Weight for residual value in residual connection after lightning attention.
-        layernorm_linear_attention_beta (`float`, *optional*, defaults to 1):
+        linear_attn_beta_factor (`float`, *optional*, defaults to 1):
             Weight for hidden state value in residual connection after lightning attention.
-        layernorm_mlp_alpha (`float`, *optional*, defaults to 1):
+        mlp_alpha_factor (`float`, *optional*, defaults to 1):
             Weight for residual value in residual connection after MLP.
-        layernorm_mlp_beta (`float`, *optional*, defaults to 1):
+        mlp_beta_factor (`float`, *optional*, defaults to 1):
             Weight for hidden state value in residual connection after MLP.
 
     ```python
@@ -163,24 +163,24 @@ class MiniMaxConfig(MixtralConfig):
         attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
         block_size=256,
         postnorm=False,
-        layernorm_full_attention_alpha=1,
-        layernorm_full_attention_beta=1,
-        layernorm_linear_attention_alpha=1,
-        layernorm_linear_attention_beta=1,
-        layernorm_mlp_alpha=1,
-        layernorm_mlp_beta=1,
+        full_attn_alpha_factor=1,
+        full_attn_beta_factor=1,
+        linear_attn_alpha_factor=1,
+        linear_attn_beta_factor=1,
+        mlp_alpha_factor=1,
+        mlp_beta_factor=1,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
         self.attn_type_list = attn_type_list
         self.block_size = block_size
         self.postnorm = postnorm
-        self.layernorm_full_attention_alpha = layernorm_full_attention_alpha
-        self.layernorm_full_attention_beta = layernorm_full_attention_beta
-        self.layernorm_linear_attention_alpha = layernorm_linear_attention_alpha
-        self.layernorm_linear_attention_beta = layernorm_linear_attention_beta
-        self.layernorm_mlp_alpha = layernorm_mlp_alpha
-        self.layernorm_mlp_beta = layernorm_mlp_beta
+        self.full_attn_alpha_factor = full_attn_alpha_factor
+        self.full_attn_beta_factor = full_attn_beta_factor
+        self.linear_attn_alpha_factor = linear_attn_alpha_factor
+        self.linear_attn_beta_factor = linear_attn_beta_factor
+        self.mlp_alpha_factor = mlp_alpha_factor
+        self.mlp_beta_factor = mlp_beta_factor
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
@@ -398,17 +398,17 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer):
         self.layer_idx = layer_idx
         self.postnorm = config.postnorm
         self.attn_type = config.attn_type_list[layer_idx]
-        self.mlp_alpha_factor = config.layernorm_mlp_alpha
-        self.mlp_beta_factor = config.layernorm_mlp_beta
+        self.mlp_alpha_factor = config.mlp_alpha_factor
+        self.mlp_beta_factor = config.mlp_beta_factor
 
         if self.attn_type == 0:
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
-            self.attn_alpha_factor = config.layernorm_linear_attention_alpha
-            self.attn_beta_factor = config.layernorm_linear_attention_beta
+            self.attn_alpha_factor = config.linear_attn_alpha_factor
+            self.attn_beta_factor = config.linear_attn_beta_factor
         else:
             self.self_attn = MiniMaxAttention(config, layer_idx)
-            self.attn_alpha_factor = config.layernorm_full_attention_alpha
-            self.attn_beta_factor = config.layernorm_full_attention_beta
+            self.attn_alpha_factor = config.full_attn_alpha_factor
+            self.attn_beta_factor = config.full_attn_beta_factor
 
     def forward(
         self,
