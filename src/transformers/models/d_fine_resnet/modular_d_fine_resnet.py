@@ -108,6 +108,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         use_learnable_affine_block=False,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.num_channels = num_channels
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
@@ -127,6 +128,9 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
 
+        if not hasattr(self, "depths"):
+            self.depths = depths
+
         if not (
             len(stage_in_channels)
             == len(stage_mid_channels)
@@ -138,7 +142,6 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
             == len(stage_numb_of_layers)
         ):
             raise ValueError("All stage configuration lists must have the same length.")
-        super().__init__(**kwargs)
 
 
 class DFineResNetPreTrainedModel(RTDetrResNetPreTrainedModel):
