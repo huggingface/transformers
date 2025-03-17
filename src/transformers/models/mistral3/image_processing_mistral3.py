@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Optional, Union, Tuple
 import math
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -34,13 +34,12 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torchvision_v2_available, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
 if is_vision_available():
     import PIL
-
 
 
 logger = logging.get_logger(__name__)
@@ -71,6 +70,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     new_image.paste(image, (0, 0), image)
     new_image = new_image.convert("RGB")
     return new_image
+
 
 def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) -> int:
     """
@@ -129,6 +129,7 @@ def get_resize_output_image_size(
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
+
 
 class Mistral3ImageProcessor(BaseImageProcessor):
     r"""

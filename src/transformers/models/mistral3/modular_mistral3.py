@@ -13,23 +13,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional, Union, Tuple
-import math
+from typing import List, Union
 
 import torch
 from torch import nn
 
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torchvision_v2_available
-
 from ...activations import ACT2FN
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput, load_image
+from ...processing_utils import Unpack, _validate_images_text_input_order
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-from ..mistral.modeling_mistral import MistralRMSNorm
 from ..llava.configuration_llava import LlavaConfig
-from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaMultiModalProjector
+from ..llava.modeling_llava import LlavaForConditionalGeneration
+from ..mistral.modeling_mistral import MistralRMSNorm
 from ..pixtral.image_processing_pixtral_fast import PixtralImageProcessorFast
 from ..pixtral.processing_pixtral import PixtralProcessor, PixtralProcessorKwargs, is_image_or_image_url
 
@@ -38,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 
 class Mistral3Config(LlavaConfig):
-    
     def __init__(
         self,
         vision_config=None,
@@ -62,6 +58,7 @@ class Mistral3ImageProcessorFast(PixtralImageProcessorFast):
 
 class Mistral3ProcessorKwargs(PixtralProcessorKwargs):
     pass
+
 
 class Mistral3Processor(PixtralProcessor):
     valid_kwargs = [
@@ -93,7 +90,7 @@ class Mistral3Processor(PixtralProcessor):
             image_token=image_token,
             image_break_token=image_break_token,
             image_end_token=image_end_token,
-            **kwargs
+            **kwargs,
         )
         self.spatial_merge_size = spatial_merge_size
 
@@ -229,7 +226,6 @@ class Mistral3PatchMerger(nn.Module):
         self.merging_layer = nn.Linear(mlp_input_dim, vision_encoder_dim, bias=False)
 
     def forward(self, x: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
-
         patch_size = self.config.vision_config.patch_size
         image_sizes = [(image_size[0] // patch_size, image_size[1] // patch_size) for image_size in image_sizes]
 
@@ -255,18 +251,13 @@ class Mistral3PatchMerger(nn.Module):
         """
 
         sub_grids = get_sub_grids(
-            x=x,
-            image_sizes=image_sizes,
-            spatial_merge_size=self.spatial_merge_size
+            x=x, image_sizes=image_sizes, spatial_merge_size=self.spatial_merge_size
         )  # list of [d x sub_grid_size x sub_grid_size x n_patches]
         permuted_tensor: list[torch.Tensor] = []
         for grid in sub_grids:
             n_patches = grid.shape[-1]
-            permuted_tensor.append(grid.view(-1, n_patches).t(
-            ))  # n_patches x d * sub_grid_size * sub_grid_size
-        return torch.cat(
-            permuted_tensor, dim=0
-        )  # (N / spatial_merge_size ** 2, d * spatial_merge_size ** 2)
+            permuted_tensor.append(grid.view(-1, n_patches).t())  # n_patches x d * sub_grid_size * sub_grid_size
+        return torch.cat(permuted_tensor, dim=0)  # (N / spatial_merge_size ** 2, d * spatial_merge_size ** 2)
 
 
 def get_sub_grids(
@@ -283,18 +274,16 @@ def get_sub_grids(
     for image_index, image_tokens in enumerate(x.split(tokens_per_image)):
         # Reshape image_tokens into a 2D grid
         h, w = image_sizes[image_index]
-        image_grid = image_tokens.view(h, w, d).permute(
-            2, 0, 1)[None, :, :, :]  # 1 x d x h x w
-        sub_grids = torch.nn.functional.unfold(image_grid,
-                                               kernel_size=sub_grid_size,
-                                               stride=sub_grid_size)
+        image_grid = image_tokens.view(h, w, d).permute(2, 0, 1)[None, :, :, :]  # 1 x d x h x w
+        sub_grids = torch.nn.functional.unfold(image_grid, kernel_size=sub_grid_size, stride=sub_grid_size)
         sub_grids = sub_grids.view(
-            1, d, sub_grid_size, sub_grid_size,
-            -1)  # 1 x d x sub_grid_size x sub_grid_size x n_patches
+            1, d, sub_grid_size, sub_grid_size, -1
+        )  # 1 x d x sub_grid_size x sub_grid_size x n_patches
 
         all_img_sub_grids.append(sub_grids[0])
 
     return all_img_sub_grids
+
 
 class Mistral3MultiModalProjector(nn.Module):
     def __init__(self, config: Mistral3Config):
@@ -323,7 +312,6 @@ class Mistral3MultiModalProjector(nn.Module):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
-    
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

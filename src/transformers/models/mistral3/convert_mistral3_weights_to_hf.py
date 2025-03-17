@@ -19,7 +19,14 @@ import re
 import torch
 from safetensors.torch import load_file
 
-from transformers import AutoTokenizer, LlamaTokenizerFast, PixtralVisionConfig, MistralConfig, Mistral3Config, Mistral3ForConditionalGeneration, Mistral3ImageProcessor, Mistral3Processor
+from transformers import (
+    Mistral3Config,
+    Mistral3ForConditionalGeneration,
+    Mistral3ImageProcessor,
+    Mistral3Processor,
+    MistralConfig,
+    PixtralVisionConfig,
+)
 from transformers.integrations.mistral import convert_tekken_tokenizer
 
 
@@ -113,7 +120,6 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
 
 
 def convert_config(original_config: dict, max_position_embeddings: int = 131072):
-
     original_vision_config = original_config.pop("vision_encoder")
     original_text_config = original_config
 
@@ -135,7 +141,9 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     new_text_config_kwargs.update({k: v for k, v in original_text_config.items() if k in similar_text_keys_to_keep})
     # These are not always defined depending on `params.json`
     new_text_config_kwargs["sliding_window"] = original_text_config.get("sliding_window", None)
-    new_text_config_kwargs["max_position_embeddings"] = original_text_config.get("max_seq_len", max_position_embeddings)
+    new_text_config_kwargs["max_position_embeddings"] = original_text_config.get(
+        "max_seq_len", max_position_embeddings
+    )
     # This may sometimes be a string in `params.json`
     if new_text_config_kwargs["sliding_window"] is not None:
         new_text_config_kwargs["sliding_window"] = int(new_text_config_kwargs["sliding_window"])
@@ -144,11 +152,11 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     # Vision config
     new_vision_config = original_vision_config
     adapter_bias = new_vision_config.pop("adapter_bias", False)
-    mm_projector_id = new_vision_config.pop("mm_projector_id")
+    _ = new_vision_config.pop("mm_projector_id", None)
     spatial_merge_size = new_vision_config.pop("spatial_merge_size")
     image_token_id = new_vision_config.pop("image_token_id", 10)
-    image_break_token_id = new_vision_config.pop("image_break_token_id", 12)
-    image_end_token_id = new_vision_config.pop("image_end_token_id", 13)
+    _ = new_vision_config.pop("image_break_token_id", 12)
+    _ = new_vision_config.pop("image_end_token_id", 13)
     _ = new_vision_config.pop("max_image_size")
     new_vision_config = PixtralVisionConfig(**new_vision_config)
 
@@ -189,12 +197,13 @@ def convert_and_write_processor(input_dir: str, output_dir: str, tokenizer_templ
     tokenizer_file = os.path.join(input_dir, "tekken.json")
     tokenizer = convert_tekken_tokenizer(tokenizer_file)
 
-    chat_template = "{%- if messages[0][\"role\"] == \"system\" %}{%- set system_message = messages[0][\"content\"] %}{%- set loop_messages = messages[1:] %}\n{%- else %}{%- set loop_messages = messages %}{%- endif %}{{- bos_token }}{%- for message in loop_messages %}{%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}{{- raise_exception('After the optional system message, conversation roles must alternate user/assistant/user/assistant/...') }}{%- endif %}{%- if message[\"role\"] == \"user\" %}{%- if loop.last and system_message is defined %}{{- \"[INST]\" + system_message + \"\n\n\" }}{%- else %}{{ \"[INST]\" }}{%- endif %}{%- endif %}{%- if message[\"content\"] is not string %}{%- for chunk in message[\"content\"] %}{%- if chunk[\"type\"] == \"text\" %}{%- if \"content\" in chunk %}{{- chunk[\"content\"] }}{%- elif \"text\" in chunk %}{{- chunk[\"text\"] }}{%- endif %}{%- elif chunk[\"type\"] == \"image\" %}{{- \"[IMG]\" }}{%- else %}{{- raise_exception(\"Unrecognized content type!\") }}{%- endif %}{%- endfor %}{%- else %}{{- message[\"content\"] }}{%- endif %}{%- if message[\"role\"] == \"user\" %}{{- \"[/INST]\" }}{%- elif message[\"role\"] == \"assistant\" %}{{- eos_token}}{%- else %}{{- raise_exception(\"Only user and assistant roles are supported, with the exception of an initial optional system message!\") }}{%- endif %}{%- endfor %}"
+    chat_template = '{%- if messages[0]["role"] == "system" %}{%- set system_message = messages[0]["content"] %}{%- set loop_messages = messages[1:] %}\n{%- else %}{%- set loop_messages = messages %}{%- endif %}{{- bos_token }}{%- for message in loop_messages %}{%- if (message[\'role\'] == \'user\') != (loop.index0 % 2 == 0) %}{{- raise_exception(\'After the optional system message, conversation roles must alternate user/assistant/user/assistant/...\') }}{%- endif %}{%- if message["role"] == "user" %}{%- if loop.last and system_message is defined %}{{- "[INST]" + system_message + "\n\n" }}{%- else %}{{ "[INST]" }}{%- endif %}{%- endif %}{%- if message["content"] is not string %}{%- for chunk in message["content"] %}{%- if chunk["type"] == "text" %}{%- if "content" in chunk %}{{- chunk["content"] }}{%- elif "text" in chunk %}{{- chunk["text"] }}{%- endif %}{%- elif chunk["type"] == "image" %}{{- "[IMG]" }}{%- else %}{{- raise_exception("Unrecognized content type!") }}{%- endif %}{%- endfor %}{%- else %}{{- message["content"] }}{%- endif %}{%- if message["role"] == "user" %}{{- "[/INST]" }}{%- elif message["role"] == "assistant" %}{{- eos_token}}{%- else %}{{- raise_exception("Only user and assistant roles are supported, with the exception of an initial optional system message!") }}{%- endif %}{%- endfor %}'
 
     config = read_json(os.path.join(input_dir, "params.json"))
     patch_size = config["vision_encoder"]["patch_size"]
     spatial_merge_size = config["vision_encoder"]["spatial_merge_size"]
-    image_processor = Mistral3ImageProcessor(patch_size=patch_size)
+    max_image_size = config["vision_encoder"]["max_image_size"]
+    image_processor = Mistral3ImageProcessor(patch_size=patch_size, size={"longest_edge": max_image_size})
 
     processor = Mistral3Processor(
         tokenizer=tokenizer,
