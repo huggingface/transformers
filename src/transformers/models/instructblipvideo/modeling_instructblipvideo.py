@@ -323,7 +323,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         "InstructBlipVideoQFormerMultiHeadAttention",
         "InstructBlipVideoQFormerSelfOutput",
     ]
-    _keep_in_fp32_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1287,6 +1286,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+    _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__(config)
