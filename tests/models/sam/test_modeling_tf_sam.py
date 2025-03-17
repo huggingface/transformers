@@ -376,7 +376,6 @@ class TFSamModelTester:
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
-        self.vision_tester = TFSamVisionModelTester(parent)
         self.prompt_encoder_tester = TFSamPromptEncoderTester()
         self.mask_decoder_tester = TFSamMaskDecoderTester()
 
@@ -387,7 +386,30 @@ class TFSamModelTester:
         return config, pixel_values
 
     def get_config(self):
-        vision_config = self.vision_tester.get_config()
+        vision_config = SamVisionConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            initializer_range=self.initializer_range,
+            initializer_factor=self.initializer_factor,
+            output_channels=self.output_channels,
+            qkv_bias=self.qkv_bias,
+            mlp_ratio=self.mlp_ratio,
+            use_abs_pos=self.use_abs_pos,
+            use_rel_pos=self.use_rel_pos,
+            rel_pos_zero_init=self.rel_pos_zero_init,
+            window_size=self.window_size,
+            global_attn_indexes=self.global_attn_indexes,
+            num_pos_feats=self.num_pos_feats,
+            mlp_dim=self.mlp_dim,
+        )
 
         prompt_encoder_config = self.prompt_encoder_tester.get_config()
 
