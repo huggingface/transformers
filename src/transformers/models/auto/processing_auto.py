@@ -66,6 +66,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma3", "Gemma3Processor"),
         ("git", "GitProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
+        ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
