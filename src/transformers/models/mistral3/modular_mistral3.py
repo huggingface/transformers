@@ -82,16 +82,7 @@ class Mistral3Processor(PixtralProcessor):
         image_end_token="[IMG_END]",
         **kwargs,
     ):
-        super().__init__(
-            image_processor,
-            tokenizer,
-            chat_template=chat_template,
-            patch_size=patch_size,
-            image_token=image_token,
-            image_break_token=image_break_token,
-            image_end_token=image_end_token,
-            **kwargs,
-        )
+        super().__init__(image_processor, tokenizer)
         self.spatial_merge_size = spatial_merge_size
 
     def __call__(
