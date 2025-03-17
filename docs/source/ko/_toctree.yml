@@ -97,6 +97,8 @@
     sections:
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
+    - local: serving
+      title: 모델 서빙
     title: 생성
   - isExpanded: false
     sections:
