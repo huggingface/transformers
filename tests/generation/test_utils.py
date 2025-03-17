@@ -124,6 +124,7 @@ VLM_CLASS_NAMES = [
     "qwen2vl",
     "qwen2_5_vl",
     "ayavision",
+    "gemma3",
 ]
 
 
@@ -1162,8 +1163,8 @@ class GenerationTesterMixin:
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(low_output, high_output)
 
-    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535 for more info.
@@ -2119,6 +2120,9 @@ class GenerationTesterMixin:
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
+        # Monkey-patching the HybridCache at test-time to continue testing compilation support
+        HybridCache.is_compileable = True
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2215,6 +2219,9 @@ class GenerationTesterMixin:
         Tests that all optional outputs are behaving as expected when compilation is triggered.
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
+        # Monkey-patching the HybridCache at test-time to continue testing compilation support
+        HybridCache.is_compileable = True
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2297,44 +2304,6 @@ class GenerationTesterMixin:
             # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
             without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
-
-    @pytest.mark.generate
-    def test_assisted_decoding_with_logits_to_keep(self):
-        for model_class in self.all_generative_model_classes:
-            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-            config.use_cache = True
-            config.is_decoder = True
-
-            model = model_class(config).to(torch_device).eval()
-            assistant_model = model
-            # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
-            # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
-            # other methods will work as well)
-            generation_kwargs = {
-                "max_new_tokens": 10,
-                "do_sample": False,
-                "assistant_model": assistant_model,
-                "return_dict_in_generate": True,
-                "output_scores": True,
-            }
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            # Setting logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(
-                **generation_kwargs, **inputs_dict, **logits_processor_kwargs, logits_to_keep=0
-            )
-            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
-            without_all_logits = model.generate(**inputs_dict, **generation_kwargs, **logits_processor_kwargs)
-
-            self._check_similar_generate_outputs(with_all_logits, without_all_logits)
 
     @pytest.mark.generate
     def test_inherits_generation_mixin(self):

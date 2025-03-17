@@ -474,6 +474,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
+    "models.gemma3": ["Gemma3Config", "Gemma3Processor", "Gemma3TextConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -1016,6 +1017,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_hpu_available",
         "is_torch_mlu_available",
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
@@ -1260,6 +1262,7 @@ else:
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -1333,6 +1336,7 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
@@ -2453,6 +2457,14 @@ else:
             "Gemma2PreTrainedModel",
         ]
     )
+    _import_structure["models.gemma3"].extend(
+        [
+            "Gemma3ForCausalLM",
+            "Gemma3ForConditionalGeneration",
+            "Gemma3PreTrainedModel",
+            "Gemma3TextModel",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2555,6 +2567,7 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2562,7 +2575,6 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
-
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -5640,6 +5652,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
+    from .models.gemma3 import Gemma3Config, Gemma3Processor, Gemma3TextConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -6243,6 +6256,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_hpu_available,
         is_torch_mlu_available,
         is_torch_musa_available,
         is_torch_neuroncore_available,
@@ -6462,6 +6476,7 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
+        from .models.gemma3 import Gemma3ImageProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
@@ -6547,6 +6562,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
@@ -7472,6 +7488,12 @@ if TYPE_CHECKING:
             Gemma2ForTokenClassification,
             Gemma2Model,
             Gemma2PreTrainedModel,
+        )
+        from .models.gemma3 import (
+            Gemma3ForCausalLM,
+            Gemma3ForConditionalGeneration,
+            Gemma3PreTrainedModel,
+            Gemma3TextModel,
         )
         from .models.git import (
             GitForCausalLM,
