@@ -14,13 +14,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# GPU 선택하기 [[GPU selection]]
+# GPU 선택하기 [[gpu-selection]]
 
 분산 학습 과정에서 사용할 GPU의 개수와 순서를 정할 수 있습니다. 이 방법은 서로 다른 연산 성능을 가진 GPU가 있을 때 더 빠른 GPU를 우선적으로 사용하거나, 사용 가능한 GPU 중 일부만 선택하여 활용하고자 할 때 유용합니다. 이 선택 과정은 [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html)과 [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html)에서 모두 작동합니다. Accelerate나 [DeepSpeed 통합](./main_classes/deepspeed)은 필요하지 않습니다.
 
 이 가이드는 사용할 GPU의 개수를 선택하는 방법과 사용 순서를 설정하는 방법을 설명합니다.
 
-## GPU 개수 지정 [[Number of GPUs]]
+## GPU 개수 지정 [[number-of-gpus]]
 
 예를 들어, GPU가 4개 있고 그중 처음 2개만 사용하려는 경우, 아래 명령어를 실행하세요.
 
@@ -54,7 +54,7 @@ deepspeed --num_gpus 2 trainer-program.py ...
 </hfoption>
 </hfoptions>
 
-### GPU 순서 [[Order of GPUs]]
+### GPU 순서 [[order-of-gpus]]
 
 사용할 GPU와 그 순서를 지정하려면 `CUDA_VISIBLE_DEVICES` 환경 변수를 설정하세요. 가장 쉬운 방법은 `~/bashrc` 또는 다른 시작 설정 파일에서 해당 변수를 설정하는 것입니다. `CUDA_VISIBLE_DEVICES`는 사용할 GPU를 매핑하는 데 사용됩니다. 예를 들어, GPU가 4개 (0, 1, 2, 3) 있고 그중에서 0번과 2번 GPU만 사용하고 싶을 경우, 다음과 같이 설정할 수 있습니다:
 
