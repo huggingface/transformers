@@ -113,10 +113,10 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        # there is a missing token in the vocab. We have to do this to support merges
+        # If "\t" is missing in the vocab, we have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
-        vocab["\t"] = vocab.get("<0x09>")
-
+        if "\t" not in vocab:
+            vocab["\t"] = vocab.get("<0x09>")
         merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
@@ -1271,7 +1271,7 @@ class XGLMConverter(SpmConverter):
         )
 
 
-class GemmaConvert(SpmConverter):
+class GemmaConverter(SpmConverter):
     handle_byte_fallback = True
     SpmExtractor = GemmaSentencePieceExtractor
     # start and end of turn tokens must be marked as special
@@ -1296,12 +1296,14 @@ class GemmaConvert(SpmConverter):
             (self.original_tokenizer.eos_token, 0.0),
             (self.original_tokenizer.bos_token, 0.0),
         ]
-        for piece in proto.pieces[3:]:
-            if piece.piece == "<0x09>":
-                vocab += [("\t", piece.score)]
-            else:
-                vocab += [(piece.piece, piece.score)]
-        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+
+        # Older gemma tokenizers had a missing tab token, so we fix that here
+        if not any(x[0] == "\t" for x in vocab):
+            override_index = next((i for i, x in enumerate(vocab) if x[0] == "<0x09>"), None)
+            if override_index is not None:
+                vocab[override_index] = ("\t", 0.0)
+
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
@@ -1444,6 +1446,95 @@ class MoshiConverter(SpmConverter):
     def pre_tokenizer(self, replacement, add_prefix_space):
         prepend_scheme = "first"
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+
+
+class HeliumConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file=None, *args):
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        model_pb2 = import_protobuf()
+
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+        tokenizer = Tokenizer(
+            Unigram(
+                vocab_scores,
+                unk_id=self.unk_id(proto),
+                byte_fallback=self.handle_byte_fallback,
+            )
+        )
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special, single_word=True)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+        tokenizer.add_tokens([AddedToken("\n", normalized=False, special=False)])
+        tokenizer.enable_padding(pad_token="<pad>", pad_id=3)
+        return tokenizer
+
+    def vocab(self, proto):
+        vocab = []
+        for piece in proto.pieces:
+            if piece.piece == "<0x0A>":
+                vocab += [("\n", piece.score)]
+            else:
+                vocab += [(piece.piece, piece.score)]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        return normalizers.Sequence([normalizers.Prepend(" "), normalizers.Replace(r" ", "▁")])
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Sequence([pre_tokenizers.Split("\n", "contiguous")])
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=[
+                "<s>",
+                "$A",
+            ],
+            pair=[
+                "<s>",
+                "$A",
+                "<s>",
+                "$B",
+            ],
+            special_tokens=[
+                ("<s>", 1),
+            ],
+        )
 
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
@@ -1601,7 +1692,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "XGLMTokenizer": XGLMConverter,
     "LlamaTokenizer": LlamaConverter,
     "CodeLlamaTokenizer": LlamaConverter,
-    "GemmaTokenizer": GemmaConvert,
+    "GemmaTokenizer": GemmaConverter,
     "Phi3Tokenizer": LlamaConverter,
 }
 
@@ -1638,5 +1729,5 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
             raise ValueError(
                 f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
                 f"with a SentencePiece tokenizer.model file."
-                f"Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+                f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )

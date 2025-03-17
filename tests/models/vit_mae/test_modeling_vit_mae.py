@@ -174,6 +174,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ViTMAEModelTester(self)
@@ -202,22 +203,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
-
-    # overwrite from common since ViTMAEForPretraining has random masking, we need to fix the noise
-    # to generate masks during test
-    def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-        # make masks reproducible
-        np.random.seed(2)
-
-        num_patches = int((pt_model.config.image_size // pt_model.config.patch_size) ** 2)
-        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
-        pt_noise = torch.from_numpy(noise)
-
-        # Add `noise` argument.
-        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
-        pt_inputs_dict["noise"] = pt_noise
-
-        super().check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -331,7 +316,7 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
             [[-0.0548, -1.7023, -0.9325], [0.3721, -0.5670, -0.2233], [0.8235, -1.3878, -0.3524]]
         )
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice.to(torch_device), atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice.to(torch_device), rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

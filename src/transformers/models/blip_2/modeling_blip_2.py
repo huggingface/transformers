@@ -419,7 +419,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "OPTDecoderLayer",
     ]
     _skip_keys_device_placement = "past_key_values"
-    _keep_in_fp32_modules = ["wo"]
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -579,6 +579,9 @@ BLIP_2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
             Whether to interpolate the pre-trained position encodings.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 """
 
 BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
@@ -1796,7 +1799,7 @@ class Blip2Model(Blip2PreTrainedModel):
 )
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1895,7 +1898,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 )
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2013,6 +2016,9 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2094,6 +2100,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -2217,6 +2224,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                use_cache=use_cache,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -2242,6 +2250,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
                 output_hidden_states=output_hidden_states,
                 return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
+                use_cache=use_cache,
             )
             loss = outputs.loss
             logits = outputs.logits
@@ -2307,12 +2316,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         language_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
+
         if input_ids is None:
-            input_ids = (
-                torch.LongTensor([[self.config.text_config.bos_token_id]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
+            start_tokens = [self.config.text_config.bos_token_id]
+            if getattr(self.config, "image_token_index", None) is not None:
+                start_tokens = [self.config.image_token_index] * self.config.num_query_tokens + start_tokens
+            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+            input_ids = input_ids.repeat(batch_size, 1)
+
         inputs_embeds = self.get_input_embeddings()(input_ids)
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -2360,7 +2371,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2531,3 +2542,15 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+
+__all__ = [
+    "Blip2Model",
+    "Blip2VisionModelWithProjection",
+    "Blip2QFormerModel",
+    "Blip2PreTrainedModel",
+    "Blip2ForConditionalGeneration",
+    "Blip2ForImageTextRetrieval",
+    "Blip2VisionModel",
+    "Blip2TextModelWithProjection",
+]

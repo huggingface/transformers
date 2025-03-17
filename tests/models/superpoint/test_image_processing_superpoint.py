@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import SuperPointImageProcessor
 
 
-class SuperPointImageProcessingTester(unittest.TestCase):
+class SuperPointImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -44,6 +44,7 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=None,
+        do_grayscale=True,
     ):
         size = size if size is not None else {"height": 480, "width": 640}
         self.parent = parent
@@ -54,11 +55,13 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.do_grayscale = do_grayscale
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
+            "do_grayscale": self.do_grayscale,
         }
 
     def expected_output_image_shape(self, images):
@@ -112,6 +115,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertTrue(hasattr(image_processing, "size"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        self.assertTrue(hasattr(image_processing, "do_grayscale"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)

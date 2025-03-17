@@ -121,7 +121,7 @@ class EncodecConv1d(nn.Module):
 
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
+        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
 
     def _get_extra_padding_for_conv1d(
         self,
@@ -576,7 +576,7 @@ class EncodecModel(EncodecPreTrainedModel):
         scale = None
         if self.config.normalize:
             # if the padding is non zero
-            input_values = input_values * padding_mask
+            input_values = input_values * padding_mask.unsqueeze(1)
             mono = torch.sum(input_values, 1, keepdim=True) / input_values.shape[1]
             scale = mono.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8
             input_values = input_values / scale
@@ -814,3 +814,6 @@ class EncodecModel(EncodecPreTrainedModel):
             return (audio_codes, audio_values)
 
         return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
+
+
+__all__ = ["EncodecModel", "EncodecPreTrainedModel"]

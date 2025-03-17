@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 from ..utils import (
     is_accelerate_available,
     is_optimum_quanto_available,
-    is_quanto_available,
     is_torch_available,
     logging,
 )
@@ -63,7 +62,7 @@ class QuantoHfQuantizer(HfQuantizer):
             )
 
     def validate_environment(self, *args, **kwargs):
-        if not (is_optimum_quanto_available() or is_quanto_available()):
+        if not is_optimum_quanto_available():
             raise ImportError(
                 "Loading an optimum-quanto quantized model requires optimum-quanto library (`pip install optimum-quanto`)"
             )
@@ -91,11 +90,6 @@ class QuantoHfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
-        elif is_quanto_available():
-            logger.warning_once(
-                "Importing from quanto will be deprecated in v4.47. Please install optimum-quanto instrad `pip install optimum-quanto`"
-            )
-            from quanto import QModuleMixin
 
         not_missing_keys = []
         for name, module in model.named_modules():
@@ -122,11 +116,6 @@ class QuantoHfQuantizer(HfQuantizer):
         """
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
-        elif is_quanto_available():
-            logger.warning_once(
-                "Importing from quanto will be deprecated in v4.47. Please install optimum-quanto instrad `pip install optimum-quanto`"
-            )
-            from quanto import QModuleMixin
 
         device_map = kwargs.get("device_map", None)
         param_device = kwargs.get("param_device", None)
@@ -188,27 +177,20 @@ class QuantoHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_quanto_layers
+        from ..integrations import replace_with_quanto_layers
 
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.modules_to_not_convert is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.modules_to_not_convert
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model, _ = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         model.config.quantization_config = self.quantization_config
 
-    def _process_model_after_weight_loading(self, model):
+    def _process_model_after_weight_loading(self, model, **kwargs):
         return model
 
     @property

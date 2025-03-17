@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from packaging import version
 
@@ -52,10 +52,14 @@ class AwqQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
+        if self.quantization_config.version == AWQLinearVersion.GEMM and not torch.cuda.is_available():
+            logger.warning_once("No CUDA found, replace GEMM with IPEX version to support non-cuda AWQ model.")
+            self.quantization_config.version = AWQLinearVersion.IPEX
+
         if self.quantization_config.version == AWQLinearVersion.IPEX:
             if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
                 raise RuntimeError(
-                    "To use IPEX backend, you need autoawq>0.6.2. Please install the latest version or from source."
+                    "To use IPEX backend, you need autoawq>0.2.6. Please install the latest version or from source."
                 )
             if device_map is None:
                 logger.warning_once(
@@ -87,17 +91,19 @@ class AwqQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype):
         if torch_dtype is None:
             torch_dtype = torch.float16
+            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
         elif torch_dtype != torch.float16:
             logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
         return torch_dtype
 
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import get_keys_to_not_convert, replace_quantization_scales, replace_with_awq_linear
+    def _process_model_before_weight_loading(
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
+    ):
+        from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model, has_been_replaced = replace_with_awq_linear(
             model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert
@@ -111,7 +117,7 @@ class AwqQuantizer(HfQuantizer):
                 " Please double check your model architecture, or submit an issue on github if you think this is a bug."
             )
 
-    def _process_model_after_weight_loading(self, model):
+    def _process_model_after_weight_loading(self, model, **kwargs):
         if self.quantization_config.do_fuse:
             from ..integrations import fuse_awq_modules
 

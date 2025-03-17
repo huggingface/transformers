@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_torch_greater_or_equal
 
 
 _import_structure = {
@@ -54,14 +54,20 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
-        "GGUF_TENSOR_MAPPING",
         "GGUF_TOKENIZER_MAPPING",
         "_gguf_parse_value",
         "load_dequant_gguf_tensor",
         "load_gguf",
+    ],
+    "higgs": [
+        "HiggsLinear",
+        "dequantize_higgs",
+        "quantize_with_higgs",
+        "replace_with_higgs_linear",
     ],
     "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
@@ -76,6 +82,7 @@ _import_structure = {
         "MLflowCallback",
         "NeptuneCallback",
         "NeptuneMissingConfiguration",
+        "SwanLabCallback",
         "TensorBoardCallback",
         "WandbCallback",
         "get_available_reporting_integrations",
@@ -95,6 +102,7 @@ _import_structure = {
         "is_ray_available",
         "is_ray_tune_available",
         "is_sigopt_available",
+        "is_swanlab_available",
         "is_tensorboard_available",
         "is_wandb_available",
         "rewrite_logs",
@@ -105,6 +113,8 @@ _import_structure = {
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
+    "spqr": ["replace_with_spqr_linear"],
+    "vptq": ["replace_with_vptq_linear"],
 }
 
 try:
@@ -116,6 +126,27 @@ else:
     _import_structure["executorch"] = [
         "TorchExportableModuleWithStaticCache",
         "convert_and_export_with_cache",
+    ]
+
+try:
+    if not is_torch_greater_or_equal("2.3"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tensor_parallel"] = [
+        "shard_and_distribute_module",
+        "SUPPORTED_TP_STYLES",
+        "translate_to_torch_parallel_style",
+    ]
+try:
+    if not is_torch_greater_or_equal("2.5"):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["flex_attention"] = [
+        "make_flex_block_causal_mask",
     ]
 
 if TYPE_CHECKING:
@@ -156,15 +187,16 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
-        GGUF_TENSOR_MAPPING,
         GGUF_TOKENIZER_MAPPING,
         _gguf_parse_value,
         load_dequant_gguf_tensor,
         load_gguf,
     )
+    from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
@@ -178,6 +210,7 @@ if TYPE_CHECKING:
         MLflowCallback,
         NeptuneCallback,
         NeptuneMissingConfiguration,
+        SwanLabCallback,
         TensorBoardCallback,
         WandbCallback,
         get_available_reporting_integrations,
@@ -197,6 +230,7 @@ if TYPE_CHECKING:
         is_ray_available,
         is_ray_tune_available,
         is_sigopt_available,
+        is_swanlab_available,
         is_tensorboard_available,
         is_wandb_available,
         rewrite_logs,
@@ -207,6 +241,8 @@ if TYPE_CHECKING:
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+    from .spqr import replace_with_spqr_linear
+    from .vptq import replace_with_vptq_linear
 
     try:
         if not is_torch_available():
@@ -216,6 +252,25 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
+    try:
+        if not is_torch_greater_or_equal("2.3"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tensor_parallel import (
+            SUPPORTED_TP_STYLES,
+            shard_and_distribute_module,
+            translate_to_torch_parallel_style,
+        )
+
+    try:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .flex_attention import make_flex_block_causal_mask
 else:
     import sys
 

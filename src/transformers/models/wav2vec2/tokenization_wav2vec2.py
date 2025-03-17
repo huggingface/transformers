@@ -781,7 +781,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
         **kwargs,
@@ -919,3 +919,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+
+__all__ = ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"]

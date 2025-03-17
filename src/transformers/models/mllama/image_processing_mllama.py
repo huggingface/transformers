@@ -33,8 +33,8 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_valid_image,
     is_vision_available,
+    make_nested_list_of_images,
     to_numpy_array,
     validate_preprocess_arguments,
 )
@@ -93,7 +93,7 @@ def get_image_size_fit_to_canvas(
     canvas_height and canvas_width, while ensuring that the image dimensions are not smaller than
     tile_size. If the image is larger than the canvas, the returned size will fit within the canvas.
     If the image already fits within the canvas, the size remains unchanged.
-    The aspect ratio of the original image is preserved.
+    The aspect ratio of the original image is preserved as much as possible.
 
     Args:
         image_height (`int`):
@@ -120,10 +120,12 @@ def get_image_size_fit_to_canvas(
 
     if scale_w < scale_h:
         new_width = target_width
-        new_height = min(math.floor(image_height * scale_w), target_height)
+        # minimum height is 1 to avoid invalid height of 0
+        new_height = min(math.floor(image_height * scale_w) or 1, target_height)
     else:
         new_height = target_height
-        new_width = min(math.floor(image_width * scale_h), target_width)
+        # minimum width is 1 to avoid invalid width of 0
+        new_width = min(math.floor(image_width * scale_h) or 1, target_width)
 
     return new_height, new_width
 
@@ -514,42 +516,6 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return alpha_composite
 
 
-# Modified from transformers.models.idefics2.image_processing_idefics2.make_list_of_images
-def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
-    """
-    Convert a single image or a list of images to a list of numpy arrays.
-
-    Args:
-        images (`ImageInput`):
-            A single image or a list of images.
-
-    Returns:
-        A list of numpy arrays.
-    """
-    # If it's a single image, convert it to a list of lists
-    if is_valid_image(images):
-        output_images = [[images]]
-    # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        output_images = [images]
-    # If it's a list of batches, it's already in the right format
-    elif (
-        isinstance(images, (list, tuple))
-        and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and any(is_valid_list_of_images(images_i) for images_i in images)
-    ):
-        output_images = images
-    else:
-        raise ValueError(
-            "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
-        )
-    return output_images
-
-
-def is_valid_list_of_images(images: List):
-    return images and all(is_valid_image(image) for image in images)
-
-
 def _validate_size(size: Dict[str, int]) -> None:
     if not ("height" in size and "width" in size):
         raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
@@ -726,12 +692,10 @@ class MllamaImageProcessor(BaseImageProcessor):
         # extra validation
         _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
-        images_list = make_list_of_images(images)
+        images_list = make_nested_list_of_images(images)
 
         if self.do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
-
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
         batch_images = []
         batch_aspect_ratios = []
@@ -743,6 +707,13 @@ class MllamaImageProcessor(BaseImageProcessor):
 
             # iterate over images in a batch sample
             for image in images:
+                # default PIL images to channels_last
+                if input_data_format is None and isinstance(image, PIL.Image.Image):
+                    input_data_format = ChannelDimension.LAST
+
+                # convert to numpy array for processing
+                image = to_numpy_array(image)
+
                 # convert images to channels first format for faster processing
                 # LAST is slower for `pad` and not supported by `split_to_tiles`
                 data_format = ChannelDimension.FIRST
@@ -771,7 +742,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                     image = self.rescale(
                         image=image,
                         scale=rescale_factor,
-                        input_data_format=input_data_format,
+                        input_data_format=data_format,
                         data_format=data_format,
                     )
 
@@ -780,7 +751,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                         image=image,
                         mean=image_mean,
                         std=image_std,
-                        input_data_format=input_data_format,
+                        input_data_format=data_format,
                         data_format=data_format,
                     )
 
@@ -928,3 +899,6 @@ class MllamaImageProcessor(BaseImageProcessor):
         )
 
         return image, (num_tiles_height, num_tiles_width)
+
+
+__all__ = ["MllamaImageProcessor"]

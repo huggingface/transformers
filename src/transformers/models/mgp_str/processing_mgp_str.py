@@ -51,7 +51,7 @@ class MgpstrProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "char_tokenizer"]
-    image_processor_class = "ViTImageProcessor"
+    image_processor_class = ("ViTImageProcessor", "ViTImageProcessorFast")
     char_tokenizer_class = "MgpstrTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -228,3 +228,6 @@ class MgpstrProcessor(ProcessorMixin):
         """
         decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs
+
+
+__all__ = ["MgpstrProcessor"]

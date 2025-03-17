@@ -431,10 +431,6 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 model = model_class(config)
                 apply(model)
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "nvidia/segformer-b0-finetuned-ade-512-512"

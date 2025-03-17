@@ -25,6 +25,7 @@ import traceback
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from parameterized import parameterized
@@ -48,7 +49,6 @@ from transformers import (
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     get_tests_dir,
-    is_pt_tf_cross_test,
     require_jinja,
     require_read_token,
     require_tf,
@@ -61,6 +61,7 @@ from transformers.tokenization_utils import AddedToken
 
 
 if is_torch_available():
+    import torch
     import torch.nn as nn
 
 
@@ -837,7 +838,7 @@ class TokenizerTesterMixin:
                 toks_after_adding = tokenizer.tokenize(text)
                 toks_after_adding2 = tokenizer.tokenize(text2)
 
-                # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                # Rust tokenizers don't lowercase added tokens at the time calling `tokenizer.add_tokens`,
                 # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
                 self.assertIn(added, [2, 4])
 
@@ -1106,14 +1107,34 @@ class TokenizerTesterMixin:
                 tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    tokenizer.save_pretrained(tmp_dir_name)
-                    tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name)
+                    # Check we aren't saving a chat_template.jinja file
+                    self.assertFalse(any(file.endswith("chat_template.jinja") for file in save_files))
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
-                self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
-                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
+                self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
+                output = new_tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
                 # Check that no error raised
-                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+                new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=True)
+                    # Check we are saving a chat_template.jinja file
+                    self.assertTrue(any(file.endswith("chat_template.jinja") for file in save_files))
+                    chat_template_file = Path(tmp_dir_name) / "chat_template.jinja"
+                    self.assertTrue(chat_template_file.is_file())
+                    self.assertEqual(chat_template_file.read_text(), dummy_template)
+                    config_dict = json.loads((Path(tmp_dir_name) / "tokenizer_config.json").read_text())
+                    # Assert the chat template is not in the config when it's saved as a separate file
+                    self.assertNotIn("chat_template", config_dict)
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+
+                self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
+                output = new_tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
+                self.assertEqual(output, expected_output)  # Test output is the same after reloading
+                # Check that no error raised
+                new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
     @require_jinja
     def test_chat_template_batched(self):
@@ -1198,6 +1219,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(len(strftime_output), 10)
                 self.assertEqual(len(strftime_output.split("-")), 3)
 
+    @require_torch
     @require_jinja
     def test_chat_template_return_assistant_tokens_mask(self):
         dummy_template = (
@@ -1242,6 +1264,9 @@ class TokenizerTesterMixin:
                     self.skipTest(reason="No fast tokenizer defined")
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+                self._check_no_pad_token_padding(tokenizer_r, conversations)
+
+                tokenizer_r.padding_side = "right"
 
                 # check batched
                 output = tokenizer_r.apply_chat_template(
@@ -1251,6 +1276,20 @@ class TokenizerTesterMixin:
                     return_assistant_tokens_mask=True,
                     return_dict=True,
                 )
+
+                output_pt = tokenizer_r.apply_chat_template(
+                    conversations,
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    padding=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                )
+
+                self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
+
                 for i, conv in enumerate(conversations):
                     chat_string = tokenizer_r.apply_chat_template(
                         conversations[i], tokenize=False, chat_template=dummy_template
@@ -1276,17 +1315,29 @@ class TokenizerTesterMixin:
                         output["assistant_masks"][i][assistant_start : assistant_end + 1],
                         [1] * (assistant_end - assistant_start + 1),
                     )
+                    self.assertTrue(
+                        (output_pt["assistant_masks"][i, assistant_start : assistant_end + 1] == 1).all(),
+                    )
+
                     # assert 1 second assistant message
                     self.assertEqual(
                         output["assistant_masks"][i][assistant_start2 : assistant_end2 + 1],
                         [1] * (assistant_end2 - assistant_start2 + 1),
                     )
+                    self.assertTrue(
+                        (output_pt["assistant_masks"][i, assistant_start2 : assistant_end2 + 1] == 1).all(),
+                    )
 
                     # assert 0 in user/system indices
                     self.assertEqual(output["assistant_masks"][i][:assistant_start], [0] * assistant_start)
+                    self.assertTrue((output_pt["assistant_masks"][i, :assistant_start] == 0).all())
+
                     self.assertEqual(
                         output["assistant_masks"][i][assistant_end + 1 : assistant_start2],
                         [0] * (assistant_start2 - assistant_end - 1),
+                    )
+                    self.assertTrue(
+                        (output_pt["assistant_masks"][i, assistant_end + 1 : assistant_start2] == 0).all(),
                     )
 
                 # check not batched
@@ -1297,6 +1348,17 @@ class TokenizerTesterMixin:
                     return_assistant_tokens_mask=True,
                     return_dict=True,
                 )
+                output_pt = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                )
+
+                self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
 
                 chat_string = tokenizer_r.apply_chat_template(
                     conversations[0], tokenize=False, chat_template=dummy_template
@@ -1315,16 +1377,26 @@ class TokenizerTesterMixin:
                     output["assistant_masks"][assistant_start : assistant_end + 1],
                     [1] * (assistant_end - assistant_start + 1),
                 )
+                self.assertTrue(
+                    (output_pt["assistant_masks"][assistant_start : assistant_end + 1] == 1).all(),
+                )
                 self.assertEqual(
                     output["assistant_masks"][assistant_start2 : assistant_end2 + 1],
                     [1] * (assistant_end2 - assistant_start2 + 1),
                 )
+                self.assertTrue(
+                    (output_pt["assistant_masks"][assistant_start2 : assistant_end2 + 1] == 1).all(),
+                )
 
                 # assert 0 in user/system indices
                 self.assertEqual(output["assistant_masks"][:assistant_start], [0] * assistant_start)
+                self.assertTrue((output_pt["assistant_masks"][0, :assistant_start] == 0).all())
                 self.assertEqual(
                     output["assistant_masks"][assistant_end + 1 : assistant_start2],
                     [0] * (assistant_start2 - assistant_end - 1),
+                )
+                self.assertTrue(
+                    (output_pt["assistant_masks"][0, assistant_end + 1 : assistant_start2] == 0).all(),
                 )
 
     @require_jinja
@@ -1494,6 +1566,33 @@ class TokenizerTesterMixin:
                 )
 
     @require_jinja
+    def test_continue_final_message_with_decoy_earlier_message(self):
+        """Regression test for chat templates where an earlier message has similar content to the final message
+        https://github.com/huggingface/transformers/issues/35433"""
+
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" + message['content'] | trim + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "hi 0"},
+            {"role": "assistant", "content": "bye: 0"},
+            {"role": "user", "content": "hi 1"},
+            {"role": "assistant", "content": "bye: "},
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                prefill_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
+                )
+                # Assert that the final message is unterminated
+                self.assertEqual(
+                    prefill_output,
+                    "<|im_start|>user\nhi 0<|im_end|>\n<|im_start|>assistant\nbye: 0<|im_end|>\n<|im_start|>user\nhi 1<|im_end|>\n<|im_start|>assistant\nbye:",
+                )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
@@ -1526,18 +1625,40 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                for save_raw_chat_template in (True, False):
+                    tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                    with tempfile.TemporaryDirectory() as tmp_dir_name:
+                        # Test that save_raw_chat_template is ignored when there's a dict of multiple templates
+                        tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=save_raw_chat_template)
+                        config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                        # Assert that chat templates are correctly serialized as lists of dictionaries
+                        self.assertEqual(
+                            config_dict["chat_template"],
+                            [
+                                {"name": "template1", "template": "{{'a'}}"},
+                                {"name": "template2", "template": "{{'b'}}"},
+                            ],
+                        )
+                        self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
+                        new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                    # Assert that the serialized list is correctly reconstructed as a single dict
+                    self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
+    @require_jinja
+    def test_chat_template_file_priority(self):
+        dummy_template1 = "a"
+        dummy_template2 = "b"
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    tokenizer.save_pretrained(tmp_dir_name)
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
-                    # Assert that chat templates are correctly serialized as lists of dictionaries
-                    self.assertEqual(
-                        config_dict["chat_template"],
-                        [{"name": "template1", "template": "{{'a'}}"}, {"name": "template2", "template": "{{'b'}}"}],
-                    )
+                    tokenizer.chat_template = dummy_template1
+                    tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
+                    with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
+                        f.write(dummy_template2)
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
-                # Assert that the serialized list is correctly reconstructed as a single dict
-                self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+                # Assert the file template clobbers any template in the config
+                self.assertEqual(new_tokenizer.chat_template, dummy_template2)
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -2875,48 +2996,6 @@ class TokenizerTesterMixin:
             tokenizer.batch_encode_plus(
                 string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
             )
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                sequences = [
-                    "Testing batch encode plus",
-                    "Testing batch encode plus with different sequence lengths",
-                    "Testing batch encode plus with different sequence lengths correctly pads",
-                ]
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(sequences, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(sequences, padding="longest", return_tensors="tf")
-                    encoded_sequences = tokenizer.batch_encode_plus(sequences, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def _check_no_pad_token_padding(self, tokenizer, sequences):
         # if tokenizer does not have pad_token_id, an error should be thrown
@@ -4641,3 +4720,15 @@ class TokenizerTesterMixin:
 
         with self.assertRaises(AttributeError, msg="conflicts with the method"):
             get_tokenizer_func(get_vocab=True)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_rust_tokenizer_add_prefix_space(self, add_prefix_space):
+        if not self.test_rust_tokenizer:
+            self.skipTest(reason="test_rust_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            fast_tokenizer = tokenizer.from_pretrained(pretrained_name, add_prefix_space=add_prefix_space)
+            self.assertEqual(fast_tokenizer.add_prefix_space, add_prefix_space)
+            # Only the ByteLevel pre-tokenizer has the `add_prefix_space` attribute, we have to ensure that it's set correctly
+            if hasattr(fast_tokenizer.backend_tokenizer.pre_tokenizer, "add_prefix_space"):
+                self.assertEqual(fast_tokenizer.backend_tokenizer.pre_tokenizer.add_prefix_space, add_prefix_space)

@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import PhimoeConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     slow,
     torch_device,
@@ -338,7 +339,6 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (
         (PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (PhimoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": PhimoeModel,
@@ -450,6 +450,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @parameterized.expand([("longrope",)])
+    @is_flaky()  # TODO (joao): unify rope tests in the mixin
     def test_model_rope_scaling_short_long_factor(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         n_factors = config.hidden_size // config.num_key_value_heads // 2
@@ -491,7 +492,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
         self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
         # Last token generated using long factor
-        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
+        torch.testing.assert_close(last_token_logits, regenerated_last_token_logits, rtol=1e-2, atol=1e-2)
 
 
 @slow
@@ -518,7 +519,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
          -4.9375,  0.7148, -0.0972,  1.7656, -0.0801,  0.2217,  0.1875, -0.4629,
           1.5781,  0.3535,  0.0874,  0.6836, -0.0518, -1.2969]]).to(torch_device)  # fmt: skip
 
-        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
     def test_phimoe_instruct_generation(self):
         model = PhimoeForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")

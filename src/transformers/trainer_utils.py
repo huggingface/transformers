@@ -35,6 +35,7 @@ from .utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -113,6 +114,8 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.musa.manual_seed_all(seed)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
+    if is_torch_hpu_available():
+        torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
     if is_tf_available():
@@ -322,7 +325,7 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
 
 def default_hp_space_sigopt(trial):
     return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
+        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
         {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
         {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
         {
@@ -508,6 +511,11 @@ class TrainerMemoryTracker:
 
             self.torch = torch
             self.gpu = {}
+        elif is_torch_hpu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
         else:
             self.torch = None
 
@@ -573,6 +581,10 @@ class TrainerMemoryTracker:
             elif is_torch_npu_available():
                 self.torch.npu.reset_peak_memory_stats()
                 self.torch.npu.empty_cache()
+            elif is_torch_hpu_available():
+                self.torch.hpu.reset_peak_memory_stats()
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.hpu.empty_cache()
             elif is_torch_mps_available():
                 self.torch.mps.empty_cache()
 
@@ -588,6 +600,8 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
             elif is_torch_npu_available():
                 self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
+            elif is_torch_hpu_available():
+                self.gpu_mem_used_at_start = self.torch.hpu.memory_allocated()
             elif is_torch_mps_available():
                 self.gpu_mem_used_at_start = self.torch.mps.current_allocated_memory()
 
@@ -623,6 +637,10 @@ class TrainerMemoryTracker:
                 self.torch.xpu.empty_cache()
             elif is_torch_npu_available():
                 self.torch.npu.empty_cache()
+            elif is_torch_hpu_available():
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.npu.empty_cache()
+                pass
             elif is_torch_mps_available():
                 self.torch.mps.empty_cache()
 
@@ -648,6 +666,9 @@ class TrainerMemoryTracker:
             elif is_torch_npu_available():
                 self.gpu_mem_used_now = self.torch.npu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
+            elif is_torch_hpu_available():
+                self.gpu_mem_used_now = self.torch.hpu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.hpu.max_memory_allocated()
             elif is_torch_mps_available():
                 self.gpu_mem_used_now = self.torch.mps.current_allocated_memory()
                 # self.torch.mps.max_memory_allocated() does not exist yet
@@ -740,6 +761,9 @@ def has_length(dataset):
         return len(dataset) is not None
     except TypeError:
         # TypeError: len() of unsized object
+        return False
+    except AttributeError:
+        # Ray DataSets raises an AttributeError: https://github.com/ray-project/ray/blob/master/python/ray/data/dataset.py#L5616
         return False
 
 

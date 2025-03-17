@@ -23,7 +23,6 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -374,7 +373,8 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4Tv2ForSpeechToText,) if is_torch_available() else ()
+    # Doesn't run generation tests. Has custom generation method with a different interface
+    all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="speech")
@@ -460,25 +460,25 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -589,9 +589,14 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
+    # TODO: @ydshieh: refer to #34968
+    @unittest.skip(reason="Failing on multi-gpu runner")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 @require_torch
-class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
@@ -610,7 +615,8 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4Tv2ForTextToText,) if is_torch_available() else ()
+    # Doesn't run generation tests. Has custom generation method with a different interface
+    all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="text")
@@ -692,25 +698,25 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -835,7 +841,13 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
     def test_speech_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
 
+        from transformers.testing_utils import set_config_for_less_flaky_test, set_model_for_less_flaky_test
+
+        set_config_for_less_flaky_test(config)
+
         model = SeamlessM4Tv2Model(config=config)
+        set_model_for_less_flaky_test(model)
+
         self.update_generation(model)
         model.save_pretrained(self.tmpdirname)
         model.to(torch_device)
@@ -847,6 +859,11 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         state_dict = model.state_dict()
 
         text_model = SeamlessM4Tv2ForTextToSpeech.from_pretrained(self.tmpdirname)
+        # Even if this component is loaded after `model.save_pretrained` which is after
+        # `set_model_for_less_flaky_test(model)`, we still need to apply `set_model_for_less_flaky_test` here as the
+        # `eps` attribute in the model's norm layers is not set from the config.
+        set_model_for_less_flaky_test(text_model)
+
         self.update_generation(text_model)
         text_model.to(torch_device)
         text_model.eval()
@@ -854,6 +871,11 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         output_text = self.factory_generation_speech_test(model, input_text)
 
         speech_model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained(self.tmpdirname)
+        # Even if this component is loaded after `model.save_pretrained` which is after
+        # `set_model_for_less_flaky_test(model)`, we still need to apply `set_model_for_less_flaky_test` here as the
+        # `eps` attribute in the model's norm layers is not set from the config.
+        set_model_for_less_flaky_test(speech_model)
+
         self.update_generation(speech_model)
         speech_model.to(torch_device)
         speech_model.eval()

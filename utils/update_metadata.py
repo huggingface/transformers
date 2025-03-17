@@ -56,7 +56,7 @@ transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 _re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 _re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 # Will match any TF or Flax model too so need to be in an else branch afterthe two previous regexes.
-_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
+_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
 # Fill this with tuples (pipeline_tag, model_mapping, auto_model)
@@ -132,7 +132,7 @@ def camel_case_split(identifier: str) -> List[str]:
         identifier (`str`): The camel-cased name to parse.
 
     Returns:
-        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+        `List[str]`: The list of words in the identifier (as separated by capital letters).
 
     Example:
 
@@ -215,7 +215,7 @@ def get_frameworks_table() -> pd.DataFrame:
 
 def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
     """
-    Update the table maping models to pipelines and auto classes without removing old keys if they don't exist anymore.
+    Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 
     Args:
         table (`Dict[str, Tuple[str, str]]`):

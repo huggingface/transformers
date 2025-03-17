@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -74,7 +75,6 @@ class NemotronModelTest(GemmaModelTest):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (NemotronForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": NemotronModel,
@@ -103,7 +103,7 @@ class NemotronModelTest(GemmaModelTest):
         pass
 
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:

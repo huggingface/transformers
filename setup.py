@@ -20,7 +20,7 @@ To create the package for pypi.
 1. Create the release branch named: v<RELEASE>-release, for example v4.19-release. For a patch release checkout the
    current release branch.
 
-   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   If releasing on a special branch, copy the updated README.md on the main branch for the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
@@ -97,10 +97,10 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow>=10.0.1,<=15.0",
     "accelerate>=0.26.0",
-    "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
+    "av",
     "beautifulsoup4",
     "blobfile",
-    "codecarbon==1.2.0",
+    "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
@@ -117,7 +117,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.24.0,<1.0",
+    "huggingface-hub>=0.26.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -130,8 +130,9 @@ _deps = [
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "librosa",
-    "nltk<=3.8.1",
     "natten>=0.14.6,<0.15.0",
+    "nltk<=3.8.1",
+    "num2words",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -148,8 +149,11 @@ _deps = [
     "pyyaml>=5.1",
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
+    "pytest-asyncio",
+    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
+    "pytest-order",
     "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
@@ -179,9 +183,9 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "tiktoken",
-    "timm<=0.9.16",
-    "tokenizers>=0.20,<0.21",
-    "torch",
+    "timm<=1.0.11",
+    "tokenizers>=0.21,<0.22",
+    "torch>=2.0",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -313,14 +317,17 @@ extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("av")
-
+extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
+        "pytest-asyncio",
         "pytest-rich",
         "pytest-xdist",
+        "pytest-order",
+        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
@@ -362,6 +369,7 @@ extras["all"] = (
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
+    + extras["num2words"]
 )
 
 
@@ -381,6 +389,7 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["num2words"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
@@ -435,7 +444,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.47.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.50.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -471,8 +480,6 @@ setup(
 extras["tests_torch"] = deps_list()
 extras["tests_tf"] = deps_list()
 extras["tests_flax"] = deps_list()
-extras["tests_torch_and_tf"] = deps_list()
-extras["tests_torch_and_flax"] = deps_list()
 extras["tests_hub"] = deps_list()
 extras["tests_pipelines_torch"] = deps_list()
 extras["tests_pipelines_tf"] = deps_list()
