@@ -21,6 +21,7 @@ from functools import reduce
 
 import numpy as np
 import requests
+from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
@@ -533,7 +534,7 @@ class JanusIntegrationTest(unittest.TestCase):
         out = model.generate(
             **inputs,
             generation_mode="image",
-            do_sample=True,
+            do_sample=False,
         )
 
         # It should run for num_image_tokens in this case 576.
@@ -546,3 +547,11 @@ class JanusIntegrationTest(unittest.TestCase):
 
         self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
         self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
+
+        filepath = hf_hub_download(
+            repo_id="hugosilva664/images_test",
+            filename="janus_image.npy",
+            repo_type="dataset",
+        )
+        original_pixels = np.load(filepath)
+        self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))
