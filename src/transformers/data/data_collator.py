@@ -2039,7 +2039,6 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 ret["max_length_q"][0] = max(ret["max_length_q"][0], len_input_ids)
                 ret["max_length_k"][0] = max(ret["max_length_k"][0], len_input_ids)
 
-        # FlashAttentionKwargs are expected to not have any batch dimension. Both
         # FlashAttentionKwargs and seq_idx are expected to be int32s.
         if return_tensors == "pt":
             import torch
