@@ -40,10 +40,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils.import_utils import (
+    auto_class_docstring,
+    auto_docstring,
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_mamba_ssm_available,
+    is_torchdynamo_compiling,
+    logging,
 )
 from .configuration_jamba import JambaConfig
 
