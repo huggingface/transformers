@@ -15,8 +15,8 @@
 # limitations under the License.
 
 from ...utils import logging
-from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaMultiModalProjector
 from ..llava.configuration_llava import LlavaConfig
+from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaMultiModalProjector
 from ..pixtral.image_processing_pixtral import PixtralImageProcessor
 from ..pixtral.image_processing_pixtral_fast import PixtralImageProcessorFast
 from ..pixtral.processing_pixtral import PixtralProcessor
@@ -28,20 +28,26 @@ logger = logging.get_logger(__name__)
 class Mistral3Config(LlavaConfig):
     pass
 
+
 class Mistral3ImageProcessor(PixtralImageProcessor):
     pass
+
 
 class Mistral3ImageProcessorFast(PixtralImageProcessorFast):
     pass
 
+
 class Mistral3Processor(PixtralProcessor):
     pass
+
 
 class Mistral3MultiModalProjector(LlavaMultiModalProjector):
     pass
 
+
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
     pass
+
 
 __all__ = [
     "Mistral3PreTrainedModel",  # noqa

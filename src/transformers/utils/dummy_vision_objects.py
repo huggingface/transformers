@@ -464,6 +464,13 @@ class MaskFormerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Mistral3ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class MllamaImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
