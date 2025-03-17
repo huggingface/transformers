@@ -141,6 +141,7 @@ _import_structure = {
         "is_ray_available",
         "is_ray_tune_available",
         "is_sigopt_available",
+        "is_swanlab_available",
         "is_tensorboard_available",
         "is_wandb_available",
     ],
@@ -194,6 +195,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.autoformer": ["AutoformerConfig"],
+    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor"],
     "models.bamba": ["BambaConfig"],
     "models.bark": [
         "BarkCoarseConfig",
@@ -402,6 +404,11 @@ _import_structure = {
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
+    "models.deepseek_vl":[
+        "DeepseekVLConfig",
+        "DeepseekVLVisionConfig",
+        "DeepseekVLProcessor",
+    ],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
@@ -472,6 +479,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
+    "models.gemma3": ["Gemma3Config", "Gemma3Processor", "Gemma3TextConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -1013,6 +1021,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_hpu_available",
         "is_torch_mlu_available",
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
@@ -1250,6 +1259,7 @@ else:
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
+    _import_structure["models.deepseek_vl"].extend(["DeepseekImageProcessor"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -1257,6 +1267,7 @@ else:
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -1330,6 +1341,8 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
+    _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -1599,6 +1612,7 @@ else:
             "AutoformerPreTrainedModel",
         ]
     )
+    _import_structure["models.aya_vision"].extend(["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"])
     _import_structure["models.bamba"].extend(
         [
             "BambaForCausalLM",
@@ -2448,6 +2462,14 @@ else:
             "Gemma2PreTrainedModel",
         ]
     )
+    _import_structure["models.gemma3"].extend(
+        [
+            "Gemma3ForCausalLM",
+            "Gemma3ForConditionalGeneration",
+            "Gemma3PreTrainedModel",
+            "Gemma3TextModel",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2550,6 +2572,7 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2557,7 +2580,6 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
-
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -5264,6 +5286,7 @@ if TYPE_CHECKING:
         is_ray_available,
         is_ray_tune_available,
         is_sigopt_available,
+        is_swanlab_available,
         is_tensorboard_available,
         is_wandb_available,
     )
@@ -5318,6 +5341,10 @@ if TYPE_CHECKING:
     )
     from .models.autoformer import (
         AutoformerConfig,
+    )
+    from .models.aya_vision import (
+        AyaVisionConfig,
+        AyaVisionProcessor,
     )
     from .models.bamba import BambaConfig
     from .models.bark import (
@@ -5550,6 +5577,11 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.depth_pro import DepthProConfig
+    from .models.deepseek_vl import (
+        DeepseekVLConfig,
+        DeepseekVLVisionConfig,
+        DeepseekVLProcessor,
+    )
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
@@ -5620,6 +5652,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
+    from .models.gemma3 import Gemma3Config, Gemma3Processor, Gemma3TextConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -6222,6 +6255,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_hpu_available,
         is_torch_mlu_available,
         is_torch_musa_available,
         is_torch_neuroncore_available,
@@ -6430,6 +6464,7 @@ if TYPE_CHECKING:
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
         from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
+        from .models.deepseek_vl import DeepseekImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
@@ -6441,6 +6476,7 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
+        from .models.gemma3 import Gemma3ImageProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
@@ -6526,6 +6562,8 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.gemma3 import Gemma3ImageProcessorFast
+        from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -6763,6 +6801,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
@@ -7449,6 +7488,12 @@ if TYPE_CHECKING:
             Gemma2ForTokenClassification,
             Gemma2Model,
             Gemma2PreTrainedModel,
+        )
+        from .models.gemma3 import (
+            Gemma3ForCausalLM,
+            Gemma3ForConditionalGeneration,
+            Gemma3PreTrainedModel,
+            Gemma3TextModel,
         )
         from .models.git import (
             GitForCausalLM,

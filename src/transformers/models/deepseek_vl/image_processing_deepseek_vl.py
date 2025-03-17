@@ -63,7 +63,7 @@ def expand_to_square(image: np.array, background_color) -> np.array:
         result[:, (height - width) // 2 : (height - width) // 2 + width] = image
         return result
 
-class DeekseekImageProcessor(BaseImageProcessor):
+class DeepseekImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
     
     def __init__(
@@ -220,3 +220,5 @@ class DeekseekImageProcessor(BaseImageProcessor):
         ]
 
         return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+
+__all__ = ["DeepseekImageProcessor"]
