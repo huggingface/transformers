@@ -18,10 +18,69 @@ and remove unnecessary dependencies.
 """
 
 import warnings
+import base64
+import os
+from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import requests
 
+from .utils import (
+    requires_backends,
+    is_soundfile_available,
+)
+
+if is_soundfile_available():
+    import soundfile
+
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", Tuple[np.ndarray, int], 
+    List[np.ndarray], List["torch.Tensor"], List[Tuple[np.ndarray, int]],
+]
+
+def load_audio(audio: Union[str, Tuple[np.ndarray, int]], timeout: Optional[float] = None) -> Tuple[np.ndarray, int]:
+    """
+    Loads `audio` to a tuple of (data, samplerate).
+    Args:
+        audio (`str` or `Tuple[np.ndarray, int]`):
+            The audio to convert to the (data, samplerate) format.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+
+    Returns:
+        `Tuple[np.ndarray, int]`: A tuple containing the audio data as a numpy array and the sample rate.
+    """
+    requires_backends(load_audio, ["soundfile"])
+    if isinstance(audio, str):
+        if audio.startswith("http://") or audio.startswith("https://"):
+            # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+            response = requests.get(audio, timeout=timeout)
+            audio_data = BytesIO(response.content)
+            data, samplerate = soundfile.read(audio_data)
+        elif os.path.isfile(audio):
+            data, samplerate = soundfile.read(audio)
+        else:
+            if audio.startswith("data:audio/"):
+                audio = audio.split(",")
+
+            # Try to load as base64
+            try:
+                b64 = base64.decodebytes(audio.encode())
+                audio_data = BytesIO(b64)
+                data, samplerate = soundfile.read(audio_data)
+            except Exception as e:
+                raise ValueError(
+                    f"Incorrect audio source. Must be a valid URL starting with `http://` or `https://`, a valid path to an audio file, or a base64 encoded string. Got {audio}. Failed with {e}"
+                )
+    elif isinstance(audio, tuple) and len(audio) == 2 and isinstance(audio, np.ndarray) and isinstance(audio, int):
+        data, samplerate = audio
+    else:
+        raise TypeError(
+            "Incorrect format used for audio. Should be an url linking to an audio file, a base64 string, a local path, or a tuple of (data, samplerate)."
+        )
+
+    return data, samplerate
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
     """
