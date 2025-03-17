@@ -17,23 +17,23 @@ Feature extractor class for Speech Granite
 """
 from typing import Optional
 import math
-import torch
-import torchaudio # TODO - this needs to be handled as an optional dependency
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from transformers.utils import logging
-
+from transformers.utils import logging, is_torch_available, is_torchaudio_available
 
 logger = logging.get_logger(__name__)
 
-# TODO - should this be a SequenceFeatureExtractor?
+if is_torch_available():
+    import torch
+
+if is_torchaudio_available():
+    import torchaudio
+
 class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
     model_input_names = ["input_features"]
 
     def __init__(
         self,
-        feature_size=0,
         sampling_rate=16000,
-        padding_value=0,
         n_fft=512,
         win_length=400,
         hop_length=160,
