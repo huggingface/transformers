@@ -21,7 +21,7 @@ import warnings
 import base64
 import os
 from io import BytesIO
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -29,10 +29,17 @@ import requests
 from .utils import (
     requires_backends,
     is_soundfile_available,
+    logging,
 )
 
 if is_soundfile_available():
     import soundfile
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+
+logger = logging.get_logger(__name__)
 
 AudioInput = Union[
     np.ndarray, "torch.Tensor", Tuple[np.ndarray, int], 

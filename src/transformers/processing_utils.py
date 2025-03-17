@@ -1409,7 +1409,7 @@ class ProcessorMixin(PushToHubMixin):
                     batch_videos.append(videos)
                     batch_video_metadata.append(video_metadata)
                 if audios:
-                    batch_audios.append(audios[0])
+                    batch_audios.append(audios)
 
             # Process conversation with video/image information if needed. Then convert into a prompt using Jinja template
             conversations = self._process_messages_for_chat_template(
