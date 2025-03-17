@@ -346,10 +346,10 @@ def customize_docstrings(
             custom_preprocess_kwargs = custom_kwargs
 
         # Remove the doc for unused kwargs
-        unused_kwargs = getattr(obj, "unused_kwargs", [])
-        for kwarg in unused_kwargs:
-            base_init_kwargs.pop(kwarg, None)
-            base_preprocess_kwargs.pop(kwarg, None)
+        if obj.unused_kwargs:
+            for kwarg in obj.unused_kwargs:
+                base_init_kwargs.pop(kwarg, None)
+                base_preprocess_kwargs.pop(kwarg, None)
 
         # Merge the base and custom kwargs, putting the custom ones first
         all_init_kwargs = {}
