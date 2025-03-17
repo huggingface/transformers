@@ -101,6 +101,7 @@ class Mistral3PatchMerger(nn.Module):
 
     def __init__(self, config: Mistral3Config):
         super().__init__()
+        self.config = config
 
         vision_encoder_dim = config.vision_args.hidden_size
         spatial_merge_size = config.spatial_merge_size
@@ -112,7 +113,9 @@ class Mistral3PatchMerger(nn.Module):
 
         self.merging_layer = nn.Linear(mlp_input_dim, vision_encoder_dim, bias=False)
 
-    def forward(self, x: torch.Tensor, image_sizes: list[tuple[int, int]]) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        patch_size = self.config.vision_config.patch_size
+        image_sizes = [(img.shape[1] // patch_size, img.shape[2] // patch_size) for img in x]
         # image_sizes specified in tokens
         assert sum([h * w for h, w in image_sizes]) == len(x)
 
