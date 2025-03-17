@@ -123,6 +123,8 @@
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
     title: ONNX로 내보내기
+  - local: serving
+    title: Transformer 모델 서빙하기
   - local: tflite
     title: TFLite로 내보내기
   - local: torchscript
