@@ -414,11 +414,35 @@ def get_fast_image_processing_content_header(content: str) -> str:
     """
     Get the header of the slow image processor file.
     """
-    # get all lines before and including the line containing """Image processor
-    content_header = re.search(r"^(.*?\n)*?\"\"\"Image processor.*", content)
+    # get all the commented lines at the beginning of the file
+    content_header = re.search(r"^# coding=utf-8\n(#[^\n]*\n)*", content, re.MULTILINE)
+    if not content_header:
+        logger.warning("Couldn't find the content header in the slow image processor file. Using a default header.")
+        return (
+            f"# coding=utf-8\n"
+            f"# Copyright {CURRENT_YEAR} The HuggingFace Team. All rights reserved.\n"
+            f"#\n"
+            f'# Licensed under the Apache License, Version 2.0 (the "License");\n'
+            f"# you may not use this file except in compliance with the License.\n"
+            f"# You may obtain a copy of the License at\n"
+            f"#\n"
+            f"#     http://www.apache.org/licenses/LICENSE-2.0\n"
+            f"#\n"
+            f"# Unless required by applicable law or agreed to in writing, software\n"
+            f'# distributed under the License is distributed on an "AS IS" BASIS,\n'
+            f"# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n"
+            f"# See the License for the specific language governing permissions and\n"
+            f"# limitations under the License.\n"
+            f"\n"
+        )
     content_header = content_header.group(0)
+    # replace the year in the copyright
     content_header = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content_header)
-    content_header = content_header.replace("Image processor", "Fast Image processor")
+    # get the line starting with """Image processor in content if it exists
+    match = re.search(r'^"""Image processor.*$', content, re.MULTILINE)
+    if match:
+        content_header += match.group(0).replace("Image processor", "Fast Image processor")
+
     return content_header
 
 
