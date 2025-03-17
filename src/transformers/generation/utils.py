@@ -1666,7 +1666,7 @@ class GenerationMixin:
         if execution_device_map is None:
             return None
         elif len(execution_device_map) == 1 and "" in execution_device_map:
-            return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
+            return dict.fromkeys(range(num_hidden_layers), execution_device_map[""])
         layer_device_map = {}
         for layer in execution_device_map:
             for idx in range(num_hidden_layers):
