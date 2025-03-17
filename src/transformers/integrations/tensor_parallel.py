@@ -418,6 +418,62 @@ class PackedRowwiseParallel(RowwiseParallel):
         return nn.Parameter(parameter)
 
 
+class ReplicateParallel(TensorParallelLayer):
+    """
+    Replicate a nn.Module.
+    Users can compose it together with other parallel styles like RowwiseParallel to achieve a fully distributed model.
+    Fully distributed model is needed for gradient clipping.
+
+    Keyword Args:
+        input_layouts (Placement, optional):
+            The DTensor layout of input tensor for the nn.Module, this is used to annotate the input tensor to
+            become a DTensor. If not specified, we assume the input tensor to be replicated.
+        output_layouts (Placement, optional):
+            The DTensor layout of the output for the nn.Module, this is used to ensure the output of the nn.Module
+            with the user desired layout. If not specified, we assume the output tensor to be replicated.
+        use_local_output (bool, optional):
+            Whether to use local :class:`torch.Tensor` instead of :class:`DTensor` for the module output, default: True.
+    Returns:
+        A :class:`ParallelStyle` object that represents replication of nn.Module.
+
+    """
+
+    def __init__(
+        self,
+        *,
+        input_layouts: Optional[Placement] = None,
+        output_layouts: Optional[Placement] = None,
+        use_local_output: bool = True,
+        use_dtensor=True,
+    ):
+        super().__init__()
+        self.input_layouts = (input_layouts or Replicate(),)
+        self.output_layouts = (output_layouts or Replicate(),)
+        self.desired_input_layouts = (Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        # since nn.Linear and nn.Embedding have single input
+        # we may extend support to other modules since its replicate.
+        input_tensor = inputs[0]
+        if isinstance(input_tensor, torch.distributed._functional_collectives.AsyncCollectiveTensor):
+            input_tensor = input_tensor.trigger_wait()
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        return outputs.to_local() if use_local_output else outputs
+
+
 SUPPORTED_TP_STYLES = {
     "colwise",
     "rowwise",
@@ -428,6 +484,9 @@ SUPPORTED_TP_STYLES = {
     "local",
     "gather",
     "local_packed_rowwise",
+    "replicate",
+    "replicate_output_dtensor",
+    "rowwise_output_dtensor",
 }
 
 
@@ -459,6 +518,12 @@ def translate_to_torch_parallel_style(style: str):
         return GatherParallel()
     elif style == "local_packed_rowwise":
         return PackedRowwiseParallel(use_dtensor=False)
+    elif style == "replicate":
+        return ReplicateParallel()
+    elif style == "replicate_output_dtensor":
+        return ReplicateParallel(use_local_output=False)
+    elif style == "rowwise_output_dtensor":
+        return RowwiseParallel(use_local_output=False)
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
 
