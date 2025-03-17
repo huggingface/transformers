@@ -192,7 +192,7 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     model.save_pretrained(output_dir)
 
 
-def convert_and_write_processor(input_dir: str, output_dir: str, tokenizer_template_name: str = ""):
+def convert_and_write_processor(input_dir: str, output_dir: str):
     """Convert the tokenizer and save it."""
     tokenizer_file = os.path.join(input_dir, "tekken.json")
     tokenizer = convert_tekken_tokenizer(tokenizer_file)
@@ -229,12 +229,6 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--template_name",
-        type=str,
-        default="",
-        help="Another model name from which to copy the chat template.",
-    )
-    parser.add_argument(
         "--max_position_embeddings",
         type=int,
         default=131072,
@@ -250,7 +244,7 @@ def main():
 
     if not args.tokenizer_only:
         convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings)
-    convert_and_write_processor(args.input_dir, args.output_dir, args.template_name)
+    convert_and_write_processor(args.input_dir, args.output_dir)
 
 
 if __name__ == "__main__":
