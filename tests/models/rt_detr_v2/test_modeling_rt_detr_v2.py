@@ -362,14 +362,15 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             )
             out_len = len(outputs)
 
-            correct_outlen = 13
+            correct_outlen = 7
 
-            # loss is at first position
             if "labels" in inputs_dict:
-                correct_outlen += 1  # loss is added to beginning
-            # Object Detection model returns pred_logits and pred_boxes
+                correct_outlen += 3  # loss, loss_dict, auxiliary_outputs are added
+
+            # Object Detection model returns 'pred_logits', 'pred_boxes'
+            # 'class_outputs', 'bbox_outputs' as well
             if model_class.__name__ == "RTDetrV2ForObjectDetection":
-                correct_outlen += 2
+                correct_outlen += 4
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -391,11 +392,12 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self.assertIsInstance(cross_attentions, (list, tuple))
             self.assertEqual(len(cross_attentions), self.model_tester.decoder_layers)
             self.assertListEqual(
-                list(cross_attentions[0].shape[-3:]),
+                list(cross_attentions[0].shape[-4:]),
                 [
                     self.model_tester.num_queries,
                     self.model_tester.decoder_attention_heads,
-                    self.model_tester.decoder_n_levels * self.model_tester.decoder_n_points,
+                    self.model_tester.decoder_n_levels,
+                    self.model_tester.decoder_n_points,
                 ],
             )
 

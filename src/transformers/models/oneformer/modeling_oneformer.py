@@ -929,7 +929,7 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
-# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->OneFormerPixelDecoder
 class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -938,12 +938,13 @@ class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
-    def __init__(self, n):
+    def __init__(self, num_features: int, eps: float = 1e-5):
         super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
+        self.eps = eps
+        self.register_buffer("weight", torch.ones(num_features))
+        self.register_buffer("bias", torch.zeros(num_features))
+        self.register_buffer("running_mean", torch.zeros(num_features))
+        self.register_buffer("running_var", torch.ones(num_features))
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -956,15 +957,15 @@ class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
-    def forward(self, x):
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # reshape for broadcasting
+        weight = self.weight.view(1, -1, 1, 1)
+        bias = self.bias.view(1, -1, 1, 1)
+        running_var = self.running_var.view(1, -1, 1, 1)
+        running_mean = self.running_mean.view(1, -1, 1, 1)
+        # compute batchnorm
+        scale = weight * (running_var + self.eps).rsqrt()
+        return (x - running_mean) * scale + bias
 
 
 # Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->OneFormerPixelDecoderEncoder

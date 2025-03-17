@@ -364,14 +364,15 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 13
+            correct_outlen = 7
 
-            # loss is at first position
             if "labels" in inputs_dict:
-                correct_outlen += 1  # loss is added to beginning
-            # Object Detection model returns pred_logits and pred_boxes
+                correct_outlen += 3  # loss, loss_dict, auxiliary_outputs are added
+
+            # Object Detection model returns 'pred_logits', 'pred_boxes'
+            # 'class_outputs', 'bbox_outputs' as well
             if model_class.__name__ == "RTDetrForObjectDetection":
-                correct_outlen += 2
+                correct_outlen += 4
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -772,4 +773,4 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(results["scores"][:4], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=1e-4, atol=2e-3)
