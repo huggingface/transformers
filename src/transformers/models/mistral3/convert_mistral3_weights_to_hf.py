@@ -22,9 +22,9 @@ from safetensors.torch import load_file
 from transformers import (
     Mistral3Config,
     Mistral3ForConditionalGeneration,
-    Mistral3ImageProcessor,
     Mistral3Processor,
     MistralConfig,
+    PixtralImageProcessorFast,
     PixtralVisionConfig,
 )
 from transformers.integrations.mistral import convert_tekken_tokenizer
@@ -203,7 +203,7 @@ def convert_and_write_processor(input_dir: str, output_dir: str):
     patch_size = config["vision_encoder"]["patch_size"]
     spatial_merge_size = config["vision_encoder"]["spatial_merge_size"]
     max_image_size = config["vision_encoder"]["max_image_size"]
-    image_processor = Mistral3ImageProcessor(patch_size=patch_size, size={"longest_edge": max_image_size})
+    image_processor = PixtralImageProcessorFast(patch_size=patch_size, size={"longest_edge": max_image_size})
 
     processor = Mistral3Processor(
         tokenizer=tokenizer,
