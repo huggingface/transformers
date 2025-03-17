@@ -19,11 +19,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -44,7 +46,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..auto.modeling_auto import AutoModel
 from .configuration_conversational_speech_model import (
     ConversationalSpeechModelConfig,
     ConversationalSpeechModelDepthDecoderConfig,
@@ -61,16 +62,43 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConversationalSpeechModelConfig"
 
 
-class ConversationalSpeechModelEmbeddingsWithProjector(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.embed_tokens = nn.Embedding(
-            (config.audio_vocab_size + 3) * config.audio_num_codebooks, config.hidden_size
-        )
-        self.projector = nn.Linear(config.audio_vocab_size, config.hidden_size)
+@dataclass
+class ConversationalSpeechModelOutputWithPast(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_loss: Optional[torch.FloatTensor] = None
+    audio_logits: torch.FloatTensor = None
+    depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
-    def forward(self, input_ids):
-        return self.projector(self.embed_tokens(input_ids))
+
+class ConversationalSpeechModelEmbeddings(nn.Embedding):
+    def __init__(self, *args, audio_vocab_size=None, audio_num_codebooks=None, **kwargs):
+        self.audio_vocab_size = audio_vocab_size
+        self.audio_num_codebooks = audio_num_codebooks
+        super().__init__(*args, **kwargs)
+
+    def reset_parameters(self):
+        for i in range(self.audio_num_codebooks):
+            nn.init.normal_(self.weight[i * (self.audio_vocab_size + 3) : (i + 1) * (self.audio_vocab_size + 3)])
+        self._fill_padding_idx_with_zero()
+
+    def forward(self, input, codebook_idxs):
+        offsets = codebook_idxs * (self.audio_vocab_size + 3)
+        return F.embedding(
+            input + offsets,
+            self.weight,
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
 
 
 class ConversationalSpeechModelRMSNorm(nn.Module):
@@ -494,54 +522,349 @@ CONVERSATIONAL_SPEECH_MODEL_INPUTS_DOCSTRING = r"""
 """
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+@add_start_docstrings(
+    "The bare ConversationalSpeechModel Model outputting raw hidden-states without any specific head on top.",
+    CONVERSATIONAL_SPEECH_MODEL_START_DOCSTRING,
+)
+class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ConversationalSpeechModelDecoderLayer`]
 
+    Args:
+        config: ConversationalSpeechModelConfig
+    """
 
-def _codebook_head_selector(module, args, kwargs):
-    # select the correct lm_head depending on the position
-
-    input_ids = kwargs.get("input_ids", None)
-    cache_position = kwargs.get("cache_position", None)
-    position_ids = kwargs.get("position_ids", None)
-    past_key_values = kwargs.get("past_key_values", None)
-    inputs_embeds = kwargs.get("inputs_embeds", None)
-
-    if cache_position is None:
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if inputs_embeds is not None:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-        else:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + input_ids.shape[1], device=input_ids.device
-            )
-
-    if position_ids is None:
-        position_ids = cache_position.unsqueeze(0)
-
-    codebook_idx = position_ids[:, -1]
-    module.lm_head = module.codebooks_heads[codebook_idx - 1]
-    return args, kwargs
-
-
-class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = ConversationalSpeechModelDepthDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = ConversationalSpeechModelModel(config)
+        self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.lm_head = None
-        self.embed_tokens = ConversationalSpeechModelEmbeddingsWithProjector(config)
-        self.codebooks_heads = [
-            nn.Linear(config.hidden_size, config.audio_vocab_size + 3, bias=False)
-            for _ in range(config.audio_num_codebooks - 1)
-        ]
-        self.register_forward_pre_hook(_codebook_head_selector, with_kwargs=True)
+        self.embed_tokens = ConversationalSpeechModelEmbeddings(
+            num_embeddings=(config.audio_vocab_size + 3) * config.audio_num_codebooks,
+            embedding_dim=config.audio_vocab_size,
+            audio_vocab_size=config.audio_vocab_size,
+            audio_num_codebooks=config.audio_num_codebooks,
+        )
+        self.layers = nn.ModuleList(
+            [ConversationalSpeechModelDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = ConversationalSpeechModelRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = ConversationalSpeechModelRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.inputs_embeds_projector = nn.Linear(config.audio_vocab_size, config.hidden_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(CONVERSATIONAL_SPEECH_MODEL_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        backbone_last_hidden_states: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            inputs_seq_length = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
+            device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_seq_length, device=device)
+
+        codebook_idxs = cache_position.clone()
+        is_first_codebook = codebook_idxs[0] == 0
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids, cache_position)
+            if is_first_codebook:
+                if backbone_last_hidden_states is None:
+                    raise ValueError("backbone_last_hidden_states must be provided when input_ids is provided.")
+                inputs_embeds = torch.cat([backbone_last_hidden_states, inputs_embeds], dim=-2)
+                cache_position = torch.cat([cache_position, cache_position[-1:] + 1], dim=-1)
+                if position_ids is not None:
+                    position_ids = torch.cat([position_ids, position_ids[:, -1:] + 1], dim=-1)
+
+        if not is_first_codebook:
+            cache_position += 1
+            position_ids += 1
+
+        inputs_embeds = self.inputs_embeds_projector(inputs_embeds)
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                    position_embeddings,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                    position_embeddings=position_embeddings,
+                    **flash_attn_kwargs,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        output = BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+        return output if return_dict else output.to_tuple()
+
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        output_attentions: bool,
+    ):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and (attention_mask == 0.0).any():
+                return attention_mask
+            return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        sequence_length = input_tensor.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_cache_shape()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            device=device,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type in ["cuda", "xpu"]
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
+    @staticmethod
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        cache_position: torch.Tensor,
+        batch_size: int,
+        **kwargs,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to place the 4D attention mask on.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+        return causal_mask
+
+    def _get_last_position_id(self, input_ids, inputs_embeds, past_key_values, position_ids, cache_position):
+        if position_ids is not None:
+            return position_ids[-1]
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            if inputs_embeds is not None:
+                last_cache_position = past_seen_tokens + inputs_embeds.shape[1]
+            else:
+                last_cache_position = past_seen_tokens + input_ids.shape[1]
+
+        # what about the else? at least position_ids/ cache_position should be provided
+
+        return last_cache_position
+
+
+class ConversationalSpeechModelCodebooksHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.audio_vocab_size = config.audio_vocab_size
+        self.audio_num_codebooks = config.audio_num_codebooks
+        self.weight = nn.Parameter(
+            torch.empty(self.audio_num_codebooks - 1, config.hidden_size, config.audio_vocab_size + 3)
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for i in range(self.audio_num_codebooks - 1):
+            nn.init.kaiming_uniform_(self.weight[i], a=math.sqrt(5))
+
+    def forward(self, hidden_states, last_cache_position):
+        n_kept_logits = hidden_states.shape[1]
+        codebook_weight = self.weight[last_cache_position - n_kept_logits : last_cache_position + 1]
+
+        return torch.einsum("bsh,sho->bso", hidden_states, codebook_weight)
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
+class ConversationalSpeechModelDepthDecoderForCausalLM(ConversationalSpeechModelPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = ConversationalSpeechModelDepthDecoder(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.codebooks_head = ConversationalSpeechModelCodebooksHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -570,6 +893,7 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        backbone_last_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -601,10 +925,10 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, ConversationalSpeechModelDepthDecoder
+        >>> from transformers import AutoTokenizer, ConversationalSpeechModelDepthDecoderForCausalLM
 
-        >>> model = ConversationalSpeechModelDepthDecoder.from_pretrained("meta-conversational_speech_model/ConversationalSpeechModel-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-conversational_speech_model/ConversationalSpeechModel-2-7b-hf")
+        >>> model = ConversationalSpeechModelDepthDecoderForCausalLM.from_pretrained("meta-conversational_speech_model_depth_decoder/ConversationalSpeechModelDepthDecoder-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-conversational_speech_model_depth_decoder/ConversationalSpeechModelDepthDecoder-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -623,6 +947,7 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
+            backbone_last_hidden_states=backbone_last_hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -637,8 +962,25 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if isinstance(logits_to_keep, int):
+            if logits_to_keep == 0:
+                slice_indices = slice(1, None)  # Skip the first logit
+            else:
+                slice_indices = slice(-logits_to_keep, None)
+        else:
+            slice_indices = logits_to_keep
+
+        # cache position
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            if inputs_embeds is not None:
+                last_cache_position = past_seen_tokens + inputs_embeds.shape[1]
+            else:
+                last_cache_position = past_seen_tokens + input_ids.shape[1]
+        else:
+            last_cache_position = cache_position[-1]
+
+        logits = self.codebooks_head(hidden_states[:, slice_indices, :], last_cache_position)
 
         loss = None
         if labels is not None:
@@ -657,53 +999,41 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
         )
 
 
-class ConversationalSpeechModelEmbeddings(nn.Module):
+class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_codebooks = config.audio_num_codebooks
-        self.embed_text_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.embed_audio_tokens = nn.Embedding(
             (config.audio_vocab_size + 3) * config.audio_num_codebooks, config.hidden_size
         )
-
         audio_tokens_offsets = torch.arange(self.num_codebooks) * (config.audio_vocab_size + 3)
         self.register_buffer("audio_tokens_offsets", audio_tokens_offsets)
 
     def forward(self, input_ids):
         # input_ids should be of shape (batch_size, seq_length, num_codebooks)
-        text_tokens = input_ids[:, :, -1:]
-        audio_tokens = input_ids[:, :, :-1]
-
-        # id 0 means it should be masked in the sum
-        text_embeds = self.embed_text_tokens(text_tokens)
-        text_embeds = text_embeds * text_tokens.bool().unsqueeze(-1)
-
-        audio_embeds = self.embed_audio_tokens(audio_tokens + self.audio_tokens_offsets)
-        audio_embeds = audio_embeds * audio_tokens.bool().unsqueeze(-1)
-
-        inputs_embeds = torch.cat([text_embeds, audio_embeds], dim=-2)
-        inputs_embeds = inputs_embeds.sum(dim=-2)
+        audio_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = audio_embeds.sum(dim=-2)
 
         return inputs_embeds
 
 
 @add_start_docstrings(
-    "The bare ConversationalSpeechModel Model outputting raw hidden-states without any specific head on top.",
+    "The bare ConversationalSpeechBackboneModel Model outputting raw hidden-states without any specific head on top.",
     CONVERSATIONAL_SPEECH_MODEL_START_DOCSTRING,
 )
-class ConversationalSpeechModelModel(ConversationalSpeechModelPreTrainedModel):
+class ConversationalSpeechModelBackboneModel(ConversationalSpeechModelPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ConversationalSpeechModelDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ConversationalSpeechBackboneModelDecoderLayer`]
 
     Args:
-        config: ConversationalSpeechModelConfig
+        config: ConversationalSpeechBackboneModelConfig
     """
 
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = ConversationalSpeechModelEmbeddings(config)
+        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(config)
         self.layers = nn.ModuleList(
             [ConversationalSpeechModelDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -956,14 +1286,14 @@ class ConversationalSpeechModelModel(ConversationalSpeechModelPreTrainedModel):
         return causal_mask
 
 
-class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedModel, GenerationMixin):
+class ConversationalSpeechModelBackboneModelForCausalLM(ConversationalSpeechModelPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = ConversationalSpeechModelModel(config)
+        self.model = ConversationalSpeechModelBackboneModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1025,10 +1355,10 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, ConversationalSpeechModelForCausalLM
+        >>> from transformers import AutoTokenizer, ConversationalSpeechModelBackboneModelForCausalLM
 
-        >>> model = ConversationalSpeechModelForCausalLM.from_pretrained("meta-conversational_speech_model/ConversationalSpeechModel-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-conversational_speech_model/ConversationalSpeechModel-2-7b-hf")
+        >>> model = ConversationalSpeechModelBackboneModelForCausalLM.from_pretrained("meta-conversational_speech_model_backbone_model/ConversationalSpeechModelBackboneModel-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-conversational_speech_model_backbone_model/ConversationalSpeechModelBackboneModel-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1081,153 +1411,65 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
         )
 
 
-@dataclass
-class ConversationalSpeechModelOutputWithPast(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    depth_loss: Optional[torch.FloatTensor] = None
-    audio_logits: torch.FloatTensor = None
-    depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
-class ConversationalSpeechModelForConditionalGeneration(ConversationalSpeechModelPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
+class ConversationalSpeechModelForConditionalGeneration(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.model = ConversationalSpeechModelModel(config.depth_decoder_config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.audio_encoder = AutoModel.from_config(config.audio_encoder_config)
-        self.depth_decoder = ConversationalSpeechModelDepthDecoder(config.depth_decoder_config)
-        self.embed_text_tokens = nn.Linear(
-            config.audio_encoder_config.hidden_size, config.depth_decoder_config.hidden_size
-        )
-        self.first_codebook_head = nn.Linear(
-            config.depth_decoder_config.hidden_size, config.audio_vocab_size + 3, bias=False
-        )
+        self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM(config.depth_decoder_config)
+        self.backbone_model = ConversationalSpeechModelBackboneModelForCausalLM(config)
+        self.embed_text_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(CONVERSATIONAL_SPEECH_MODEL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor = None,  # shape (batch_size, seq_length, num_codebooks + 1)
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,  # shape (batch_size, seq_length, num_codebooks)
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs,  #: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, ConversationalSpeechModelForConditionalGeneration
-
-        >>> model = ConversationalSpeechModelForConditionalGeneration.from_pretrained("meta-conversational_speech_model/ConversationalSpeechModel-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-conversational_speech_model/ConversationalSpeechModel-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-        # TODO: add docstring
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
-            input_ids=input_ids,
+        # first codeboook label is for the backbone model
+        backbone_labels = labels[:, :, 0] if labels is not None else None
+        depth_decoder_labels = labels[:, :, 1:] if labels is not None else None
+
+        # here we need to compute inputs_embeds for the backbone model to take into account the text tokens
+        if inputs_embeds is None:
+            text_embeds = self.embed_text_tokens(input_ids[:, :, -1])
+            audio_embeds = self.backbone_model.model.embed_tokens(input_ids[:, :, :-1])
+            inputs_embeds = text_embeds + audio_embeds
+
+        backbone_outputs = self.backbone_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            labels=backbone_labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        if labels is not None:
-            last_hidden_state = hidden_states[:, -1, :]
-            projected_last_hidden_state = self.depth_decoder.embed_tokens.projector(last_hidden_state)
-
-            codebook_embeds = self.depth_decoder.embed_tokens(labels)
-            depth_decoder_inputs_embeds = torch.cat([projected_last_hidden_state, codebook_embeds], dim=-2)
+        if depth_decoder_labels is not None:
+            last_hidden_state = backbone_outputs[0]
+            projected_hidden_states = self.depth_decoder.embed_tokens.projector(last_hidden_state)
+            codebook_embeds = self.depth_decoder.embed_tokens(depth_decoder_labels)
+            depth_decoder_inputs_embeds = torch.cat([projected_hidden_states, codebook_embeds], dim=-2)
 
             depth_decoder_outputs = self.depth_decoder(
                 inputs_embeds=depth_decoder_inputs_embeds,
@@ -1235,40 +1477,16 @@ class ConversationalSpeechModelForConditionalGeneration(ConversationalSpeechMode
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                labels=labels,
+                labels=depth_decoder_labels,
             )
-            loss += depth_decoder_outputs.loss
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        # return CausalLMOutputWithPast(
-        #     loss=loss,
-        #     logits=logits,
-        #     past_key_values=outputs.past_key_values,
-        #     hidden_states=outputs.hidden_states,
-        #     attentions=outputs.attentions,
-        # )
-
-        return ConversationalSpeechModelOutputWithPast(
-            loss=loss,
-            logits=logits,
-            last_hidden_state=hidden_states,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            depth_loss=None if depth_decoder_outputs is None else depth_decoder_outputs.loss,
-            audio_logits=None if depth_decoder_outputs is None else depth_decoder_outputs.logits,
-            depth_past_key_values=None if outputs is None else outputs.past_key_values,
-            depth_hidden_states=None if outputs is None else outputs.hidden_states,
-            depth_attentions=None if outputs is None else outputs.attentions,
-        )
+        return
 
 
 __all__ = [
     "ConversationalSpeechModelDepthDecoder",
-    "ConversationalSpeechModelModel",
-    "ConversationalSpeechModelForCausalLM",
+    "ConversationalSpeechModelDepthDecoderForCausalLM",
+    "ConversationalSpeechModelBackboneModel",
+    "ConversationalSpeechModelBackboneModelForCausalLM",
     "ConversationalSpeechModelForConditionalGeneration",
 ]

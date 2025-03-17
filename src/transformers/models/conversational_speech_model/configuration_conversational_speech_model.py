@@ -159,7 +159,7 @@ class ConversationalSpeechModelDepthDecoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
+        vocab_size=2051,
         audio_vocab_size=2048,
         audio_num_codebooks=32,
         hidden_size=1024,
@@ -388,7 +388,7 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
+        vocab_size=2051,
         audio_vocab_size=2048,
         audio_num_codebooks=32,
         hidden_size=2048,

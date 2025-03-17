@@ -3043,6 +3043,9 @@ else:
             "ConversationalSpeechModelPreTrainedModel",
             "ConversationalSpeechModelDepthDecoder",
             "ConversationalSpeechModelDepthDecoderConfig",
+            "ConversationalSpeechModelDepthDecoderForCausalLM",
+            "ConversationalSpeechModelBackboneModel",
+            "ConversationalSpeechModelBackboneModelForCausalLM",
         ]
     )
     _import_structure["models.mpnet"].extend(
