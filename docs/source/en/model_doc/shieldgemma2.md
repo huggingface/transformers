@@ -78,6 +78,7 @@ inputs = processor(
     images=[image],
     custom_policies=custom_policies,
     policies=["dangerous", "key_a", "key_b"],
+    return_tensors="pt",
 ).to(model.device)
 
 output = model(**inputs)
