@@ -25,55 +25,30 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The ELECTRA model was proposed in the paper [ELECTRA: Pre-training Text Encoders as Discriminators Rather Than
-Generators](https://openreview.net/pdf?id=r1xMH1BtvB). ELECTRA is a new pretraining approach which trains two
-transformer models: the generator and the discriminator. The generator's role is to replace tokens in a sequence, and
-is therefore trained as a masked language model. The discriminator, which is the model we're interested in, tries to
-identify which tokens were replaced by the generator in the sequence.
+ELECTRA 모델은 [ELECTRA: Pre-training Text Encoders as Discriminators Rather Than
+Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었습니다. ELECTRA는 두가지 트랜스포머 모델인 생성모델과 판별 모델을 학습시키는 새로운 사전학습 접근법입니다. 생성 모델의 역할은 시퀀스에 있는 토큰을 대체하는 것이며 마스킹된 언어로 학습됩니다. 우리가 관심을 가진 판별 모델은 시퀀스에서 어떤 토큰이 생성모델에 의해 대체되었는지 식별합니다. 
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다:
 
-*Masked language modeling (MLM) pretraining methods such as BERT corrupt the input by replacing some tokens with [MASK]
-and then train a model to reconstruct the original tokens. While they produce good results when transferred to
-downstream NLP tasks, they generally require large amounts of compute to be effective. As an alternative, we propose a
-more sample-efficient pretraining task called replaced token detection. Instead of masking the input, our approach
-corrupts it by replacing some tokens with plausible alternatives sampled from a small generator network. Then, instead
-of training a model that predicts the original identities of the corrupted tokens, we train a discriminative model that
-predicts whether each token in the corrupted input was replaced by a generator sample or not. Thorough experiments
-demonstrate this new pretraining task is more efficient than MLM because the task is defined over all input tokens
-rather than just the small subset that was masked out. As a result, the contextual representations learned by our
-approach substantially outperform the ones learned by BERT given the same model size, data, and compute. The gains are
-particularly strong for small models; for example, we train a model on one GPU for 4 days that outperforms GPT (trained
-using 30x more compute) on the GLUE natural language understanding benchmark. Our approach also works well at scale,
-where it performs comparably to RoBERTa and XLNet while using less than 1/4 of their compute and outperforms them when
-using the same amount of compute.*
+*BERT와 같은 마스킹된 언어 모델(MLM) 사전학습 방법은 일부 토큰을 [MASK] 토큰으로 바꿔 손상시키고 난 뒤, 모델이 다시 원본 토큰을 복원하도록 학습합니다. 이런 방식은 다운스트림 NLP 작업을 전이할 때 좋은 성능을 내지만, 효과적으로 사용하기 위해서는 일반적으로 많은 양의 연산이 필요합니다. 따라서 대안으로, 대체 토큰 탐지라고 불리는 샘플-효과적인 사전학습을 제안합니다. 우리의 방법론은 입력에 마스킹을 하는 대신에 소형 생성 모델의 그럴듯한 대안 토큰으로 손상시킵니다. 그리고 나서, 모델이 손상된 토큰의 원래 토큰을 예측하도록 훈련시키는 대신, 판별 모델을 각각의 토큰이 생성 모델의 샘플로 손상되었는지 아닌지 학습합니다. 실험들은 통해 이 새로운 사전학습 방식은 마스킹된 일부 토큰에만 적용되는 기존 방식과 달리 모든 입력 토큰에 대해 학습이 이뤄지기 때문에 마스킹된 언어 모델(MLM)보다 더 효율적임을 입증하였습니다. 결과적으로 소개된 방식이 같은 모델 크기, 데이터, 연상량을 가진 BERT모델로 학습한 결과를 압도하는 문맥 표현 학습을 할 수 있다는 것을 확인했습니다. 특히 작은 모델에서 성능 향상이 두드러지며, 예를 들어 GPU 한 대로 4일간 학습한 모델이 30배 더 많은 계산 자원을 사용한 GPT보다 GLUE 자연어 이해 벤치마크에서 더 나은 성능을 보입니다. 대규모 환경에서도 유효하며 더 적은 연산량으로 RoBERTa와 XLNet과 비슷한 성능을 낼 수 있으며, 동일한 연산량을 가질 경우 경우 이들의 성능을 능가합니다.*
 
-This model was contributed by [lysandre](https://huggingface.co/lysandre). The original code can be found [here](https://github.com/google-research/electra).
 
-## Usage tips
+이 모델은 [lysandre](https://huggingface.co/lysandre)이 기여했습니다. 원본 코드는 [이곳](https://github.com/google-research/electra)에서 찾아보실 수 있습니다.
 
-- ELECTRA is the pretraining approach, therefore there is nearly no changes done to the underlying model: BERT. The
-  only change is the separation of the embedding size and the hidden size: the embedding size is generally smaller,
-  while the hidden size is larger. An additional projection layer (linear) is used to project the embeddings from their
-  embedding size to the hidden size. In the case where the embedding size is the same as the hidden size, no projection
-  layer is used.
-- ELECTRA is a transformer model pretrained with the use of another (small) masked language model. The inputs are corrupted by that language model, which takes an input text that is randomly masked and outputs a text in which ELECTRA has to predict which token is an original and which one has been replaced. Like for GAN training, the small language model is trained for a few steps (but with the original texts as objective, not to fool the ELECTRA model like in a traditional GAN setting) then the ELECTRA model is trained for a few steps.
-- The ELECTRA checkpoints saved using [Google Research's implementation](https://github.com/google-research/electra)
-  contain both the generator and discriminator. The conversion script requires the user to name which model to export
-  into the correct architecture. Once converted to the HuggingFace format, these checkpoints may be loaded into all
-  available ELECTRA models, however. This means that the discriminator may be loaded in the
-  [`ElectraForMaskedLM`] model, and the generator may be loaded in the
-  [`ElectraForPreTraining`] model (the classification head will be randomly initialized as it
-  doesn't exist in the generator).
+## 사용 팁
 
-## Resources
+- ELECTRA는 사전학습 방법으로 기본 모델인 BERT의 구조와 거의 차이가 없습니다. 유일한 차이는 임베딩 크기와 히든 크기를 구분했다는 점입니다. 임베딩 크기는 일반적으로 더 작고, 히든 크기는 더 큽니다. 임베딩에서 임베딩 크기를 히든 크기로 변환하기 위해 추가로 선형 변환 층이 사용됩니다. 임베딩 크기와 히든 크기가 동일할 경우에는 이 선형 변환 층이 필요하지 않습니다. 
+- ELECTRA는 또다른 (작은) 마스킹된 언어 모델을 사용해 사전학습 된 트랜스포머 모델입니다.  작은 언어 모델이 입력 텍스트의 일부를 무작위로 마스킹하고, 그 자리에 새로운 토큰을 삽입합니다.ELECTRA는 원래 토큰과 대체된 토큰을 구분하는 역할을 수행합니다. GAN 훈련과 비슷하지만, 생성모델은 ELECTRA 모델을 속이는 것이 아니라 원래 텍스트를 복원하는 목표로 몇 단계 학습합니다. 그 후 ELECTRA가 학습을 하게 됩니다.
+- [구글 리서치의 구현](https://github.com/google-research/electra)으로 저장된 ELECTRA checkpoints는 변환 스크립트에서는 사용자가 어떤 모델을 어떤 아키텍처로 내보낼지 명시해야 합니다. 일단 Hugging Face 포맷으로 변환되면, 이 체크포인트들은 모든 ELECTRA 모델에서 불러올 수 있습니다. 즉, 판별 모델은 [`ElectraForMaskedLM`] 모델에, 생성 모델은 [`ElectraForPreTraining`]모델에 불러올 수 있다는 의미입니다. (단, 생성모델에는 분류 헤드가 존재하지 않기 때문에, 해당 부분은 무작위로 초기화됩니다.)
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+## 참고 자료
+
+- [텍스트 분류 가이드](../tasks/sequence_classification)
+- [토큰 분류 가이드](../tasks/token_classification)
+- [질의 응답 가이드](../tasks/question_answering)
+- [인과 언어 모델링 가이드](../tasks/language_modeling)
+- [마스킹된 언어 모델링 가이드](../tasks/masked_language_modeling)
+- [객관식 문제 가이드](../tasks/multiple_choice)
 
 ## ElectraConfig
 
