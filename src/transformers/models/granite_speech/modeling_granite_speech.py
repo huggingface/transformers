@@ -467,17 +467,20 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
         # to make sure this does not pick up the adapter_config if in the future we use
         # from_pretrained or something similar, since that should be set by the composite
         # model; don't need to consider it twice
-        self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.encoder = CTCModel(config.encoder_config)
         self.projector = EncoderProjectorQFormer(config.projector_config)
         self.post_init()
 
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
+
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
 
     def get_audio_features(self, input_features):
         encoder_embeds = self.encoder(input_features)
