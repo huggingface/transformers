@@ -72,7 +72,7 @@ class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
 class GraniteSpeechConfig(PretrainedConfig):
     model_type = "granite_speech"
     sub_configs = {
-        "llm_config": AutoConfig,
+        "text_config": AutoConfig,
         "encoder_config": GraniteSpeechEncoderConfig,
         "projector_config": GraniteSpeechProjectorConfig,
     }
@@ -80,18 +80,18 @@ class GraniteSpeechConfig(PretrainedConfig):
     def __init__(
         self,
         encoder_config=None,
-        llm_config=None,
+        text_config=None,
         projector_config=None,
         audio_token_index=49155,
         tie_word_embeddings=True,
         initializer_range=0.02,
         **kwargs,
     ):
-        if isinstance(llm_config, dict):
-            llm_config["model_type"] = llm_config["model_type"] if "model_type" in llm_config else "granite"
-            llm_config = CONFIG_MAPPING[llm_config["model_type"]](**llm_config)
-        elif llm_config is None:
-            llm_config = CONFIG_MAPPING["granite"]()
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "granite"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["granite"]()
 
         if isinstance(projector_config, dict):
             # TODO - Make this generic after blip2qformer is moved out to its own model dir.
@@ -105,7 +105,7 @@ class GraniteSpeechConfig(PretrainedConfig):
             encoder_config = dict() if encoder_config is None else encoder_config
             encoder_config = GraniteSpeechEncoderConfig(**encoder_config)
 
-        self.llm_config = llm_config
+        self.text_config = text_config
         self.encoder_config = encoder_config
         self.projector_config = projector_config
         self.audio_token_index = audio_token_index
