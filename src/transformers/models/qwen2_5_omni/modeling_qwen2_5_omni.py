@@ -28,7 +28,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.amp import autocast
 from torch.nn import ConvTranspose1d, Parameter
-from torchdiffeq import odeint
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
@@ -5802,6 +5801,59 @@ class Qwen2_5OmniToken2WavBigVGANModel(torch.nn.Module):
         return x.squeeze().cpu()
 
 
+class ODESolverRK4():
+    def __init__(self, func, y0):
+        self.func = func
+        self.y0 = y0
+
+        self._one_third = 1 / 3
+        self._two_thirds = 2 / 3
+
+        self.grid_constructor = lambda f, y0, t: t
+
+    def _rk4_alt_step_func(self, func, t0, dt, t1, y0, f0=None):
+        k1 = f0
+        if k1 is None:
+            k1 = func(t0, y0)
+        k2 = func(t0 + dt * self._one_third, y0 + dt * k1 * self._one_third)
+        k3 = func(t0 + dt * self._two_thirds, y0 + dt * (k2 - k1 * self._one_third))
+        k4 = func(t1, y0 + dt * (k1 - k2 + k3))
+        return (k1 + 3 * (k2 + k3) + k4) * dt * 0.125
+
+    def _step_func(self, func, t0, dt, t1, y0):
+        f0 = func(t0, y0)
+        return self._rk4_alt_step_func(func, t0, dt, t1, y0, f0=f0), f0
+
+    def _linear_interp(self, t0, t1, y0, y1, t):
+        if t == t0:
+            return y0
+        if t == t1:
+            return y1
+        slope = (t - t0) / (t1 - t0)
+        return y0 + slope * (y1 - y0)
+
+    def integrate(self, t):
+        time_grid = self.grid_constructor(self.func, self.y0, t)
+        assert time_grid[0] == t[0] and time_grid[-1] == t[-1]
+
+        solution = torch.empty(len(t), *self.y0.shape, dtype=self.y0.dtype, device=self.y0.device)
+        solution[0] = self.y0
+
+        j = 1
+        y0 = self.y0
+        for t0, t1 in zip(time_grid[:-1], time_grid[1:]):
+            dt = t1 - t0
+            dy, f0 = self._step_func(self.func, t0, dt, t1, y0)
+            y1 = y0 + dy
+
+            while j < len(t) and t1 >= t[j]:
+                solution[j] = self._linear_interp(t0, t1, y0, y1, t[j])
+                j += 1
+            y0 = y1
+
+        return solution
+
+
 class Qwen2_5OmniToken2WavDiTModel(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -5951,7 +6003,8 @@ class Qwen2_5OmniToken2WavDiTModel(torch.nn.Module):
         if sway_sampling_coef is not None:
             t = t + sway_sampling_coef * (torch.cos(torch.pi / 2 * t) - 1 + t)
 
-        trajectory = odeint(fn, y0, t, **odeint_kwargs)
+        solver = ODESolverRK4(func=fn, y0=y0)
+        trajectory = solver.integrate(t)
 
         generated = trajectory[-1]
         generated_mel_spec = generated.permute(0, 2, 1)

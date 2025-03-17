@@ -210,14 +210,14 @@ text_ids = model.generate(**inputs, return_audio=False)
 ```
 
 #### Change voice type of output audio
-Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Cherry` and `Ehtan`, while `Cherry` is a female voice and `Ehtan` is a male voice. By defalut, if `spk` is not specified, the default voice type is `Cherry`.
+Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Cherry` and `Ethan`, while `Cherry` is a female voice and `Ethan` is a male voice. By defalut, if `spk` is not specified, the default voice type is `Cherry`.
 
 ```python
 text_ids, audio = model.generate(**inputs, spk="Cherry")
 ```
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Ehtan")
+text_ids, audio = model.generate(**inputs, spk="Ethan")
 ```
 
 #### Flash-Attention 2 to speed up generation
