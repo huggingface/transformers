@@ -90,7 +90,6 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
             hidden_size = config.vision_config.hidden_size
             head_dim = config.vision_config.head_dim
             key_value_dim = head_dim * num_attention_heads
-            key_value_dim = head_dim * num_key_value_heads
             query_dim = head_dim * num_attention_heads
         else:
             num_attention_heads = config.text_config.num_attention_heads
