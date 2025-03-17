@@ -235,7 +235,7 @@ def main():
 
     if not args.tokenizer_only:
         convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings)
-    convert_and_write_tokenizer(args.input_dir, args.output_dir, args.template_name)
+    convert_and_write_processor(args.input_dir, args.output_dir, args.template_name)
 
 
 if __name__ == "__main__":
