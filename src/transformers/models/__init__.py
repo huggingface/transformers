@@ -65,6 +65,7 @@ from . import (
     ctrl,
     cvt,
     d_fine,
+    d_fine_resnet,
     dab_detr,
     dac,
     data2vec,

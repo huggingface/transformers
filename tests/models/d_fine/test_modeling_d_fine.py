@@ -198,7 +198,6 @@ class DFineModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
             stem_channels=[3, 16, 16],
-            layer_type="basic",
             use_lab=True,
         )
         return DFineConfig.from_backbone_configs(

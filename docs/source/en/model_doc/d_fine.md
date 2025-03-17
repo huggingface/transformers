@@ -75,9 +75,9 @@ remote: 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
 [[autodoc]] DFineModel
     - forward
 
-## DFineModelForObjectDetection
+## DFineForObjectDetection
 
-[[autodoc]] DFineModelForObjectDetection
+[[autodoc]] DFineForObjectDetection
     - forward
 
 ## DFineResNetBackbone

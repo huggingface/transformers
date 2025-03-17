@@ -22,7 +22,6 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
-from .configuration_d_fine_resnet import DFineResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -34,7 +33,7 @@ class DFineConfig(PretrainedConfig):
     Extends RTDetrConfig with additional parameters specific to D-FINE architecture.
 
     Args:
-    initializer_range (`float`, *optional*, defaults to 0.01):
+        initializer_range (`float`, *optional*, defaults to 0.01):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_bias_prior_prob (`float`, *optional*):
             The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
@@ -124,8 +123,6 @@ class DFineConfig(PretrainedConfig):
             Indicates whether the initial query embeddings for the decoder should be learned during training
         anchor_image_size (`Tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
         with_box_refine (`bool`, *optional*, defaults to `True`):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
             based on the predictions from the previous layer.
@@ -161,7 +158,7 @@ class DFineConfig(PretrainedConfig):
             Index of the decoder layer to use for evaluation. If negative, counts from the end
             (e.g., -1 means use the last layer). This allows for early prediction in the decoder
             stack while still training later layers.
-        layer_scale (`float`, *optional*, defaults to 1.0):
+        layer_scale (`float`, *optional*, defaults to `1.0`):
             Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
             model capacity after the evaluation layer.
         max_num_bins (`int`, *optional*, defaults to 32):
@@ -173,14 +170,16 @@ class DFineConfig(PretrainedConfig):
         depth_mult (`float`, *optional*, defaults to 1.0):
             Multiplier for the number of blocks in RepNCSPELAN4 layers. Used to scale the model's
             depth while maintaining its architecture.
-        decoder_method (`str`, *optional*, defaults to `"default"`):
-            The method to use for the decoder: `"default"` or `"discrete"`.
-        top_prob_values (`int`, *optional*, defaults to 2):
+        top_prob_values (`int`, *optional*, defaults to 4):
             Number of top probability values to consider from each corner's distribution.
         lqe_hidden_dim (`int`, *optional*, defaults to 64):
             Hidden dimension size for the Location Quality Estimator (LQE) network.
         lqe_layers (`int`, *optional*, defaults to 2):
             Number of layers in the Location Quality Estimator MLP.
+        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+            Offset scale used in deformable attention.
+        decoder_method (`str`, *optional*, defaults to `"default"`):
+            The method to use for the decoder: `"default"` or `"discrete"`.
     """
 
     model_type = "d_fine"
@@ -235,7 +234,6 @@ class DFineConfig(PretrainedConfig):
         box_noise_scale=1.0,
         learn_initial_query=False,
         anchor_image_size=None,
-        disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
         # Loss
@@ -264,7 +262,6 @@ class DFineConfig(PretrainedConfig):
         decoder_method="default",
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
@@ -272,9 +269,14 @@ class DFineConfig(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `DFine-ResNet` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `D-FINE-ResNet` backbone."
             )
-            backbone_config = DFineResNetConfig(
+            backbone_model_type = "d_fine_resnet"
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            # this will map it to RTDetrResNetConfig
+            # note: we can instead create RTDetrV2ResNetConfig but it will be exactly the same as V1
+            # and we would need to create RTDetrV2ResNetModel
+            backbone_config = config_class(
                 num_channels=3,
                 embedding_size=64,
                 hidden_sizes=[256, 512, 1024, 2048],
@@ -338,7 +340,6 @@ class DFineConfig(PretrainedConfig):
         self.learn_initial_query = learn_initial_query
         self.anchor_image_size = anchor_image_size
         self.auxiliary_loss = auxiliary_loss
-        self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
         # Loss
         self.matcher_alpha = matcher_alpha
@@ -376,6 +377,7 @@ class DFineConfig(PretrainedConfig):
             raise ValueError(
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def num_attention_heads(self) -> int:

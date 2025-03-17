@@ -20,10 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from ..d_fine_resnet.configuration_d_fine_resnet import *
-    from ..d_fine_resnet.modeling_d_fine_resnet import *
-    from .configuration_d_fine import *
-    from .modeling_d_fine import *
+    from .configuration_d_fine_resnet import *
+    from .modeling_d_fine_resnet import *
 else:
     import sys
 

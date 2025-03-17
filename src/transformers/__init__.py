@@ -331,7 +331,8 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
-    "models.d_fine": ["DFineConfig", "DFineResNetConfig"],
+    "models.d_fine": ["DFineConfig"],
+    "models.d_fine_resnet": ["DFineResNetConfig"],
     "models.dab_detr": ["DabDetrConfig"],
     "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
@@ -1967,6 +1968,10 @@ else:
             "DFineForObjectDetection",
             "DFineModel",
             "DFinePreTrainedModel",
+        ]
+    )
+    _import_structure["models.d_fine_resnet"].extend(
+        [
             "DFineResNetBackbone",
             "DFineResNetPreTrainedModel",
         ]
@@ -5580,7 +5585,8 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
-    from .models.d_fine import DFineConfig, DFineResNetConfig
+    from .models.d_fine import DFineConfig
+    from .models.d_fine_resnet import DFineResNetConfig
     from .models.dab_detr import (
         DabDetrConfig,
     )
@@ -7189,6 +7195,8 @@ if TYPE_CHECKING:
             DFineForObjectDetection,
             DFineModel,
             DFinePreTrainedModel,
+        )
+        from .models.d_fine_resnet import (
             DFineResNetBackbone,
         )
         from .models.dab_detr import (
