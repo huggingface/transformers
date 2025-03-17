@@ -36,7 +36,6 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torchvision_v2_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
-from .image_processing_mistral3 import get_resize_output_image_size
 
 
 if is_vision_available():
