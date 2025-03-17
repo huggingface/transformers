@@ -1487,11 +1487,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._tp_plan = self.config.base_model_tp_plan
             self._pp_plan = self.config.base_model_pp_plan
 
-    @classmethod
-    def visualize_attention_mask(cls, tokenizer_path:str, input_sequence: str):
+    def visualize_attention_mask(self, input_sequence: str):
         if not hasattr(self, "prepare_inputs_for_generation"):
             raise ValueError("Model does not support visiaulization")
-        return visualize_attention_mask(self, tokenizer_path, input_sequence)
+        return visualize_attention_mask(self,  input_sequence)
 
     def dequantize(self):
         """

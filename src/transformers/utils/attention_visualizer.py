@@ -1,6 +1,6 @@
 import numpy as np
-
-from ..tokenization_utils import PreTrainedTokenizer
+import torch
+from transformers import PreTrainedModel, AutoTokenizer
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -150,7 +150,7 @@ dogs.: 21 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ �
 
 """
 
-def generate_attention_matrix_from_mask(word, mask):
+def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
     mask = mask.int()
     if mask.ndim == 3:
         mask = mask[0,:, :]
@@ -204,12 +204,21 @@ def generate_attention_matrix_from_mask(word, mask):
 
 
 def visualize_attention_mask(model, tokenizer_path: "meta-llama/Llama-3.2-3B-Instruct", input_sentence:str):
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-    inputs = tokenizer(input_sentence, return_tensors="pt") # TODO maybe add padding to visualize padding attention
-    attention_mask = model.prepare_inputs_for_genearation(**inputs)["attention_mask"]
+    tokenizer = AutoTokenizer.from_pretrained(model.config._name_or_path)
+    attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"] # TODO maybe add padding to visualize padding attention
+    model.config._attn_implementation = "eager"
+    attention_mask = ~model._update_causal_mask(
+        attention_mask = attention_mask,
+    
+        input_tensor=attention_mask.half(),
+        cache_position = torch.arange(attention_mask.shape[1]),
+        past_key_values = None,
+        output_attentions=False
+    ).bool()
     tokens = tokenizer.tokenize(input_sentence)
     generate_attention_matrix_from_mask(tokens, attention_mask)
 
-def __main__():
-    from transformers import LlamaModel
-    visualize_attention_mask(LlamaModel, "meta-llama/Llama-3.2-3B-Instruct", "A normal attention mask")
+
+from transformers import LlamaModel 
+model = LlamaModel.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+model.visualize_attention_mask("A normal attention mask")
