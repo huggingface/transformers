@@ -120,8 +120,6 @@ class DogeConfig(PretrainedConfig):
             Number of Experts for the Cross Domain Mixture of Experts.
         num_experts_per_tok (`int`, *optional*, defaults to 64):
             Number of selected experts to route per-token.
-        expert_retrieval_size (`int`, *optional*, defaults to 64):
-            Dimension of the Expert retrieval states for calculating the dot product of query and key to determine the expert index.
 
     ```python
     >>> from transformers import DogeConfig, DogeModel
@@ -148,7 +146,7 @@ class DogeConfig(PretrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.queries_proj": "colwise",
+        "layers.*.feed_forward.router_gate": "colwise",
         "layers.*.mlp.down_embed": "rowwise",
         "layers.*.mlp.up_embed": "rowwise",
     }
@@ -180,7 +178,6 @@ class DogeConfig(PretrainedConfig):
         is_moe=False,
         num_experts=16384,
         num_experts_per_tok=64,
-        expert_retrieval_size=64,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -206,7 +203,6 @@ class DogeConfig(PretrainedConfig):
         self.is_moe = is_moe
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
-        self.expert_retrieval_size = expert_retrieval_size
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.

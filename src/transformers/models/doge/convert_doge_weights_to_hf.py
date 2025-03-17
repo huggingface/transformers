@@ -38,8 +38,7 @@ STATE_DICT_MAPPING = {
     r"^model.layers.(\d+).feed_forward.gate_proj.weight": r"model.layers.\1.mlp.gate_proj.weight",
     r"^model.layers.(\d+).feed_forward.up_proj.weight": r"model.layers.\1.mlp.up_proj.weight",
     r"^model.layers.(\d+).feed_forward.down_proj.weight": r"model.layers.\1.mlp.down_proj.weight",
-    r"^model.layers.(\d+).feed_forward.queries_proj.weight": r"model.layers.\1.mlp.queries_proj.weight",
-    r"^model.layers.(\d+).feed_forward.keys": r"model.layers.\1.mlp.keys",
+    r"^model.layers.(\d+).feed_forward.router_gate.weight": r"model.layers.\1.mlp.router_gate.weight",
     r"^model.layers.(\d+).feed_forward.down_embed.weight": r"model.layers.\1.mlp.down_embed.weight",
     r"^model.layers.(\d+).feed_forward.up_embed.weight": r"model.layers.\1.mlp.up_embed.weight",
 }
