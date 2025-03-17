@@ -45,7 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.hub import get_file_from_repo
+from ...utils.hub import cached_file
 from .configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
     Qwen2_5OmniConfig,
@@ -6171,7 +6171,7 @@ class Qwen2_5OmniModel(PreTrainedModel):
             weights_only=weights_only,
             **kwargs,
         )
-        spk_path = get_file_from_repo(
+        spk_path = cached_file(
             pretrained_model_name_or_path,
             "spk_dict.pt",
             subfolder=kwargs.pop("subfolder", None),
