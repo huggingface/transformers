@@ -25,7 +25,7 @@ from transformers.models.llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaPreTrainedModel,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionModel, SamVisionLayer
+from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import (
@@ -247,6 +247,10 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.window_size = window_size
 
 
+class GotOcr2VisionEncoder(SamVisionEncoder):
+    pass
+
+
 class GotOcr2MultiModalProjector(nn.Module):
     def __init__(self, config: GotOcr2Config):
         super().__init__()
@@ -273,10 +277,6 @@ class GotOcr2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
-    pass
-
-
-class GotOcr2VisionEncoder(SamVisionModel):
     pass
 
 
