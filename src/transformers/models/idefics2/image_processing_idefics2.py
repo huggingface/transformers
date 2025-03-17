@@ -29,7 +29,6 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_flat_list_of_images,
     make_nested_list_of_images,
     to_numpy_array,
     valid_images,
@@ -498,7 +497,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
         # Search for the first image in the image list.
         # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
-        first_image_in_list = make_flat_list_of_images(images_list)[0]
+        first_image_in_list = [images for images in images_list if images][0][0]
 
         if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
