@@ -355,7 +355,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(selected_image_feature.unsqueeze(0), image_sizes)
+        image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
         return image_features
 
 
