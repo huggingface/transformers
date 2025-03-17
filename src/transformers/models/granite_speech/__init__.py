@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_granite_speech import (
             GraniteSpeechForConditionalGeneration,
+            GraniteSpeechPretrainedModel,
         )
 
     try:
