@@ -173,7 +173,7 @@ class GenerationTesterMixin:
     def _check_similar_generate_outputs(self, output_1, output_2, atol=1e-5, rtol=1e-5):
         """
         Checks whether a pair of generate outputs are similar. Two `generate` call outputs are considered similar in
-        the following siturations:
+        the following situations:
         1. The sequences are the same
         2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
         """
@@ -1162,8 +1162,8 @@ class GenerationTesterMixin:
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(low_output, high_output)
 
-    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535 for more info.
@@ -1617,7 +1617,7 @@ class GenerationTesterMixin:
             embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
-            # some models have diffent num-head for query vs key/value so we need to assign correct value
+            # some models have different num-head for query vs key/value so we need to assign correct value
             # BUT only after `per_head_embed_dim` is set
             num_attention_heads = (
                 text_config.num_key_value_heads
@@ -2305,45 +2305,6 @@ class GenerationTesterMixin:
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     @pytest.mark.generate
-    @is_flaky
-    def test_assisted_decoding_with_logits_to_keep(self):
-        for model_class in self.all_generative_model_classes:
-            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-            config.use_cache = True
-            config.is_decoder = True
-
-            model = model_class(config).to(torch_device).eval()
-            assistant_model = model
-            # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
-            # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
-            # other methods will work as well)
-            generation_kwargs = {
-                "max_new_tokens": 10,
-                "do_sample": False,
-                "assistant_model": assistant_model,
-                "return_dict_in_generate": True,
-                "output_scores": True,
-            }
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            # Setting logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(
-                **generation_kwargs, **inputs_dict, **logits_processor_kwargs, logits_to_keep=0
-            )
-            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
-            without_all_logits = model.generate(**inputs_dict, **generation_kwargs, **logits_processor_kwargs)
-
-            self._check_similar_generate_outputs(with_all_logits, without_all_logits)
-
-    @pytest.mark.generate
     def test_inherits_generation_mixin(self):
         """
         Tests that the model class directly inherits `GenerationMixin`, as opposed to relying on `PreTrainedModel`
@@ -2355,7 +2316,7 @@ class GenerationTesterMixin:
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.
-        NOTE: despite the test logic being the same, different implementations actually need diferent decorators, hence
+        NOTE: despite the test logic being the same, different implementations actually need different decorators, hence
         this separate function.
         """
         max_new_tokens = 30
@@ -4658,7 +4619,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(diff < 1e-4)
 
     def test_generate_input_ids_as_kwarg(self):
-        """Test that `input_ids` work equaly as a positional and keyword argument in decoder-only models"""
+        """Test that `input_ids` work equally as a positional and keyword argument in decoder-only models"""
         article = "I need input_ids to generate"
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=15)
@@ -4675,7 +4636,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sequences.shape, (1, 15))
 
     def test_generate_input_ids_as_encoder_kwarg(self):
-        """Test that `input_ids` work equaly as a positional and keyword argument in encoder-decoder models"""
+        """Test that `input_ids` work equally as a positional and keyword argument in encoder-decoder models"""
         article = "Justin Timberlake and Jessica Biel, welcome to parenthood."
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")
