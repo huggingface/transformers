@@ -24,29 +24,12 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-<<<<<<< HEAD
+    LossKwargs,
     auto_class_docstring,
     auto_docstring,
-    get_torch_version,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-||||||| 597efd21d2
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    get_torch_version,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-=======
-    LossKwargs,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     is_torch_flex_attn_available,
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_phi import PhiConfig
 
 
@@ -57,9 +40,6 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "microsoft/phi-1"
-_CONFIG_FOR_DOC = "PhiConfig"
 
 
 def rotate_half(x):
@@ -291,31 +271,6 @@ class PhiDecoderLayer(nn.Module):
         return outputs
 
 
-<<<<<<< HEAD
-@auto_class_docstring
-||||||| 597efd21d2
-PHI_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PhiConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Phi Model outputting raw hidden-states without any specific head on top.",
-    PHI_START_DOCSTRING,
-)
-=======
 class PhiRotaryEmbedding(nn.Module):
     def __init__(self, config: PhiConfig, device=None):
         super().__init__()
@@ -377,28 +332,7 @@ class PhiRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-PHI_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PhiConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Phi Model outputting raw hidden-states without any specific head on top.",
-    PHI_START_DOCSTRING,
-)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
+@auto_class_docstring
 class PhiPreTrainedModel(PreTrainedModel):
     config_class = PhiConfig
     base_model_prefix = "model"
@@ -722,16 +656,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-<<<<<<< HEAD
     @auto_docstring
-||||||| 597efd21d2
-    @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-=======
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -748,53 +673,6 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-<<<<<<< HEAD
-||||||| 597efd21d2
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
-        Returns:
-=======
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, PhiForCausalLM
-
-        >>> model = PhiForCausalLM.from_pretrained("meta-phi/Phi-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-phi/Phi-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -838,43 +716,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         )
 
 
-<<<<<<< HEAD
 @auto_class_docstring
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PHI,Llama->Phi with self.transformer->self.model, transformer_outputs->model_outputs
-||||||| 597efd21d2
-@add_start_docstrings(
-    """
-    The PhiModel with a sequence classification head on top (linear layer).
-
-    [`PhiForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    PHI_START_DOCSTRING,
-)
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PHI,Llama->Phi with self.transformer->self.model, transformer_outputs->model_outputs
-=======
-@add_start_docstrings(
-    """
-    The Phi Model transformer with a sequence classification head on top (linear layer).
-
-    [`PhiForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    PHI_START_DOCSTRING,
-)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
 class PhiForSequenceClassification(PhiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -961,27 +803,6 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
         )
 
 
-<<<<<<< HEAD
-@auto_class_docstring
-# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with MPT->PHI,Mpt->Phi,self.transformer->self.model,transformer_outputs->model_outputs
-||||||| 597efd21d2
-@add_start_docstrings(
-    """
-    PhiModel with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    PHI_START_DOCSTRING,
-)
-# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with MPT->PHI,Mpt->Phi,self.transformer->self.model,transformer_outputs->model_outputs
-=======
-@add_start_docstrings(
-    """
-    The Phi Model transformer with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    PHI_START_DOCSTRING,
-)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
 class PhiForTokenClassification(PhiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -999,30 +820,13 @@ class PhiForTokenClassification(PhiPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-<<<<<<< HEAD
-    # Ignore copy
-    @auto_docstring
-||||||| 597efd21d2
-    @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-=======
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1035,27 +839,7 @@ class PhiForTokenClassification(PhiPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-<<<<<<< HEAD
-        **deprecated_arguments,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
-||||||| 597efd21d2
-        **deprecated_arguments,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-=======
     ) -> Union[Tuple, TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(

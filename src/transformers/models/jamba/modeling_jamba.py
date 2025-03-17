@@ -39,20 +39,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-<<<<<<< HEAD
-    auto_class_docstring,
-    auto_docstring,
-||||||| 597efd21d2
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-=======
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
-    logging,
-)
+
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_causal_conv1d_available,
@@ -1341,18 +1328,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-<<<<<<< HEAD
-    # Ignore copy
     @auto_docstring
-||||||| 597efd21d2
-    @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
-=======
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
     def forward(
         self,
         input_ids: torch.LongTensor = None,
