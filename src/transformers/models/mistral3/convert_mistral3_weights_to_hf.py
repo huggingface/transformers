@@ -19,7 +19,7 @@ import re
 import torch
 from safetensors.torch import load_file
 
-from transformers import AutoTokenizer, LlamaTokenizerFast, PixtralVisionConfig, MistralConfig, Mistral3Config, Mistral3ForConditionalGeneration
+from transformers import AutoTokenizer, LlamaTokenizerFast, PixtralVisionConfig, MistralConfig, Mistral3Config, Mistral3ForConditionalGeneration, Mistral3ImageProcessor, Mistral3Processor
 from transformers.integrations.mistral import convert_tekken_tokenizer
 
 
@@ -37,7 +37,7 @@ STATE_DICT_MAPPING = {
     r"^layers.(\d+).feed_forward.w3.weight":      r"language_model.model.layers.\1.mlp.up_proj.weight",
 
     # Vision model keys
-    r"^vision_encoder.transformer.layers.(\d+).input_layernorm.weight": r"vision_tower.transformer.layers.\1.attention_norm.weight",
+    r"vision_encoder.transformer.layers.(\d+).attention_norm.weight": r"vision_tower.transformer.layers.\1.attention_norm.weight",
     r"^vision_encoder.transformer.layers.(\d+).ffn_norm.weight": r"vision_tower.transformer.layers.\1.ffn_norm.weight",
     r"^vision_encoder.transformer.layers.(\d+).attention.w(q|k|v|o).weight": r"vision_tower.transformer.layers.\1.attention.\2_proj.weight",
     r"^vision_encoder.transformer.layers.(\d+).feed_forward.w1.weight": r"vision_tower.transformer.layers.\1.feed_forward.gate_proj.weight",
@@ -99,13 +99,14 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
             query_dim = head_dim * num_attention_heads
 
         if "q_proj" in new_key:
-            tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
+            # tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
             tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
         elif "k_proj" in new_key:
-            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+            # tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
             tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
         elif "v_proj" in new_key:
-            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+            # tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+            pass
 
         new_dict[new_key] = tensor
     return new_dict
@@ -182,7 +183,7 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     model.save_pretrained(output_dir)
 
 
-def convert_and_write_tokenizer(input_dir: str, output_dir: str, tokenizer_template_name: str = ""):
+def convert_and_write_processor(input_dir: str, output_dir: str, tokenizer_template_name: str = ""):
     """Convert the tokenizer and save it."""
     tokenizer_file = os.path.join(input_dir, "tekken.json")
     tokenizer = convert_tekken_tokenizer(tokenizer_file)
@@ -192,8 +193,13 @@ def convert_and_write_tokenizer(input_dir: str, output_dir: str, tokenizer_templ
         template_tok = AutoTokenizer.from_pretrained(tokenizer_template_name)
         tokenizer.chat_template = template_tok.chat_template
 
+    config = read_json(os.path.join(input_dir, "params.json"))
+    image_processor = Mistral3ImageProcessor(patch_size=config["vision_encoder"]["patch_size"])
+
+    processor = Mistral3Processor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
+
     # Finally save it
-    tokenizer.save_pretrained(output_dir)
+    processor.save_pretrained(output_dir)
 
 
 def main():
