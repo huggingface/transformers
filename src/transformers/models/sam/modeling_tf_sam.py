@@ -47,7 +47,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 
 @dataclass
-class TFSamVisionModelOutput(ModelOutput):
+class TFSamVisionEncoderOutput(ModelOutput):
     """
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -1272,7 +1272,7 @@ class TFSamVisionEncoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSamVisionModelOutput]:
+    ) -> Union[Tuple, TFSamVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1313,7 +1313,7 @@ class TFSamVisionEncoder(keras.layers.Layer):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return TFSamVisionModelOutput(
+        return TFSamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -1483,7 +1483,7 @@ class TFSamVisionModel(TFSamPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSamVisionModelOutput, config_class=SamVisionConfig)
+    @replace_return_docstrings(output_type=TFSamVisionEncoderOutput, config_class=SamVisionConfig)
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
@@ -1492,7 +1492,7 @@ class TFSamVisionModel(TFSamPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFSamVisionModelOutput | Tuple[tf.Tensor]:
+    ) -> TFSamVisionEncoderOutput | Tuple[tf.Tensor]:
         r"""
         Returns:
 
@@ -1537,7 +1537,7 @@ class TFSamVisionModel(TFSamPreTrainedModel):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return TFSamVisionModelOutput(
+        return TFSamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,

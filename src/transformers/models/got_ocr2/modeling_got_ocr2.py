@@ -289,7 +289,7 @@ class GotOcr2VisionLayer(nn.Module):
 
 
 @dataclass
-class GotOcr2VisionModelOutput(ModelOutput):
+class GotOcr2VisionEncoderOutput(ModelOutput):
     """
     Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -444,7 +444,7 @@ class GotOcr2VisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, GotOcr2VisionModelOutput]:
+    ) -> Union[Tuple, GotOcr2VisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -491,7 +491,7 @@ class GotOcr2VisionEncoder(nn.Module):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return GotOcr2VisionModelOutput(
+        return GotOcr2VisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,

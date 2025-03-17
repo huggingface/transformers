@@ -44,7 +44,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 
 @dataclass
-class SamVisionModelOutput(ModelOutput):
+class SamVisionEncoderOutput(ModelOutput):
     """
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -1126,7 +1126,7 @@ class SamVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionModelOutput]:
+    ) -> Union[Tuple, SamVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1173,7 +1173,7 @@ class SamVisionEncoder(nn.Module):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return SamVisionModelOutput(
+        return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -1348,14 +1348,14 @@ class SamVisionModel(SamPreTrainedModel):
         return self.patch_embed
 
     @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SamVisionModelOutput, config_class=SamVisionConfig)
+    @replace_return_docstrings(output_type=SamVisionEncoderOutput, config_class=SamVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionModelOutput]:
+    ) -> Union[Tuple, SamVisionEncoderOutput]:
         r"""
         Returns:
 
@@ -1406,7 +1406,7 @@ class SamVisionModel(SamPreTrainedModel):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return SamVisionModelOutput(
+        return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
