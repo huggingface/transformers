@@ -162,7 +162,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     return new_config
 
 
-def convert_and_write_model(input_dir: str, output_dir: str, max_position_embeddings: int, modules_are_split: bool):
+def convert_and_write_model(input_dir: str, output_dir: str, max_position_embeddings: int):
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
     config = convert_config(params, max_position_embeddings)
