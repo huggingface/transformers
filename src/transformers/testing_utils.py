@@ -32,7 +32,7 @@ import tempfile
 import threading
 import time
 import unittest
-from collections import defaultdict
+from collections import UserDict, defaultdict
 from collections.abc import Mapping
 from dataclasses import MISSING, fields
 from functools import cache, wraps
@@ -3010,89 +3010,58 @@ def cleanup(device: str, gc_collect=False):
     backend_empty_cache(device)
 
 
-class Expectation:
-    result: Any
-    type: Union[str, None]
-    major: Union[int, None]
+_KT = tuple[Union[str, None], Union[int, None]]
 
-    def __init__(self, result: Any, type: Union[str, None] = None, major: Union[int, None] = None):
-        self.result = result
-        self.type = type
-        self.major = major
+
+class Expectations(UserDict[_KT, Any]):
+    def get_expectation(self) -> Any:
+        """
+        Find best matching expectation based on environment device properties.
+        """
+        return self.find_expectation(self._get_device_properties()).result
 
     @staticmethod
-    def default(result: Any):
-        return Expectation(result, None, None)
+    def _is_default(key: _KT) -> bool:
+        (type, major) = key
+        return type is None and major is None
 
-    def is_default(self) -> bool:
-        return self.type is None and self.major is None
-
-    def cmp(self, type: Union[str, None] = None, major: Union[int, None] = None) -> int:
+    @staticmethod
+    def score(key: _KT, other: _KT) -> int:
         """
         Returns score indicating how similar two instances of `Properties` are.
         If the compared device types are "cuda" and "hip" they get half marks as they are similar, but not equal.
         """
+        (type, major) = key
+        (other_type, other_major) = other
 
-        score = 0b0000
-        if self.type == type:
-            score |= 0b100
-        elif self.type in ["cuda", "rocm"] and type in ["cuda", "rocm"]:
-            score |= 0b010
+        score = 0b00000
+        if type == other_type:
+            score |= 0b1000
+        elif type in ["cuda", "rocm"] and other_type in ["cuda", "rocm"]:
+            score |= 0b0100
 
-        if self.major == major and self.major is not None:
-            score |= 0b001
+        if major == other_major and other_major is not None:
+            print(type, major, other_type, other_major)
+            score |= 0b0010
+
+        if Expectations._is_default(other):
+            score |= 0b0001
 
         return int(score)
 
-
-class Expectations:
-    _inner: list[Expectation]
-    _default: Union[Expectation, None] = None
-
-    def __init__(self, *args: Expectation):
-        self._inner = list(args)
-
-        # Guarantee at least one expectation is set
-        if len(self._inner) == 0:
-            raise ValueError("Expectations must have atleast one expectation")
-
-        # Guarantee the properties are unique
-        unique_properties = {(e.type, e.major) for e in self._inner}
-        if len(unique_properties) != len(self._inner):
-            raise ValueError("Expectation properties must be unique")
-
-        # Find default if exists
-        for expectation in self._inner:
-            if expectation.is_default():
-                self._default = expectation
-                break
-
-    def get(self) -> Expectation:
-        """
-        Find best matching expectation based on environment device properties.
-        """
-        (type, major) = self._get_device_properties()
-        return self.find_expectation(type, major).result
-
-    def find_expectation(self, type: Union[str, None] = None, major: Union[int, None] = None) -> Expectation:
+    def find_expectation(self, key: _KT = (None, None)) -> Any:
         """
         Find best matching expectation based on provided device properties.
         """
-        result = self._default
-        best = 0
-        for expectation in self._inner:
-            score = expectation.cmp(type, major)
-            if score > best:
-                result = expectation
-                best = score
+        (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
 
-        if result is None:
-            raise ValueError(f"No matching expectation found for ({type}, {major})")
+        if Expectations.score(key, result_key) == 0:
+            raise ValueError(f"No matching expectation found for {key}")
 
         return result
 
     @cache
-    def _get_device_properties(self) -> tuple[Union[str, None], Union[int, None]]:
+    def _get_device_properties(self) -> _KT:
         """
         Get environment device properties.
         """
@@ -3108,4 +3077,4 @@ class Expectations:
             return (torch_device, None)
 
     def __repr__(self):
-        return f"{self._inner}"
+        return f"{self.data}"
