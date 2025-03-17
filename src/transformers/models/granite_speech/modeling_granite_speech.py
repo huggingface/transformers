@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import ModelOutput
 
-from transformers import Blip2QFormerModel, GraniteForCausalLM
+from transformers import Blip2QFormerModel
 from transformers.generation import GenerationMixin
 from transformers.modeling_utils import PreTrainedModel
 from ..auto import AutoModelForCausalLM
@@ -17,9 +17,6 @@ from .configuration_granite_speech import (
     GraniteSpeechConfig,
     GraniteSpeechEncoderConfig,
 )
-
-from peft import get_peft_model, LoraConfig, TaskType
-import time
 
 
 @dataclass
@@ -42,6 +39,10 @@ class EncoderProjectorQFormer(nn.Module):
         self.num_queries = self.window_size // self.ds_rate
         self.query = nn.Parameter(torch.zeros(1, self.num_queries, config.hidden_size))
         self.query.data.normal_(mean=0.0, std=1.0)
+        # NOTE: It would be better to create this from config, similar to the LLM.
+        # To do this, we need to register the QFormer model into an automodel, which
+        # will require pulling it out into its own dir so that it's accessible under
+        # transformers.models.X
         self.qformer = Blip2QFormerModel(config)
         self.linear = nn.Linear(config.hidden_size, config.llm_dim)
 
@@ -109,8 +110,6 @@ class CTCModel(nn.Module):
 
 # NOTE: Conformer code is adapated from the following
 # https://github.com/lucidrains/conformer.git
-# helper functions
-
 def calc_same_padding(kernel_size):
     pad = kernel_size // 2
     return (pad, pad - (kernel_size + 1) % 2)
@@ -344,7 +343,15 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
         self.post_init()
 
     def _legacy_load(self, config: GraniteSpeechConfig, skip_lora=False):
+        """NOTE: This should only be used for testing the model and converting;
+        we should use the other loading logic, which does NOT explicitly create
+        an encapsulated peft model, and instead handles it through the peft mixin
+        if we have an adapter config present.
+        """
         super().__init__(config)
+        from peft import get_peft_model, LoraConfig, TaskType
+        from transformers import GraniteForCausalLM
+
         self.language_model = GraniteForCausalLM.from_pretrained("ibm-granite/granite-3.1-8b-instruct")
 
         if not skip_lora:
@@ -407,7 +414,7 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         if input_features is not None and inputs_embeds is not None:
             raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+                "You cannot specify both input_features and inputs_embeds at the same time, and must specify either one"
             )
 
         if inputs_embeds is None:
@@ -499,9 +506,9 @@ class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids
-        # do not contain special audio token anymore Otherwise we need input feature values
-        # to be passed to the model
+        # If we're in cached decoding stage, input_features should be None because
+        # input ids do not contain special audio token anymore Otherwise we need
+        # input feature values to be passed to the model
         if cache_position[0] == 0:
             model_inputs["input_features"] = input_features
         return model_inputs

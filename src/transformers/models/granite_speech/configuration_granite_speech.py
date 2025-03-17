@@ -1,7 +1,6 @@
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import AutoConfig
 from transformers.models.blip_2.configuration_blip_2 import Blip2QFormerConfig
-from transformers.models.granite.configuration_granite import GraniteConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
@@ -94,13 +93,17 @@ class GraniteSpeechConfig(PretrainedConfig):
         elif llm_config is None:
             llm_config = CONFIG_MAPPING["granite"]()
 
+        if isinstance(projector_config, dict):
+            # TODO - Make this generic after blip2qformer is moved out to its own model dir.
+            if projector_config["model_type"] != "blip_2_qformer":
+                raise ValueError("Granite speech currently requires blip2 qformer as its encoder!")
+            projector_config = Blip2QFormerConfig(**projector_config)
+        elif projector_config is None:
+            projector_config = Blip2QFormerConfig()
+
         if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
             encoder_config = dict() if encoder_config is None else encoder_config
             encoder_config = GraniteSpeechEncoderConfig(**encoder_config)
-
-        if not isinstance(projector_config, GraniteSpeechProjectorConfig):
-            projector_config = dict() if projector_config is None else projector_config
-            projector_config = GraniteSpeechProjectorConfig(**projector_config)
 
         self.llm_config = llm_config
         self.encoder_config = encoder_config
