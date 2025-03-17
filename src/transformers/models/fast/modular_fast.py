@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for FAST."""
-from ...utils.import_utils import is_cv2_available, is_torch_available, is_scipy_available
+from ...utils.import_utils import is_cv2_available, is_torch_available, is_scipy_available, requires_backends
 import math
 if is_cv2_available():
     import cv2
@@ -27,6 +27,127 @@ if is_torch_available():
     import torch.nn as nn
     import torch.nn.functional as F
 from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
+
+
+def connected_components(image, connectivity=8):
+    
+    """
+    Computes connected components of a binary image using SciPy.
+    
+    Parameters:
+        image (np.ndarray): Binary input image (0s and 1s)
+        connectivity (int): Connectivity, 4 or 8 (default is 8)
+    
+    Returns:
+        labels (np.ndarray): Labeled output image
+        num_labels (int): Number of labels found
+    """
+    if connectivity == 8:
+        structure = np.ones((3, 3), dtype=np.int32)  # 8-connectivity
+    else:
+        structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.int32)  # 4-connectivity
+    
+    labels, num_labels = ndi.label(image, structure=structure)
+    return num_labels, labels
+
+def compute_min_area_rect(points):
+        
+        """
+        Compute the minimum area rotated bounding rectangle around a set of 2D points.
+        
+        Args:
+            points (np.ndarray): Nx2 array of (x, y) coordinates.
+
+        Returns:
+            tuple: ((cx, cy), (w, h), angle) where
+                - (cx, cy) is the center of the rectangle,
+                - (w, h) are the width and height of the rectangle,
+                - angle is the rotation angle in degrees.
+        """
+        # compute convex hull
+        hull = ConvexHull(points)
+        hull_points = points[hull.vertices]
+
+        # compute edge angles
+        edges = np.diff(hull_points, axis=0, append=hull_points[:1])
+        edge_angles = np.arctan2(edges[:, 1], edges[:, 0])  # get angles in radians
+        edge_angles = np.unique(np.abs(edge_angles))  # remove duplicates
+
+        # initialize min area variables
+        min_area = float('inf')
+        best_rect = None
+
+        for angle in edge_angles:
+            # rotation matrix
+            R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+            rotated_points = points @ R.T
+
+            # get bounding box in rotated space
+            xmin, ymin = rotated_points.min(axis=0)
+            xmax, ymax = rotated_points.max(axis=0)
+            w, h = xmax - xmin, ymax - ymin
+            area = w * h
+
+            if area < min_area:
+                min_area = area
+                best_rect = (xmin, ymin, xmax, ymax, angle, w, h)
+
+        # extract best rectangle parameters
+        xmin, ymin, xmax, ymax, angle, w, h = best_rect
+
+        # compute center in rotated space
+        center_rotated = np.array([(xmin + xmax) / 2, (ymin + ymax) / 2])
+
+        # rotate center back to original coordinates
+        R_inv = np.linalg.inv(np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]))
+        center = center_rotated @ R_inv.T
+
+        # convert angle to degrees
+        angle = np.degrees(angle)
+
+        # fix angle range to match OpenCV [-90, 0]
+        if w < h:
+            angle += 90
+            w, h = h, w  # Swap width and height
+
+        # we ensure angle sign matches opencv's convention
+        if angle > 0:
+            angle -= 180
+
+        return ((center[0], center[1]), (w, h), -angle)
+        
+def get_box_points(rect):
+    """
+    Computes the four corner points of a rotated rectangle in OpenCV's order.
+
+    Args:
+        rect (tuple): (cx, cy, w, h, angle)
+                    - Center (cx, cy)
+                    - Width (w) and Height (h)
+                    - Rotation angle in degrees
+
+    Returns:
+        np.ndarray: (4,2) array containing the rectangle's four corners in OpenCV order:
+                    [Top-Left, Top-Right, Bottom-Right, Bottom-Left]
+    """
+    (cx, cy), (w, h), angle = rect
+
+    # convert angle from degrees to radians
+    angle = np.radians(angle)
+
+    # compute movement vectors using OpenCV's method
+    b = np.cos(angle) * 0.5
+    a = np.sin(angle) * 0.5
+
+    # compute four corners
+    points = np.array([
+        [cx - a * h - b * w, cy + b * h - a * w],  # top-left
+        [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
+        [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
+        [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)]   # bottom-left
+    ], dtype=np.float32)
+
+    return points
 
 class FastImageProcessor(TextNetImageProcessor):
     def resize(
@@ -94,19 +215,38 @@ class FastImageProcessor(TextNetImageProcessor):
         pooled_output = pooling(input_tensor)
         return pooled_output
 
-    def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", img_size=None):
+    def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", image_size=None):
+        """
+        Post-processes the raw model output to generate bounding boxes and scores for text detection.
+
+        Args:
+            output (dict): Dictionary containing model outputs. Must include key `"last_hidden_state"` (Tensor of shape [B, C, H, W]).
+            target_sizes (List[Tuple[int, int]]): Original image sizes (height, width) for each item in the batch.
+                                                Used to scale detection results back to original image dimensions.
+            threshold (float): Confidence threshold for filtering low-score text regions.
+            bbox_type (str, optional): Type of bounding box to return. Must be one of:
+                                    - "rect": rotated bounding rectangles
+                                    - "poly": polygon boundaries
+            image_size (Tuple[int, int], optional): Size (height, width) of the image used during inference.
+                                                If not provided, defaults to `self.img_size`.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing:
+                - "bboxes" (np.ndarray): Array of detected bounding boxes in the specified format.
+                - "scores" (np.ndarray): Corresponding confidence scores for each bounding box.
+        """
         scale = 2
-        img_size = img_size if img_size is not None else self.img_size
+        image_size = image_size if image_size is not None else self.img_size
         out = output["last_hidden_state"]
         batch_size = out.size(0)
         final_results = {}
 
         texts = F.interpolate(
-            out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+            out[:, 0:1, :, :], size=(image_size[0] // scale, image_size[1] // scale), mode="nearest"
         )  # B*1*320*320
         texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
         score_maps = torch.sigmoid_(texts)  # B*1*320*320
-        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
+        score_maps = F.interpolate(score_maps, size=(image_size[0], image_size[1]), mode="nearest")  # B*1*640*640
         score_maps = score_maps.squeeze(1)  # B*640*640
 
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
@@ -119,10 +259,10 @@ class FastImageProcessor(TextNetImageProcessor):
         labels_ = torch.from_numpy(labels_)
         labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
         labels = F.interpolate(
-            labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+            labels, size=(image_size[0] // scale, image_size[1] // scale), mode="nearest"
         )  # B*1*320*320
         labels = self._max_pooling(labels, scale=scale)
-        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
+        labels = F.interpolate(labels, size=(image_size[0], image_size[1]), mode="nearest")  # B*1*640*640
         labels = labels.squeeze(1).to(torch.int32)  # B*640*640
 
         keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
@@ -131,8 +271,8 @@ class FastImageProcessor(TextNetImageProcessor):
 
         results = []
         for i in range(batch_size):
-            org_img_size = target_sizes[i]
-            scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
+            org_image_size = target_sizes[i]
+            scales = (float(org_image_size[1]) / float(image_size[1]), float(org_image_size[0]) / float(image_size[0]))
 
             bboxes, scores = self.generate_bbox(
                 keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
@@ -143,6 +283,25 @@ class FastImageProcessor(TextNetImageProcessor):
         return results
 
     def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
+        """
+        Generates bounding boxes and corresponding confidence scores from instance labels and score maps.
+
+        Args:
+            keys (Tensor): Unique instance labels (1D Tensor) for connected components in the image.
+            label (Tensor): Instance segmentation map (H x W), where each connected region has a unique label.
+            score (Tensor): Confidence map (H x W) with values in [0, 1], representing text region probabilities.
+            scales (Tuple[float, float]): Scaling factors (width_scale, height_scale) used to map results
+                                        back to original image dimensions.
+            threshold (float): Minimum average score required for a region to be considered a valid detection.
+            bbox_type (str): Type of bounding box to generate for each instance. Options:
+                            - "rect": Minimum area rotated rectangle (via `compute_min_area_rect`).
+                            - "poly": Polygonal contour (via `cv2.findContours`, requires OpenCV).
+
+        Returns:
+            Tuple[List[List[int]], List[float]]:
+                - List of bounding boxes (`bboxes`), each a flattened list of coordinates.
+                - List of corresponding confidence scores (`scores`).
+        """
         label_num = len(keys)
         bboxes = []
         scores = []
@@ -160,12 +319,13 @@ class FastImageProcessor(TextNetImageProcessor):
                 continue
 
             if bbox_type == "rect":
-                rect = self.min_area_rect(points[:, ::-1])
+                rect = compute_min_area_rect(points[:, ::-1])
                 alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
                 rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-                bbox = self.box_points(rect) * scales
+                bbox = get_box_points(rect) * scales
 
             elif bbox_type == "poly":
+                requires_backend(self, "cv2")
                 binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
                 # cv2.findContours is too complex to replicate :(
@@ -176,125 +336,6 @@ class FastImageProcessor(TextNetImageProcessor):
             scores.append(score_i)
 
         return bboxes, scores
-    
-    def connected_components(self, image, connectivity=8):
-        
-        """
-        Computes connected components of a binary image using SciPy.
-        
-        Parameters:
-            image (np.ndarray): Binary input image (0s and 1s)
-            connectivity (int): Connectivity, 4 or 8 (default is 8)
-        
-        Returns:
-            labels (np.ndarray): Labeled output image
-            num_labels (int): Number of labels found
-        """
-        if connectivity == 8:
-            structure = np.ones((3, 3), dtype=np.int32)  # 8-connectivity
-        else:
-            structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.int32)  # 4-connectivity
-        
-        labels, num_labels = ndi.label(image, structure=structure)
-        return num_labels, labels
-
-    def min_area_rect(self, points):
-        
-        """
-        Compute the minimum area rotated bounding rectangle around a set of 2D points.
-        
-        Args:
-            points (np.ndarray): Nx2 array of (x, y) coordinates.
-
-        Returns:
-            tuple: ((cx, cy), (w, h), angle) where
-                - (cx, cy) is the center of the rectangle,
-                - (w, h) are the width and height of the rectangle,
-                - angle is the rotation angle in degrees.
-        """
-        # compute convex hull
-        hull = ConvexHull(points)
-        hull_points = points[hull.vertices]
-
-        # compute edge angles
-        edges = np.diff(hull_points, axis=0, append=hull_points[:1])
-        edge_angles = np.arctan2(edges[:, 1], edges[:, 0])  # get angles in radians
-        edge_angles = np.unique(np.abs(edge_angles))  # remove duplicates
-
-        # initialize min area variables
-        min_area = float('inf')
-        best_rect = None
-
-        for angle in edge_angles:
-            # rotation matrix
-            R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
-            rotated_points = points @ R.T
-
-            # get bounding box in rotated space
-            xmin, ymin = rotated_points.min(axis=0)
-            xmax, ymax = rotated_points.max(axis=0)
-            w, h = xmax - xmin, ymax - ymin
-            area = w * h
-
-            if area < min_area:
-                min_area = area
-                best_rect = (xmin, ymin, xmax, ymax, angle, w, h)
-
-        # extract best rectangle parameters
-        xmin, ymin, xmax, ymax, angle, w, h = best_rect
-
-        # compute center in rotated space
-        center_rotated = np.array([(xmin + xmax) / 2, (ymin + ymax) / 2])
-
-        # rotate center back to original coordinates
-        R_inv = np.linalg.inv(np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]))
-        center = center_rotated @ R_inv.T
-
-        # convert angle to degrees
-        angle = np.degrees(angle)
-
-        # fix angle range to match OpenCV [-90, 0]
-        if w < h:
-            angle += 90
-            w, h = h, w  # Swap width and height
-
-        # we ensure angle sign matches opencv's convention
-        if angle > 0:
-            angle -= 180
-
-        return ((center[0], center[1]), (w, h), -angle)
-    def box_points(self, rect):
-        """
-        Computes the four corner points of a rotated rectangle in OpenCV's order.
-
-        Args:
-            rect (tuple): ((cx, cy), (w, h), angle)
-                        - Center (cx, cy)
-                        - Width (w) and Height (h)
-                        - Rotation angle in degrees
-
-        Returns:
-            np.ndarray: (4,2) array containing the rectangle's four corners in OpenCV order:
-                        [Top-Left, Top-Right, Bottom-Right, Bottom-Left]
-        """
-        (cx, cy), (w, h), angle = rect
-
-        # convert angle from degrees to radians
-        angle = np.radians(angle)
-
-        # compute movement vectors using OpenCV's method
-        b = np.cos(angle) * 0.5
-        a = np.sin(angle) * 0.5
-
-        # compute four corners
-        points = np.array([
-            [cx - a * h - b * w, cy + b * h - a * w],  # top-left
-            [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
-            [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
-            [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)]   # bottom-left
-        ], dtype=np.float32)
-
-        return points
 
 __all__ = [
     "FastImageProcessor",

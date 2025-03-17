@@ -18,11 +18,11 @@ import unittest
 
 import requests
 
-from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_vision_available
-
+from transformers.testing_utils import require_torch, require_vision, require_cv2, slow
+from transformers.utils import is_torch_available, is_vision_available, is_cv2_available
+from transformers.models.fast.image_processing_fast import compute_min_area_rect, get_box_points
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+import numpy as np
 
 if is_torch_available():
     import torch
@@ -32,6 +32,8 @@ if is_vision_available():
 
     from transformers import FastForSceneTextRecognition, FastImageProcessor
 
+if is_cv2_available():
+    import cv2
 
 class FastImageProcessingTester(unittest.TestCase):
     def __init__(
@@ -159,5 +161,42 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         threshold = 0.88
         final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="rect")
 
+        #TODO: align bbox format with transformer models
         assert final_out[0]["bboxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.91862
+
+    @require_cv2
+    def test_compute_min_area_rect_against_cv2(self):
+        for _ in range(10):
+            points = (np.random.rand(10, 2) * 100).astype(np.float32)
+
+            # our implementation
+            my_rect = compute_min_area_rect(points)
+
+            # openCV implementation
+            cv2_rect = cv2.minAreaRect(points)
+
+            my_center, my_size, my_angle = my_rect
+            cv2_center, cv2_size, cv2_angle = cv2_rect
+
+            assert np.allclose(my_center, cv2_center, atol=5), f"Center mismatch: {my_center} vs {cv2_center}"
+            assert np.allclose(sorted(my_size), sorted(cv2_size), atol=5), f"Size mismatch: {my_size} vs {cv2_size}"
+            assert abs(my_angle - cv2_angle) < 15 or abs(my_angle + 180 - cv2_angle) < 15, \
+                f"Angle mismatch: {my_angle} vs {cv2_angle}"
+    
+    @require_cv2
+    def test_get_box_points_against_cv2(self):
+        for _ in range(10):
+            points = (np.random.rand(10, 2) * 100).astype(np.float32)
+
+            my_rect = compute_min_area_rect(points)
+            my_box = get_box_points(my_rect)
+
+            cv2_rect = cv2.minAreaRect(points)
+            cv2_box = cv2.boxPoints(cv2_rect)
+
+            my_box_sorted = np.array(sorted(my_box, key=lambda x: (x[0], x[1])))
+            cv2_box_sorted = np.array(sorted(cv2_box, key=lambda x: (x[0], x[1])))
+
+            assert np.allclose(my_box_sorted, cv2_box_sorted, atol=5), \
+                f"Box points mismatch:\n{my_box_sorted}\nvs\n{cv2_box_sorted}"

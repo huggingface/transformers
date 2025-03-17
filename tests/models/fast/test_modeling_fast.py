@@ -53,8 +53,6 @@ class FastModelTester:
         parent,
         backbone_kernel_size=3,
         backbone_stride=2,
-        backbone_dilation=1,
-        backbone_groups=1,
         backbone_has_shuffle=False,
         backbone_in_channels=3,
         backbone_out_channels=64,
@@ -66,26 +64,18 @@ class FastModelTester:
         backbone_stage1_out_channels=[64],
         backbone_stage1_kernel_size=[[3, 3]],
         backbone_stage1_stride=[1],
-        backbone_stage1_dilation=[1],
-        backbone_stage1_groups=[1],
         backbone_stage2_in_channels=[64],
         backbone_stage2_out_channels=[128],
         backbone_stage2_kernel_size=[[3, 1]],
         backbone_stage2_stride=[2],
-        backbone_stage2_dilation=[1],
-        backbone_stage2_groups=[1],
         backbone_stage3_in_channels=[128],
         backbone_stage3_out_channels=[256],
         backbone_stage3_kernel_size=[[1, 3]],
         backbone_stage3_stride=[2],
-        backbone_stage3_dilation=[1],
-        backbone_stage3_groups=[1],
         backbone_stage4_in_channels=[256],
         backbone_stage4_out_channels=[512],
         backbone_stage4_kernel_size=[[3, 3]],
         backbone_stage4_stride=[2],
-        backbone_stage4_dilation=[1],
-        backbone_stage4_groups=[1],
         neck_in_channels=[64],
         neck_out_channels=[128],
         neck_kernel_size=[[3, 3]],
@@ -171,10 +161,6 @@ class FastModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        # labels = None
-        # if self.use_labels:
-        #     labels = ids_tensor([self.batch_size], self.num_labels)
-        #
         config = self.get_config()
 
         return config, {"pixel_values": pixel_values}

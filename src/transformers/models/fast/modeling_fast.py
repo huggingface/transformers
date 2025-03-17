@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...utils import is_timm_available
+from ...utils.backbone_utils import load_backbone
 
 
 if is_timm_available():
@@ -83,42 +84,13 @@ class FastForSceneTextRecognitionOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
         padding1 = get_same_padding(kernel_size[0])
         padding2 = get_same_padding(kernel_size[1])
         return padding1, padding2
     return kernel_size // 2
-
-
-class FastConvLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size=3,
-        stride=1,
-        bias=False,
-    ):
-        super().__init__()
-
-        self.kernel_size = kernel_size
-        self.stride = stride
-
-        padding = get_same_padding(self.kernel_size)
-
-        self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=bias,
-        )
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        return hidden_states
 
 class FastRepConvLayer(nn.Module):
     def __init__(
@@ -164,7 +136,8 @@ class FastRepConvLayer(nn.Module):
             )
             self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels)
         else:
-            self.vertical_conv, self.vertical_batch_norm = None, None
+            self.vertical_conv = nn.Identity()
+            self.vertical_batch_norm = nn.Identity()
 
         if kernel_size[0] != 1:
             self.horizontal_conv = nn.Conv2d(
@@ -177,36 +150,32 @@ class FastRepConvLayer(nn.Module):
             )
             self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels)
         else:
-            self.horizontal_conv, self.horizontal_batch_norm = None, None
+            self.horizontal_conv = nn.Identity()
+            self.horizontal_batch_norm = nn.Identity()
         
         #TODO: check if needed
         self.rbr_identity = (
-            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+            nn.BatchNorm2d(out_channels) if out_channels == in_channels and stride == 1 else None
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         # if self.training:
+        main = self.main_conv(hidden_states)
+        main = self.main_batch_norm(main)
 
-        main_outputs = self.main_conv(hidden_states)
-        main_outputs = self.main_batch_norm(main_outputs)
-        if self.vertical_conv is not None:
-            vertical_outputs = self.vertical_conv(hidden_states)
-            vertical_outputs = self.vertical_batch_norm(vertical_outputs)
+        vertical = self.vertical_conv(hidden_states)
+        vertical = self.vertical_batch_norm(vertical)
+
+        horizontal = self.horizontal_conv(hidden_states)
+        horizontal = self.horizontal_batch_norm(horizontal)
+
+        if self.rbr_identity is not None:
+            rbr_identity = self.rbr_identity(hidden_states)
         else:
-            vertical_outputs = 0
+            rbr_identity = 0
 
-        if self.horizontal_conv is not None:
-            horizontal_outputs = self.horizontal_conv(hidden_states)
-            horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
-        else:
-            horizontal_outputs = 0
 
-        if self.rbr_identity is None:
-            id_out = 0
-        else:
-            id_out = self.rbr_identity(hidden_states)
-
-        return self.activation(main_outputs + vertical_outputs + horizontal_outputs + id_out)
+        return self.activation(main + vertical + horizontal + rbr_identity)
 
 
 class FastPreTrainedModel(PreTrainedModel):
@@ -236,20 +205,18 @@ class FastPreTrainedModel(PreTrainedModel):
 class FASTNeck(nn.Module):
     def __init__(self, config):
         super().__init__()
-        reduce_layer_configs = list(
-            zip(
-                config.neck_in_channels,
-                config.neck_out_channels,
-                config.neck_kernel_size,
-                config.neck_stride,
-            )
-        )
-        self.num_layers = len(reduce_layer_configs)
-        self.reduce_layers = nn.ModuleList([
-            FastRepConvLayer(*config) for config in reduce_layer_configs
-        ])
+        self.reduce_layers = nn.ModuleList()
+        for in_channels, out_channels, kernel_size, stride in zip(
+            config.neck_in_channels,
+            config.neck_out_channels,
+            config.neck_kernel_size,
+            config.neck_stride,
+        ):
+            layer = FastRepConvLayer(in_channels, out_channels, kernel_size, stride)
+            self.reduce_layers.append(layer)
+        self.num_layers = len(self.reduce_layers)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         first_layer_hidden = hidden_states[0]
         first_layer_hidden = self.reduce_layers[0](first_layer_hidden)
         output_stages = [first_layer_hidden]
@@ -274,12 +241,15 @@ class FASTHead(nn.Module):
             config.head_conv_stride,
         )
 
-        self.final = FastConvLayer(
+        padding = get_same_padding(config.head_final_kernel_size)
+
+        self.final_conv = nn.Conv2d(
             config.head_final_in_channels,
             config.head_final_out_channels,
-            config.head_final_kernel_size,
-            config.head_final_stride,
-            config.head_final_bias,
+            kernel_size=config.head_final_kernel_size,
+            stride=config.head_final_stride,
+            padding=padding,
+            bias=config.head_final_bias,
         )
 
         self.pooling_size = config.head_pooling_size
@@ -297,7 +267,7 @@ class FASTHead(nn.Module):
         hidden_states = self.conv(hidden_states)
         if self.dropout is not None:
             hidden_states = self.dropout(hidden_states)
-        hidden_states = self.final(hidden_states)
+        hidden_states = self.final_conv(hidden_states)
         return hidden_states
 
 
@@ -330,7 +300,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
                 **kwargs,
             )
         else:
-            backbone = AutoBackbone.from_config(config.backbone_config)
+            backbone = load_backbone(config.backbone_config)
         self.backbone = backbone
         self.neck = FASTNeck(config=config)
         self.text_detection_head = FASTHead(config=config)
@@ -342,17 +312,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             kernel_size=config.head_pooling_size // 2 + 1, stride=1, padding=(config.head_pooling_size // 2) // 2
         )
         self.post_init()
-
-    def _upsample(self, x, size, scale=1):
-        _, _, H, W = size
-        return F.interpolate(x, size=(H // scale, W // scale), mode="bilinear")
-
-    def _max_pooling(self, x, scale=1):
-        if scale == 1:
-            x = self.pooling_1s(x)
-        elif scale == 2:
-            x = self.pooling_2s(x)
-        return x
 
 
     @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
@@ -410,10 +369,9 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
                 size=(pixel_values.size(2), pixel_values.size(3)), 
                 mode="bilinear"
             )
-            # TODO: refactor
-            loss = self.loss_function(upsampled_output, labels)
+            loss = self.loss_function()
             kernels = upsampled_output[:, 0, :, :]  # 4*640*640
-            texts = self._max_pooling(kernels, scale=1)  # 4*640*640
+            texts = self.pooling_1s(kernels) # 4*640*640 
             loss = loss(upsampled_output, labels, texts)
             
         text_detection_output = F.interpolate(
