@@ -5801,7 +5801,7 @@ class Qwen2_5OmniToken2WavBigVGANModel(torch.nn.Module):
         return x.squeeze().cpu()
 
 
-class ODESolverRK4():
+class ODESolverRK4:
     def __init__(self, func, y0):
         self.func = func
         self.y0 = y0
