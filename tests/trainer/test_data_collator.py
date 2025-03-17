@@ -149,6 +149,12 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
 
+    def test_data_collator_with_flattening_flash_attn_kwargs(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
         data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
@@ -173,6 +179,12 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["max_length_q"].shape, torch.Size([1]))
         self.assertEqual(batch["max_length_q"].tolist(), [7])
 
+    def test_data_collator_with_flattening_seq_idx(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
         data_collator = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
