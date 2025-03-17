@@ -41,12 +41,8 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-<<<<<<< HEAD
     auto_docstring,
-||||||| 597efd21d2
-=======
     is_torch_flex_attn_available,
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
     logging,
     replace_return_docstrings,
 )

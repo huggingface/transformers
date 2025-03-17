@@ -41,7 +41,6 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_jetmoe import JetMoeConfig
 
 
@@ -1225,16 +1224,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-<<<<<<< HEAD
     @auto_docstring
-||||||| 597efd21d2
-    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-=======
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1252,41 +1242,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
-<<<<<<< HEAD
-||||||| 597efd21d2
-        r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
-        Returns:
-        """
-
-=======
-        r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-        """
-
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

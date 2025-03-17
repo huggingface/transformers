@@ -39,7 +39,6 @@ from ...utils import (
     is_flash_attn_2_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
 
@@ -882,51 +881,8 @@ class PhimoeDecoderLayer(nn.Module):
         return outputs
 
 
-<<<<<<< HEAD
 @auto_class_docstring
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
-||||||| 597efd21d2
-PHIMOE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-    Parameters:
-        config ([`PhimoeConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Phimoe Model outputting raw hidden-states without any specific head on top.",
-    PHIMOE_START_DOCSTRING,
-)
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
-=======
-PHIMOE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-    Parameters:
-        config ([`PhimoeConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Phimoe Model outputting raw hidden-states without any specific head on top.",
-    PHIMOE_START_DOCSTRING,
-)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
 class PhimoePreTrainedModel(PreTrainedModel):
     config_class = PhimoeConfig
     base_model_prefix = "model"
@@ -1311,15 +1267,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-<<<<<<< HEAD
-||||||| 597efd21d2
-    @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-=======
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
     # Ignore copy
     @auto_docstring
     def forward(
@@ -1340,8 +1287,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
-<<<<<<< HEAD
-||||||| 597efd21d2
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1353,20 +1298,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
         Returns:
-=======
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-        Returns:
->>>>>>> c8a2b25f915a7745d57c92635415e2517b739bc8
         Example:
 
         ```python
