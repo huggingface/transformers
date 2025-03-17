@@ -4668,7 +4668,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4819,6 +4819,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Compute expected model keys
         expected_keys = list(model_to_load.state_dict().keys())
+        print(expected_keys)
+        import pdb; pdb.set_trace()
         if hf_quantizer is not None:
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
