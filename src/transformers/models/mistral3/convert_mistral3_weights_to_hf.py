@@ -86,9 +86,11 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
 
         if "vision" in old_key:
             num_attention_heads = config.vision_config.num_attention_heads
+            num_key_value_heads = num_attention_heads
             hidden_size = config.vision_config.hidden_size
             head_dim = config.vision_config.head_dim
             key_value_dim = head_dim * num_attention_heads
+            key_value_dim = head_dim * num_key_value_heads
             query_dim = head_dim * num_attention_heads
         else:
             num_attention_heads = config.text_config.num_attention_heads
@@ -99,14 +101,13 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
             query_dim = head_dim * num_attention_heads
 
         if "q_proj" in new_key:
-            # tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
+            tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
             tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
         elif "k_proj" in new_key:
-            # tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
             tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
         elif "v_proj" in new_key:
-            # tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
-            pass
+            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
 
         new_dict[new_key] = tensor
     return new_dict
@@ -189,15 +190,14 @@ def convert_and_write_processor(input_dir: str, output_dir: str, tokenizer_templ
     tokenizer_file = os.path.join(input_dir, "tekken.json")
     tokenizer = convert_tekken_tokenizer(tokenizer_file)
 
-    # Load a chat template from another model
-    if tokenizer_template_name != "":
-        template_tok = AutoTokenizer.from_pretrained(tokenizer_template_name)
-        tokenizer.chat_template = template_tok.chat_template
+    chat_template = "{%- if messages[0][\"role\"] == \"system\" %}{%- set system_message = messages[0][\"content\"] %}{%- set loop_messages = messages[1:] %}\n{%- else %}{%- set loop_messages = messages %}{%- endif %}{{- bos_token }}{%- for message in loop_messages %}{%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}{{- raise_exception('After the optional system message, conversation roles must alternate user/assistant/user/assistant/...') }}{%- endif %}{%- if message[\"role\"] == \"user\" %}{%- if loop.last and system_message is defined %}{{- \"[INST]\" + system_message + \"\n\n\" }}{%- else %}{{ \"[INST]\" }}{%- endif %}{%- endif %}{%- if message[\"content\"] is not string %}{%- for chunk in message[\"content\"] %}{%- if chunk[\"type\"] == \"text\" %}{%- if \"content\" in chunk %}{{- chunk[\"content\"] }}{%- elif \"text\" in chunk %}{{- chunk[\"text\"] }}{%- endif %}{%- elif chunk[\"type\"] == \"image\" %}{{- \"[IMG]\" }}{%- else %}{{- raise_exception(\"Unrecognized content type!\") }}{%- endif %}{%- endfor %}{%- else %}{{- message[\"content\"] }}{%- endif %}{%- if message[\"role\"] == \"user\" %}{{- \"[/INST]\" }}{%- elif message[\"role\"] == \"assistant\" %}{{- eos_token}}{%- else %}{{- raise_exception(\"Only user and assistant roles are supported, with the exception of an initial optional system message!\") }}{%- endif %}{%- endfor %}"
 
     config = read_json(os.path.join(input_dir, "params.json"))
-    image_processor = Mistral3ImageProcessor(patch_size=config["vision_encoder"]["patch_size"])
+    patch_size = config["vision_encoder"]["patch_size"]
+    image_processor = Mistral3ImageProcessor(patch_size=patch_size)
 
-    processor = Mistral3Processor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
+    processor = Mistral3Processor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]", patch_size=patch_size)
+    processor.chat_template = chat_template
 
     # Finally save it
     processor.save_pretrained(output_dir)
