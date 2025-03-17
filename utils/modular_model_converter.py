@@ -865,9 +865,7 @@ class ModelFileMapper(ModuleMapper):
 
             should_keep_if_not_none = any(
                 re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE
-            )
-            if should_keep_if_not_none and hasattr(node.body[0].value, "value") and node.body[0].value.value == "None":
-                should_keep_if_not_none = False
+            ) and not (hasattr(node.body[0].value, "value") and node.body[0].value.value == "None")
 
             if should_keep or should_keep_if_not_none or assignment not in self.assignments:
                 self.assignments[assignment] = node
