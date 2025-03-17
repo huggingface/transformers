@@ -14,3 +14,17 @@ class MusicgenMelodyProcessor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchaudio"])
+
+
+class GraniteSpeechFeatureExtractor(metaclass=DummyObject):
+    _backends = ["torchaudio"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchaudio"])
+
+
+class GraniteSpeechProcessor(metaclass=DummyObject):
+    _backends = ["torchaudio"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchaudio"])
