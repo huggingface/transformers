@@ -2002,6 +2002,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
         self.separator_id = separator_id
+        self._int_64_keys = {"labels", "position_ids", "input_ids"}
+        self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
 
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
@@ -2059,15 +2061,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         else:
             raise ValueError(f'return_tensors must be one of ("pt", "np", "tf"), not {return_tensors=}')
 
-        ret["input_ids"] = data_cls(ret["input_ids"], dtype=dtype_64)[None]
-        ret["labels"] = data_cls(ret["labels"], dtype=dtype_64)[None]
-        if self.return_position_ids:
-            ret["position_ids"] = data_cls(ret["position_ids"], dtype=dtype_64)[None]
-        if self.return_flash_attn_kwargs:
-            ret["cu_seq_lens_q"] = data_cls(ret["cu_seq_lens_q"], dtype=dtype_32)
-            ret["cu_seq_lens_k"] = data_cls(ret["cu_seq_lens_k"], dtype=dtype_32)
-            ret["max_length_q"] = data_cls(ret["max_length_q"], dtype=dtype_32)
-            ret["max_length_k"] = data_cls(ret["max_length_k"], dtype=dtype_32)
-        if self.return_seq_idx:
-            ret["seq_idx"] = data_cls(ret["seq_idx"], dtype=dtype_32)[None]
+        for k, v in ret.items():
+            if k in self._batch_dim_keys:
+                v = [v]
+            ret[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
+
         return ret
