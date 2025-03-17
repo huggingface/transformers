@@ -47,8 +47,8 @@ STATE_DICT_MAPPING = {
     r"^vision_language_adapter.w_out": r"multi_modal_projector.linear_2",
     r"^vision_encoder.ln_pre.weight": r"vision_tower.ln_pre.weight",
     r"^vision_encoder.patch_conv.weight": r"vision_tower.patch_conv.weight",
-    r"^patch_merger.merging_layer.weight": r"multi_modal_projector.patch_merger.weight",
-    r"^pre_mm_projector_norm.weight": r"multi_modal_projector.pre_mm_projector_norm.weight",
+    r"^patch_merger.merging_layer.weight": r"multi_modal_projector.patch_merger.merging_layer.weight",
+    r"^pre_mm_projector_norm.weight": r"multi_modal_projector.norm.weight",
 }
 # fmt: on
 
@@ -156,6 +156,8 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         text_config=new_text_config,
         multimodal_projector_bias=adapter_bias,
         image_token_index=image_token_id,
+        spatial_merge_size=spatial_merge_size,
+        vision_feature_layer=-1,
     )
     return new_config
 

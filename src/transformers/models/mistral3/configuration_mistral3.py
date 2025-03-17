@@ -99,8 +99,10 @@ class Mistral3Config(PretrainedConfig):
         vision_feature_layer=-2,
         image_seq_length=576,
         multimodal_projector_bias=True,
+        spatial_merge_size=2,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
@@ -141,8 +143,7 @@ class Mistral3Config(PretrainedConfig):
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
-
-        super().__init__(**kwargs)
+        self.spatial_merge_size = spatial_merge_size
 
 
 __all__ = ["Mistral3Config"]
