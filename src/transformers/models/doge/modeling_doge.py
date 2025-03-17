@@ -397,11 +397,11 @@ class DogeCDMoE(DogeMLP):
         all_scores = all_scores.view(*all_scores.shape[:-2], -1)
         all_indices = all_indices.view(*all_indices.shape[:-2], -1)
         scores, indices = all_scores.topk(self.top_k, dim=-1)
-        down_embed = self.down_embed(indices).transpose(1, 2)
+        down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
 
         # mix experts states with cross domain states
-        experts_weights = torch.matmul(hidden_states.view(bsz * seq_len, 1, -1), down_embed).view(bsz * seq_len, -1)
+        experts_weights = torch.matmul(down_embed, hidden_states.view(bsz * seq_len, -1, 1)).view(bsz * seq_len, -1)
         experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
         experts_states = torch.matmul(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
@@ -605,7 +605,7 @@ class DogeModel(DogePreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [DogeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -844,12 +844,11 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: DogeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = DogeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -981,13 +980,11 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     DOGE_START_DOCSTRING,
 )
 class DogeForSequenceClassification(DogePreTrainedModel):
-    def __init__(self, config: DogeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-
         self.model = DogeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
