@@ -158,6 +158,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "plbart",
     "qwen2",
     "qwen2_moe",
+    "qwen3",
+    "qwen3_moe",
     "resnet",
     "roberta",
     "segformer",
