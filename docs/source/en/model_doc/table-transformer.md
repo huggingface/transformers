@@ -60,6 +60,15 @@ found [here](https://github.com/microsoft/table-transformer).
 
 [[autodoc]] TableTransformerConfig
 
+## TableTransformerImageProcessor
+
+[[autodoc]] TableTransformerImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
+
 ## TableTransformerModel
 
 [[autodoc]] TableTransformerModel
