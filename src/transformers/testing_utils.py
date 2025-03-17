@@ -38,7 +38,7 @@ from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
+from typing import Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -48,6 +48,7 @@ import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
 
+from transformers import Trainer
 from transformers import logging as transformers_logging
 
 from .integrations import (
@@ -141,6 +142,7 @@ from .utils import (
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
+    is_torch_hpu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -858,6 +860,13 @@ def require_torch_multi_npu(test_case):
     return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
 
 
+def require_non_hpu(test_case):
+    """
+    Decorator marking a test that should be skipped for HPU.
+    """
+    return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
+
+
 def require_torch_xpu(test_case):
     """
     Decorator marking a test that requires XPU (in PyTorch).
@@ -889,6 +898,19 @@ def require_torch_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
+def require_torch_multi_hpu(test_case):
+    """
+    Decorator marking a test that requires a multi-HPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple HPUs.
+
+    To run *only* the multi_hpu tests, assuming all test names contain multi_hpu: $ pytest -sv ./tests -k "multi_hpu"
+    """
+    if not is_torch_hpu_available():
+        return unittest.skip(reason="test requires PyTorch HPU")(test_case)
+
+    return unittest.skipUnless(torch.hpu.device_count() > 1, "test requires multiple HPUs")(test_case)
+
+
 if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
@@ -917,6 +939,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "hpu" and not is_torch_hpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -929,6 +955,8 @@ if is_torch_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
+    elif _run_third_party_device_tests and is_torch_hpu_available():
+        torch_device = "hpu"
     elif _run_third_party_device_tests and is_torch_xpu_available():
         torch_device = "xpu"
     else:
@@ -1411,6 +1439,34 @@ def get_tests_dir(append_path=None):
         return os.path.join(tests_dir, append_path)
     else:
         return tests_dir
+
+
+def get_steps_per_epoch(trainer: Trainer) -> int:
+    training_args = trainer.args
+    train_dataloader = trainer.get_train_dataloader()
+
+    initial_training_values = trainer.set_initial_training_values(
+        args=training_args,
+        dataloader=train_dataloader,
+        total_train_batch_size=training_args.per_device_train_batch_size,
+    )
+    steps_per_epoch = initial_training_values[1]
+
+    return steps_per_epoch
+
+
+def evaluate_side_effect_factory(
+    side_effect_values: List[Dict[str, float]],
+) -> Generator[Dict[str, float], None, None]:
+    """
+    Function that returns side effects for the _evaluate method.
+    Used when we're unsure of exactly how many times _evaluate will be called.
+    """
+    for side_effect_value in side_effect_values:
+        yield side_effect_value
+
+    while True:
+        yield side_effect_values[-1]
 
 
 #
@@ -2491,6 +2547,11 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     """
     To decorate flaky tests. They will be retried on failures.
 
+    Please note that our push tests use `pytest-rerunfailures`, which prompts the CI to rerun certain types of
+    failed tests. More specifically, if the test exception contains any substring in `FLAKY_TEST_FAILURE_PATTERNS`
+    (in `.circleci/create_circleci_config.py`), it will be rerun. If you find a recurrent pattern of failures,
+    expand `FLAKY_TEST_FAILURE_PATTERNS` in our CI configuration instead of using `is_flaky`.
+
     Args:
         max_attempts (`int`, *optional*, defaults to 5):
             The maximum number of attempts to retry the flaky test.
@@ -2563,6 +2624,20 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
         return wrapper
 
     return decorator
+
+
+def run_first(test_case):
+    """
+    Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
+    are garanteed to run first.
+
+    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
+    single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
+    allocation conflicts.
+    """
+    import pytest
+
+    return pytest.mark.order(1)(test_case)
 
 
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
@@ -2686,8 +2761,8 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
-    codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
+    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
         if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
@@ -2852,6 +2927,25 @@ else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
+
+if is_torch_hpu_available():
+    BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
+    BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_npu_available():
+    BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
+    BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
+    BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
+
+if is_torch_xpu_available():
+    BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
+    BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
+    BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
+
+if is_torch_xla_available():
+    BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
+    BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
+    BACKEND_DEVICE_COUNT["xla"] = torch.cuda.device_count
 
 
 def backend_manual_seed(device: str, seed: int):

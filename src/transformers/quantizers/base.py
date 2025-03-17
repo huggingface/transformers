@@ -247,9 +247,33 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
+    @staticmethod
+    def get_modules_to_not_convert(
+        model: "PreTrainedModel",
+        skip_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[List[str]] = None,
+    ):
+        from ..integrations import get_keys_to_not_convert
+
+        modules_to_not_convert = []
+        if skip_modules is None:
+            modules_to_not_convert = get_keys_to_not_convert(model)
+        else:
+            modules_to_not_convert = skip_modules
+
+        if keep_in_fp32_modules is not None:
+            modules_to_not_convert.extend(keep_in_fp32_modules)
+
+        return modules_to_not_convert
+
     @property
     def is_qat_trainable(self) -> bool:
         """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return False
+
+    @property
+    def is_compileable(self) -> bool:
+        """Flag indicating whether the quantized model can be compiled"""
         return False
 
     @abstractmethod
