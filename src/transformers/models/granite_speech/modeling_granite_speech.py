@@ -20,6 +20,7 @@ from .configuration_granite_speech import (
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_peft_available,
     logging,
     replace_return_docstrings,
 )
@@ -662,10 +663,11 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
         to conditionally enable / disable the lora adapter based on whether
         or not any input features were provided.
         """
-        if input_features is not None:
-            self.enable_adapters()
-        else:
-            self.disable_adapters()
+        if is_peft_available and self._hf_peft_config_loaded:
+            if input_features is not None:
+                self.enable_adapters()
+            else:
+                self.disable_adapters()
         return super().generate(input_features=input_features, **kwargs)
 
 __all__ = [
