@@ -71,7 +71,6 @@ class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
 
 class GraniteSpeechConfig(PretrainedConfig):
     model_type = "granite_speech"
-    # TODO - Probably should consolidate these into a single config
     sub_configs = {
         "llm_config": AutoConfig,
         "encoder_config": GraniteSpeechEncoderConfig,
@@ -85,6 +84,7 @@ class GraniteSpeechConfig(PretrainedConfig):
         projector_config=None,
         audio_token_index=49155,
         tie_word_embeddings=True,
+        initializer_range=0.02,
         **kwargs,
     ):
         if isinstance(llm_config, dict):
@@ -109,6 +109,7 @@ class GraniteSpeechConfig(PretrainedConfig):
         self.encoder_config = encoder_config
         self.projector_config = projector_config
         self.audio_token_index = audio_token_index
+        self.initializer_range = initializer_range
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechProjectorConfig", "GraniteSpeechConfig"]

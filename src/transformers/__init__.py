@@ -2611,6 +2611,7 @@ else:
     _import_structure["models.granite_speech"].extend(
         [
             "GraniteSpeechForConditionalGeneration",
+            "GraniteSpeechPreTrainedModel",
         ]
     )
     _import_structure["models.grounding_dino"].extend(

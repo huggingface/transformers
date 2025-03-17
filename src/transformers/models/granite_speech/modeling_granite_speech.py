@@ -315,11 +315,23 @@ class ConformerBlock(nn.Module):
         return x
 
 
-
-class GraniteSpeechForConditionalGeneration(PreTrainedModel, GenerationMixin):
+class GraniteSpeechPretrainedModel(PreTrainedModel):
     config_class = GraniteSpeechConfig
     _supports_cache_class = True
 
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, GenerationMixin):
     def __init__(self, config: GraniteSpeechConfig, is_legacy=False, skip_lora=True):
         if is_legacy:
             self._legacy_load(config, skip_lora)
