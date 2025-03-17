@@ -34,11 +34,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torchvision_v2_available,
-)
+from ...utils import TensorType, add_start_docstrings, is_torchvision_v2_available
 from .image_processing_mistral3 import get_resize_output_image_size
 
 
