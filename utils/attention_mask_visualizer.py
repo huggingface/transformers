@@ -1,12 +1,13 @@
 import numpy as np
 
-
+from transformers import PreTrainedModel, AutoTokenizer
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
+
 
 
 def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img>", is_causal=True):
@@ -148,3 +149,67 @@ dogs.: 21 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ �
           ----------------------------------------------------
 
 """
+
+def generate_attention_matrix_from_mask(word, mask):
+    mask = mask.int()
+    if mask.ndim == 3:
+        mask = mask[0,:, :]
+    if mask.ndim == 4:
+        mask = mask[0,0,:,:]
+
+    n = len(words)
+    max_word_length = max(len(word) for word in words)
+    first_img_idx = 0
+
+    for i, k in enumerate(words):
+        if img_token in k and not first_img_idx:
+            first_img_idx = i
+        if first_img_idx > 0 and (img_token not in k or i == n - 1):
+            if i == n - 1:
+                i += 1
+            mask[first_img_idx:i, first_img_idx:i] = 2
+            first_img_idx = 0
+    
+    vertical_header = []
+    for idx, word in enumerate(words):
+        if img_token not in word:
+            vertical_header += [list(str(idx).rjust(len(str(n))))]
+        else:
+            vertical_header += [[f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]]
+
+    vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
+    # Print the vertical header
+    for row in vertical_header:
+        print((max_word_length + 5) * " " + " ".join(row))
+
+    for i, word in enumerate(words):
+        colored_word = f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
+        number = str(i).rjust(len(str(n))) 
+        colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
+        base_display = colored_word + ": " + colored_number + " "
+        row_display = " ".join(
+            f"{YELLOW}{BLACK_SQUARE}{RESET}"
+            if img_token in words[j] and mask[i, j] and img_token in words[i]
+            else f"{GREEN}{BLACK_SQUARE}{RESET}"
+            if i == j
+            else BLACK_SQUARE
+            if mask[i, j]
+            else WHITE_SQUARE
+            for j in range(n)
+        )
+        print(base_display + row_display)
+
+    print(" " * len(base_display) + "-" * len(row_display)) 
+
+
+
+def visualize_attention_mask(model: PreTrainedModel, tokenizer_path: "meta-llama/Llama-3.2-3B-Instruct", input_sentence:str):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    inputs = tokenizer.encode(input_sentence) # TODO maybe add padding to visualize padding attention
+    attention_mask = model.prepare_inputs_for_genearation(**inputs)["attention_mask"]
+    tokens = tokenizer.tokenize(input_sentence)
+    generate_attention_matrix_from_mask(tokens, attention_mask)
+
+
+from transformers import LlamaModel
+visualize_attention_mask(LlamaModel, "meta-llama/Llama-3.2-3B-Instruct", "A normal attention mask")
