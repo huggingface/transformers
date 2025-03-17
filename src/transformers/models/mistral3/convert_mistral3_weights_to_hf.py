@@ -159,6 +159,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         image_token_index=image_token_id,
         spatial_merge_size=spatial_merge_size,
         vision_feature_layer=-1,
+        vision_feature_select_strategy="full",
     )
     return new_config
 
