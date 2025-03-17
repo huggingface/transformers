@@ -113,9 +113,11 @@ class Mistral3PatchMerger(nn.Module):
 
         self.merging_layer = nn.Linear(mlp_input_dim, vision_encoder_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
         patch_size = self.config.vision_config.patch_size
-        image_sizes = [(img.shape[1] // patch_size, img.shape[2] // patch_size) for img in x]
+        x = x[0]
+        image_sizes = [(image_size[0] // patch_size, image_size[1] // patch_size) for image_size in image_sizes]
+
         # image_sizes specified in tokens
         assert sum([h * w for h, w in image_sizes]) == len(x)
 
@@ -172,9 +174,9 @@ class Mistral3MultiModalProjector(nn.Module):
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
         )
 
-    def forward(self, image_features):
+    def forward(self, image_features, image_sizes):
         image_features = self.norm(image_features)
-        image_features = self.patch_merger(image_features)
+        image_features = self.patch_merger(image_features, image_sizes)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
@@ -397,6 +399,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Union[int, List[int]],
         vision_feature_select_strategy: str,
+        image_sizes: torch.Tensor,
         **kwargs,
     ):
         """
@@ -420,8 +423,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
-
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, image_sizes=image_sizes, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
@@ -435,7 +437,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = self.multi_modal_projector(selected_image_feature, image_sizes)
         return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")

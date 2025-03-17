@@ -95,6 +95,7 @@ class Mistral3Processor(ProcessorMixin):
         tokenizer=None,
         patch_size: int = 16,
         chat_template=None,
+        spatial_merge_size: int = 2,
         image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
         image_break_token="[IMG_BREAK]",
         image_end_token="[IMG_END]",
@@ -104,6 +105,7 @@ class Mistral3Processor(ProcessorMixin):
         self.image_token = image_token
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
+        self.spatial_merge_size = spatial_merge_size
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -191,8 +193,8 @@ class Mistral3Processor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // self.patch_size
-                    num_width_tokens = width // self.patch_size
+                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
+                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
