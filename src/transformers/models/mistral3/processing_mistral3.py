@@ -102,12 +102,12 @@ class Mistral3Processor(ProcessorMixin):
         image_end_token="[IMG_END]",
         **kwargs,
     ):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.patch_size = patch_size
         self.image_token = image_token
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
         self.spatial_merge_size = spatial_merge_size
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -194,8 +194,8 @@ class Mistral3Processor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
-                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
+                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)  # main diff with Pixtral
+                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)  # main diff with Pixtral
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens

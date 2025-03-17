@@ -115,19 +115,10 @@ class Mistral3PatchMerger(nn.Module):
 
     def forward(self, x: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
         patch_size = self.config.vision_config.patch_size
-        x = x[0]
         image_sizes = [(image_size[0] // patch_size, image_size[1] // patch_size) for image_size in image_sizes]
 
-        # image_sizes specified in tokens
-        assert sum([h * w for h, w in image_sizes]) == len(x)
-
-        # x is (N, vision_encoder_dim)
         x = self.permute(x, image_sizes)
-
-        # x is (N / spatial_merge_size ** 2, vision_encoder_dim * spatial_merge_size ** 2)
         x = self.merging_layer(x)
-
-        # x is (N / spatial_merge_size ** 2, vision_encoder_dim)
         return x
 
     def permute(
@@ -437,7 +428,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(selected_image_feature, image_sizes)
+        image_features = self.multi_modal_projector(selected_image_feature.unsqueeze(0), image_sizes)
         return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
