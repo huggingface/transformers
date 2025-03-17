@@ -108,13 +108,7 @@ class CTCModel(nn.Module):
         return x
 
 
-# NOTE: Conformer code is adapated from the following
-# https://github.com/lucidrains/conformer.git
-def calc_same_padding(kernel_size):
-    pad = kernel_size // 2
-    return (pad, pad - (kernel_size + 1) % 2)
-
-
+# NOTE: Conformer adapated from: https://github.com/lucidrains/conformer.git
 class Permute(nn.Module):
     def __init__(self, dims):
         super().__init__()
@@ -124,8 +118,6 @@ class Permute(nn.Module):
         x = x.permute(self.dims)
         return x
 
-
-# helper classes
 
 class DepthWiseConv1d(nn.Module):
     def __init__(self, chan_in, chan_out, kernel_size, padding):
@@ -137,7 +129,6 @@ class DepthWiseConv1d(nn.Module):
         x = F.pad(x, self.padding)
         return self.conv(x)
 
-# attention, feedforward, and conv module
 
 class Scale(nn.Module):
     def __init__(self, scale, fn):
@@ -147,6 +138,7 @@ class Scale(nn.Module):
 
     def forward(self, x, **kwargs):
         return self.fn(x, **kwargs) * self.scale
+
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -158,6 +150,7 @@ class PreNorm(nn.Module):
         x = self.norm(x)
         return self.fn(x, **kwargs)
 
+
 class PreNormAttn(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
@@ -168,15 +161,16 @@ class PreNormAttn(nn.Module):
         x = self.norm(x)
         return self.fn(x, context_size, **kwargs)
 
+
 class Attention(nn.Module):
     def __init__(
         self,
         dim,
-        heads = 8,
-        dim_head = 64,
-        dropout = 0.,
-        context_size = 200,
-        max_pos_emb = 512
+        heads=8,
+        dim_head=64,
+        dropout=0.,
+        context_size=200,
+        max_pos_emb=512
     ):
         super().__init__()
         inner_dim = dim_head * heads
@@ -205,7 +199,10 @@ class Attention(nn.Module):
             nb += 1
 
         q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim = -1))
-        q, k, v = map(lambda t: t.reshape(bs, nb, context_size, h, -1).transpose(2, 3), (q, k, v))
+        q, k, v = map(
+            lambda t: t.reshape(bs, nb, context_size, h, -1).transpose(2, 3),
+            (q, k, v),
+        )
         dots = einsum('b m h i d, b m h j d -> b m h i j', q, k) * self.scale
 
         # shaw's relative positional embedding
@@ -229,12 +226,13 @@ class Attention(nn.Module):
         out = self.to_out(out[:,:n,:])
         return self.dropout(out)
 
+
 class FeedForward(nn.Module):
     def __init__(
         self,
         dim,
-        mult = 4,
-        dropout = 0.
+        mult=4,
+        dropout=0.
     ):
         super().__init__()
         self.net = nn.Sequential(
@@ -248,25 +246,29 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+
 class ConformerConvModule(nn.Module):
     def __init__(
         self,
         dim,
-        causal = False,
-        expansion_factor = 2,
-        kernel_size = 31,
-        dropout = 0.):
+        causal=False,
+        expansion_factor=2,
+        kernel_size=31,
+        dropout=0.):
         super().__init__()
 
         inner_dim = dim * expansion_factor
-        padding = calc_same_padding(kernel_size) if not causal else (kernel_size - 1, 0)
+        padding = self.calc_same_padding(kernel_size) if not causal else (kernel_size - 1, 0)
 
         self.net = nn.Sequential(
             nn.LayerNorm(dim),
             Permute(dims=(0, 2, 1)),
             nn.Conv1d(dim, inner_dim * 2, 1),
             nn.GLU(dim=1),
-            DepthWiseConv1d(inner_dim, inner_dim, kernel_size = kernel_size, padding = padding),
+            DepthWiseConv1d(inner_dim,
+                            inner_dim,
+                            kernel_size=kernel_size,
+                            padding=padding),
             nn.BatchNorm1d(inner_dim) if not causal else nn.Identity(),
             nn.SiLU(),
             nn.Conv1d(inner_dim, dim, 1),
@@ -277,28 +279,44 @@ class ConformerConvModule(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-# Conformer Block
+    @staticmethod
+    def calc_same_padding(kernel_size: int):
+        pad = kernel_size // 2
+        return (pad, pad - (kernel_size + 1) % 2)
+
 
 class ConformerBlock(nn.Module):
     def __init__(
         self,
         *,
         dim,
-        dim_head = 64,
-        heads = 8,
-        ff_mult = 2,
-        conv_expansion_factor = 2,
-        conv_kernel_size = 31,
-        context_size = -1,
-        attn_dropout = 0.,
-        ff_dropout = 0.,
-        conv_dropout = 0.
+        dim_head=64,
+        heads=8,
+        ff_mult=2,
+        conv_expansion_factor=2,
+        conv_kernel_size=31,
+        context_size=-1,
+        attn_dropout=0.,
+        ff_dropout=0.,
+        conv_dropout=0.
     ):
         super().__init__()
-        self.ff1 = FeedForward(dim = dim, mult = ff_mult, dropout = ff_dropout)
-        self.attn = Attention(dim = dim, dim_head = dim_head, heads = heads, dropout = attn_dropout, context_size = context_size)
-        self.conv = ConformerConvModule(dim = dim, causal = False, expansion_factor = conv_expansion_factor, kernel_size = conv_kernel_size, dropout = conv_dropout)
-        self.ff2 = FeedForward(dim = dim, mult = ff_mult, dropout = ff_dropout)
+        self.ff1 = FeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
+        self.attn = Attention(
+            dim=dim,
+            dim_head=dim_head,
+            heads=heads,
+            dropout=attn_dropout,
+            context_size=context_size,
+        )
+        self.conv = ConformerConvModule(
+            dim=dim,
+            causal=False,
+            expansion_factor=conv_expansion_factor,
+            kernel_size=conv_kernel_size,
+            dropout=conv_dropout,
+        )
+        self.ff2 = FeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
 
         self.attn = PreNormAttn(dim, self.attn)
         self.ff1 = Scale(0.5, PreNorm(dim, self.ff1))
@@ -561,4 +579,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
             self.disable_adapters()
         return super().generate(input_features=input_features, **kwargs)
 
-__all__ = ["GraniteSpeechForConditionalGeneration"]
+__all__ = [
+    "GraniteSpeechForConditionalGeneration",
+    "GraniteSpeechPretrainedModel",
+]
