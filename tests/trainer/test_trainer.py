@@ -241,7 +241,7 @@ def bytes2megabytes(x):
     return int(x / 2**20)
 
 
-# Copied from acclerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
+# Copied from accelerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
 class TorchTracemalloc:
     def __enter__(self):
         gc.collect()
@@ -4086,7 +4086,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Functional check
             self.assertAlmostEqual(loss, orig_loss)
 
-            # AOT Autograd recomputaion and nvfuser recomputation optimization
+            # AOT Autograd recomputation and nvfuser recomputation optimization
             # aggressively fuses the operations and reduce the memory footprint.
             self.assertGreater(orig_peak_mem, peak_mem * 2)
 
