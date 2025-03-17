@@ -115,7 +115,7 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-from ...utils.attention_mask_visualizer import visualize_attention_mask
+from .utils.attention_visualizer import visualize_attention_mask
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
@@ -1487,7 +1487,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._tp_plan = self.config.base_model_tp_plan
             self._pp_plan = self.config.base_model_pp_plan
 
-    def visualize_attention_mask(self, tokenizer_path:str, input_sequence: str):
+    @classmethod
+    def visualize_attention_mask(cls, tokenizer_path:str, input_sequence: str):
         if not hasattr(self, "prepare_inputs_for_generation"):
             raise ValueError("Model does not support visiaulization")
         return visualize_attention_mask(self, tokenizer_path, input_sequence)
