@@ -13,16 +13,69 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_torchaudio_available,
+)
 from ...utils.import_utils import define_import_structure
 
+_import_structure = {
+    "configuration_granite_speech": [
+        "GraniteSpeechConfig",
+        "GraniteSpeechEncoderConfig",
+        "GraniteSpeechProjectorConfig",
+    ],
+}
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_granite_speech"] = [
+        "GraniteSpeechForConditionalGeneration",
+    ]
+
+try:
+    if not is_torchaudio_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_granite_speech"] = ["GraniteSpeechFeatureExtractor"]
+    _import_structure["processing_granite_speech"] = ["GraniteSpeechProcessor"]
+
+
+
 if TYPE_CHECKING:
-    # TODO - handle optional dependencies
-    from .configuration_granite_speech import *
-    from .feature_extraction_granite_speech import *
-    from .modeling_granite_speech import *
-    from .processing_granite_speech import *
+    from .configuration_granite_speech import (
+        GraniteSpeechConfig,
+        GraniteSpeechEncoderConfig,
+        GraniteSpeechProjectorConfig,
+    )
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_granite_speech import (
+            GraniteSpeechForConditionalGeneration,
+        )
+
+    try:
+        if not is_torchaudio_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_granite_speech import GraniteSpeechFeatureExtractor
+        from .processing_granite_speech import GraniteSpeechProcessor
 else:
     import sys
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
