@@ -213,7 +213,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
     def test_original_dtype(self):
         r"""
-        A simple test to check if the model succesfully stores the original dtype
+        A simple test to check if the model successfully stores the original dtype
         """
         self.assertTrue(hasattr(self.model_8bit.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
@@ -655,8 +655,8 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
     def test_pipeline(self):
         r"""
         The aim of this test is to verify that the mixed int8 is compatible with `pipeline` from transformers. Since
-        we used pipline for inference speed benchmarking we want to make sure that this feature does not break anything
-        on pipline.
+        we used pipeline for inference speed benchmarking we want to make sure that this feature does not break anything
+        on pipeline.
         """
         # self._clear_cuda_cache()
         self.pipe = pipeline(
