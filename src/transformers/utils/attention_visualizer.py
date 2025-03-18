@@ -12,15 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import numpy as np
-from PIL import Image
 import requests
-from .import_utils import is_torch_available
-from ..models.auto.tokenization_auto import AutoTokenizer, TOKENIZER_MAPPING_NAMES
-from ..models.auto.processing_auto import AutoProcessor, PROCESSOR_MAPPING_NAMES
-from ..models.auto.configuration_auto import AutoConfig
-from ..models.auto.modeling_auto import MODEL_MAPPING, MODEL_FOR_PRETRAINING_MAPPING
+from PIL import Image
+
 from ..models.auto.auto_factory import _get_model_class
+from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
+from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
+from .import_utils import is_torch_available
 
 
 if is_torch_available():
@@ -33,7 +35,6 @@ YELLOW = "\033[93m"
 RESET = "\033[0m"
 BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
-
 
 
 def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img>", is_causal=True):
@@ -59,7 +60,7 @@ def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img
                 i += 1
             mask[first_img_idx:i, first_img_idx:i] = 1
             first_img_idx = 0
-    
+
     vertical_header = []
     for idx, word in enumerate(words):
         if img_token not in word:
@@ -73,8 +74,10 @@ def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img
         print((max_word_length + 5) * " " + " ".join(row))
 
     for i, word in enumerate(words):
-        colored_word = f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
-        number = str(i).rjust(len(str(n))) 
+        colored_word = (
+            f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
+        )
+        number = str(i).rjust(len(str(n)))
         colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
         base_display = colored_word + ": " + colored_number + " "
         row_display = " ".join(
@@ -176,12 +179,13 @@ dogs.: 21 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ �
 
 """
 
+
 def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
     mask = mask.int()
     if mask.ndim == 3:
-        mask = mask[0,:, :]
+        mask = mask[0, :, :]
     if mask.ndim == 4:
-        mask = mask[0,0,:,:]
+        mask = mask[0, 0, :, :]
 
     n = len(words)
     max_word_length = max(len(word) for word in words)
@@ -195,7 +199,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
                 i += 1
             mask[first_img_idx:i, first_img_idx:i] = 2
             first_img_idx = 0
-    
+
     vertical_header = []
     for idx, word in enumerate(words):
         if img_token not in word:
@@ -209,8 +213,10 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
         print((max_word_length + 5) * " " + " ".join(row))
 
     for i, word in enumerate(words):
-        colored_word = f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
-        number = str(i).rjust(len(str(n))) 
+        colored_word = (
+            f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
+        )
+        number = str(i).rjust(len(str(n)))
         colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
         base_display = colored_word + ": " + colored_number + " "
         row_display = " ".join(
@@ -225,34 +231,10 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
         )
         print(base_display + row_display)
 
-    print(" " * len(base_display) + "-" * len(row_display)) 
-
-
-
-def visualize_attention_mask(model, input_sentence:str):
-    if model.config.model_type in PROCESSOR_MAPPING_NAMES:
-        processor = AutoProcessor.from_pretrained(model.config._name_or_path)
-    elif model.config.model_type in TOKENIZER_MAPPING_NAMES:
-        processor = AutoTokenizer.from_pretrained(model.config._name_or_path)
-    else:
-        raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
-
-    attention_mask = processor(input_sentence, return_tensors="pt")["attention_mask"] # TODO maybe add padding to visualize padding attention
-    model.config._attn_implementation = "eager"
-    attention_mask = ~model._update_causal_mask(
-        attention_mask = attention_mask,
-    
-        input_tensor=attention_mask.half(),
-        cache_position = torch.arange(attention_mask.shape[1]),
-        past_key_values = None,
-        output_attentions=False
-    ).bool()
-    tokens = tokenizer.tokenize(input_sentence)
-    generate_attention_matrix_from_mask(tokens, attention_mask)
+    print(" " * len(base_display) + "-" * len(row_display))
 
 
 class AttentionMaskVisualizer:
-    
     def __init__(self, model_name: str):
         config = AutoConfig.from_pretrained(model_name)
         self.config = config
@@ -261,7 +243,7 @@ class AttentionMaskVisualizer:
 
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
-        except Exception as e:
+        except Exception:
             mapped_cls = _get_model_class(config, MODEL_FOR_PRETRAINING_MAPPING)
 
         if mapped_cls is None:
@@ -276,10 +258,10 @@ class AttentionMaskVisualizer:
         self.model = _ModelWrapper(config, model_name)
         self.model.to(config.torch_dtype)
         self.repo_id = model_name
-    
+
     def __call__(self, input_sentence: str):
         self.visualize_attention_mask(input_sentence)
-    
+
     def visualize_attention_mask(self, input_sentence: str):
         model = self.model
         kwargs = {}
@@ -302,16 +284,14 @@ class AttentionMaskVisualizer:
             attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
         else:
             raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
-        
-        
+
         model.config._attn_implementation = "eager"
-        
+
         attention_mask = ~model._update_causal_mask(
             attention_mask=attention_mask,
             input_tensor=attention_mask.to(self.model.dtype),
-            cache_position=torch.arange(attention_mask.shape[1]),  
+            cache_position=torch.arange(attention_mask.shape[1]),
             past_key_values=None,
         ).bool()
-        
-        
+
         generate_attention_matrix_from_mask(tokens, attention_mask)
