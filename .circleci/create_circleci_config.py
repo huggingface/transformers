@@ -178,7 +178,8 @@ class CircleCIJob:
                     # "command": "python3 -m pytest -n 8 -v --make-reports=test_tok --durations=100 @temp4.txt"
                     # "command": "python3 -m pytest  -n 8 -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml --max-worker-restart=0 --dist=loadfile -vvv -rsfE --make-reports=tests_tokenization @temp4.txt",
                     # "command": "python3 -m pytest  -n 8  @temp4.txt",
-                "command": "python3 -m pytest  -n 8 -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml --max-worker-restart=0 -vvv -rsfE --make-reports=tests_tokenization @temp4.txt",
+                    # "command": "python3 -m pytest  -n 8 -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml --max-worker-restart=0 -vvv -rsfE --make-reports=tests_tokenization @temp4.txt",
+                   "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
                 }
             },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
@@ -361,7 +362,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [tokenization_job] # fmt: skip
+REGULAR_TESTS = [torch_job] # fmt: skip
 ALL_TESTS = REGULAR_TESTS
 
 
