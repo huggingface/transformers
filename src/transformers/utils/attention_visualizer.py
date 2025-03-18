@@ -1,6 +1,24 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import numpy as np
-import torch
-from transformers import PreTrainedModel, AutoTokenizer
+from .import_utils import is_torch_available
+from ..models.auto.tokenization_auto import AutoTokenizer
+from ..models.auto.processing_auto import AutoProcessor
+if is_torch_available():
+    import torch
+
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -203,7 +221,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
 
 
 
-def visualize_attention_mask(model, tokenizer_path: "meta-llama/Llama-3.2-3B-Instruct", input_sentence:str):
+def visualize_attention_mask(model, input_sentence:str):
     tokenizer = AutoTokenizer.from_pretrained(model.config._name_or_path)
     attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"] # TODO maybe add padding to visualize padding attention
     model.config._attn_implementation = "eager"
@@ -218,7 +236,3 @@ def visualize_attention_mask(model, tokenizer_path: "meta-llama/Llama-3.2-3B-Ins
     tokens = tokenizer.tokenize(input_sentence)
     generate_attention_matrix_from_mask(tokens, attention_mask)
 
-
-from transformers import LlamaModel 
-model = LlamaModel.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
-model.visualize_attention_mask("A normal attention mask")
