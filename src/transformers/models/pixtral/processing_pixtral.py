@@ -64,6 +64,8 @@ class PixtralProcessor(ProcessorMixin):
             The tokenizer is a required input.
         patch_size (`int`, *optional*, defaults to 16):
             Patch size from the vision tower.
+        spatial_merge_size (`int`, *optional*, defaults to 1):
+            The downsampling factor for the spatial merge operation.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"[IMG]"`):
@@ -78,6 +80,7 @@ class PixtralProcessor(ProcessorMixin):
     valid_kwargs = [
         "chat_template",
         "patch_size",
+        "spatial_merge_size",
         "image_token",
         "image_break_token",
         "image_end_token",
@@ -90,6 +93,7 @@ class PixtralProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size: int = 16,
+        spatial_merge_size: int = 1,
         chat_template=None,
         image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
         image_break_token="[IMG_BREAK]",
@@ -187,8 +191,8 @@ class PixtralProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // self.patch_size
-                    num_width_tokens = width // self.patch_size
+                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
+                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens

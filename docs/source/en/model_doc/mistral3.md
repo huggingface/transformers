@@ -68,7 +68,7 @@ This example demonstrates how to perform inference on a single image with the Mi
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../mistral3_weights"
+>>> model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -100,7 +100,7 @@ This example shows how to generate text using the Mistral3 model without providi
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../mistral3_weights"
+>>> model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -130,7 +130,7 @@ Mistral3 models also support batched image and text inputs.
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "../mistral3_weights"
+>>> model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
 
@@ -175,7 +175,7 @@ This example also how to use `BitsAndBytes` to load the model in 4bit quantizati
 >>> import torch
 
 >>> torch_device = "cuda"
->>> model_checkpoint = "yonigozlan/InternVL2_5-1B-MPO-hf"
+>>> model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 >>> quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 >>> model = AutoModelForImageTextToText.from_pretrained(

@@ -22,7 +22,7 @@ from safetensors.torch import load_file
 from transformers import (
     Mistral3Config,
     Mistral3ForConditionalGeneration,
-    Mistral3Processor,
+    PixtralProcessor,
     MistralConfig,
     PixtralImageProcessorFast,
     PixtralVisionConfig,
@@ -201,7 +201,7 @@ def convert_and_write_processor(input_dir: str, output_dir: str):
     max_image_size = config["vision_encoder"]["max_image_size"]
     image_processor = PixtralImageProcessorFast(patch_size=patch_size, size={"longest_edge": max_image_size})
 
-    processor = Mistral3Processor(
+    processor = PixtralProcessor(
         tokenizer=tokenizer,
         image_processor=image_processor,
         image_token="[IMG]",
