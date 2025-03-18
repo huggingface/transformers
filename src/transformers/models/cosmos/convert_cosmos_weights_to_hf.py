@@ -80,8 +80,8 @@ KEYS_TO_MODIFY_MAPPING = {
     r"\.up\.": ".up_block.up.",
     r"\.mid\.": ".middle_block.",
     # move the attention norms outside of attention modules
-    r"attn_1\.0\.norm": "attn.attn_norm",
-    r"attn_1\.1\.norm": "attn.attn_norm",
+    r"attn_1\.0\.norm": "attn.attn_norm_1",
+    r"attn_1\.1\.norm": "attn.attn_norm_2",
     # rename QKV proj for the VQ-VAE model because we use SiglipAttention
     r"attn_1\.0\.k\.conv3d": "attn.attn_1.k_proj",
     r"attn_1\.0\.q\.conv3d": "attn.attn_1.q_proj",
@@ -143,9 +143,8 @@ def convert_model(
         prompt_encoder_sd = {f"model.prompt_encoder.{k}": v for k, v in prompt_encoder_sd.items()}
         state_dict.update(prompt_encoder_sd)
 
-    # Initialize Cosmos config
+    # Initialize Cosmos config. Only text config is different for each model, while same VQ is used
     orig_text_config = json.load(open(f"{llm_weights_path}/config.json", "r"))
-
     text_config = {
         "is_video_to_world": "text_and_video" in orig_text_config["input_types"],
         "apply_abs_pos_emb": orig_text_config.get("apply_abs_pos_emb", False),
@@ -165,7 +164,7 @@ def convert_model(
         ]
         text_config["insert_cross_attn_layers"] = insert_cross_attn_layers
 
-    config = CosmosConfig(text_config=text_config, **config)
+    config = CosmosConfig(text_config=text_config)
 
     # LOad model
     with init_empty_weights():

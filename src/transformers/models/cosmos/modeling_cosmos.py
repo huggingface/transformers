@@ -21,9 +21,11 @@
 # limitations under the License.
 
 import math
+import random
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -208,7 +210,7 @@ class CosmosCausalConv3d(nn.Module):
         hidden_states_prev = hidden_states[:, :, :1, ...].repeat(1, 1, self.time_pad, 1, 1)
         hidden_states = torch.cat([hidden_states_prev, hidden_states], dim=2)
 
-        hidden_states = F.pad(hidden_states, self.padding)
+        hidden_states = F.pad(hidden_states, self.padding, mode="constant")
         hidden_states = self.conv3d(hidden_states)
         return hidden_states
 
@@ -421,7 +423,6 @@ class CosmosVQVAEResnetBlock(nn.Module):
         in_channels: int,
         out_channels: Optional[int] = None,
         dropout: Optional[int] = None,
-        mid=False,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -439,7 +440,6 @@ class CosmosVQVAEResnetBlock(nn.Module):
             CosmosCausalConv3d(out_channels, out_channels, kernel_size=(3, 1, 1), stride=1, padding=0),
         )
         self.dropout = torch.nn.Dropout(dropout)
-        self.mid = mid
 
         if self.in_channels != self.out_channels:
             self.nin_shortcut = CosmosCausalConv3d(
@@ -519,9 +519,15 @@ class CosmosVQVAETemporalAttentionBlock(nn.Module):
                 )
             attn_weights = attn_weights + attention_mask
 
+        # TODO: add causalm mask somwhow
+        attention_mask = torch.tril(torch.ones_like(attn_weights))
+        dtype_min = torch.finfo(attn_weights.dtype).min
+        attn_weights = attn_weights.masked_fill(attention_mask == 0, dtype_min)
+
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -619,11 +625,13 @@ class CosmosVQVAEAttention(nn.Module):
 
         self.attn_1 = CosmosVQVAEAttentionBlock(config)
         self.attn_2 = CosmosVQVAETemporalAttentionBlock(config)
-        self.attn_norm = CosmosVQVAETemporalNorm(in_channels)
+        self.attn_norm_1 = CosmosVQVAETemporalNorm(in_channels)
+        self.attn_norm_2 = CosmosVQVAETemporalNorm(in_channels)
 
     def forward(self, hidden_states: torch.Tensor):
         # Apply attn norm + attn in spatial dim
-        hidden_states = self.attn_norm(hidden_states)
+        residual = hidden_states
+        hidden_states = self.attn_norm_1(hidden_states)
 
         # b c t h w -> (b t) c h w
         batch_size, channels, temporal, height, width = hidden_states.shape
@@ -631,16 +639,19 @@ class CosmosVQVAEAttention(nn.Module):
         hidden_states = hidden_states.view(batch_size * temporal, channels, height * width).transpose(1, 2)
         hidden_states = self.attn_1(hidden_states)[0]
         hidden_states = hidden_states.reshape(batch_size, temporal, height, width, channels).permute(0, 4, 1, 2, 3)
+        hidden_states += residual
 
         # Apply attn norm + attn in temporal dim
-        hidden_states = self.attn_norm(hidden_states)
+        residual = hidden_states
+        hidden_states = self.attn_norm_2(hidden_states)
 
         # b c t h w -> (b h w) c t
         batch_size, channels, temporal, height, width = hidden_states.shape
         hidden_states = hidden_states.permute(0, 3, 4, 1, 2).contiguous()
         hidden_states = hidden_states.view(batch_size * height * width, channels, temporal).transpose(1, 2)
         hidden_states = self.attn_2(hidden_states)[0]
-        hidden_states = hidden_states.reshape(batch_size, height, width, channels, temporal).permute(0, 3, 4, 1, 2)
+        hidden_states = hidden_states.reshape(batch_size, height, width, temporal, channels).permute(0, 4, 3, 1, 2)
+        hidden_states += residual
         return hidden_states
 
 
@@ -651,7 +662,6 @@ class CosmosVQVAEMiddleBlock(nn.Module):
             in_channels=in_channels,
             out_channels=in_channels,
             dropout=config.dropout,
-            mid=True,
         )
         self.attn = CosmosVQVAEAttention(config, in_channels)
         self.block_2 = CosmosVQVAEResnetBlock(
@@ -662,10 +672,7 @@ class CosmosVQVAEMiddleBlock(nn.Module):
 
     def forward(self, hidden_states: torch.FloatTensor):
         hidden_states = self.block_1(hidden_states)
-        torch.save(hidden_states, 'mid.pt')
-        residual = hidden_states
         hidden_states = self.attn(hidden_states)
-        hidden_states = residual + hidden_states
         hidden_states = self.block_2(hidden_states)
         return hidden_states
 
@@ -827,8 +834,6 @@ class CosmosVQVAEEncoder(nn.Module):
         hidden_states = self.norm_out(hidden_states)
         hidden_states *= torch.sigmoid(hidden_states)
         hidden_states = self.conv_out(hidden_states)
-        torch.save(hidden_states, "conv_out.pt")
-        hidden_states = torch.load("/raid/raushan/Cosmos/conv_out.pt", weights_only=True)
 
         return hidden_states
 
@@ -1634,9 +1639,9 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
             )
 
         if position_ids_rope is None:
-            seq_length_with_past = cache_position[-1]
+            seq_length_with_past = cache_position[-1] + 1
             position_ids_rope = self._calculate_position_ids(seq_length_with_past, device=cache_position.device)
-            position_ids_rope = position_ids_rope[..., -inputs_embeds.shape[1]:]
+            position_ids_rope = position_ids_rope[..., -inputs_embeds.shape[1] :]
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -1662,6 +1667,7 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        encoder_hidden_states = torch.load("/raid/raushan/Cosmos/encoder_hidden_states.pt", weights_only=True)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
@@ -2034,13 +2040,21 @@ class CosmosModel(CosmosPreTrainedModel):
             input_ids = self.get_image_tokens(pixel_values)
 
         if encoder_hidden_states is None and encoder_input_ids is not None:
-            output = self.prompt_encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask, output_hidden_states=True, output_attentions=True)
-            encoder_hidden_states = output.last_hidden_state
+            output = self.prompt_encoder(
+                input_ids=encoder_input_ids,
+                attention_mask=encoder_attention_mask,
+                output_hidden_states=True,
+                output_attentions=True,
+            )
             if encoder_attention_mask is not None:
                 lengths = encoder_attention_mask.sum(dim=1)
                 for batch_id in range(encoder_hidden_states.shape[0]):
                     encoder_hidden_states[batch_id][lengths[batch_id] :] = 0
 
+        seed = 0
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
             input_ids=input_ids,
@@ -2265,7 +2279,7 @@ class CosmosForConditionalGeneration(CosmosPreTrainedModel, GenerationMixin):
         )
 
         # Cosmos needs 3D positions constructed in custom way. DO NOT overwrite 1D positions, which are used in `AbsolutePosEmbLayer`
-        seq_length = cache_position[-1]
+        seq_length = cache_position[-1] + 1
         position_ids_rope = self.model.language_model._calculate_position_ids(seq_length, device=cache_position.device)
         input_length = model_inputs["input_ids"].shape[1]
         model_inputs["position_ids_rope"] = position_ids_rope[..., -input_length:]

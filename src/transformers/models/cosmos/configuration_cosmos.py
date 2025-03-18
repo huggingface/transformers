@@ -23,7 +23,6 @@
 from typing import Dict, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ..auto import AutoConfig
 
 
