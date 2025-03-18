@@ -14,10 +14,16 @@
 # limitations under the License.
 import numpy as np
 from .import_utils import is_torch_available
-from ..models.auto.tokenization_auto import AutoTokenizer
-from ..models.auto.processing_auto import AutoProcessor
+from ..models.auto.tokenization_auto import AutoTokenizer, TOKENIZER_MAPPING_NAMES
+from ..models.auto.processing_auto import AutoProcessor, PROCESSOR_MAPPING_NAMES
+from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.modeling_auto import MODEL_MAPPING, MODEL_FOR_PRETRAINING_MAPPING
+from ..models.auto.auto_factory import _get_model_class
+
+
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
@@ -84,31 +90,31 @@ def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img
     print(" " * len(base_display) + "-" * len(row_display))
 
 
-sentece = (
-    "What is this? <img> <img> <img> <img> This is a cat. And these ? <img> <img> <img> <img> <img> These are dogs."
-)
-words = sentece.split()
-generate_sliding_window_mask_matrix(words)
-generate_sliding_window_mask_matrix(words, sliding_window=3)
+# sentece = (
+#     "What is this? <img> <img> <img> <img> This is a cat. And these ? <img> <img> <img> <img> <img> These are dogs."
+# )
+# words = sentece.split()
+# generate_sliding_window_mask_matrix(words)
+# generate_sliding_window_mask_matrix(words, sliding_window=3)
 
 
-sentece = (
-    "<img> <img> <img> <img> This is the system prompt."
-)
-words = sentece.split()
-generate_sliding_window_mask_matrix(words, is_causal=False)
+# sentece = (
+#     "<img> <img> <img> <img> This is the system prompt."
+# )
+# words = sentece.split()
+# generate_sliding_window_mask_matrix(words, is_causal=False)
 
-sentece = (
-    "This step is decoding, the mask is causal."
-)
-words = sentece.split()
-generate_sliding_window_mask_matrix(words, is_causal=True)
+# sentece = (
+#     "This step is decoding, the mask is causal."
+# )
+# words = sentece.split()
+# generate_sliding_window_mask_matrix(words, is_causal=True)
 
-sentece = (
-    "<img> <img> <img> <img> This is the system prompt. This step is decoding, the mask is causal."
-)
-words = sentece.split()
-generate_sliding_window_mask_matrix(words, is_causal=True)
+# sentece = (
+#     "<img> <img> <img> <img> This is the system prompt. This step is decoding, the mask is causal."
+# )
+# words = sentece.split()
+# generate_sliding_window_mask_matrix(words, is_causal=True)
 
 
 # Should print:
@@ -222,8 +228,14 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
 
 
 def visualize_attention_mask(model, input_sentence:str):
-    tokenizer = AutoTokenizer.from_pretrained(model.config._name_or_path)
-    attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"] # TODO maybe add padding to visualize padding attention
+    if model.config.model_type in PROCESSOR_MAPPING_NAMES:
+        processor = AutoProcessor.from_pretrained(model.config._name_or_path)
+    elif model.config.model_type in TOKENIZER_MAPPING_NAMES:
+        processor = AutoTokenizer.from_pretrained(model.config._name_or_path)
+    else:
+        raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
+
+    attention_mask = processor(input_sentence, return_tensors="pt")["attention_mask"] # TODO maybe add padding to visualize padding attention
     model.config._attn_implementation = "eager"
     attention_mask = ~model._update_causal_mask(
         attention_mask = attention_mask,
@@ -236,3 +248,53 @@ def visualize_attention_mask(model, input_sentence:str):
     tokens = tokenizer.tokenize(input_sentence)
     generate_attention_matrix_from_mask(tokens, attention_mask)
 
+
+class AttentionMaskVisualizer:
+    
+    def __init__(self, model_name: str):
+        config = AutoConfig.from_pretrained(model_name)
+        self.config = config
+        try:
+            mapped_cls = _get_model_class(config, MODEL_MAPPING)
+        except Exception as e:
+            mapped_cls = _get_model_class(config, MODEL_FOR_PRETRAINING_MAPPING)
+
+        if mapped_cls is None:
+            raise ValueError(f"Model name {model_name} is not supported for attention visualization")
+
+        class _ModelWrapper(mapped_cls, nn.Module):
+            def __init__(self, model_name):
+                nn.Module.__init__(self)
+                self.dummy_module = nn.Linear(1, 1)
+                self.config = AutoConfig.from_pretrained(model_name)
+
+        self.model = _ModelWrapper(model_name)
+        self.model.to(config.torch_dtype)
+        self.repo_id = model_name
+    
+    def __call__(self, input_sentence: str):
+        self.visualize_attention_mask(input_sentence)
+    
+    def visualize_attention_mask(self, input_sentence: str):
+        model = self.model
+        
+        if self.config.model_type in PROCESSOR_MAPPING_NAMES:
+            processor = AutoProcessor.from_pretrained(self.repo_id)
+        elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
+            processor = AutoTokenizer.from_pretrained(self.repo_id)
+        else:
+            raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
+        
+        attention_mask = processor(input_sentence, return_tensors="pt")["attention_mask"]
+        model.config._attn_implementation = "eager"
+        
+        attention_mask = ~model._update_causal_mask(
+            attention_mask=attention_mask,
+            input_tensor=attention_mask.to(self.model.dtype),
+            cache_position=torch.arange(attention_mask.shape[1]),
+            past_key_values=None,
+            output_attentions=False
+        ).bool()
+        
+        tokens = processor.tokenize(input_sentence)
+        generate_attention_matrix_from_mask(tokens, attention_mask)
