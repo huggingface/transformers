@@ -1098,7 +1098,7 @@ class GenerationTesterMixin:
                 use_cache=True,
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
-            
+
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
