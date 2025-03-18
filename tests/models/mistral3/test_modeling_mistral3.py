@@ -198,6 +198,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if is_torch_available()
         else {}
     )
+    _is_composite = True
     test_headmasking = False
     test_pruning = False
 
@@ -279,7 +280,30 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
+    
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_eager_matches_fa2_generate(self):
+        pass
 
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 @slow
 @require_torch_gpu
