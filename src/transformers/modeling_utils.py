@@ -709,9 +709,19 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
 
 
 def _infer_parameter_dtype(
-    model: "PreTrainedModel", param_name: str, empty_param, keep_in_fp32_modules=None
+    model: "PreTrainedModel",
+    param_name: str,
+    empty_param: torch.Tensor,
+    keep_in_fp32_modules: Optional[List[str]] = None,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
-    old_param = model.get_parameter_or_buffer(param_name)
+    try:
+        old_param = model.get_parameter_or_buffer(param_name)
+    except Exception as e:
+        if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ:
+            return True, None
+        else:
+            raise e
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
     # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
     # in int/uint/bool and not cast them.
@@ -722,6 +732,8 @@ def _infer_parameter_dtype(
         if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
             casting_dtype = torch.float32
         # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
+        elif hf_quantizer is not None:
+            casting_dtype = model.config._pre_quantization_dtype
         else:
             casting_dtype = old_param.dtype
     return old_param is not None and old_param.is_contiguous(), casting_dtype
@@ -744,7 +756,6 @@ def _load_state_dict_into_meta_model(
     keep_in_fp32_modules: Optional[List[str]] = None,
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
-    weights_only=True,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
     device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
@@ -781,6 +792,7 @@ def _load_state_dict_into_meta_model(
             param_name,
             empty_param,
             keep_in_fp32_modules,
+            hf_quantizer,
         )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
@@ -1906,9 +1918,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for name, module in self.named_children():
                 if plan := getattr(module, "_tp_plan", None):
                     self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
-        for name, module in self.named_children():
-            if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
             for _, v in self._tp_plan.items():
@@ -4224,10 +4233,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 token=token,
                 revision=revision,
                 subfolder=subfolder,
+                gguf_file=gguf_file,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
                 **kwargs,
             )
+            if "gguf_file" in model_kwargs:
+                model_kwargs.pop("gguf_file")
         else:
             # In case one passes a config to `from_pretrained` + "attn_implementation"
             # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
@@ -4813,7 +4825,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and hf_quantizer is None:
             expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
+            caching_allocator_warmup(model_to_load, expanded_device_map)
 
         error_msgs = []
         mismatched_keys = []
@@ -4835,7 +4847,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
-            # If shard_file is""", we use the existing state_dict instead of loading it
+            # If shard_file is "", we use the existing state_dict instead of loading it
             if shard_file != "":
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
@@ -4853,7 +4865,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 prefix if loading_base_model_from_task_state_dict else "",
             )
 
-            if low_cpu_mem_usage and shard_file is not None:
+            if low_cpu_mem_usage:
                 # Skip it with fsdp on ranks other than 0
                 if not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
                     disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
@@ -4872,7 +4884,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         keep_in_fp32_modules=keep_in_fp32_modules,
                         unexpected_keys=unexpected_keys,
                         device_mesh=device_mesh,
-                        weights_only=weights_only,
                     )
             else:
                 assign_params = check_support_param_buffer_assignment(model_to_load, state_dict)
@@ -4881,9 +4892,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     model_to_load.load_state_dict(state_dict, strict=False, assign=assign_params)
 
-            # force memory release
+            # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
             del state_dict
-            gc.collect()
 
         # Adjust offloaded weights name and save if needed
         if disk_offload_index is not None and len(disk_offload_index) > 0:
@@ -5776,11 +5786,24 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
-def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, dtype: torch.dtype) -> Dict:
+def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
     the model, which is actually the loading speed botteneck.
     Calling this function allows to cut the model loading time by a very large margin.
+
+    A few facts related to loading speed (taking into account the use of this function):
+    - When loading a model the first time, it is usually slower than the subsequent times, because the OS is very likely
+    to cache the different state dicts (if enough ressources/RAM are available)
+    - Trying to force the OS to cache the files in advance (by e.g. accessing a small portion of them) is really hard,
+    and not a good idea in general as this is low level OS optimizations that depend on ressource usage anyway
+    - As of 18/03/2025, loading a Llama 70B model with TP takes ~1 min without file cache, and ~13s with full file cache.
+    The baseline, i.e. only loading the tensor shards on device and adjusting dtype (i.e. copying them) is ~5s with full cache.
+    These numbers are reported for TP on 4 H100 GPUs.
+    - It is useless to pre-allocate more than the model size in this function (i.e. using an `allocation_factor` > 1) as
+    cudaMalloc is not a bottleneck at all anymore
+    - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
+    However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
     # Remove disk and cpu devices, and cast to proper torch.device
     accelerator_device_map = {
@@ -5795,31 +5818,26 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
         else None
     )
 
-    parameter_count = defaultdict(lambda: 0)
-    allocation_factor = 1
-    if torch.distributed.is_initialized() or len(set(accelerator_device_map.values())) >= 2:
-        allocation_factor = 2
-
+    total_byte_count = defaultdict(lambda: 0)
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
-        param_size = int(math.prod(param.shape) * allocation_factor)
+        # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
+        param_byte_count = math.prod(param.shape) * dtype_byte_size(param.dtype)
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
-            param_size //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
+            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
 
-        parameter_count[device] += param_size
-
-    dtype = dtype if dtype is not None else torch.float32
+        total_byte_count[device] += param_byte_count
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
-    for device, param_count in parameter_count.items():
-        max_memory_device = None
+    for device, byte_count in total_byte_count.items():
         if device.type == "cuda":
-            max_memory_device = torch.cuda.mem_get_info(device.index)[0]
-        # allocate only if we have enough memory
-        if max_memory_device is None or max_memory_device > param_count * dtype_byte_size(dtype):
-            _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
+            device_memory = torch.cuda.mem_get_info(device)[0]
+            # Allow up to 95% of max device memory
+            byte_count = min(byte_count, int(0.95 * device_memory))
+        # Allocate memory
+        _ = torch.empty(byte_count // 2, dtype=torch.float16, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):
@@ -5835,7 +5853,7 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, Callable]] = {}
+ALL_ATTENTION_FUNCTIONS: Dict[str, Callable] = {}
 
 ALL_ATTENTION_FUNCTIONS.update(
     {

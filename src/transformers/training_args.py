@@ -1641,7 +1641,7 @@ class TrainingArguments:
             self.do_eval = True
 
         if self.torch_empty_cache_steps is not None:
-            if not (isinstance(self.torch_empty_cache_steps, int) or self.torch_empty_cache_steps > 0):
+            if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
                 raise ValueError(
                     f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
                 )

@@ -84,6 +84,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
+        ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
@@ -382,6 +383,6 @@ class AutoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            processor_class ([`FeatureExtractorMixin`]): The processor to register.
+            processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
