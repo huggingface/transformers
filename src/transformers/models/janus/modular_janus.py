@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
-from ... import Blip2VisionModel
+from ..blip_2.modeling_blip_2 import Blip2VisionModel
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -1313,7 +1313,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
-        batch_size, seq_len = input_ids.shape
         dtype, device = input_ids.dtype, input_ids.device
 
         if len(input_ids.shape) != 2:
@@ -1348,6 +1347,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             expand_size=generation_config.num_return_sequences,
             **model_kwargs,
         )
+
+        # Should only get shape after self._expand_inputs_for_generation
+        batch_size, seq_len = input_ids.shape
 
         # 7. Prepare input and model caches
         num_image_tokens = self.model.vision_model.config.num_image_tokens
@@ -1396,7 +1398,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         for i in range(num_image_tokens):
             model_inputs = self.prepare_inputs_for_generation(
-                inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
+                inputs_embeds=inputs_embeds, input_ids=input_tokens, **model_kwargs
             )
 
             model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
