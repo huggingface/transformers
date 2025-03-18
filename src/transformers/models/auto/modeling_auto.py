@@ -196,6 +196,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nat", "NatModel"),
         ("nemotron", "NemotronModel"),
+        ("ngen3", "NGen3ForCasualLM"),
         ("nezha", "NezhaModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nystromformer", "NystromformerModel"),
