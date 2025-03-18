@@ -22,7 +22,10 @@
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import is_torch_available, logging
+from ...utils import (
+    is_torch_available,
+    logging,
+)
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -74,8 +77,6 @@ class JanusVisionConfig(PretrainedConfig):
             Whether to normalize the query and key matrices.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        use_vision_head (`bool`, *optional*, defaults to `True`):
-            Whether to use a Vision specific Attention Pool head.
         depth (`int`, *optional*, defaults to 2):
             Number of hidden layers in the aligner module.
         num_image_tokens (`int`, *optional*, defaults to 576):
@@ -103,7 +104,6 @@ class JanusVisionConfig(PretrainedConfig):
         projection_dropout=0.0,
         use_qk_norm=False,
         initializer_range=0.02,
-        use_vision_head=True,
         depth=2,
         num_image_tokens=576,
         **kwargs,
@@ -128,7 +128,6 @@ class JanusVisionConfig(PretrainedConfig):
         self.projection_dropout = projection_dropout
         self.use_qk_norm = use_qk_norm
         self.initializer_range = initializer_range
-        self.use_vision_head = use_vision_head
         self.depth = depth
         self.num_image_tokens = num_image_tokens
 

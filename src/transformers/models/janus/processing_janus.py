@@ -139,11 +139,9 @@ class JanusProcessor(ProcessorMixin):
         # Replace the image token with expanded image tokens.
         prompt_strings = []
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
-        print("text",text)
         for prompt in text:
             prompt = prompt.replace(self.image_token, one_img_tokens)
             if self.use_default_system_prompt and generation_mode == "text":
-                print("prompt",prompt)
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
             if generation_mode == "image":
                 prompt += self.image_start_token
