@@ -49,7 +49,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Mistral3Processor.from_pretrained("../mistral3_weights")
+        processor = Mistral3Processor.from_pretrained("mistralai/Mistral-Small-3.1-24B-Instruct-2503")
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
