@@ -7,7 +7,8 @@ tests/models/dpr/test_tokenization_dpr.py
 tests/models/layoutlm/test_tokenization_layoutlm.py
 tests/models/electra/test_tokenization_electra.py
 tests/models/perceiver/test_tokenization_perceiver.py
-tests/models/rembert/test_tokenization_rembert.pytests/models/layoutlmv2/test_tokenization_layoutlmv2.py
+tests/models/rembert/test_tokenization_rembert.py
+tests/models/layoutlmv2/test_tokenization_layoutlmv2.py
 tests/models/herbert/test_tokenization_herbert.py
 tests/models/deberta_v2/test_tokenization_deberta_v2.py
 tests/models/led/test_tokenization_led.py
