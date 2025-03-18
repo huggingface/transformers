@@ -24,7 +24,6 @@ from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
-from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -642,7 +641,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         if labels is not None:
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
 
-            loss = fixed_cross_entropy(
+            loss = self.loss_function(
                 logits.reshape(-1, self.decoder.config.vocab_size),
                 labels.reshape(-1),
                 num_items_in_batch=num_items_in_batch,
