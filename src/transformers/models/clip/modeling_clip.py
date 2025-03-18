@@ -1104,7 +1104,7 @@ class CLIPVisionTransformer(nn.Module):
             return_dict=True,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 

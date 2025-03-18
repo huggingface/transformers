@@ -944,7 +944,7 @@ class Siglip2TextTransformer(nn.Module):
             return_dict=True,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # Assuming "sticky" EOS tokenization, last token is always EOS.
@@ -1309,16 +1309,16 @@ class Siglip2Model(Siglip2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        pooled_output = text_outputs[1]
+        pooled_output = text_outputs.pooler_output
 
         return pooled_output
 
