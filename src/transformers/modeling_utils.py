@@ -734,7 +734,6 @@ def _infer_parameter_dtype(
         # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
         elif hf_quantizer is not None:
             casting_dtype = model.config._pre_quantization_dtype
-            print(casting_dtype)
         else:
             casting_dtype = old_param.dtype
     return old_param is not None and old_param.is_contiguous(), casting_dtype
@@ -851,8 +850,6 @@ def _load_state_dict_into_meta_model(
                     assign=True,
                 )
             else:
-                print(param_name)
-                print(param)
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
                 )
