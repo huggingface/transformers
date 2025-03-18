@@ -233,7 +233,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
         self.qkv_bias = qkv_bias
-        
+
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
