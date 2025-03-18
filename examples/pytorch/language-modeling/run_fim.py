@@ -265,8 +265,7 @@ class DataTrainingArguments:
         default="<fim_pad>",
         metadata={
             "help": (
-                "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. "
-                "Defaults to '<fim_pad>'."
+                "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. Defaults to '<fim_pad>'."
             )
         },
     )
@@ -514,7 +513,7 @@ def main():
             attn_implementation=model_args.attn_implementation,
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
-        logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+        logger.info(f"Training new model from scratch - Total size={n_params / 2**20:.2f}M params")
 
     # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
     special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
