@@ -63,6 +63,8 @@ class Mistral3Processor(ProcessorMixin):
             Patch size from the vision tower.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The downsampling factor for the spatial merge operation.
         image_token (`str`, *optional*, defaults to `"[IMG]"`):
             Special token used to denote image location.
         image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
@@ -72,6 +74,7 @@ class Mistral3Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+
     valid_kwargs = [
         "chat_template",
         "patch_size",

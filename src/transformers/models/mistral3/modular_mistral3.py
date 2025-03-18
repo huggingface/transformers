@@ -24,31 +24,13 @@ from ...image_utils import ImageInput, load_image
 from ...processing_utils import Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import LlavaForConditionalGeneration
 from ..mistral.modeling_mistral import MistralRMSNorm
 from ..pixtral.processing_pixtral import PixtralProcessor, PixtralProcessorKwargs, is_image_or_image_url
+from .configuration_mistral3 import Mistral3Config
 
 
 logger = logging.get_logger(__name__)
-
-
-class Mistral3Config(LlavaConfig):
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=32000,
-        projector_hidden_act="gelu",
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-1,
-        image_seq_length=576,
-        multimodal_projector_bias=False,
-        spatial_merge_size=2,
-        **kwargs,
-    ):
-        super().__init__(vision_config, text_config)
-        self.spatial_merge_size = spatial_merge_size
 
 
 class Mistral3ProcessorKwargs(PixtralProcessorKwargs):
@@ -56,6 +38,31 @@ class Mistral3ProcessorKwargs(PixtralProcessorKwargs):
 
 
 class Mistral3Processor(PixtralProcessor):
+    r"""
+    Constructs a Mistral3 processor which wraps a Mistral3 image processor and a Mistral3 tokenizer into a single processor.
+
+    [`Mistral3Processor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~Mistral3Processor.__call__`] and [`~Mistral3Processor.decode`] for more information.
+
+    Args:
+        image_processor ([`Mistral3ImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        patch_size (`int`, *optional*, defaults to 16):
+            Patch size from the vision tower.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The downsampling factor for the spatial merge operation.
+        image_token (`str`, *optional*, defaults to `"[IMG]"`):
+            Special token used to denote image location.
+        image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
+            Special token used to denote the end of a line of pixels in an image.
+        image_end_token (`str`, *optional*, defaults to `"[IMG_END]"`):
+            Special token used to denote the end of an image input.
+    """
+
     valid_kwargs = [
         "chat_template",
         "patch_size",
@@ -309,6 +316,5 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
 __all__ = [
     "Mistral3PreTrainedModel",  # noqa
     "Mistral3ForConditionalGeneration",
-    "Mistral3Config",
     "Mistral3Processor",
 ]
