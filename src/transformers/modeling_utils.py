@@ -5802,8 +5802,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
     These numbers are reported for TP on 4 H100 GPUs.
     - It is useless to pre-allocate more than the model size in this function (i.e. using an `allocation_factor` > 1) as
     cudaMalloc is not a bottleneck at all anymore
-    - Loading speed bottleneck is now fully tensor copy (i.e. changing the dtype) and moving the tensors to the devices. However,
-    we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
+    - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
+    However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
     # Remove disk and cpu devices, and cast to proper torch.device
     accelerator_device_map = {
