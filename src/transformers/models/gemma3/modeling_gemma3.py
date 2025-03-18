@@ -45,6 +45,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
+from .speech_conformer_encoder import ConformerEncoder
 
 
 logger = logging.get_logger(__name__)
@@ -89,6 +90,7 @@ class Gemma3CausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+    audio_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class Gemma3TextScaledWordEmbedding(nn.Embedding):
@@ -1114,6 +1116,18 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        audio_config = config.audio_config.to_diff_dict()
+        for item in ['transformers_version', 'model_type', 'torch_dtype']:
+            if item in audio_config:
+                audio_config.pop(item)
+        self.audio_tower = ConformerEncoder(**audio_config)
+        self.audio_tower.post_init({})
+        self.audio_projector = nn.Sequential(
+            nn.Linear(in_features=config.audio_config.attention_dim, out_features=config.text_config.hidden_size, bias=True),
+            nn.GELU(approximate='none'),
+            nn.Linear(in_features=config.text_config.hidden_size, out_features=config.text_config.hidden_size, bias=True)
+        ).to(dtype=self.dtype)
+
         self.multi_modal_projector = Gemma3MultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
@@ -1226,6 +1240,21 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
+        
+    def get_audio_features(self, input_audio_embeds: torch.FloatTensor, audio_attention_mask: torch.FloatTensor, audio_embed_sizes: torch.FloatTensor):
+        """
+        Projects the last hidden state from the audio model into language model space.
+        
+        Args:
+            audio_inputs (`torch.FloatTensor]` of shape `(batch_size, sequence_length, feature_dim)`)
+                The tensors corresponding to the input audio features.
+                
+        Returns:
+            audio_features (`torch.Tensor`): Audio feature tensor of shape `(batch_size, audio_length, embed_dim)`).
+        """
+        audio_features, masks = self.audio_tower(input_audio_embeds, audio_attention_mask)
+        audio_outputs = self.audio_projector(audio_features)
+        return audio_outputs
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
@@ -1234,6 +1263,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        input_audio_embeds: torch.FloatTensor = None,
+        audio_embed_sizes: torch.FloatTensor = None,
+        audio_attention_mask: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
@@ -1297,10 +1329,12 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_training = token_type_ids is not None and labels is not None
 
         # Replace image id woth PAD if the image token if OOV, to avoid index-errors
-        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
+        if input_ids is not None and self.config.image_token_index >= self.vocab_size or self.config.audio_token_index >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_index
+            special_audio_mask = input_ids == self.config.audio_token_index
             llm_input_ids = input_ids.clone()
             llm_input_ids[special_image_mask] = 0
+            llm_input_ids[special_audio_mask] = 0
         else:
             llm_input_ids = input_ids
 
@@ -1337,6 +1371,33 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
                 )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # Merge text and audios
+        if input_audio_embeds is not None:
+            audio_features = self.get_audio_features(input_audio_embeds, audio_attention_mask, audio_embed_sizes)
+            if input_ids is None:
+                special_audio_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.audio_token_index, dtype=torch.long, device=inputs_embeds.device)
+                )
+            else:
+                special_audio_mask = (input_ids == self.config.audio_token_index).unsqueeze(-1)
+                special_audio_mask = special_audio_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                
+            masked_audio_features = []
+            for i, size in enumerate(audio_embed_sizes):
+                masked_audio_features.append(audio_features[i, :size, :])
+            masked_audio_features = torch.cat(masked_audio_features, dim=0)
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_audio_mask].numel() != masked_audio_features.numel():
+                audio_tokens_in_text = (special_audio_mask).sum(dim=1).sum(dim=0)[0]
+                masked_audio_size = audio_embed_sizes.sum()[0]
+                raise ValueError(
+                    f"Number of images does not match number of special image tokens in the input text. "
+                    f"Got {audio_tokens_in_text} image tokens in the text but {masked_audio_size} "
+                    "tokens from image embeddings."
+                )
+            masked_audio_features = masked_audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, masked_audio_features)
 
         # mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
@@ -1396,6 +1457,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
+            audio_hidden_states=audio_features if input_audio_embeds is not None else None,
         )
 
     def prepare_inputs_for_generation(
@@ -1406,6 +1468,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         pixel_values=None,
+        input_audio_embeds=None,
+        audio_embed_sizes=None,
+        audio_attention_mask=None,
         attention_mask=None,
         token_type_ids=None,
         use_cache=True,
@@ -1434,6 +1499,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
+            model_inputs["input_audio_embeds"] = input_audio_embeds
+            model_inputs["audio_embed_sizes"] = audio_embed_sizes
+            model_inputs["audio_attention_mask"] = audio_attention_mask
         is_training = token_type_ids is not None and labels is not None
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
