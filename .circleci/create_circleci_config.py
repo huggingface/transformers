@@ -362,7 +362,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job] # fmt: skip
+REGULAR_TESTS = [tokenization_job] # fmt: skip
 ALL_TESTS = REGULAR_TESTS
 
 
