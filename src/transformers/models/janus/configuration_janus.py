@@ -121,7 +121,6 @@ class JanusVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
-        self.mlp_ratio = mlp_ratio
         self.attention_bias = attention_bias
         self.hidden_dropout_rate = hidden_dropout_rate
         self.projection_dim = projection_dim

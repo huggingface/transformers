@@ -185,7 +185,6 @@ class JanusVisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
-        self.mlp_ratio = mlp_ratio
         self.attention_bias = attention_bias
         self.intermediate_size = int(hidden_size * mlp_ratio)
         self.hidden_dropout_rate = hidden_dropout_rate
@@ -1280,7 +1279,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         generation_mode = kwargs.pop("generation_mode", "text")
         if generation_mode == "text":
             # Set to prevent running UnbatchedCFG processor.
-            self.generation_config.guidance_scale = None
             generation_config.guidance_scale = None
             return super().generate(
                 inputs=inputs, attention_mask=attention_mask, generation_config=generation_config, **kwargs
@@ -1315,6 +1313,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
+        batch_size, seq_len = input_ids.shape
+        dtype, device = input_ids.dtype, input_ids.device
+
         if len(input_ids.shape) != 2:
             raise ValueError(
                 f"Expected input ids as input of shape (batch_size, seq_len), but got {input_ids.shape}"
@@ -1337,7 +1338,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             encoder_input_ids=input_ids,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
-            device=input_ids.device,
+            device=device,
         )
 
         # 6. Expand inputs for multiple image generations per prompt.
@@ -1349,14 +1350,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
 
         # 7. Prepare input and model caches
-        batch_size, seq_len = input_ids.shape
-        dtype, device = input_ids.dtype, input_ids.device
-
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
         attention_mask = model_kwargs.pop("attention_mask", None)
         attention_mask = attention_mask.repeat(2, 1)
+        model_kwargs["attention_mask"] = attention_mask
 
         input_tokens[batch_size:, :].masked_fill_(
             (input_tokens[batch_size:, :] != generation_config.bos_token_id)
@@ -1410,12 +1409,10 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
 
             # Update model_kwargs like cache_position for next generation.
-            model_kwargs["attention_mask"] = attention_mask
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
-            attention_mask = model_kwargs.pop("attention_mask", None)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
-            # Generate scores using the generation head. (not using above defined lm head)
+            # Generate scores using the generation head (Not using above defined LM Head)
             scores = self.model.gen_head(hidden_state)
             next_token_scores = logits_processor(input_ids, scores)
 
