@@ -141,7 +141,6 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
         self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
 
-
         if not (
             len(stage_in_channels)
             == len(stage_mid_channels)
