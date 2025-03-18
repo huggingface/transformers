@@ -305,7 +305,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
 
-    def build_string_from_input(self, text, image):
+    def build_string_from_input(self, text, images):
         return [
                     build_string_from_input(
                         prompt=prompt,

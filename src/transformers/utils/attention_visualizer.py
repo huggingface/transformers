@@ -16,7 +16,7 @@
 import numpy as np
 import requests
 from PIL import Image
-
+import re
 from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
@@ -188,7 +188,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
         mask = mask[0, 0, :, :]
 
     n = len(words)
-    max_word_length = max(len(word) for word in words)
+    max_word_length = max(len(repr(word)) for word in words)
     first_img_idx = 0
 
     for i, k in enumerate(words):
@@ -213,6 +213,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
         print((max_word_length + 5) * " " + " ".join(row))
 
     for i, word in enumerate(words):
+        word = repr(word)
         colored_word = (
             f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
         )
@@ -260,13 +261,13 @@ class AttentionMaskVisualizer:
         self.model.to(config.torch_dtype)
         self.repo_id = model_name
 
-    def __call__(self, input_sentence: str):
-        self.visualize_attention_mask(input_sentence)
+    def __call__(self, input_sentence: str, suffix=""):
+        self.visualize_attention_mask(input_sentence, suffix=suffix)
 
-    def visualize_attention_mask(self, input_sentence: str):
+    def visualize_attention_mask(self, input_sentence: str, suffix=""):
         model = self.model
         kwargs = {}
-        suffix = [""]
+        suffix_tokens = [""]
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             img = Image.open(requests.get(img, stream=True).raw)
@@ -277,13 +278,12 @@ class AttentionMaskVisualizer:
                 input_sentence = input_sentence.replace("<img>", image_token)
             suffix = "This is a suffix"
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
-            
-            suffix = processor.tokenizer.tokenize(suffix)
+            suffix_tokens = processor.tokenizer.tokenize(suffix)
             attention_mask = inputs["attention_mask"]
             if "token_type_ids" in inputs: # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
-            input_sentence = processor.build_string_from_input(input_sentence, img)
-            tokens = processor.tokenizer.tokenize(input_sentence)
+            input_sentence = processor.build_string_from_input([input_sentence], [img])
+            tokens = processor.tokenizer.tokenize(input_sentence[0])
         elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
             tokens = tokenizer.tokenize(input_sentence)
@@ -301,4 +301,4 @@ class AttentionMaskVisualizer:
             **kwargs
         ).bool()
 
-        generate_attention_matrix_from_mask(tokens + suffix, attention_mask, img_token=self.image_token)
+        generate_attention_matrix_from_mask(tokens + suffix_tokens, attention_mask, img_token=self.image_token)
