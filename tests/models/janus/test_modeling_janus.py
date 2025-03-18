@@ -58,7 +58,7 @@ class JanusVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        # image_token_index=0,
+        image_token_index=0,
         seq_length=25,
         initializer_range=0.02,
         text_config={
@@ -112,7 +112,7 @@ class JanusVisionText2TextModelTester:
         self.parent = parent
         self.initializer_range = initializer_range
         # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        # self.image_token_index = image_token_index
+        self.image_token_index = image_token_index
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -129,7 +129,6 @@ class JanusVisionText2TextModelTester:
         self.image_size = vision_config["image_size"]
         self.num_image_tokens = vision_config["num_image_tokens"]
         self.use_cache = use_cache
-        self.image_token_index = 0
 
         # vq model params
         self.vq_num_embeds = vq_num_embeds
@@ -178,8 +177,6 @@ class JanusVisionText2TextModelTester:
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_index
-        # How to test with with iamge input as the image token id is 1000581
-        # Hacky way is consider 0 as image otken idnex so modify in modelling file instead of hardcoding it
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -188,8 +185,6 @@ class JanusVisionText2TextModelTester:
             "generation_mode": "text",  # Required to perform text generation instead of image generation.
         }
         return config, inputs_dict
-
-    # Skip test_sdpa_can_dispatch_composite_models test for Janusforconditionalgeneration and not for Janusmodel
 
 
 @require_torch

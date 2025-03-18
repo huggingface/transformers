@@ -20,7 +20,7 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -37,10 +37,14 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+class JanusTextKwargs(TextKwargs, total=False):
+    generation_mode: str
+
+
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
+    text_kwargs: JanusTextKwargs
     _defaults = {
-        "text_kwargs": {"padding": False},
+        "text_kwargs": {"padding": False, "generation_mode": "text"},
         "common_kwargs": {"return_tensors": "pt"},
     }
 
@@ -64,7 +68,7 @@ class JanusProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "use_default_system_prompt", "generation_mode"]
+    valid_kwargs = ["chat_template", "use_default_system_prompt"]
     image_processor_class = "JanusImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
@@ -79,12 +83,43 @@ class JanusProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        generation_mode: bool = None,
+        videos=None,
+        audio=None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
-        """Construct a Janus processor with Janus Image procesor and Llama text tokenizer"""
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        JanusImageProcessor's [`~JanusImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
 
         output_kwargs = self._merge_kwargs(
             JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
@@ -93,22 +128,22 @@ class JanusProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
 
-        if not generation_mode:
-            logger.warning("Generation mode argument not provided. Setting default to `text generation` mode.")
-            generation_mode = "text"
-
         if text is not None:
             if isinstance(text, str):
                 text = [text]
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
+        generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
+
         # Replace the image token with expanded image tokens.
         prompt_strings = []
         one_img_tokens = self.image_start_token + (self.image_token * self.num_image_tokens) + self.image_end_token
+        print("text",text)
         for prompt in text:
             prompt = prompt.replace(self.image_token, one_img_tokens)
             if self.use_default_system_prompt and generation_mode == "text":
+                print("prompt",prompt)
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
             if generation_mode == "image":
                 prompt += self.image_start_token
@@ -139,6 +174,10 @@ class JanusProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     def postprocess(self, images: ImageInput, **kwargs):
+        """
+        Forwards all arguments to the image processor's `postprocess` method.
+        Refer to the original method's docstring for more details.
+        """
         return self.image_processor.postprocess(images, **kwargs)
 
     @property
