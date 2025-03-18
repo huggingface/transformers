@@ -9170,6 +9170,12 @@ if TYPE_CHECKING:
             TFMT5ForConditionalGeneration,
             TFMT5Model,
         )
+        from .models.ngen3 import (
+            NGen3ForCasualLM,
+            NGen3Config,
+        )
+
+        
         from .models.openai import (
             TFOpenAIGPTDoubleHeadsModel,
             TFOpenAIGPTForSequenceClassification,
