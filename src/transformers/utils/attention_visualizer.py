@@ -238,6 +238,7 @@ class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
         config = AutoConfig.from_pretrained(model_name)
         self.config = config
+        self.image_token = "<img>"
         if hasattr(config, "sliding_window"):
             config.sliding_window = 5
 
@@ -265,18 +266,23 @@ class AttentionMaskVisualizer:
     def visualize_attention_mask(self, input_sentence: str):
         model = self.model
         kwargs = {}
-
+        suffix = [""]
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             img = Image.open(requests.get(img, stream=True).raw)
-            kwargs["text"] = input_sentence
-            processor = AutoProcessor.from_pretrained(self.repo_id)
+            processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=5)
             image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
-
+            self.image_token = image_token
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
-
-            attention_mask = processor(img, input_sentence, return_tensors="pt")["attention_mask"]
+            suffix = "This is a suffix"
+            inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
+            
+            suffix = processor.tokenizer.tokenize(suffix)
+            attention_mask = inputs["attention_mask"]
+            if "token_type_ids" in inputs: # TODO inspect signature of update causal mask
+                kwargs["token_type_ids"] = inputs["token_type_ids"]
+            input_sentence = processor.build_string_from_input(input_sentence, img)
             tokens = processor.tokenizer.tokenize(input_sentence)
         elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
@@ -286,12 +292,13 @@ class AttentionMaskVisualizer:
             raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
 
         model.config._attn_implementation = "eager"
-
+        model.train()
         attention_mask = ~model._update_causal_mask(
             attention_mask=attention_mask,
             input_tensor=attention_mask.to(self.model.dtype),
             cache_position=torch.arange(attention_mask.shape[1]),
             past_key_values=None,
+            **kwargs
         ).bool()
 
-        generate_attention_matrix_from_mask(tokens, attention_mask)
+        generate_attention_matrix_from_mask(tokens + suffix, attention_mask, img_token=self.image_token)
