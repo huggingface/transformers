@@ -21,14 +21,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import is_torchvision_v2_available
 from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-if is_torchvision_v2_available():
-    pass
-else:
-    pass
 
 
 class Mistral3Config(PretrainedConfig):

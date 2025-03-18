@@ -111,7 +111,7 @@ else:
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("mistral3", ("Mistral3ImageProcessor", "Mistral3ImageProcessorFast")),
+            ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),

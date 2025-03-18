@@ -19,11 +19,12 @@ import unittest
 from transformers import (
     AutoProcessor,
     Mistral3Config,
+    is_bitsandbytes_available,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
+    require_bitsandbytes,
     require_torch,
     require_torch_gpu,
     slow,
@@ -44,8 +45,8 @@ if is_torch_available():
     )
 
 
-if is_vision_available():
-    pass
+if is_bitsandbytes_available():
+    from transformers import BitsAndBytesConfig
 
 
 class Mistral3VisionText2TextModelTester:
@@ -205,6 +206,13 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.config_tester = ConfigTester(self, config_class=Mistral3Config, has_text_modality=False)
 
     def test_config(self):
+        # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
+        # TODO: avoid overwritten once there is a better fix for #36077
+        def check_config_can_be_init_without_params():
+            config = self.config_tester.config_class()
+            self.config_tester.parent.assertIsNotNone(config)
+
+        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
 
     def test_initialization(self):
@@ -307,7 +315,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "Whispers of dawn,\nLeaves rustle in the breeze,\nNew day begins."
+        expected_output = "Sure, here's a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace."
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -335,7 +343,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink couch. One cat is on the left side of the"
+        expected_output = "The image depicts two cats lying on a pink blanket. The larger cat, which appears to be an"
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -374,7 +382,9 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn misty mountains, nature's still,\nPeace awaits beneath the sky."  # fmt: skip
+        expected_output = (
+            "Write a haiku for this imageCalm waters reflect\nWhispers of the forest's breath\nPeace on wooden path"
+        )
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -383,8 +393,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, featuring red pillars and ornate decorations. There is'  # fmt: skip
-
+        expected_output = "Describe this imageThe image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -393,11 +402,14 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
+    @require_bitsandbytes
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.model_checkpoint, quantization_config=quantization_config
         )
+
         # Prepare inputs
         messages = [
             [
@@ -431,14 +443,13 @@ class Mistral3IntegrationTest(unittest.TestCase):
         ]
         inputs = processor.apply_chat_template(
             messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(model.device, dtype=torch.bfloat16)
+        ).to(model.device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nWhere mountains meet a tranquil lake,\nDreams of the unknown begin.'  # fmt: skip
+        expected_output = "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -447,7 +458,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the differences between these two images?\nassistant\nThe image on the right appears to be a different scene from the one on the left. Here are some differences:\n\n1.'  # fmt: skip
+        expected_output = "These images depict two different landmarks. Can you identify them?Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City."
         self.assertEqual(
             decoded_output,
             expected_output,

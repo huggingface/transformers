@@ -33,18 +33,12 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
-    is_torchvision_v2_available,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_mistral3 import Mistral3Config
 
-
-if is_torchvision_v2_available():
-    pass
-else:
-    pass
 
 _CONFIG_FOR_DOC = "Mistral3Config"
 
@@ -311,6 +305,8 @@ MISTRAL3_INPUTS_DOCSTRING = r"""
     MISTRAL3_START_DOCSTRING,
 )
 class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin):
+    _supports_sdpa = False
+
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -486,7 +482,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            print(inputs_embeds[special_image_mask].shape, image_features.shape)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
                 n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]

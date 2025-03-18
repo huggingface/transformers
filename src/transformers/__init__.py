@@ -1278,7 +1278,6 @@ else:
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.llava"].append("LlavaImageProcessor")
-    _import_structure["models.mistral3"].append("Mistral3ImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
@@ -1343,7 +1342,6 @@ else:
     _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
-    _import_structure["models.mistral3"].append("Mistral3ImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
@@ -6507,7 +6505,6 @@ if TYPE_CHECKING:
             MaskFormerFeatureExtractor,
             MaskFormerImageProcessor,
         )
-        from .models.mistral3 import Mistral3ImageProcessor
         from .models.mllama import MllamaImageProcessor
         from .models.mobilenet_v1 import (
             MobileNetV1FeatureExtractor,
@@ -6572,7 +6569,6 @@ if TYPE_CHECKING:
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
-        from .models.mistral3 import Mistral3ImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast

@@ -125,6 +125,7 @@ VLM_CLASS_NAMES = [
     "qwen2_5_vl",
     "ayavision",
     "gemma3",
+    "mistral3",
 ]
 
 

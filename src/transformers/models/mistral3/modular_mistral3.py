@@ -27,7 +27,6 @@ from ...utils import logging
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import LlavaForConditionalGeneration
 from ..mistral.modeling_mistral import MistralRMSNorm
-from ..pixtral.image_processing_pixtral_fast import PixtralImageProcessorFast
 from ..pixtral.processing_pixtral import PixtralProcessor, PixtralProcessorKwargs, is_image_or_image_url
 
 
@@ -50,10 +49,6 @@ class Mistral3Config(LlavaConfig):
     ):
         super().__init__(vision_config, text_config)
         self.spatial_merge_size = spatial_merge_size
-
-
-class Mistral3ImageProcessorFast(PixtralImageProcessorFast):
-    pass
 
 
 class Mistral3ProcessorKwargs(PixtralProcessorKwargs):
@@ -224,14 +219,15 @@ class Mistral3PatchMerger(nn.Module):
             # Reshape image_tokens into a 2D grid
             h, w = image_sizes[image_index]
             image_grid = image_tokens.view(h, w, d).permute(2, 0, 1).unsqueeze(0)
-            grid = torch.nn.functional.unfold(image_grid, kernel_size=self.spatial_merge_size, stride=self.spatial_merge_size)
-            grid = grid.view(d * self.spatial_merge_size ** 2, -1).t()
+            grid = torch.nn.functional.unfold(
+                image_grid, kernel_size=self.spatial_merge_size, stride=self.spatial_merge_size
+            )
+            grid = grid.view(d * self.spatial_merge_size**2, -1).t()
             permuted_tensor.append(grid)
 
         image_features = torch.cat(permuted_tensor, dim=0)
         image_features = self.merging_layer(image_features)
         return image_features
-
 
 
 class Mistral3MultiModalProjector(nn.Module):
@@ -261,6 +257,8 @@ class Mistral3MultiModalProjector(nn.Module):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
+    _supports_sdpa = False
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -312,6 +310,5 @@ __all__ = [
     "Mistral3PreTrainedModel",  # noqa
     "Mistral3ForConditionalGeneration",
     "Mistral3Config",
-    "Mistral3ImageProcessorFast",
     "Mistral3Processor",
 ]
