@@ -423,7 +423,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         # Does not support using additional convolution states via inputs_embeds
         # as opposed to Mamba, currently.
         if use_cache:
-            # `cache_position` should have been initialized in `generate`
             if cache_position is None:
                 raise ValueError(
                     "`cache_position` should not be None as it should have been initialized in "
@@ -435,7 +434,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             # (lastly generated token), and all previous tokens are already ingested.
             # This should as well support generation from scratch with the [BOS] token inserted first.
 
-            # if is_torchdynamo_compiling() or cache_position[0] > 0:
             if cache_params is not None:
                 input_ids = input_ids[:, -1:]
                 if inputs_embeds is not None:
@@ -485,18 +483,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        inserted_bos_token = False
-        if (
-            (cache_params is None or cache_params.rnn_state_initial)
-            and self.config.force_bos_token_insert
-            and input_ids is not None
-        ):
-            if not is_torchdynamo_compiling():
-                if bool(torch.all(input_ids[0, 0] != self.config.bos_token_id).cpu()):
-                    input_ids = torch.cat(
-                        [self.config.bos_token_id + input_ids.new_zeros([input_ids.shape[0], 1]), input_ids], dim=1
-                    )
-                    inserted_bos_token = True
+       
 
         xlstm_outputs = self.backbone(
             input_ids,
@@ -509,33 +496,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
         )
         hidden_states = xlstm_outputs[0]
-
-        if inserted_bos_token:
-            hidden_states = hidden_states[:, 1:]
-            if hasattr(xlstm_outputs, "hidden_states"):
-                xlstm_outputs_mod = (
-                    hidden_states,
-                    xlstm_outputs.cache_params,
-                    tuple(hidden_state[:, 1:] for hidden_state in xlstm_outputs.hidden_states)
-                    if xlstm_outputs.hidden_states is not None
-                    else None,
-                )
-            elif len(xlstm_outputs) == 3:
-                xlstm_outputs_mod = (
-                    hidden_states,
-                    xlstm_outputs[1],
-                    tuple(hidden_state[:, 1:] for hidden_state in xlstm_outputs[2])
-                    if xlstm_outputs[2] is not None
-                    else None,
-                )
-            elif len(xlstm_outputs) == 2:
-                xlstm_outputs_mod = (hidden_states, xlstm_outputs[1])
-            elif len(xlstm_outputs) == 1:
-                xlstm_outputs_mod = (hidden_states,)
-            if isinstance(xlstm_outputs, xLSTMOutput):
-                xlstm_outputs = xLSTMOutput(*xlstm_outputs_mod)
-            else:
-                xlstm_outputs = xlstm_outputs_mod
 
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
