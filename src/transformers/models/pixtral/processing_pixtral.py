@@ -101,6 +101,7 @@ class PixtralProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.spatial_merge_size = spatial_merge_size
         self.image_token = image_token
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
