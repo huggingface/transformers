@@ -613,7 +613,7 @@ class PipelineUtilsTest(unittest.TestCase):
         set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
         for task in SUPPORTED_TASKS.keys():
             if task == "table-question-answering":
-                # test table in seperate test due to more dependencies
+                # test table in separate test due to more dependencies
                 continue
 
             self.check_default_pipeline(task, "pt", set_seed_fn, self.check_models_equal_pt)
@@ -631,7 +631,7 @@ class PipelineUtilsTest(unittest.TestCase):
         set_seed_fn = lambda: keras.utils.set_random_seed(0)  # noqa: E731
         for task in SUPPORTED_TASKS.keys():
             if task == "table-question-answering":
-                # test table in seperate test due to more dependencies
+                # test table in separate test due to more dependencies
                 continue
 
             self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
