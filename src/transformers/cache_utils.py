@@ -1913,6 +1913,8 @@ class MambaCache:
 
 class xLSTMCache:
     """
+    Cache for xLSTM model which does not have attention mechanism and key value states.
+
     Arguments:
         config: xLSTMConfig
         batch_size: int
@@ -1922,6 +1924,22 @@ class xLSTMCache:
     Attributes:
         seqlen_offset: int
         dtype: torch.dtype
+
+    Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, xLSTMForCausalLM, xLSTMCache
+
+        >>> model = xLSTMForCausalLM.from_pretrained("NX-AI/xLSTM-7b")
+        >>> tokenizer = xLSTMTokenizer.from_pretrained("NX-AI/xLSTM-7b")
+
+        >>> inputs = tokenizer(text="I am an xLSTM", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_params = xLSTMCache(config=model.config, batch_size=1, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
+        >>> outputs.cache_params
+        xLSTMCache()
     """
 
     def __init__(
