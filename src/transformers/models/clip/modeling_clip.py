@@ -942,6 +942,7 @@ class CLIPEncoder(nn.Module):
         if self.config.num_hidden_layers in output_hidden_states_position_to_index.values():
             encoder_states[self.config.num_hidden_layers] = hidden_states
 
+        # Reordering `hidden_states` to follow the requested order, even if it is not sequential.
         # `None` when there are no `encoder_states` so it's not returned in `not return_dict` path.
         encoder_states = (
             tuple(

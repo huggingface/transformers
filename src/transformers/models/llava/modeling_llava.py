@@ -305,13 +305,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        image_outputs = self.vision_tower(
-            pixel_values,
-            output_hidden_states=[vision_feature_layer]
-            if isinstance(vision_feature_layer, int)
-            else vision_feature_layer,
-            **kwargs,
-        )
+        output_hidden_states = [vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=output_hidden_states, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
