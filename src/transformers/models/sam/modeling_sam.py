@@ -1461,7 +1461,7 @@ class SamModel(SamPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=True,
             )
-            image_embeddings = vision_outputs.image_embeds
+            image_embeddings = vision_outputs.last_hidden_state
 
             if output_hidden_states:
                 vision_hidden_states = vision_outputs.hidden_states
