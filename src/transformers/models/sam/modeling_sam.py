@@ -16,7 +16,7 @@
 
 import collections
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1159,19 +1159,13 @@ class SamVisionEncoder(nn.Module):
 
         hidden_states = self.neck(hidden_states)
 
-        if not return_dict:
-            outputs = (hidden_states,)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_self_attentions,)
-            return outputs
-
-        return SamVisionEncoderOutput(
+        output = SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+        return output if return_dict else output.to_tuple()
 
 
 class SamPreTrainedModel(PreTrainedModel):
@@ -1394,7 +1388,7 @@ class SamModel(SamPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> Union[SamImageSegmentationOutput, Tuple[torch.Tensor, ...]]:
         r"""
         Example:
 
@@ -1461,18 +1455,18 @@ class SamModel(SamPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            vision_outputs = self.vision_encoder(
+            vision_outputs: SamVisionEncoderOutput = self.vision_encoder(
                 pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
             )
-            image_embeddings = vision_outputs[0]
+            image_embeddings = vision_outputs.image_embeds
 
             if output_hidden_states:
-                vision_hidden_states = vision_outputs[1]
+                vision_hidden_states = vision_outputs.hidden_states
             if output_attentions:
-                vision_attentions = vision_outputs[-1]
+                vision_attentions = vision_outputs.attentions
 
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
@@ -1504,22 +1498,15 @@ class SamModel(SamPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        if not return_dict:
-            output = (iou_predictions, low_res_masks)
-            if output_hidden_states:
-                output = output + (vision_hidden_states,)
-
-            if output_attentions:
-                output = output + (vision_attentions, mask_decoder_attentions)
-            return output
-
-        return SamImageSegmentationOutput(
+        output = SamImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
             vision_hidden_states=vision_hidden_states,
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
+
+        return output if return_dict else output.to_tuple()
 
 
 __all__ = ["SamModel", "SamPreTrainedModel"]
