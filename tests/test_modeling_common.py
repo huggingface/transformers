@@ -138,16 +138,16 @@ TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
     (
         # test name for the test runner
         f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attn_mask'}"
-        f"{'_output_attn' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+        f"{'_sdpa_kernels' if enable_kernels else ''}",
         # parameterization
-        *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+        *(dtype, padding_side, use_attention_mask, False, enable_kernels),
     )
     for dtype in ("fp16", "fp32", "bf16")
     for padding_side in ("left", "right")
     for use_attention_mask in (True, False)
-    for output_attentions in (True, False)
     for enable_kernels in (True, False)
-]
+    # Extra test case: `output_attentions=True` has special attention mask handling and sdpa reverts to eager
+] + [("fp32_pad_left_output_attentions", "fp32", "left", True, True, False)]
 
 
 def _config_zero_init(config):
@@ -3618,7 +3618,7 @@ class ModelTesterMixin:
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-4,
-            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.bfloat16): 3e-2,  # (different from others)
             ("cuda", True, torch.float16): 5e-3,
         }
 
