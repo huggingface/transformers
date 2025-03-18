@@ -565,9 +565,7 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
-    "models.mistral3": [
-        "Mistral3Config",
-    ],
+    "models.mistral3": ["Mistral3Config"],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -5797,9 +5795,7 @@ if TYPE_CHECKING:
         MimiConfig,
     )
     from .models.mistral import MistralConfig
-    from .models.mistral3 import (
-        Mistral3Config,
-    )
+    from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
         MllamaConfig,
