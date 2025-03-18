@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+
 import requests
 from PIL import Image
-import re
+
 from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
@@ -37,149 +37,6 @@ BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
 
 
-def generate_sliding_window_mask_matrix(words, sliding_window=0, img_token="<img>", is_causal=True):
-    n = len(words)
-    max_word_length = max(len(word) for word in words)
-    first_img_idx = 0
-
-    if sliding_window != 0:
-        mask = np.tril(np.zeros((n, n), dtype=int))
-        for i in range(n):
-            mask[i, max(0, i - sliding_window + 1) : i + 1] = 1
-    else:
-        if is_causal:
-            mask = np.tril(np.ones((n, n), dtype=int))
-        else:
-            mask = np.ones((n, n), dtype=int)
-
-    for i, k in enumerate(words):
-        if img_token in k and not first_img_idx:
-            first_img_idx = i
-        if first_img_idx > 0 and (img_token not in k or i == n - 1):
-            if i == n - 1:
-                i += 1
-            mask[first_img_idx:i, first_img_idx:i] = 1
-            first_img_idx = 0
-
-    vertical_header = []
-    for idx, word in enumerate(words):
-        if img_token not in word:
-            vertical_header += [list(str(idx).rjust(len(str(n))))]
-        else:
-            vertical_header += [[f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]]
-
-    vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
-    # Print the vertical header
-    for row in vertical_header:
-        print((max_word_length + 5) * " " + " ".join(row))
-
-    for i, word in enumerate(words):
-        colored_word = (
-            f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
-        )
-        number = str(i).rjust(len(str(n)))
-        colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
-        base_display = colored_word + ": " + colored_number + " "
-        row_display = " ".join(
-            f"{YELLOW}{BLACK_SQUARE}{RESET}"
-            if img_token in words[j] and mask[i, j] and img_token in words[i]
-            else f"{GREEN}{BLACK_SQUARE}{RESET}"
-            if i == j
-            else BLACK_SQUARE
-            if mask[i, j]
-            else WHITE_SQUARE
-            for j in range(n)
-        )
-        print(base_display + row_display)
-
-    print(" " * len(base_display) + "-" * len(row_display))
-
-
-# sentece = (
-#     "What is this? <img> <img> <img> <img> This is a cat. And these ? <img> <img> <img> <img> <img> These are dogs."
-# )
-# words = sentece.split()
-# generate_sliding_window_mask_matrix(words)
-# generate_sliding_window_mask_matrix(words, sliding_window=3)
-
-
-# sentece = (
-#     "<img> <img> <img> <img> This is the system prompt."
-# )
-# words = sentece.split()
-# generate_sliding_window_mask_matrix(words, is_causal=False)
-
-# sentece = (
-#     "This step is decoding, the mask is causal."
-# )
-# words = sentece.split()
-# generate_sliding_window_mask_matrix(words, is_causal=True)
-
-# sentece = (
-#     "<img> <img> <img> <img> This is the system prompt. This step is decoding, the mask is causal."
-# )
-# words = sentece.split()
-# generate_sliding_window_mask_matrix(words, is_causal=True)
-
-
-# Should print:
-""""
-
-
-                              1 1 1 1 1 1 1 1 1 1 2 2
-          0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-What :  0 ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-is   :  1 ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-this?:  2 ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  3 ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  4 ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  5 ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  6 ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-This :  7 ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-is   :  8 ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-a    :  9 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-cat. : 10 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-And  : 11 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-these: 12 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-?    : 13 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>: 14 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 15 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 16 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 17 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 18 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-These: 19 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚
-are  : 20 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ⬚
-dogs.: 21 ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■ ■
-          ----------------------------------------------------
-                              1 1 1 1 1 1 1 1 1 1 2 2
-          0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-What :  0 ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-is   :  1 ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-this?:  2 ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  3 ⬚ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  4 ⬚ ⬚ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  5 ⬚ ⬚ ⬚ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>:  6 ⬚ ⬚ ⬚ ■ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-This :  7 ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-is   :  8 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-a    :  9 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-cat. : 10 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-And  : 11 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-these: 12 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-?    : 13 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚
-<img>: 14 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 15 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 16 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 17 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-<img>: 18 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ■ ■ ⬚ ⬚ ⬚
-These: 19 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚ ⬚
-are  : 20 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■ ⬚
-dogs.: 21 ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ■ ■ ■
-          ----------------------------------------------------
-
-"""
-
-
 def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
     mask = mask.int()
     if mask.ndim == 3:
@@ -200,70 +57,21 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
             mask[first_img_idx:i, first_img_idx:i] = 2
             first_img_idx = 0
 
-    vertical_header = []
-    for idx, word in enumerate(words):
-        if img_token not in word:
-            vertical_header += [list(str(idx).rjust(len(str(n))))]
-        else:
-            vertical_header += [[f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]]
-
-    vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
-    # Print the vertical header
-    for row in vertical_header:
-        print((max_word_length + 5) * " " + " ".join(row))
-
-    for i, word in enumerate(words):
-        word = repr(word)
-        colored_word = (
-            f"{YELLOW}{word.ljust(max_word_length)}{RESET}" if img_token in word else word.ljust(max_word_length)
-        )
-        number = str(i).rjust(len(str(n)))
-        colored_number = f"{YELLOW}{number}{RESET}" if img_token in word else number
-        base_display = colored_word + ": " + colored_number + " "
-        row_display = " ".join(
-            f"{YELLOW}{BLACK_SQUARE}{RESET}"
-            if img_token in words[j] and mask[i, j] and img_token in words[i]
-            else f"{GREEN}{BLACK_SQUARE}{RESET}"
-            if i == j
-            else BLACK_SQUARE
-            if mask[i, j]
-            else WHITE_SQUARE
-            for j in range(n)
-        )
-        print(base_display + row_display)
-
-    print(" " * len(base_display) + "-" * len(row_display))
-def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
-    mask = mask.int()
-    if mask.ndim == 3:
-        mask = mask[0, :, :]
-    if mask.ndim == 4:
-        mask = mask[0, 0, :, :]
-
-    n = len(words)
-    max_word_length = max(len(repr(word)) for word in words)
-    first_img_idx = 0
-
-    for i, k in enumerate(words):
-        if img_token in k and not first_img_idx:
-            first_img_idx = i
-        if first_img_idx > 0 and (img_token not in k or i == n - 1):
-            if i == n - 1:
-                i += 1
-            mask[first_img_idx:i, first_img_idx:i] = 2
-            first_img_idx = 0
-    
     # Generate sliding window mask (size = 4), but exclude img_token
     sliding_window_mask = [
         [1 if (0 <= i - j < 4) or img_token in words[i] and img_token in words[j] else 0 for j in range(n)]
         for i in range(n)
     ]
-    
+
     row_dummy = " ".join(
-            f"{YELLOW}{BLACK_SQUARE}{RESET}" if img_token in words[j] and mask[i, j] and img_token in words[i] else
-            f"{GREEN}{BLACK_SQUARE}{RESET}" if i == j else
-            BLACK_SQUARE if mask[0, j] else WHITE_SQUARE
-            for j in range(n)
+        f"{YELLOW}{BLACK_SQUARE}{RESET}"
+        if img_token in words[j] and mask[i, j] and img_token in words[i]
+        else f"{GREEN}{BLACK_SQUARE}{RESET}"
+        if i == j
+        else BLACK_SQUARE
+        if mask[0, j]
+        else WHITE_SQUARE
+        for j in range(n)
     )
     # Print headers
     legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: img tokens"
@@ -282,27 +90,33 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
     for row in vertical_header:
         print((max_word_length + 5) * " " + " ".join(row).ljust(len(row_dummy)) + " " * 9 + " ".join(row))
 
-    
     for i, word in enumerate(words):
         word_repr = repr(word).ljust(max_word_length)
         colored_word = f"{YELLOW}{word_repr}{RESET}" if img_token in word else word_repr
         row_display = " ".join(
-            f"{YELLOW}{BLACK_SQUARE}{RESET}" if img_token in words[j] and mask[i, j] and img_token in words[i] else
-            f"{GREEN}{BLACK_SQUARE}{RESET}" if i == j else
-            BLACK_SQUARE if mask[i, j] else WHITE_SQUARE
+            f"{YELLOW}{BLACK_SQUARE}{RESET}"
+            if img_token in words[j] and mask[i, j] and img_token in words[i]
+            else f"{GREEN}{BLACK_SQUARE}{RESET}"
+            if i == j
+            else BLACK_SQUARE
+            if mask[i, j]
+            else WHITE_SQUARE
             for j in range(n)
         )
-        
+
         sliding_window_row = " ".join(
-            f"{YELLOW}{BLACK_SQUARE}{RESET}" if img_token in words[j] and sliding_window_mask[i][j] and img_token in words[i] else
-            f"{GREEN}{BLACK_SQUARE}{RESET}" if i == j else
-            BLACK_SQUARE if sliding_window_mask[i][j] else WHITE_SQUARE
+            f"{YELLOW}{BLACK_SQUARE}{RESET}"
+            if img_token in words[j] and sliding_window_mask[i][j] and img_token in words[i]
+            else f"{GREEN}{BLACK_SQUARE}{RESET}"
+            if i == j
+            else BLACK_SQUARE
+            if sliding_window_mask[i][j]
+            else WHITE_SQUARE
             for j in range(n)
         )
-        
+
         print(f"{colored_word}: {str(i).rjust(2)} {row_display}    |    {sliding_window_row}")
-    
-    print(" " * (max_word_length + 5) + "-" * (len(row_display) + 5) + "|" + "-" * len(sliding_window_row))
+
 
 class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
@@ -348,7 +162,7 @@ class AttentionMaskVisualizer:
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
             suffix_tokens = processor.tokenizer.tokenize(suffix)
             attention_mask = inputs["attention_mask"]
-            if "token_type_ids" in inputs: # TODO inspect signature of update causal mask
+            if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
             input_sentence = processor.build_string_from_input([input_sentence], [img])
             tokens = processor.tokenizer.tokenize(input_sentence[0])
@@ -366,7 +180,21 @@ class AttentionMaskVisualizer:
             input_tensor=attention_mask.to(self.model.dtype),
             cache_position=torch.arange(attention_mask.shape[1]),
             past_key_values=None,
-            **kwargs
+            **kwargs,
         ).bool()
-
+        top_bottom_border = "##" * (
+            len(f"Attention visualization for {self.config.model_type}") + 4
+        )  # Box width adjusted to text length
+        side_border = "##"
+        print(f"\n{top_bottom_border}")
+        print(
+            "##"
+            + f"  Attention visualization for \033[1m{self.config.model_type}:{self.repo_id}\033[0m".center(
+                len(top_bottom_border)
+            )
+            + "    "
+            + side_border
+        )
+        print(f"{top_bottom_border}")
         generate_attention_matrix_from_mask(tokens + suffix_tokens, attention_mask, img_token=self.image_token)
+        print(f"{top_bottom_border}")

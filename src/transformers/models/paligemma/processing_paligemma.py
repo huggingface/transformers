@@ -307,15 +307,15 @@ class PaliGemmaProcessor(ProcessorMixin):
 
     def build_string_from_input(self, text, images):
         return [
-                    build_string_from_input(
-                        prompt=prompt,
-                        bos_token=self.tokenizer.bos_token,
-                        image_seq_len=self.image_seq_length,
-                        image_token=IMAGE_TOKEN,
-                        num_images=len(image_list) if isinstance(image_list, list) else 1,
-                    )
-                    for prompt, image_list in zip(text, images)
-                ]
+            build_string_from_input(
+                prompt=prompt,
+                bos_token=self.tokenizer.bos_token,
+                image_seq_len=self.image_seq_length,
+                image_token=IMAGE_TOKEN,
+                num_images=len(image_list) if isinstance(image_list, list) else 1,
+            )
+            for prompt, image_list in zip(text, images)
+        ]
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

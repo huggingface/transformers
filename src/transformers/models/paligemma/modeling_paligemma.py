@@ -341,8 +341,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         self,
         attention_mask,
         token_type_ids=None,
-        past_key_values = None,
-        cache_position = None,
+        past_key_values=None,
+        cache_position=None,
         input_tensor=None,
         is_training: bool = None,
     ):
@@ -350,7 +350,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
-        is_training = training if is_training is not None else self.training
+        is_training = is_training if is_training is not None else self.training
         using_static_cache = isinstance(past_key_values, StaticCache)
         min_dtype = torch.finfo(self.dtype).min
         if input_tensor is None:
