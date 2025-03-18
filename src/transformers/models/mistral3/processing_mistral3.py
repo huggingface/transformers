@@ -51,15 +51,15 @@ class Mistral3Processor(ProcessorMixin):
     r"""
     Constructs a Mistral3 processor which wraps a Mistral3 image processor and a Mistral3 tokenizer into a single processor.
 
-    [`Mistral3Processor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`Mistral3Processor`] offers all the functionalities of [`PixtralImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~Mistral3Processor.__call__`] and [`~Mistral3Processor.decode`] for more information.
 
     Args:
-        image_processor ([`Mistral3ImageProcessor`], *optional*):
+        image_processor ([`PixtralImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             Patch size from the vision tower.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -90,7 +90,7 @@ class Mistral3Processor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        patch_size: int = 16,
+        patch_size: int = 14,
         chat_template=None,
         spatial_merge_size: int = 2,
         image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
@@ -115,10 +115,9 @@ class Mistral3Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        and `kwargs` arguments to the tokenizer if `text` is not `None` in order to encode the text. To prepare the image(s),
+        this method forwards the `images` and `kwargs` arguments to the processor if `images` is not `None`. Please refer
+        to the doctsring of the above two methods for more information.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
