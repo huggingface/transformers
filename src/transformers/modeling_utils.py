@@ -1436,6 +1436,229 @@ def _find_mismatched_keys(
     return mismatched_keys
 
 
+def _is_rank_zero():
+    """Return True if rank=0 or we aren't running distributed."""
+    if not (_torch_distributed_available and torch.distributed.is_initialized()):
+        return True
+    return torch.distributed.get_rank() == 0
+
+
+MEMORY_ADDRESS_REGEX = re.compile(r"object at 0x[0-9A-Fa-f]+")
+
+
+def _sanitize_repr_for_diff(x_str: str) -> str:
+    """
+    Replace memory addresses in an object's repr with a stable placeholder
+    so that beautiful JSON diffs won't be ruined by ephemeral addresses.
+    """
+    return MEMORY_ADDRESS_REGEX.sub("object at 0xXXXXXXXX", x_str)
+
+
+def _dtensor_repr(x):
+    """Return a stable string representation for a DTensor-like object."""
+    if _is_rank_zero():
+        return f"DTensor (rank0) -> {repr(x._local_tensor)}"
+    return "DTensor(non-rank0)"
+
+
+def _serialize_io(value):
+    """
+    Recursively build a JSON-serializable Python structure from `value`.
+    Tensors and DTensors become sanitized repr strings.
+    Lists/tuples/dicts are recursed into.
+    All memory addresses are replaced with a stable placeholder.
+
+    Args:
+        value: Any Python object, often including torch Tensors, lists, dicts, etc.
+
+    Returns:
+        A nested Python structure (list, dict, or sanitized string) that is safe to json.dump.
+    """
+    if isinstance(value, (list, tuple)):
+        # recursively handle sequences
+        return [_serialize_io(v) for v in value]
+
+    if isinstance(value, dict):
+        # handle dictionaries
+        return {k: _serialize_io(v) for k, v in value.items()}
+
+    if hasattr(value, "_local_tensor"):
+        # DTensor-like
+        return {
+            "shape": repr(value._local_tensor.shape),
+            "dtype": repr(value._local_tensor.dtype),
+            "value": _sanitize_repr_for_diff(repr(value)),
+        }
+
+    if isinstance(value, torch.Tensor):
+        # standard PyTorch Tensor
+        # return also the shape of such
+        return {"shape": repr(value.shape), "dtype": repr(value.dtype), "value": _sanitize_repr_for_diff(repr(value))}
+
+    # fallback for everything else (bool, int, float, None, or custom class)
+    return _sanitize_repr_for_diff(repr(value))
+
+
+def prune_outputs_if_children(node):
+    # if there are children, remove this node's "outputs"
+    # so we only see outputs at the leaf level
+    if node.get("children"):
+        node.pop("outputs", None)
+        for child in node["children"]:
+            prune_outputs_if_children(child)
+
+
+def model_addition_debugger(cls):
+    """
+    # Model addition debugger - a model adder tracer
+    This decorator is a power user tool intended for model adders.
+    It tracks all forward calls within a model forward and logs a slice of each input and output on a nested Json.
+
+    ## Usage
+
+    add decorator to your model class
+    ```python
+    from ...modeling_utils import model_addition_debugger
+
+    @model_addition_debugger
+    class MyModel(nn.Module) # Can inherit from PreTrainedModel too
+        # ... nothing else changes
+    ```
+    Then, in a separate script (example is for Llava)
+
+    ```python
+    import torch
+    from PIL import Image
+    import requests
+    from transformers import LlavaProcessor, LlavaForConditionalGeneration
+    torch.random.manual_seed(673)
+
+    # load pretrained model and processor
+    model_id = "llava-hf/llava-1.5-7b-hf"
+    processor = LlavaProcessor.from_pretrained(model_id)
+    model = LlavaForConditionalGeneration.from_pretrained(model_id, low_cpu_mem_usage=True)
+
+    # create random image input
+    random_image = Image.fromarray(torch.randint(0, 256, (224, 224, 3), dtype=torch.uint8).numpy())
+
+    # prompt
+    prompt = "<image>Describe this image."
+
+    # process inputs
+    inputs = processor(text=prompt, images=random_image, return_tensors="pt")
+
+    # call forward method (not .generate!)
+    with torch.no_grad():
+        output = model.forward(**inputs)
+    ```
+
+    """
+    orig_init = cls.__init__
+
+    @functools.wraps(cls.__init__)
+    def wrapped_init(self, *args, **kwargs):
+        orig_init(self, *args, **kwargs)
+
+        # The top-level call tree
+        self._call_tree = {"module_path": f"{cls.__name__}", "inputs": None, "outputs": None, "children": []}
+
+        self._debugger_model_call_stack = []
+
+        def wrap_forward(module, full_path):
+            orig_forward = module.forward
+
+            @functools.wraps(orig_forward)
+            def wrapped_forward(*inps, **kws):
+                if _is_rank_zero():
+                    dict_inputs = {"args": inps, "kwargs": kws}
+                    dict_inputs = {k: dict_inputs[k] for k in dict_inputs if len(dict_inputs[k]) > 0}
+                    node = {
+                        "module_path": full_path,
+                        "inputs": _serialize_io(dict_inputs),
+                        "outputs": None,
+                        "children": [],
+                    }
+                    self._debugger_model_call_stack.append(node)
+                out = orig_forward(*inps, **kws)
+                if _is_rank_zero():
+                    if sum(1 for _ in module.named_children()) > 0:
+                        node["outputs"] = None
+                    else:
+                        node["outputs"] = _serialize_io(out)
+
+                    finished = self._debugger_model_call_stack.pop()
+                    # prune empty vertices here as well (mostly empty children nodes)
+                    if len(finished["children"]) == 0:
+                        finished.pop("children")
+
+                    if self._debugger_model_call_stack:
+                        self._debugger_model_call_stack[-1]["children"].append(finished)
+                    else:
+                        # top-level subcall
+                        pass
+                return out
+
+            module.forward = wrapped_forward
+
+        # Wrap submodules
+        for name, submodule in self.named_modules():
+            if name == "":  # skip self
+                continue
+            full_path = f"{cls.__name__}.{name}"
+            wrap_forward(submodule, full_path)
+
+        real_top_forward = self.forward
+
+        @functools.wraps(real_top_forward)
+        def top_wrapped_forward(*inps, **kws):
+            self._debugger_module_dump_name = cls.__name__
+            if _is_rank_zero():
+                top_node = {
+                    "module_path": f"{cls.__name__} (top-level)",
+                    "inputs": _serialize_io({"args": inps, "kwargs": kws}),
+                    "outputs": None,
+                    "children": [],
+                }
+                self._debugger_model_call_stack.append(top_node)
+            out = real_top_forward(*inps, **kws)
+            if _is_rank_zero():
+                if self._debugger_model_call_stack:
+                    top_node["outputs"] = _serialize_io(out)
+
+                    finished = self._debugger_model_call_stack.pop()
+                    self._call_tree["inputs"] = finished["inputs"]
+                    self._call_tree["outputs"] = finished["outputs"]
+                    self._call_tree["children"] = finished["children"]
+                    # prune empty stuff for visibility
+                    [self._call_tree.pop(k, None) for k in self._call_tree if len(self._call_tree[k] == 0)]
+
+            return out
+
+        self.forward = top_wrapped_forward
+
+        def final_hook(mod, inputs, outputs):
+            if _is_rank_zero():
+                # If we never called the top-level forward, the top_wrapped_forward won't do the final pop.
+                if self._debugger_model_call_stack:
+                    finished = self._debugger_model_call_stack.pop()
+                    self._call_tree["inputs"] = finished["inputs"]
+                    self._call_tree["outputs"] = finished["outputs"]
+                    self._call_tree["children"] = finished["children"]
+
+            with open(self._debugger_module_dump_name + "_debug_tree.json", "w") as f:
+                prune_outputs_if_children(self._call_tree)
+                json.dump(self._call_tree, f, indent=2)
+
+        self.register_forward_hook(final_hook)
+        # register final hook for other possible forward names
+        submodule = getattr(self, "language_model", None)
+        if isinstance(submodule, nn.Module) or isinstance(submodule, PreTrainedModel):
+            submodule.register_forward_hook(final_hook)
+
+    cls.__init__ = wrapped_init
+    return cls
+
+
 class PipelineParallel(Enum):
     inputs: 0
     outputs: 1
