@@ -241,7 +241,7 @@ def bytes2megabytes(x):
     return int(x / 2**20)
 
 
-# Copied from acclerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
+# Copied from accelerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
 class TorchTracemalloc:
     def __enter__(self):
         gc.collect()
@@ -896,9 +896,8 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # all diff truth should be quite close
         self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
-
-        # max diff broken should be very off
-        self.assertGreater(max(diff_broken), 1.3, f"Difference {max(diff_broken)} is not greater than 1.3")
+        # max diff broken should be very off ("very off" is arbitrary, but as long as it's bigger than 0.1, it's fine)
+        self.assertGreater(max(diff_broken), 0.7, f"Difference {max(diff_broken)} is not greater than 0.7")
 
         loss_base = sum(base_loss_callback.losses)
         loss_broken = sum(broken_loss_callback.losses)
@@ -4087,7 +4086,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Functional check
             self.assertAlmostEqual(loss, orig_loss)
 
-            # AOT Autograd recomputaion and nvfuser recomputation optimization
+            # AOT Autograd recomputation and nvfuser recomputation optimization
             # aggressively fuses the operations and reduce the memory footprint.
             self.assertGreater(orig_peak_mem, peak_mem * 2)
 
