@@ -266,8 +266,17 @@ class PaliGemmaProcessor(ProcessorMixin):
                     and is_valid_image(images[0][0])
                 ):
                     raise ValueError("images must be an image, list of images or list of list of images")
-                input_strings = self.build_string_from_input(text, images)
 
+                input_strings = [
+                    build_string_from_input(
+                        prompt=prompt,
+                        bos_token=self.tokenizer.bos_token,
+                        image_seq_len=self.image_seq_length,
+                        image_token=IMAGE_TOKEN,
+                        num_images=len(image_list) if isinstance(image_list, list) else 1,
+                    )
+                    for prompt, image_list in zip(text, images)
+                ]
                 images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
@@ -304,18 +313,6 @@ class PaliGemmaProcessor(ProcessorMixin):
             labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
             return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
-
-    def build_string_from_input(self, text, images):
-        return [
-            build_string_from_input(
-                prompt=prompt,
-                bos_token=self.tokenizer.bos_token,
-                image_seq_len=self.image_seq_length,
-                image_token=IMAGE_TOKEN,
-                num_images=len(image_list) if isinstance(image_list, list) else 1,
-            )
-            for prompt, image_list in zip(text, images)
-        ]
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
