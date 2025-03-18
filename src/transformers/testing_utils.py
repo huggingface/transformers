@@ -3045,46 +3045,67 @@ def cleanup(device: str, gc_collect=False):
     backend_empty_cache(device)
 
 
-_KT = tuple[Union[str, None], Union[int, None]]
+# Type definition of key used in `Expectations` class.
+Properties = tuple[Union[str, None], Union[int, None]]
 
 
-class Expectations(UserDict[_KT, Any]):
+@cache
+def get_device_properties(self) -> Properties:
+    """
+    Get environment device properties.
+    """
+    if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+        import torch
+
+        major, _ = torch.cuda.get_device_capability()
+        if IS_ROCM_SYSTEM:
+            return ("rocm", major)
+        else:
+            return ("cuda", major)
+    else:
+        return (torch_device, None)
+
+
+class Expectations(UserDict[Properties, Any]):
     def get_expectation(self) -> Any:
         """
         Find best matching expectation based on environment device properties.
         """
-        return self.find_expectation(self._get_device_properties()).result
+        return self.find_expectation(get_device_properties())
 
     @staticmethod
-    def _is_default(key: _KT) -> bool:
-        (type, major) = key
-        return type is None and major is None
+    def is_default(key: Properties) -> bool:
+        return all([p is None for p in key])
 
     @staticmethod
-    def score(key: _KT, other: _KT) -> int:
+    def score(key: Properties, other: Properties) -> int:
         """
-        Returns score indicating how similar two instances of `Properties` are.
-        If the compared device types are "cuda" and "hip" they get half marks as they are similar, but not equal.
+        Returns score indicating how similar two instances of the `Properties` tuple are.
+        Points are calculated using bits, but documented as int.
+        Rules are as follows:
+            * Matching `type` gives 8 points.
+            * Semi-matching `type`, for example cuda and rocm, gives 4 points.
+            * Matching `major` (compute capability major version) gives 2 points.
+            * Default expectation (if present) gives 1 points.
         """
         (type, major) = key
         (other_type, other_major) = other
 
-        score = 0b00000
+        score = 0b0
         if type == other_type:
             score |= 0b1000
         elif type in ["cuda", "rocm"] and other_type in ["cuda", "rocm"]:
-            score |= 0b0100
+            score |= 0b100
 
         if major == other_major and other_major is not None:
-            print(type, major, other_type, other_major)
-            score |= 0b0010
+            score |= 0b10
 
-        if Expectations._is_default(other):
-            score |= 0b0001
+        if Expectations.is_default(other):
+            score |= 0b1
 
         return int(score)
 
-    def find_expectation(self, key: _KT = (None, None)) -> Any:
+    def find_expectation(self, key: Properties = (None, None)) -> Any:
         """
         Find best matching expectation based on provided device properties.
         """
@@ -3094,22 +3115,6 @@ class Expectations(UserDict[_KT, Any]):
             raise ValueError(f"No matching expectation found for {key}")
 
         return result
-
-    @cache
-    def _get_device_properties(self) -> _KT:
-        """
-        Get environment device properties.
-        """
-        if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
-            import torch
-
-            major, _ = torch.cuda.get_device_capability()
-            if IS_ROCM_SYSTEM:
-                return ("rocm", major)
-            else:
-                return ("cuda", major)
-        else:
-            return (torch_device, None)
 
     def __repr__(self):
         return f"{self.data}"
