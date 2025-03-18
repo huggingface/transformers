@@ -107,13 +107,9 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
             query_dim = head_dim * num_attention_heads
 
         if "q_proj" in new_key:
-            tensor = tensor.reshape(query_dim, hidden_size)
             tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
         elif "k_proj" in new_key:
-            tensor = tensor.reshape(key_value_dim, hidden_size)
             tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
-        elif "v_proj" in new_key:
-            tensor = tensor.reshape(key_value_dim, hidden_size)
 
         new_dict[new_key] = tensor
     return new_dict
