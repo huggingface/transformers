@@ -1,74 +1,77 @@
 import os
 import zipfile
+from typing import Union
 
 import requests
 from get_ci_error_statistics import download_artifact, get_artifacts_links
 
 
-def get_daily_ci_runs(token, num_runs=7):
-    """Get the workflow runs of the scheduled (daily) CI.
+# Default scheduled CI id
+# DEFAULT_WF_ID: str = "77490895"
+DEFAULT_WF_ID: str = "90575235"
+
+
+def get_workflow_runs(*, workflow_id: str, token: str, num_runs: int = 7) -> dict:
+    """Get the workflow runs of the specified workflow.
 
     This only selects the runs triggered by the `schedule` event on the `main` branch.
+
+    Args:
+        token (`str`): Github access token (must be able to read actions).
+        workflow_id (`str`): Id of a workflow (not workflow run id). Can be retrieved by going to
+            https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
+            and checking the `workflow_id` key.
+        num_runs (`int`): Amount of CI runs to retrieve.
+
+    Returns:
+        Dictionary containing workflow runs.
     """
     headers = None
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    # The id of a workflow (not of a workflow run).
-    # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
-    # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
-    # and check the `workflow_id` key.
-    workflow_id = "90575235"
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
-    url += f"?branch=main&event=schedule&exclude_pull_requests=true&per_page={num_runs}"
+    params = {"branch": "main", "event": "schedule", "exclude_pull_requests": "true", "per_page": num_runs}
 
-    result = requests.get(url, headers=headers).json()
+    result = requests.get(url, params=params, headers=headers).json()
 
     return result["workflow_runs"]
 
 
-def get_last_daily_ci_runs(token):
-    """Get the last completed workflow run id of the scheduled (daily) CI."""
-    workflow_runs = get_daily_ci_runs(token)
-    workflow_run_id = None
-    for workflow_run in workflow_runs:
-        if workflow_run["status"] == "completed":
-            workflow_run_id = workflow_run["id"]
-            break
-
-    return workflow_run_id
+def get_latest_workflow_run(*, workflow_id: str, token: str) -> Union[dict, None]:
+    """Get the last completed run of the specified workflow."""
+    for workflow_run in get_workflow_runs(workflow_id=workflow_id, token=token):
+        if workflow_run.get("status") == "completed":
+            return workflow_run
 
 
-def get_last_daily_ci_run_commit(token):
-    """Get the commit sha of the last completed scheduled daily CI workflow run."""
-    workflow_runs = get_daily_ci_runs(token)
-    head_sha = None
-    for workflow_run in workflow_runs:
-        if workflow_run["status"] == "completed":
-            head_sha = workflow_run["head_sha"]
-            break
-
-    return head_sha
+def get_latest_workflow_run_id(*, workflow_id: str, token: str) -> Union[int, None]:
+    """Get the id of the last completed run of the specified workflow."""
+    if workflow_run := get_latest_workflow_run(workflow_id=workflow_id, token=token):
+        if workflow_run_id := workflow_run.get("id"):
+            try:
+                return int(workflow_run_id)
+            except ValueError:
+                return None
 
 
-def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
-    """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
-    workflow_run_id = get_last_daily_ci_runs(token)
-    if workflow_run_id is not None:
-        artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
-        for artifact_name in artifact_names:
-            if artifact_name in artifacts_links:
-                artifact_url = artifacts_links[artifact_name]
-                download_artifact(
-                    artifact_name=artifact_name, artifact_url=artifact_url, output_dir=output_dir, token=token
-                )
+def download_workflow_artifacts(*, workflow_run_id: int, artifact_names: list[str], output_dir: str, token: str):
+    """Download the artifacts of the specified workflow run id."""
+    artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
+    for artifact_name in artifact_names:
+        if artifact_name in artifacts_links:
+            artifact_url = artifacts_links[artifact_name]
+            download_artifact(
+                artifact_name=artifact_name, artifact_url=artifact_url, output_dir=output_dir, token=token
+            )
 
 
-def get_last_daily_ci_reports(artifact_names, output_dir, token):
-    """Get the artifacts' content of the last completed workflow run id of the scheduled (daily) CI."""
-    get_last_daily_ci_artifacts(artifact_names, output_dir, token)
+def get_workflow_run_reports(*, workflow_run_id: int, artifact_names: list[str], output_dir: str, token: str) -> dict[str, dict[str, str]]:
+    """Get the artifacts' content of the last completed run of the specified workflow."""
+    download_workflow_artifacts(
+        workflow_run_id=workflow_run_id, artifact_names=artifact_names, output_dir=output_dir, token=token
+    )
 
     results = {}
     for artifact_name in artifact_names:
@@ -83,3 +86,16 @@ def get_last_daily_ci_reports(artifact_names, output_dir, token):
                             results[artifact_name][filename] = f.read().decode("UTF-8")
 
     return results
+
+
+def get_latest_workflow_run_reports(
+    *, workflow_id: str = DEFAULT_WF_ID, artifact_names: list[str], output_dir: str, token: str
+) -> dict:
+    """Get the artifacts' content of the last completed run of the specified workflow."""
+
+    if workflow_run_id := get_latest_workflow_run_id(workflow_id=workflow_id, token=token):
+        return get_workflow_run_reports(
+            workflow_run_id=workflow_run_id, artifact_names=artifact_names, output_dir=output_dir, token=token
+        )
+
+    return {}
