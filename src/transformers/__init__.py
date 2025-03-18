@@ -613,6 +613,7 @@ _import_structure = {
     ],
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
+    "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
         "MllamaConfig",
@@ -2938,6 +2939,12 @@ else:
             "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mistral3"].extend(
+        [
+            "Mistral3ForConditionalGeneration",
+            "Mistral3PreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -5788,6 +5795,7 @@ if TYPE_CHECKING:
         MimiConfig,
     )
     from .models.mistral import MistralConfig
+    from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
         MllamaConfig,
@@ -7843,6 +7851,10 @@ if TYPE_CHECKING:
             MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
+        )
+        from .models.mistral3 import (
+            Mistral3ForConditionalGeneration,
+            Mistral3PreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
