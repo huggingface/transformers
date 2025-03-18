@@ -31,7 +31,7 @@ It is ideal for:
 
 This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
 
-The original code can be found [here](https://github.com/mistralai/mistral-common).
+The original code can be found [here](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/pixtral.py) and [here](https://github.com/mistralai/mistral-common).
 
 ## Usage example
 
@@ -210,7 +210,7 @@ This example also how to use `BitsAndBytes` to load the model in 4bit quantizati
 
 >>> decoded_outputs = processor.batch_decode(output, skip_special_tokens=True)
 >>> decoded_outputs
-["Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n", "These images depict two different landmarks. Can you identify them?Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City."]
+["Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n", "These images depict two different landmarks. Can you identify them? Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City."]
 ```
 
 
