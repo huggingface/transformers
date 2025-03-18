@@ -21,13 +21,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ...modeling_utils import PreTrainedModel
-
-from ..moshi.modeling_moshi import MoshiForCausalLM, MoshiForConditionalGeneration
 
 from ..llama.modeling_llama import LlamaModel, LlamaForCausalLM, LlamaForCausalLM, KwargsForCausalLM
 from ..llama.configuration_llama import LlamaConfig
-from ..auto.modeling_auto import AutoModel
 
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import rope_config_validation
@@ -189,17 +185,16 @@ class ConversationalSpeechModelConfig(LlamaConfig):
 @dataclass
 class ConversationalSpeechModelOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    depth_loss: Optional[torch.FloatTensor] = None
-    audio_logits: torch.FloatTensor = None
-    depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
+    backbone_loss: Optional[torch.FloatTensor] = None
+    depth_decoder_loss: Optional[torch.FloatTensor] = None
+    backbone_logits: torch.FloatTensor = None
+    depth_decoder_logits: torch.FloatTensor = None
+    backbone_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    depth_decoder_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    backbone_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    backbone_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    depth_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 class ConversationalSpeechModelEmbeddings(nn.Embedding):
     def __init__(self, *args, audio_vocab_size=None, audio_num_codebooks=None, **kwargs):
@@ -526,6 +521,8 @@ class ConversationalSpeechModelBackboneModel(LlamaModel):
 class ConversationalSpeechModelForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
+        del self.model
+
         self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM(config.depth_decoder_config)
         self.backbone_model = ConversationalSpeechModelBackboneModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
@@ -554,7 +551,6 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM):
 
         # first codeboook label is for the backbone model
         backbone_labels = labels[:, :, 0] if labels is not None else None  # shape (batch_size, seq_length)
-        depth_decoder_labels = labels[:, :, 1:] if labels is not None else None  # shape (batch_size, seq_length, num_codebooks - 1)
 
         backbone_outputs = self.backbone_model(
             input_ids=input_ids,
@@ -575,25 +571,47 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM):
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         backbone_logits = self.lm_head(backbone_hidden_states[:, slice_indices, :])
 
-        backbone_loss = None
+        loss = None
         if labels is not None:
-            backbone_loss = self.loss_function(logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs)
-        
-        if depth_decoder_labels is not None:
-            projected_hidden_states = self.depth_decoder.embed_tokens.projector(backbone_hidden_states)
-            codebook_embeds = self.depth_decoder.embed_tokens(depth_decoder_labels)
-            depth_decoder_inputs_embeds = torch.cat([projected_hidden_states, codebook_embeds], dim=-2)
+            backbone_loss = self.loss_function(
+                logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
+            )
+
+            decoder_input_ids = input_ids.view(-1, self.config.audio_num_codebooks)
+            backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.audio_vocab_size)
+            depth_decoder_labels = labels.view(-1, self.config.audio_num_codebooks)
 
             depth_decoder_outputs = self.depth_decoder(
-                inputs_embeds=depth_decoder_inputs_embeds,
+                input_ids=decoder_input_ids,
+                backbone_last_hidden_states=backbone_last_hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,  # test ???
+                inputs_embeds=inputs_embeds,  # test ???
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                cache_position=cache_position,
                 labels=depth_decoder_labels,
             )
+            depth_decoder_loss = depth_decoder_outputs.loss
 
-        return 
+            loss = backbone_loss + depth_decoder_loss
+        
+        return ConversationalSpeechModelOutputWithPast(
+            loss=loss,
+            backbone_loss=backbone_loss,
+            depth_decoder_loss=depth_decoder_loss,
+            backbone_logits=backbone_logits,
+            depth_decoder_logits=depth_decoder_outputs.logits,
+            backbone_past_key_values=backbone_outputs.past_key_values,
+            depth_decoder_past_key_values=depth_decoder_outputs.past_key_values,
+            backbone_hidden_states=backbone_outputs.hidden_states,
+            depth_decoder_hidden_states=depth_decoder_outputs.hidden_states,
+            backbone_attentions=backbone_outputs.attentions,
+            depth_decoder_attentions=depth_decoder_outputs.attentions,
+        )
         
 
 __all__ = [
@@ -603,5 +621,5 @@ __all__ = [
     "ConversationalSpeechModelDepthDecoderForCausalLM",
     "ConversationalSpeechModelBackboneModel",
     "ConversationalSpeechModelBackboneModelForCausalLM",
-    "ConversationalSpeechModelForConditionalGeneration",
+    "ConversationalSpeechModelForCausalLM",
 ]
