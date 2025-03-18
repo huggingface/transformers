@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
+from ... import Blip2VisionModel
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
