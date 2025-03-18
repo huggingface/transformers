@@ -26,7 +26,11 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
     """
-    Configuration class for HGNet-V2 backbone.
+    This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a DeepSeek
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of D-FINE-X-COCO "[vladislavbro/dfine_x_coco"](https://huggingface.co/vladislavbro/dfine_x_coco").
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
