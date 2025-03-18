@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections.abc
 import copy
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
@@ -56,6 +55,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "JanusConfig"
+
 
 JANUS_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -211,54 +211,26 @@ class JanusCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class JanusVisionPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
-            )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
-
-
 class JanusVisionEmbeddings(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
-        self.dropout = nn.Dropout(config.hidden_dropout_rate)
-        self.patch_embeddings = JanusVisionPatchEmbeddings(config)
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
 
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -300,38 +272,51 @@ class JanusVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         if interpolate_pos_encoding:
             pos_embeds = self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            pos_embeds = self.position_embeddings(self.position_ids)
+            pos_embeds = self.position_embedding(self.position_ids)
 
         embeddings = embeddings + pos_embeds
-        embeddings = self.dropout(embeddings)
 
         return embeddings
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     module: nn.Module,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-
-    # Only apply attention dropout during training.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -357,6 +342,9 @@ class JanusVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         proj_dropout = config.projection_dropout
         qk_norm = config.use_qk_norm
+
+        # Janus has no MHA, hence for `eager_attention_forward` call setting `num_key_value_groups` to 1.
+        self.num_key_value_groups = 1
 
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
@@ -442,13 +430,14 @@ class JanusVisionMLP(nn.Module):
 class JanusVisionEncoderLayer(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
-        self.config = config
         self.embed_dim = config.hidden_size
-        self.attn = JanusVisionAttention(config)
+        self.self_attn = JanusVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = JanusVisionMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.config = config
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -465,18 +454,27 @@ class JanusVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        norm_hidden_states = self.layer_norm1(hidden_states)
+        residual = hidden_states
 
-        attn_output, attn_weights = self.attn(
-            norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + attn_output
-        norm_hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = residual + hidden_states
 
-        mlp_output = self.mlp(norm_hidden_states)
-        hidden_states = hidden_states + mlp_output
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
 
-        return (hidden_states, attn_weights) if output_attentions else (hidden_states,)
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class JanusVisionEncoder(nn.Module):
@@ -570,38 +568,45 @@ class JanusVisionEncoder(nn.Module):
 JANUS_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`JanusProcessor`]. See [`JanusProcessor.__call__`] for
+            details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
 """
 
 
-class JanusVisionTransformer(nn.Module):
+class JanusVisionModel(JanusPreTrainedModel):
+    main_input_name = "pixel_values"
+    config_class = JanusVisionConfig
+
     def __init__(self, config: JanusVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
+        embed_dim = config.hidden_size
+
         self.embeddings = JanusVisionEmbeddings(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = JanusVisionEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(JANUS_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=JanusVisionConfig)
     def forward(
         self,
-        pixel_values,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -612,6 +617,9 @@ class JanusVisionTransformer(nn.Module):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
@@ -625,78 +633,21 @@ class JanusVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = self.head(last_hidden_state) if self.use_head else None
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
         if not return_dict:
-            return (last_hidden_state, pooler_output) + encoder_outputs[1:]
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
-            pooler_output=pooler_output,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
-
-@add_start_docstrings(
-    """The vision model from Janus without any head or projection on top.""",
-    JANUS_START_DOCSTRING,
-)
-class JanusVisionModel(JanusPreTrainedModel):
-    config_class = JanusVisionConfig
-    main_input_name = "pixel_values"
-
-    def __init__(self, config: JanusVisionConfig):
-        super().__init__(config)
-
-        self.vision_model = JanusVisionTransformer(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @add_start_docstrings_to_model_forward(JANUS_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=JanusVisionConfig)
-    def forward(
-        self,
-        pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, JanusVisionModel
-
-        >>> model = JanusVisionModel.from_pretrained("google/janus-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/janus-base-patch16-224")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled features
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-        )
+    def get_input_embeddings(self):
+        return self.embeddings
 
 
 class JanusVisionAlignerMLP(nn.Module):
@@ -1302,13 +1253,13 @@ class JanusModel(JanusPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_embeddings(self, pixel_values):
+    def get_image_features(self, pixel_values):
         image_embeds = self.vision_model(pixel_values)
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
-        return self.language_model._prepare_4d_causal_attention_mask_with_cache_position(*args, **kwargs)
+    # def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
+    #     return self.language_model._prepare_4d_causal_attention_mask_with_cache_position(*args, **kwargs)
 
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
@@ -1354,7 +1305,7 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_embeddings(pixel_values)
+            image_embeds = self.get_image_features(pixel_values)
             image_attention_mask = input_ids == self.config.image_token_index
 
             embed_dim = inputs_embeds.shape[-1]
@@ -1560,8 +1511,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if generation_mode == "text":
             # Set to prevent running UnbatchedCFG processor.
             generation_config.guidance_scale = None
-            logger.info("Generation mode argument is not passed. Setting to default `Text` generation.")
-            return super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
+            return super().generate(
+                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config, **kwargs
+            )
 
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
@@ -1581,12 +1533,19 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # Set `use_cache=True` as we will be using input embeds for generation.
         model_kwargs["use_cache"] = True
+
+        if generation_config.guidance_scale is None:
+            logger.warning("`guidance_scale` is required for CFG but not provided. Setting to default value of 5.")
+            generation_config.guidance_scale = 5
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
         # 3. Prepare model inputs
         input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
+
+        batch_size, seq_len = input_ids.shape
+        dtype, device = input_ids.dtype, input_ids.device
 
         if len(input_ids.shape) != 2:
             raise ValueError(
@@ -1610,7 +1569,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             encoder_input_ids=input_ids,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
-            device=input_ids.device,
+            device=device,
         )
 
         # 6. Expand inputs for multiple image generations per prompt.
@@ -1622,14 +1581,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
 
         # 7. Prepare input and model caches
-        batch_size, seq_len = input_ids.shape
-        dtype, device = input_ids.dtype, input_ids.device
-
         num_image_tokens = self.model.vision_model.config.num_image_tokens
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
         attention_mask = model_kwargs.pop("attention_mask", None)
         attention_mask = attention_mask.repeat(2, 1)
+        model_kwargs["attention_mask"] = attention_mask
 
         input_tokens[batch_size:, :].masked_fill_(
             (input_tokens[batch_size:, :] != generation_config.bos_token_id)
@@ -1649,7 +1606,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
-                device=input_ids.device,
+                device=device,
                 model_kwargs=model_kwargs,
             )
 
@@ -1683,15 +1640,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
 
             # Update model_kwargs like cache_position for next generation.
-            model_kwargs["attention_mask"] = attention_mask
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
-            attention_mask = model_kwargs.pop("attention_mask", None)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
-            # Generate scores using the generation head. (not using above defined lm head)
+            # Generate scores using the generation head (Not using above defined LM Head)
             scores = self.model.gen_head(hidden_state)
-            logits = logits_processor(input_ids, scores)
-            next_token_scores = logits / generation_config.temperature
+            next_token_scores = logits_processor(input_ids, scores)
 
             # Sample next token.
             if generation_config.do_sample:

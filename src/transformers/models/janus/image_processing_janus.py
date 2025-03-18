@@ -192,7 +192,6 @@ class JanusImageProcessor(BaseImageProcessor):
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
-            return_numpy=True,
             **kwargs,
         )
         # Expand and pad the images to obtain a square image of dimensions `size x size`
@@ -424,6 +423,7 @@ class JanusImageProcessor(BaseImageProcessor):
         input_data_format: str = None,
         return_tensors: str = None,
     ):
+        """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
