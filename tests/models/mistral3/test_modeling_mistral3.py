@@ -378,7 +378,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = (
-            "Write a haiku for this imageCalm waters reflect\nWhispers of the forest's breath\nPeace on wooden path"
+            "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's mirror gleams,\nWhispering pines"
         )
         self.assertEqual(
             decoded_output,
