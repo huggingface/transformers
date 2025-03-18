@@ -233,7 +233,76 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
         print(base_display + row_display)
 
     print(" " * len(base_display) + "-" * len(row_display))
+def generate_attention_matrix_from_mask(words, mask, img_token="<img>"):
+    mask = mask.int()
+    if mask.ndim == 3:
+        mask = mask[0, :, :]
+    if mask.ndim == 4:
+        mask = mask[0, 0, :, :]
 
+    n = len(words)
+    max_word_length = max(len(repr(word)) for word in words)
+    first_img_idx = 0
+
+    for i, k in enumerate(words):
+        if img_token in k and not first_img_idx:
+            first_img_idx = i
+        if first_img_idx > 0 and (img_token not in k or i == n - 1):
+            if i == n - 1:
+                i += 1
+            mask[first_img_idx:i, first_img_idx:i] = 2
+            first_img_idx = 0
+    
+    # Generate sliding window mask (size = 4), but exclude img_token
+    sliding_window_mask = [
+        [1 if (0 <= i - j < 4) or img_token in words[i] and img_token in words[j] else 0 for j in range(n)]
+        for i in range(n)
+    ]
+    
+    row_dummy = " ".join(
+            f"{YELLOW}{BLACK_SQUARE}{RESET}" if img_token in words[j] and mask[i, j] and img_token in words[i] else
+            f"{GREEN}{BLACK_SQUARE}{RESET}" if i == j else
+            BLACK_SQUARE if mask[0, j] else WHITE_SQUARE
+            for j in range(n)
+    )
+    # Print headers
+    legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: img tokens"
+    print(" " + legend)
+    print(" " * (max_word_length + 5) + "Attention Matrix".ljust(len(row_dummy)) + " " * 4 + "Sliding Window Mask")
+
+    vertical_header = []
+    for idx, word in enumerate(words):
+        if img_token not in word:
+            vertical_header += [list(str(idx).rjust(len(str(n))))]
+        else:
+            vertical_header += [[f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]]
+
+    vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
+
+    for row in vertical_header:
+        print((max_word_length + 5) * " " + " ".join(row).ljust(len(row_dummy)) + " " * 9 + " ".join(row))
+
+    
+    for i, word in enumerate(words):
+        word_repr = repr(word).ljust(max_word_length)
+        colored_word = f"{YELLOW}{word_repr}{RESET}" if img_token in word else word_repr
+        row_display = " ".join(
+            f"{YELLOW}{BLACK_SQUARE}{RESET}" if img_token in words[j] and mask[i, j] and img_token in words[i] else
+            f"{GREEN}{BLACK_SQUARE}{RESET}" if i == j else
+            BLACK_SQUARE if mask[i, j] else WHITE_SQUARE
+            for j in range(n)
+        )
+        
+        sliding_window_row = " ".join(
+            f"{YELLOW}{BLACK_SQUARE}{RESET}" if img_token in words[j] and sliding_window_mask[i][j] and img_token in words[i] else
+            f"{GREEN}{BLACK_SQUARE}{RESET}" if i == j else
+            BLACK_SQUARE if sliding_window_mask[i][j] else WHITE_SQUARE
+            for j in range(n)
+        )
+        
+        print(f"{colored_word}: {str(i).rjust(2)} {row_display}    |    {sliding_window_row}")
+    
+    print(" " * (max_word_length + 5) + "-" * (len(row_display) + 5) + "|" + "-" * len(sliding_window_row))
 
 class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
@@ -276,7 +345,6 @@ class AttentionMaskVisualizer:
             self.image_token = image_token
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
-            suffix = "This is a suffix"
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
             suffix_tokens = processor.tokenizer.tokenize(suffix)
             attention_mask = inputs["attention_mask"]
