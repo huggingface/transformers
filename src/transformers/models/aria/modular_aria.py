@@ -33,6 +33,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import (
@@ -48,7 +49,6 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torch_available
-from ...modeling_outputs import CausalLMOutputWithPast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
