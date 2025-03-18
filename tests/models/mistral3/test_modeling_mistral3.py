@@ -280,7 +280,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
-    
+
     @unittest.skip("Pixtral does not support attention interfaces.")
     def test_eager_matches_fa2_generate(self):
         pass
@@ -304,6 +304,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @unittest.skip("Pixtral does not support attention interfaces.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
 
 @slow
 @require_torch_gpu
@@ -401,9 +402,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = (
-            "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's mirror gleams,\nWhispering pines"
-        )
+        expected_output = "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's mirror gleams,\nWhispering pines"
         self.assertEqual(
             decoded_output,
             expected_output,
