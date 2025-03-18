@@ -1925,11 +1925,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
                     )
 
-    def visualize_attention_mask(self, input_sequence: str):
-        if not hasattr(self, "prepare_inputs_for_generation"):
-            raise ValueError("Model does not support visiaulization")
-        return visualize_attention_mask(self, input_sequence)
-
     def dequantize(self):
         """
         Potentially dequantize the model in case it has been quantized by a quantization method that support
