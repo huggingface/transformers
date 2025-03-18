@@ -277,21 +277,25 @@ class AttentionMaskVisualizer:
     
     def visualize_attention_mask(self, input_sentence: str):
         model = self.model
-        
+        kwargs = {}
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
+            kwargs = {"images": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"}
             processor = AutoProcessor.from_pretrained(self.repo_id)
+            image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
+            if image_token:
+                input_sentence = input_sentence.replace("<img>", image_token)
         elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
             processor = AutoTokenizer.from_pretrained(self.repo_id)
         else:
             raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
         
-        attention_mask = processor(input_sentence, return_tensors="pt")["attention_mask"]
+        attention_mask = processor(input_sentence, return_tensors="pt", **kwargs)["attention_mask"]
         model.config._attn_implementation = "eager"
         
         attention_mask = ~model._update_causal_mask(
             attention_mask=attention_mask,
             input_tensor=attention_mask.to(self.model.dtype),
-            cache_position=torch.arange(attention_mask.shape[1]),
+            cache_position=torch.arange(attention_mask.shape[1]),  
             past_key_values=None,
             output_attentions=False
         ).bool()
