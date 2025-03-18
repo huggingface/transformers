@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import numpy as np
+from PIL import Image
+import requests
 from .import_utils import is_torch_available
 from ..models.auto.tokenization_auto import AutoTokenizer, TOKENIZER_MAPPING_NAMES
 from ..models.auto.processing_auto import AutoProcessor, PROCESSOR_MAPPING_NAMES
@@ -284,6 +286,7 @@ class AttentionMaskVisualizer:
 
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
+            img = Image.open(requests.get(img, stream=True).raw)
             kwargs["text"] = input_sentence
             processor = AutoProcessor.from_pretrained(self.repo_id)
             image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
@@ -308,7 +311,6 @@ class AttentionMaskVisualizer:
             input_tensor=attention_mask.to(self.model.dtype),
             cache_position=torch.arange(attention_mask.shape[1]),  
             past_key_values=None,
-            output_attentions=False
         ).bool()
         
         
