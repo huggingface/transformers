@@ -3641,16 +3641,13 @@ class GenerationMixin:
 
         batch_size_unflattened, cur_len = input_ids.shape
         batch_size = batch_size_unflattened // num_beams
-        # TODO (joao): change to `self.config.get_text_config().vocab_size` when imagegpt gets deprecated; standardize
-        # special cases
+        # TODO (joao): standardize special cases
         if self.__class__.__name__ == "MoshiDepthDecoder":
             vocab_size = self.config.audio_vocab_size
+        elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
+            vocab_size = self.get_output_embeddings().out_features
         else:
-            vocab_size = (
-                self.get_output_embeddings().out_features
-                if self.get_output_embeddings() is not None
-                else self.config.get_text_config().vocab_size
-            )
+            vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
