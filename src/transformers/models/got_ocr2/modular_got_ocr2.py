@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -224,9 +225,6 @@ class GotOcr2Config(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs)
-
-
-__all__ = ["GotOcr2VisionConfig", "GotOcr2Config"]
 
 
 class GotOcr2MLPBlock(SamMLPBlock):
@@ -474,7 +472,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        outputs = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -482,12 +480,12 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
         )
 
-        logits = outputs[0]
+        logits = outputs.logits
 
         loss = None
         if labels is not None:
@@ -507,11 +505,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
             )
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return GotOcr2CausalLMOutputWithPast(
+        output = GotOcr2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -519,6 +513,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
+        return output if return_dict else output.to_tuple()
 
 
 __all__ = [
