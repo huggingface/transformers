@@ -1686,7 +1686,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_isin_mps_friendly(self):
         """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
         random_ids = torch.randint(0, 100, (100,))
-        # We can match against an interger
+        # We can match against an integer
         random_test_integer = torch.randint(0, 100, (1,)).item()
         self.assertTrue(
             torch.equal(
@@ -1911,7 +1911,7 @@ class ModelUtilsTest(TestCasePlus):
     @require_torch_gpu
     def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
         """
-        This test is used to avoid regresion on https://github.com/huggingface/transformers/pull/36380.
+        This test is used to avoid regression on https://github.com/huggingface/transformers/pull/36380.
         10s should be more than enough for both models, and allows for some margin as loading time are quite
         unstable. Before #36380, it used to take more than 40s, so 10s is still reasonable.
         Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up.
