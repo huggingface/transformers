@@ -49,7 +49,10 @@ if is_torch_available():
         StaticCache,
         convert_and_export_with_cache,
     )
-    from transformers.utils import is_torch_greater_or_equal
+    from transformers.pytorch_utils import (
+        is_torch_greater_or_equal_than_2_3,
+        is_torch_greater_or_equal_than_2_7,
+    )
 
 
 @require_torch
@@ -180,7 +183,7 @@ class CacheTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.3"):
+        if not is_torch_greater_or_equal_than_2_3:
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         set_seed(0)
@@ -551,7 +554,7 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
 
-        if not is_torch_greater_or_equal("2.7") and device.type == "xpu":
+        if not is_torch_greater_or_equal_than_2_7 and device.type == "xpu":
             self.skipTest(reason="This test requires torch >= 2.7 to run on xpu.")
 
         input_text = "Fun fact:"
@@ -579,7 +582,7 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
 
-        if not is_torch_greater_or_equal("2.7") and device.type == "xpu":
+        if not is_torch_greater_or_equal_than_2_7 and device.type == "xpu":
             self.skipTest(reason="This test requires torch >= 2.7 to run on xpu.")
 
         input_text = "Fun fact:"
