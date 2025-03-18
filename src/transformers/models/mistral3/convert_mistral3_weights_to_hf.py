@@ -22,9 +22,9 @@ from safetensors.torch import load_file
 from transformers import (
     Mistral3Config,
     Mistral3ForConditionalGeneration,
-    PixtralProcessor,
     MistralConfig,
     PixtralImageProcessorFast,
+    PixtralProcessor,
     PixtralVisionConfig,
 )
 from transformers.integrations.mistral import convert_tekken_tokenizer

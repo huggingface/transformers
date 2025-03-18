@@ -223,7 +223,3 @@ This example also how to use `BitsAndBytes` to load the model in 4bit quantizati
 
 [[autodoc]] Mistral3ForConditionalGeneration
     - forward
-
-## Mistral3Processor
-
-[[autodoc]] Mistral3Processor

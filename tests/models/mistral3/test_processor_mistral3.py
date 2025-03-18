@@ -37,6 +37,7 @@ if is_vision_available():
 @require_vision
 class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
+
     processor_class = PixtralProcessor
 
     @classmethod
