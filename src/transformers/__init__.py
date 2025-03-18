@@ -565,7 +565,6 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
-    "models.mistral3": ["Mistral3Config"],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -614,6 +613,7 @@ _import_structure = {
     ],
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
+    "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
         "MllamaConfig",
@@ -2785,12 +2785,6 @@ else:
             "LlavaPreTrainedModel",
         ]
     )
-    _import_structure["models.mistral3"].extend(
-        [
-            "Mistral3ForConditionalGeneration",
-            "Mistral3PreTrainedModel",
-        ]
-    )
     _import_structure["models.llava_next"].extend(
         [
             "LlavaNextForConditionalGeneration",
@@ -2945,6 +2939,12 @@ else:
             "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mistral3"].extend(
+        [
+            "Mistral3ForConditionalGeneration",
+            "Mistral3PreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
