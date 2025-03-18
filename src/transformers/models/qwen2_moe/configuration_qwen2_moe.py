@@ -133,7 +133,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             Indicate which layers use Qwen2MoeMLP rather than Qwen2MoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
