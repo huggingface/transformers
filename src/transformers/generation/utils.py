@@ -1272,21 +1272,37 @@ class GenerationMixin:
         default_list: Union[LogitsProcessorList, StoppingCriteriaList],
         custom_list: Union[LogitsProcessorList, StoppingCriteriaList],
     ) -> Union[LogitsProcessorList, StoppingCriteriaList]:
+        """
+        Merge user-defined processors/criteria with the ones instantiated inside `generate`. In case the same
+        processor/criteria is present on both lists, use the user-defined one.
+
+        (Note: up to v4.49.0, this funtion threw an exception is the same logit processor was found twice.)
+        """
         if len(custom_list) == 0:
             return default_list
+
+        final_list = type(default_list)()
         for default in default_list:
+            using_custom = False
             for custom in custom_list:
                 if type(custom) is type(default):
                     object_type = "stopping criteria" if isinstance(custom, StoppingCriteria) else "logits processor"
-                    raise ValueError(
-                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to"
-                        f" `.generate()`, but it has already been created with the values {default}. {default} has been"
-                        " created by passing the corresponding arguments to generate or by the model's config default"
-                        f" values. If you just want to change the default values of {object_type} consider passing"
-                        f" them as arguments to `.generate()` instead of using a custom {object_type}."
+                    logger.warning_once(
+                        f"A custom {object_type} of type {type(custom)} has been passed to `.generate()`, but it "
+                        f"was also created in `.generate()`, given its parameterization. The custom {type(custom)} "
+                        f"will take precedence. Please check the docstring of {type(custom)} to see related "
+                        "`.generate()` flags."
                     )
-        default_list.extend(custom_list)
-        return default_list
+                    final_list.append(custom)
+                    using_custom = True
+                    break
+            if not using_custom:
+                final_list.append(default)
+
+        for custom in custom_list:
+            if custom not in final_list:
+                final_list.append(custom)
+        return final_list
 
     def compute_transition_scores(
         self,
@@ -1669,20 +1685,30 @@ class GenerationMixin:
         # This can still be exported if strict=False (torch.export.export(..., strict=False)).
         if not is_torchdynamo_compiling() or is_torchdynamo_exporting():
             generation_config = copy.deepcopy(generation_config)
-            model_kwargs = generation_config.update(**kwargs)
-            # If `generation_config` is provided, let's fallback ALL special tokens to the default values for the model
+
+            # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
+            # TODO (joao): per-model generation config classes.
             if not using_model_generation_config:
-                if generation_config.bos_token_id is None:
-                    generation_config.bos_token_id = self.generation_config.bos_token_id
-                if generation_config.eos_token_id is None:
-                    generation_config.eos_token_id = self.generation_config.eos_token_id
-                if generation_config.pad_token_id is None:
-                    generation_config.pad_token_id = self.generation_config.pad_token_id
-                if generation_config.decoder_start_token_id is None:
-                    generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
+                modified_values = {}
+                default_generation_config = GenerationConfig()
+                for key, default_value in default_generation_config.__dict__.items():
+                    if key.startswith("_"):  # metadata
+                        continue
+                    custom_gen_config_value = getattr(generation_config, key)
+                    model_gen_config_value = getattr(self.generation_config, key)
+                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                        modified_values[key] = model_gen_config_value
+                        setattr(generation_config, key, model_gen_config_value)
+                if len(modified_values) > 0:
+                    logger.warning_once(
+                        f"`generation_config` default values have been modified to match model-specific defaults: "
+                        f"{modified_values}. If this is not desired, please set these values explicitly."
+                    )
+
+            # Finally, apply any passed kwargs
+            model_kwargs = generation_config.update(**kwargs)
         else:
             model_kwargs = kwargs
-
         return generation_config, model_kwargs
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
@@ -1933,6 +1959,8 @@ class GenerationMixin:
                 model_kwargs[cache_name] = cache_class(cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
+            elif generation_config.cache_implementation == "dynamic":
+                model_kwargs[cache_name] = DynamicCache()
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
@@ -3348,7 +3376,9 @@ class GenerationMixin:
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), Cache):
             is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-            is_compileable = is_compileable and not self.generation_config.disable_compile
+            if getattr(self, "hf_quantizer", None) is not None:
+                is_compileable &= self.hf_quantizer.is_compileable
+            is_compileable = is_compileable and not generation_config.disable_compile
             if is_compileable and (
                 self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
             ):
