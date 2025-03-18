@@ -105,12 +105,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
         """
 
-        # Handle BC when user passes positional args and `audio` gets assigned the second argument
+        # Handle BC when user passes deprecared keyword argument
         if audios is not None and audio is None:
-            audios = audio
+            audio = audios
             warnings.wanr(
                 "You may have used the keyword argument for the `audio` inputs. It is strongly recommended to pass inputs with keyword arguments "
-                "with keys `audios` and `text`. From transformers v4.55 `audio` will be the onle acceptable keyword argument.",
+                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the onle acceptable keyword argument.",
                 FutureWarning,
             )
 
@@ -121,14 +121,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        # ensure we have as much audios as audio tokens
-        # num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
-        # num_audios = 1 if type(audio) == np.ndarray else len(audio)
-        # if num_audio_tokens != num_audios:
-        #     raise ValueError(
-        #         f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
-        #     )
-
         output_kwargs = self._merge_kwargs(
             Qwen2AudioProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -136,6 +128,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
         )
 
         if audio is not None:
+            # ensure we have as much audios as audio tokens
+            num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
+            num_audios = 1 if type(audio) == np.ndarray else len(audio)
+            if num_audio_tokens != num_audios:
+                raise ValueError(
+                    f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
+                )
+
             # Some kwargs should not be changed so we can expand text with audio tokens below
             output_kwargs["audio_kwargs"]["return_attention_mask"] = True
             output_kwargs["audio_kwargs"]["padding"] = "max_length"

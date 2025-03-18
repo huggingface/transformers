@@ -14,16 +14,17 @@
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
-from transformers.testing_utils import require_librosa, require_torch, require_torchaudio
+from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available:
-    import torch
+    pass
 
 
 @require_torch
@@ -47,6 +48,25 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    def prepare_processor_dict(self):
+        return {
+            "chat_template": "{% set audio_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' %}{% set audio_count.value = audio_count.value + 1 %}Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}",
+        }
+
+    # Override as Qwen2AudioProcessor needs audio tokens in prompts
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is None:
+            return "lower newer <|AUDIO|>"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer <|AUDIO|>"]
+        return ["lower newer <|AUDIO|>", "<|AUDIO|> upper older longer string"] + ["<|AUDIO|> lower newer"] * (
+            batch_size - 2
+        )
 
     def test_can_load_various_tokenizers(self):
         processor = Qwen2AudioProcessor.from_pretrained(self.checkpoint)
@@ -135,103 +155,6 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
-
-    @require_librosa
-    def test_chat_template_return_dict(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-
-        expected_tokens = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647] + [151646] * 101 + [151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198, 2132, 374, 279, 5112, 315, 8991, 557, 30336, 13, 151645, 198, 151644, 872, 198, 14755, 220, 17, 25, 220, 151647] + [151646] * 73 + [151648, 198, 4340, 911, 419, 825, 30, 151645, 198, 151644, 77091, 198]  # fmt: skip
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "You are a helpful assistant."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
-                    },
-                    {"type": "text", "text": "What's that sound?"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "It is the sound of glass shattering."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
-                    },
-                    {"type": "text", "text": "How about this one?"},
-                ],
-            },
-        ]
-
-        tokenized_text = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True)
-        self.assertEqual(expected_tokens, tokenized_text[0])
-
-        inputs_dict = processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            return_dict=True,
-            add_generation_prompt=True,
-            sampling_rate=8_000,
-        )
-        self.assertListEqual(
-            list(inputs_dict.keys()), ["input_ids", "attention_mask", "input_features", "feature_attention_mask"]
-        )
-
-    @require_torch
-    @require_librosa
-    def test_chat_template_dict_torch(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "You are a helpful assistant."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
-                    },
-                    {"type": "text", "text": "What's that sound?"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "It is the sound of glass shattering."}],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
-                    },
-                    {"type": "text", "text": "How about this one?"},
-                ],
-            },
-        ]
-
-        out_dict_tensors = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        self.assertListEqual(
-            list(out_dict_tensors.keys()), ["input_ids", "attention_mask", "input_features", "feature_attention_mask"]
-        )
-        self.assertTrue(isinstance(out_dict_tensors["input_ids"], torch.Tensor))
 
     def test_chat_template_with_continue_final_message(self):
         processor = AutoProcessor.from_pretrained(self.checkpoint)

@@ -29,6 +29,7 @@ from transformers.processing_utils import Unpack
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_av,
+    require_librosa,
     require_torch,
     require_vision,
 )
@@ -106,6 +107,8 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
+    # TODO: raushan unify all these special token LLMs under the general preparation. We can get audio/image token
+    # from tokenizer, so we can generalize instead of overriding
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
             return "lower newer"
@@ -377,7 +380,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs(batch_size=3)
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
@@ -395,7 +398,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs(batch_size=3)
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
@@ -414,7 +417,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs(batch_size=3)
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
@@ -433,7 +436,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer"]
+        input_str = self.prepare_text_inputs(batch_size=3)
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         with self.assertRaises(ValueError):
@@ -457,7 +460,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer"]
+        input_str = self.prepare_text_inputs(batch_size=3)
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
 
@@ -694,7 +697,7 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer"]
+        input_str = self.prepare_text_inputs(batch_size=3)
         audio_lengths = [4000, 8000, 16000, 32000]
         raw_speech = [np.asarray(audio)[:length] for audio, length in zip(floats_list((3, 32_000)), audio_lengths)]
 
@@ -754,10 +757,13 @@ class ProcessorTesterMixin:
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
-    def test_chat_template_single(self):
+    def test_image_chat_template_single_images(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         messages = [
             [
@@ -799,10 +805,13 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict["attention_mask"]), 1)
         self.assertEqual(len(out_dict[self.images_input_name]), 1)
 
-    def test_chat_template_batched(self):
+    def test_image_chat_template_batched(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         batched_messages = [
             [
@@ -866,10 +875,13 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict["attention_mask"]), 2)
         self.assertEqual(len(out_dict[self.images_input_name]), 2)
 
-    def test_chat_template_accepts_processing_kwargs(self):
+    def test_image_chat_template_accepts_processing_kwargs(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         messages = [
             [
@@ -917,10 +929,13 @@ class ProcessorTesterMixin:
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
 
     @require_torch
-    def test_chat_template_dict_torch(self):
+    def test_image_chat_template_dict_torch(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
+
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         messages = [
             {
@@ -1173,3 +1188,117 @@ class ProcessorTesterMixin:
         self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 243)
+
+    @require_librosa
+    def test_audio_chat_template_single(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                    },
+                    {"type": "text", "text": "What's that sound?"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "It is the sound of glass shattering."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                    },
+                    {"type": "text", "text": "How about this one?"},
+                ],
+            },
+        ]
+
+        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+        )
+        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
+        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+
+        messages[1]["content"][0]["audio"] = (
+            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        )
+        messages[3]["content"][0]["audio"] = (
+            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        )
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        self.assertTrue(self.audio_input_name in out_dict)
+
+        # should always have input_ids and attention_mask
+        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
+        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
+        self.assertEqual(len(out_dict[self.audio_input_name]), 2)  # 2 audios in the conversation
+
+    @require_torch
+    @require_librosa
+    def test_audiO_chat_template_dict_torch(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "feature_extractor" not in self.processor_class.attributes:
+            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+                    },
+                    {"type": "text", "text": "What's that sound?"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "It is the sound of glass shattering."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "audio": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+                    },
+                    {"type": "text", "text": "How about this one?"},
+                ],
+            },
+        ]
+
+        out_dict_tensors = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
+        self.assertTrue(self.audio_input_name in out_dict_tensors)
+        for k in out_dict_tensors:
+            self.assertIsInstance(out_dict_tensors[k], torch.Tensor)
