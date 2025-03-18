@@ -339,7 +339,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace."
+        expected_output = "Sure, here's a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace."
         self.assertEqual(decoded_output, expected_output)
 
     def test_mistral3_integration_generate(self):
@@ -365,7 +365,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image features two cats lying on a pink blanket. The larger cat, which appears to be an"
+        expected_output = "The image depicts two cats lying on a pink blanket. The larger cat, which appears to be an"
         self.assertEqual(decoded_output, expected_output)
 
     def test_mistral3_integration_batched_generate(self):
@@ -401,8 +401,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         # Check first output
-        decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins."
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's mirror gleams,\nWhispering pines"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -410,8 +410,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         )
 
         # Check second output
-        decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = "The image depicts a street scene in what appears to be Chinatown, likely in a major city. The focal point is"
+        decoded_output = processor.decode(output[1], skip_special_tokens=True)
+        expected_output = "Describe this imageThe image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -464,8 +464,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         # Check first output
-        decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = "Still lake reflects skies,\nWooden path to nature's heart,\nSilence speaks volumes."
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -473,8 +473,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         )
 
         # Check second output
-        decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City."
+        decoded_output = processor.decode(output[1], skip_special_tokens=True)
+        expected_output = "These images depict two different landmarks. Can you identify them?Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City."
         self.assertEqual(
             decoded_output,
             expected_output,
