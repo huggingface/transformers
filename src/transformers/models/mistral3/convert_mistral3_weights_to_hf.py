@@ -153,6 +153,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     new_vision_config = original_vision_config
     adapter_bias = new_vision_config.pop("adapter_bias", False)
     _ = new_vision_config.pop("mm_projector_id", None)
+    _ = new_vision_config.pop("add_pre_mm_projector_layer_norm", None)
     spatial_merge_size = new_vision_config.pop("spatial_merge_size")
     image_token_id = new_vision_config.pop("image_token_id", 10)
     _ = new_vision_config.pop("image_break_token_id", 12)
