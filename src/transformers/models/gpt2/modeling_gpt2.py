@@ -822,7 +822,8 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # Attention mask.
         _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
-        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
+        if attention_mask is not None and attention_mask.dim() == 2:
+            attention_mask = attention_mask.view(batch_size, -1)
         if self._attn_implementation == "flash_attention_2":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif _use_sdpa:
