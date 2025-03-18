@@ -368,7 +368,7 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
         super()._init_backbone(config)
-
+        self.depths = config.depths
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = HGNetV2Embeddings(config)
         self.encoder = HGNetV2Encoder(config)

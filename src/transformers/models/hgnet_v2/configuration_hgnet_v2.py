@@ -26,7 +26,7 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a DeepSeek
+    This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a HGNet-V2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of D-FINE-X-COCO "[vladislavbro/dfine_x_coco"](https://huggingface.co/vladislavbro/dfine_x_coco").
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -112,6 +112,7 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
         super().__init__(**kwargs)
         self.num_channels = num_channels
         self.embedding_size = embedding_size
+        self.depths = depths
         self.hidden_sizes = hidden_sizes
         self.hidden_act = hidden_act
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
@@ -128,9 +129,6 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
         self.stage_kernel_size = stage_kernel_size
         self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
-
-        if not hasattr(self, "depths"):
-            self.depths = depths
 
         if not (
             len(stage_in_channels)
