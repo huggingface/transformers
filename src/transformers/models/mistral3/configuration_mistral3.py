@@ -22,31 +22,25 @@ class Mistral3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Mistral3ForConditionalGeneration`]. It is used to instantiate an
     Mistral3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Mistral3-9B.
-
-    e.g. [mistral3-hf/mistral3-9b](https://huggingface.co/mistral3-hf/mistral3-9b)
+    with the defaults will yield a similar configuration to that of
+    [mistralai/Mistral-Small-3.1-24B-Instruct-2503](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `PixtralVisionConfig`):
             The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MistralConfig`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_index (`int`, *optional*, defaults to 10):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
         vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the multimodal projector.
         spatial_merge_size (`int`, *optional*, defaults to 2):
@@ -60,10 +54,10 @@ class Mistral3Config(PretrainedConfig):
     >>> # Initializing a Pixtral-vision config
     >>> vision_config = PixtralVisionConfig()
 
-    >>> # Initializing a Llama config
+    >>> # Initializing a Mistral config
     >>> text_config = MistralConfig()
 
-    >>> # Initializing a Mistral3 mistral3.1 configuration
+    >>> # Initializing a Mistral3 configuration
     >>> configuration = Mistral3Config(vision_config, text_config)
 
     >>> # Initializing a model from the mistral3.1 configuration
@@ -81,11 +75,9 @@ class Mistral3Config(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        image_token_index=32000,
+        image_token_index=10,
         projector_hidden_act="gelu",
-        vision_feature_select_strategy="full",
         vision_feature_layer=-1,
-        image_seq_length=576,
         multimodal_projector_bias=False,
         spatial_merge_size=2,
         **kwargs,
@@ -93,21 +85,11 @@ class Mistral3Config(PretrainedConfig):
         super().__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.image_seq_length = image_seq_length
 
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
-                f"Got: {vision_feature_select_strategy}"
-            )
-
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
+            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "pixtral"
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["pixtral"](
@@ -125,7 +107,7 @@ class Mistral3Config(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["mistral"](
