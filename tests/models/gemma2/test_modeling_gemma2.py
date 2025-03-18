@@ -16,6 +16,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
@@ -63,7 +64,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Gemma2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Gemma2Model,
@@ -92,16 +92,12 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -110,6 +106,7 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -152,6 +149,13 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_sdpa_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
+        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
 
