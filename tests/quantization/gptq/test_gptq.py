@@ -261,7 +261,7 @@ class GPTQTest(unittest.TestCase):
                 if self.device_map == "cpu":
                     quant_type = "ipex" if is_ipex_available() else "torch"
                 else:
-                    # We expecte tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
+                    # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
                     # TODO: Remove this once GPTQModel exllama kernels supports packing
                     quant_type = "tritonv2"
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
@@ -433,7 +433,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
                 "exllamav2",
             )
         else:
-            # We expecte tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
+            # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
             # TODO: Remove this once GPTQModel exllama kernels supports packing
             self.assertEqual(
                 self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
