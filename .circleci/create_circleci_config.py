@@ -30,7 +30,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PIPELINE_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "vvv": None, "rsfE":None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 # Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
