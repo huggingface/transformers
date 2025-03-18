@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+a = 1
+
 """
 Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/main/setup.py
 
