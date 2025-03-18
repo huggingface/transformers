@@ -642,7 +642,10 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
 
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.vocab_size, num_items_in_batch=num_items_in_batch
+                logits=logits,
+                labels=labels,
+                vocab_size=self.decoder.config.vocab_size,
+                num_items_in_batch=num_items_in_batch,
             )
 
         if not return_dict:
