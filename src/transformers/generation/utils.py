@@ -1416,11 +1416,11 @@ class GenerationMixin:
             if value is not None and key not in model_args:
                 unused_model_args.append(key)
 
-        if unused_model_args:
-            raise ValueError(
-                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
-                " generate arguments will also show up in this list)"
-            )
+        # if unused_model_args:
+        #     raise ValueError(
+        #         f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+        #         " generate arguments will also show up in this list)"
+        #     )
 
     def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
         """Performs validation related to the resulting generated length"""

@@ -21,6 +21,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+import torch
 import requests
 from packaging import version
 
@@ -159,6 +160,17 @@ def is_valid_image(img):
 def is_valid_list_of_images(images: List):
     return images and all(is_valid_image(image) for image in images)
 
+
+def concatenate_list(input_list):
+    if isinstance(input_list[0], list):
+        input_list = [item for sublist in input_list for item in sublist]
+    if isinstance(input_list[0], np.ndarray):
+        return np.concatenate(input_list, axis=0)
+    elif isinstance(input_list[0], torch.Tensor):
+        return torch.cat(input_list, dim=0)
+    else:
+        raise ValueError(f"Unsupported type {type(input_list[0])}")
+        
 
 def valid_images(imgs):
     # If we have an list of images, make sure every image is valid

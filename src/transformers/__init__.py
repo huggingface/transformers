@@ -723,6 +723,11 @@ _import_structure = {
         "Qwen2_5_VLConfig",
         "Qwen2_5_VLProcessor",
     ],
+    "models.long_vita": [
+        "Long_vitaConfig",
+        "Long_vitaProcessor",
+        "Long_vitaVisionConfig",
+    ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
         "Qwen2AudioEncoderConfig",
@@ -3353,6 +3358,13 @@ else:
             "Qwen2_5_VLPreTrainedModel",
         ]
     )
+    _import_structure["models.long_vita"].extend(
+        [
+            "Long_vitaForConditionalGeneration",
+            "Long_vitaPreTrainedModel",
+            "Long_vitaVisionModel",
+        ]
+    )
     _import_structure["models.qwen2_audio"].extend(
         [
             "Qwen2AudioEncoder",
@@ -5906,6 +5918,11 @@ if TYPE_CHECKING:
         Qwen2_5_VLConfig,
         Qwen2_5_VLProcessor,
     )
+    from .models.long_vita import (
+        Long_vitaConfig,
+        Long_vitaProcessor,
+        Long_vitaVisionConfig,
+    )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
         Qwen2AudioEncoderConfig,
@@ -8153,6 +8170,11 @@ if TYPE_CHECKING:
             Qwen2_5_VLForConditionalGeneration,
             Qwen2_5_VLModel,
             Qwen2_5_VLPreTrainedModel,
+        )
+        from .models.long_vita import (
+            Long_vitaForConditionalGeneration,
+            Long_vitaPreTrainedModel,
+            Long_vitaVisionModel,
         )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,

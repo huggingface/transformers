@@ -244,6 +244,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertConfig"),
         ("qwen2", "Qwen2Config"),
         ("qwen2_5_vl", "Qwen2_5_VLConfig"),
+        ("long_vita", "Long_vitaConfig"),
+        ("long_vita_vision", "Long_vitaVisionConfig"),
         ("qwen2_audio", "Qwen2AudioConfig"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
         ("qwen2_moe", "Qwen2MoeConfig"),
@@ -592,6 +594,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("qdqbert", "QDQBert"),
         ("qwen2", "Qwen2"),
         ("qwen2_5_vl", "Qwen2_5_VL"),
+        ("long_vita", "Long_vita"),
+        ("long_vita_vision", "Long_vitaVision"),
         ("qwen2_audio", "Qwen2Audio"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoE"),
@@ -754,6 +758,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
+        ("long_vita_vision", "Long_vitaVision"),
     ]
 )
 
