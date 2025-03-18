@@ -202,7 +202,7 @@ class TorchAoGPUTest(TorchAoTest):
 
     def test_int4wo_offload(self):
         """
-        Simple test that checks if the quantized model int4 wieght only is working properly with cpu/disk offload
+        Simple test that checks if the quantized model int4 weight only is working properly with cpu/disk offload
         """
 
         device_map_offload = {
@@ -254,7 +254,7 @@ class TorchAoGPUTest(TorchAoTest):
     @require_torch_multi_gpu
     def test_int4wo_quant_multi_gpu(self):
         """
-        Simple test that checks if the quantized model int4 wieght only is working properly with multiple GPUs
+        Simple test that checks if the quantized model int4 weight only is working properly with multiple GPUs
         set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
         """
 
