@@ -932,7 +932,6 @@ class ProcessorMixin(PushToHubMixin):
                         if hasattr(self.tokenizer, modality_key)
                         else tokenizer_init_kwargs[modality_key]
                     )
-                    print(modality_key, modality, value)
                     default_kwargs[modality][modality_key] = value
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary

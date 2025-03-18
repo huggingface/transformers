@@ -82,10 +82,10 @@ class Qwen2AudioProcessor(ProcessorMixin):
     @deprecate_kwarg("audios", version="4.54.0", new_name="audio")
     def __call__(
         self,
-        images=None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio: Union[np.ndarray, List[np.ndarray]] = None,
         videos=None,
+        images=None,
         audios=None,  # kept for BC
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
@@ -106,34 +106,11 @@ class Qwen2AudioProcessor(ProcessorMixin):
         """
 
         # Handle BC when user passes positional args and `audio` gets assigned the second argument
-        arguments_passed_correctly = False
-        # case 1: when processor("hello", optional[my_audio])
-        if images is not None and audio is None and audios is None:
-            if text is not None:
-                audio = text
-                text = images
-            else:
-                text = images
-        # case 2: when processor("hello", audios=my_audio)
-        elif images is not None and audios is not None and text is None:
-            audio = audios
-            text = images
-        # case 3: when processor(text="hello", audios=my_audio)
-        elif text is not None and audios is not None and audio is None and images is None:
-            audio = audios
-        # case 4: when processor(text="hello", audio=my_audio), the only correct way to pass args
-        elif text is not None and audio is not None and audios is None and images is None:
-            arguments_passed_correctly = True
-        else:
-            raise ValueError(
-                "Could not infer input arguments. It is strongly recommended to pass inputs as keyword arguments "
-                "with keys `text` and `audio` for correct processing."
-            )
-
-        if not arguments_passed_correctly:
+        if audios is not None and audio is None:
+            audios = audio
             warnings.wanr(
-                "You may have used the wrong order or keyword for inputs. It is strongly recommended to pass inputs as keyword arguments "
-                "with keys `audios` and `text`. This behavior will be deprecated and positional arguments will throw error in transformers v4.54 ",
+                "You may have used the keyword argument for the `audio` inputs. It is strongly recommended to pass inputs with keyword arguments "
+                "with keys `audios` and `text`. From transformers v4.55 `audio` will be the onle acceptable keyword argument.",
                 FutureWarning,
             )
 
