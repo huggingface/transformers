@@ -59,6 +59,7 @@ class Chat:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
         images = retrieve_images_in_messages(messages, images)
+
         self.messages = messages
         self.images = images
 
@@ -320,7 +321,7 @@ class ImageTextToTextPipeline(Pipeline):
                 "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even though this model supports chat. "
                 "Consider using the chat format for better results. For more information, see https://huggingface.co/docs/transformers/en/chat_templating"
             )
-        
+
         # support text only generation
         if images is None:
             return super().__call__(text, **kwargs)
