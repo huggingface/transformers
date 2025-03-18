@@ -54,7 +54,7 @@ Here is how you can use the `image-text-to-text` pipeline to perform inference w
 ...     },
 ... ]
 
->>> pipe = pipeline("image-text-to-text", model="../mistral3_weights", torch_dtype=torch.bfloat16)
+>>> pipe = pipeline("image-text-to-text", model="mistralai/Mistral-Small-3.1-24B-Instruct-2503", torch_dtype=torch.bfloat16)
 >>> outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
 >>> outputs[0]["generated_text"]
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
