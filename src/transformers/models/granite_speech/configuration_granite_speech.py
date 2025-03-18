@@ -1,7 +1,7 @@
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import AutoConfig
 from transformers.models.blip_2.configuration_blip_2 import Blip2QFormerConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
+from transformers.models.auto import CONFIG_MAPPING, AutoConfig
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
     model_type = "granite_speech_encoder"
