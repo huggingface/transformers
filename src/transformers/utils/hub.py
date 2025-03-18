@@ -300,7 +300,7 @@ def cached_file(
     #         a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
-
+        local_files_only = True
     if subfolder is None:
         subfolder = ""
 
