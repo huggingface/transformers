@@ -17,7 +17,6 @@ import json
 import os
 import shutil
 import tempfile
-from typing import Optional
 import unittest
 
 from parameterized import parameterized
