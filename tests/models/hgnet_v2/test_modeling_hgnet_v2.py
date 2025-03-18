@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import DFineResNetConfig
+from transformers import HGNetV2Config
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
@@ -24,7 +24,7 @@ from ...test_modeling_common import floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    from transformers import DFineResNetBackbone
+    from transformers import HGNetV2Backbone
 
 
 class DFineResNetModelTester:
@@ -91,7 +91,7 @@ class DFineResNetModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return DFineResNetConfig(
+        return HGNetV2Config(
             num_channels=self.num_channels,
             embeddings_size=self.embeddings_size,
             hidden_sizes=self.hidden_sizes,
@@ -112,7 +112,7 @@ class DFineResNetModelTester:
         )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
-        model = DFineResNetBackbone(config=config)
+        model = HGNetV2Backbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -127,7 +127,7 @@ class DFineResNetModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
-        model = DFineResNetBackbone(config=config)
+        model = HGNetV2Backbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -149,9 +149,9 @@ class DFineResNetModelTester:
 
 @require_torch
 class RTDetrResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
-    all_model_classes = (DFineResNetBackbone,) if is_torch_available() else ()
+    all_model_classes = (HGNetV2Backbone,) if is_torch_available() else ()
     has_attentions = False
-    config_class = DFineResNetConfig
+    config_class = HGNetV2Config
 
     def setUp(self):
         self.model_tester = DFineResNetModelTester(self)

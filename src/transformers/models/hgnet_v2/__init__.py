@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_d_fine_resnet import *
-    from .modeling_d_fine_resnet import *
+    from .configuration_hgnet_v2 import *
+    from .modeling_hgnet_v2 import *
 else:
     import sys
 

@@ -27,6 +27,7 @@ from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 from ..rt_detr.modeling_rt_detr import (
+    RTDetrConvEncoder,
     RTDetrConvNormLayer,
     RTDetrDecoder,
     RTDetrDecoderLayer,
@@ -49,7 +50,6 @@ logger = logging.get_logger(__name__)
 class DFineConfig(PretrainedConfig):
     """
     Configuration class for D-FINE (Distribution-guided Fine-grained Object Detection).
-    Extends RTDetrConfig with additional parameters specific to D-FINE architecture.
 
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -288,13 +288,13 @@ class DFineConfig(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `D-FINE-ResNet` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNet-V2` backbone."
             )
-            backbone_model_type = "d_fine_resnet"
+            backbone_model_type = "hgnet_v2"
             config_class = CONFIG_MAPPING[backbone_model_type]
             # this will map it to RTDetrResNetConfig
-            # note: we can instead create RTDetrV2ResNetConfig but it will be exactly the same as V1
-            # and we would need to create RTDetrV2ResNetModel
+            # note: we can instead create HGNetV2Config
+            # and we would need to create HGNetV2Backbone
             backbone_config = config_class(
                 num_channels=3,
                 embedding_size=64,
@@ -790,9 +790,7 @@ class DFineDecoder(RTDetrDecoder):
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
                 intermediate_logits = torch.stack(intermediate_logits, dim=1)
-                intermediate_reference_points += (
-                    (inter_ref_bbox,) if self.bbox_embed is not None else (reference_points,)
-                )
+                intermediate_reference_points += (inter_ref_bbox.clamp(min=0),) if self.training else (inter_ref_bbox,)
                 intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
 
             if output_attentions:
@@ -834,9 +832,19 @@ class DFineDecoder(RTDetrDecoder):
         )
 
 
+class DFineConvEncoder(RTDetrConvEncoder):
+    """
+    Convolutional backbone using the modeling_hgnet_v2.py.
+    https://github.com/Peterande/D-FINE/blob/master/src/nn/backbone/hgnetv2.py
+    """
+
+    pass
+
+
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
+        self.backbone = DFineConvEncoder(config)
         del self.decoder_input_proj
         self.encoder = DFineHybridEncoder(config=config)
         num_backbone_outs = len(config.decoder_in_channels)

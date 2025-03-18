@@ -66,10 +66,6 @@ remote: 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
 
 [[autodoc]] DFineConfig
 
-## DFineResNetConfig
-
-[[autodoc]] DFineResNetConfig
-
 ## DFineModel
 
 [[autodoc]] DFineModel
@@ -78,9 +74,4 @@ remote: 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
 ## DFineForObjectDetection
 
 [[autodoc]] DFineForObjectDetection
-    - forward
-
-## DFineResNetBackbone
-
-[[autodoc]] DFineResNetBackbone
     - forward

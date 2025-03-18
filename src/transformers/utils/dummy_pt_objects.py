@@ -2536,13 +2536,6 @@ class DFinePreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class DFineResNetBackbone(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DabDetrForObjectDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5176,6 +5169,13 @@ class HeliumModel(metaclass=DummyObject):
 
 
 class HeliumPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class HGNetV2Backbone(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

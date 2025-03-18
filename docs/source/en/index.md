@@ -120,7 +120,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
 |                        [D-FINE](model_doc/d_fine)                        |       ✅        |         ❌         |      ❌      |
-|                 [D-FINE-ResNet](model_doc/d_fine_resnet)                 |       ✅        |         ❌         |      ❌      |
 |                      [DAB-DETR](model_doc/dab-detr)                      |       ✅        |         ❌         |      ❌      |
 |                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
@@ -190,6 +189,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
 |                        [Helium](model_doc/helium)                        |       ✅        |         ❌         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
+|                 [HGNet-V2](model_doc/hgnet_v2)                           |       ✅        |         ❌         |      ❌      |
 |                         [Hiera](model_doc/hiera)                         |       ✅        |         ❌         |      ❌      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |
 |                        [I-BERT](model_doc/ibert)                         |       ✅        |         ❌         |      ❌      |

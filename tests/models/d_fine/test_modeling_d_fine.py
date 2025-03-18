@@ -23,7 +23,7 @@ from parameterized import parameterized
 
 from transformers import (
     DFineConfig,
-    DFineResNetConfig,
+    HGNetV2Config,
     is_torch_available,
     is_vision_available,
 )
@@ -183,7 +183,7 @@ class DFineModelTester:
 
     def get_config(self):
         hidden_sizes = [64, 128, 256, 512]
-        backbone_config = DFineResNetConfig(
+        backbone_config = HGNetV2Config(
             stage_in_channels=[16, 64, 128, 256],
             stage_mid_channels=[16, 32, 64, 128],
             stage_out_channels=[64, 128, 256, 512],

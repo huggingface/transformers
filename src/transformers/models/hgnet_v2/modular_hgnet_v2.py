@@ -14,22 +14,30 @@
 # limitations under the License.
 
 
+import math
+from typing import Optional
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutputWithNoAttention,
 )
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetConvLayer, RTDetrResNetPreTrainedModel
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+from ...utils.backbone_utils import BackboneConfigMixin, BackboneMixin, get_aligned_output_features_output_indices
+from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 
-class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
+class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
     """
-    Configuration class for D-FINE ResNet backbone.
-    Extends RTDetrResNetConfig with D-FINE specific parameters.
+    Configuration class for HGNet-V2 backbone.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
@@ -85,7 +93,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
             LAB adds learnable scale and bias parameters after certain operations.
     """
 
-    model_type = "d_fine_resnet"
+    model_type = "hgnet_v2"
 
     def __init__(
         self,
@@ -144,11 +152,37 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
             raise ValueError("All stage configuration lists must have the same length.")
 
 
-class DFineResNetPreTrainedModel(RTDetrResNetPreTrainedModel):
-    pass
+# General docstring
+_CONFIG_FOR_DOC = "HGNetV2Config"
 
 
-class DFineResNetLearnableAffineBlock(nn.Module):
+class HGNetV2PreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = HGNetV2Config
+    base_model_prefix = ""
+    main_input_name = "pixel_values"
+    _no_split_modules = ["HGNetV2ConvLayer"]
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
+        elif isinstance(module, nn.Linear):
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(module.bias, -bound, bound)
+        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
+
+
+class HGNetV2LearnableAffineBlock(nn.Module):
     def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
         self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
@@ -159,7 +193,7 @@ class DFineResNetLearnableAffineBlock(nn.Module):
         return hidden_state
 
 
-class DFineResNetConvLayer(RTDetrResNetConvLayer):
+class HGNetV2ConvLayer(RTDetrResNetConvLayer):
     def __init__(
         self,
         in_channels: int,
@@ -181,7 +215,7 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
             bias=False,
         )
         if activation and use_learnable_affine_block:
-            self.lab = DFineResNetLearnableAffineBlock()
+            self.lab = HGNetV2LearnableAffineBlock()
         else:
             self.lab = nn.Identity()
 
@@ -193,19 +227,19 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
         return hidden_state
 
 
-class DFineResNetConvLayerLight(nn.Module):
+class HGNetV2ConvLayerLight(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int, use_learnable_affine_block: bool = False
     ):
         super().__init__()
-        self.conv1 = DFineResNetConvLayer(
+        self.conv1 = HGNetV2ConvLayer(
             in_channels,
             out_channels,
             kernel_size=1,
             activation=None,
             use_learnable_affine_block=use_learnable_affine_block,
         )
-        self.conv2 = DFineResNetConvLayer(
+        self.conv2 = HGNetV2ConvLayer(
             out_channels,
             out_channels,
             kernel_size=kernel_size,
@@ -219,11 +253,11 @@ class DFineResNetConvLayerLight(nn.Module):
         return hidden_state
 
 
-class DFineResNetEmbeddings(nn.Module):
-    def __init__(self, config: DFineResNetConfig):
+class HGNetV2Embeddings(nn.Module):
+    def __init__(self, config: HGNetV2Config):
         super().__init__()
 
-        self.stem1 = DFineResNetConvLayer(
+        self.stem1 = HGNetV2ConvLayer(
             config.stem_channels[0],
             config.stem_channels[1],
             kernel_size=3,
@@ -231,7 +265,7 @@ class DFineResNetEmbeddings(nn.Module):
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem2a = DFineResNetConvLayer(
+        self.stem2a = HGNetV2ConvLayer(
             config.stem_channels[1],
             config.stem_channels[1] // 2,
             kernel_size=2,
@@ -239,7 +273,7 @@ class DFineResNetEmbeddings(nn.Module):
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem2b = DFineResNetConvLayer(
+        self.stem2b = HGNetV2ConvLayer(
             config.stem_channels[1] // 2,
             config.stem_channels[1],
             kernel_size=2,
@@ -247,7 +281,7 @@ class DFineResNetEmbeddings(nn.Module):
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem3 = DFineResNetConvLayer(
+        self.stem3 = HGNetV2ConvLayer(
             config.stem_channels[1] * 2,
             config.stem_channels[1],
             kernel_size=3,
@@ -255,7 +289,7 @@ class DFineResNetEmbeddings(nn.Module):
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
-        self.stem4 = DFineResNetConvLayer(
+        self.stem4 = HGNetV2ConvLayer(
             config.stem_channels[1],
             config.stem_channels[2],
             kernel_size=1,
@@ -285,7 +319,7 @@ class DFineResNetEmbeddings(nn.Module):
         return embedding
 
 
-class DFineResNetBasicLayer(nn.Module):
+class HGNetV2BasicLayer(nn.Module):
     def __init__(
         self,
         in_channels: int,
@@ -305,14 +339,14 @@ class DFineResNetBasicLayer(nn.Module):
         for i in range(layer_num):
             temp_in_channels = in_channels if i == 0 else middle_channels
             if light_block:
-                block = DFineResNetConvLayerLight(
+                block = HGNetV2ConvLayerLight(
                     in_channels=temp_in_channels,
                     out_channels=middle_channels,
                     kernel_size=kernel_size,
                     use_learnable_affine_block=use_learnable_affine_block,
                 )
             else:
-                block = DFineResNetConvLayer(
+                block = HGNetV2ConvLayer(
                     in_channels=temp_in_channels,
                     out_channels=middle_channels,
                     kernel_size=kernel_size,
@@ -323,14 +357,14 @@ class DFineResNetBasicLayer(nn.Module):
 
         # feature aggregation
         total_channels = in_channels + layer_num * middle_channels
-        aggregation_squeeze_conv = DFineResNetConvLayer(
+        aggregation_squeeze_conv = HGNetV2ConvLayer(
             total_channels,
             out_channels // 2,
             kernel_size=1,
             stride=1,
             use_learnable_affine_block=use_learnable_affine_block,
         )
-        aggregation_excitation_conv = DFineResNetConvLayer(
+        aggregation_excitation_conv = HGNetV2ConvLayer(
             out_channels // 2,
             out_channels,
             kernel_size=1,
@@ -356,8 +390,8 @@ class DFineResNetBasicLayer(nn.Module):
         return hidden_state
 
 
-class DFineResNetStage(nn.Module):
-    def __init__(self, config: DFineResNetConfig, stage_index: int, drop_path: float = 0.0):
+class HGNetV2Stage(nn.Module):
+    def __init__(self, config: HGNetV2Config, stage_index: int, drop_path: float = 0.0):
         super().__init__()
         in_channels = config.stage_in_channels[stage_index]
         mid_channels = config.stage_mid_channels[stage_index]
@@ -370,7 +404,7 @@ class DFineResNetStage(nn.Module):
         use_learnable_affine_block = config.use_learnable_affine_block
 
         if downsample:
-            self.downsample = DFineResNetConvLayer(
+            self.downsample = HGNetV2ConvLayer(
                 in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
             )
         else:
@@ -379,7 +413,7 @@ class DFineResNetStage(nn.Module):
         blocks_list = []
         for i in range(num_blocks):
             blocks_list.append(
-                DFineResNetBasicLayer(
+                HGNetV2BasicLayer(
                     in_channels if i == 0 else out_channels,
                     mid_channels,
                     out_channels,
@@ -400,12 +434,12 @@ class DFineResNetStage(nn.Module):
         return hidden_state
 
 
-class DFineResNetEncoder(nn.Module):
-    def __init__(self, config: DFineResNetConfig):
+class HGNetV2Encoder(nn.Module):
+    def __init__(self, config: HGNetV2Config):
         super().__init__()
         self.stages = nn.ModuleList([])
         for stage_index in range(len(config.stage_in_channels)):
-            resnet_stage = DFineResNetStage(config, stage_index)
+            resnet_stage = HGNetV2Stage(config, stage_index)
             self.stages.append(resnet_stage)
 
     def forward(
@@ -431,11 +465,96 @@ class DFineResNetEncoder(nn.Module):
         )
 
 
-class DFineResNetBackbone(RTDetrResNetBackbone):
-    def __init__(self, config: DFineResNetConfig):
-        super().__init__(config=config)
-        self.embedder = DFineResNetEmbeddings(config)
-        self.encoder = DFineResNetEncoder(config)
+HGNet_V2_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`HGNetV2Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+HGNet_V2_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`RTDetrImageProcessor.__call__`] for details.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
-__all__ = ["DFineResNetConfig", "DFineResNetBackbone", "DFineResNetPreTrainedModel"]
+class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+    def __init__(self, config: HGNetV2Config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.num_features = [config.embedding_size] + config.hidden_sizes
+        self.embedder = HGNetV2Embeddings(config)
+        self.encoder = HGNetV2Encoder(config)
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(HGNet_V2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+        >>> import torch
+
+        >>> config = RTDetrResNetConfig()
+        >>> model = RTDetrResNetBackbone(config)
+
+        >>> pixel_values = torch.randn(1, 3, 224, 224)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(pixel_values)
+
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 2048, 7, 7]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        embedding_output = self.embedder(pixel_values)
+
+        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_states[idx],)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )
+
+
+__all__ = ["HGNetV2Config", "HGNetV2Backbone", "HGNetV2PreTrainedModel"]
