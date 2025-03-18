@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
+from typing import List, Optional, Union
 
 import torch
 import torch.utils.checkpoint
 
+from ...cache_utils import Cache
 from ...modeling_outputs import ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -107,6 +109,20 @@ SHIELDGEMMA2_INPUTS_DOCSTRING = r"""
             Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
+
+    Returns:
+        A `ShieldGemma2ImageClassifierOutputWithNoAttention` instance continaing the logits and probabilities
+        associated with the model predicting the `Yes` or `No` token as the response to that prompt, captured in the
+        following properties. When used with the `ShieldGemma2Processor`, the `batch_size` will be equal to
+        `len(images) * len(policies)`, and the order within the batch will be
+        img1_policy1, ... img1_policyN, ... imgM_policyN.
+
+            *   `logits` (`torch.Tensor` of shape `(batch_size, 2)`):
+                The first position along dim=1 is the logits for the `Yes` token and the second position along dim=1 is
+                the logits for the `No` token.
+            *   `probabilities` (`torch.Tensor` of shape `(batch_size, 2)`):
+                The first position along dim=1 is the probability of predicting the `Yes` token and the second position
+                along dim=1 is the probability of predicting the `No` token.
 """
 
 
@@ -154,14 +170,45 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     @replace_return_docstrings(
         output_type=ShieldGemma2ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
     )
-    def forward(self, **kwargs) -> ShieldGemma2ImageClassifierOutputWithNoAttention:
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
+    ) -> ShieldGemma2ImageClassifierOutputWithNoAttention:
         """Predicts the binary probability that the image violates the speicfied policy.
-
-        Args:
 
         Returns:
         """
-        outputs = self.model(**kwargs)
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            token_type_ids=token_type_ids,
+            cache_position=cache_position,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            logits_to_keep=logits_to_keep,
+            **lm_kwargs
+        )
         logits = outputs.logits
         selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]
         probabilities = torch.softmax(selected_logits, dim=-1)

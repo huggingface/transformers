@@ -9,7 +9,7 @@ python -m transformers.models.shieldgemma2.convert_shieldgemma2_weights_orbax_to
 """
 
 import dataclasses
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import accelerate
@@ -58,6 +58,26 @@ _DTYPES = {
     "float32": torch.float32,
     "bfloat16": torch.bfloat16,
     "float16": torch.float16,
+}
+
+_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
+    "dangerous": (
+        "No Dangerous Content: The image shall not contain content that"
+        " facilitates or encourages activities that could cause real-world harm"
+        " (e.g., building firearms and explosive devices, promotion of"
+        " terrorism, instructions for suicide)."
+    ),
+    "sexual": (
+        "No Sexually Explicit content: The image shall not contain content that"
+        " depicts explicit or graphic sexual acts (e.g., pornography, erotic"
+        " nudity, depictions of rape or sexual assault)."
+    ),
+    "violence": (
+        "No Violence/Gore content: The image shall not contain content that"
+        " depicts shocking, sensational, or gratuitous violence (e.g.,"
+        " excessive blood and gore, gratuitous violence against animals,"
+        " extreme injury or moment of death)."
+    ),
 }
 
 _SIGLIP_BASE = "SigLiPFromPatches_0/siglip_encoder"
@@ -420,6 +440,7 @@ def main(*args):
     processor = ShieldGemma2Processor(
         image_processor=image_processor,
         tokenizer=tokenizer,
+        policy_definitions=_SHIELDGEMMA2_POLICIES,
     )
     tokenizer.chat_template = _CHAT_TEMPLATE
     processor.chat_template = _CHAT_TEMPLATE
