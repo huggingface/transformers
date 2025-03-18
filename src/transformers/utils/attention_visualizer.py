@@ -254,6 +254,9 @@ class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
         config = AutoConfig.from_pretrained(model_name)
         self.config = config
+        if hasattr(config, "sliding_window"):
+            config.sliding_window = 5
+
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
         except Exception as e:
@@ -263,12 +266,12 @@ class AttentionMaskVisualizer:
             raise ValueError(f"Model name {model_name} is not supported for attention visualization")
 
         class _ModelWrapper(mapped_cls, nn.Module):
-            def __init__(self, model_name):
+            def __init__(self, config, model_name):
                 nn.Module.__init__(self)
                 self.dummy_module = nn.Linear(1, 1)
-                self.config = AutoConfig.from_pretrained(model_name)
+                self.config = config
 
-        self.model = _ModelWrapper(model_name)
+        self.model = _ModelWrapper(config, model_name)
         self.model.to(config.torch_dtype)
         self.repo_id = model_name
     
@@ -278,6 +281,7 @@ class AttentionMaskVisualizer:
     def visualize_attention_mask(self, input_sentence: str):
         model = self.model
         kwargs = {}
+
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             kwargs["text"] = input_sentence
