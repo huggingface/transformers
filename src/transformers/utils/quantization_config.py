@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import dataclasses
 import importlib.metadata
 import json
 import os
@@ -27,6 +28,7 @@ from packaging import version
 
 from ..utils import (
     is_auto_awq_available,
+    is_compressed_tensors_available,
     is_gptqmodel_available,
     is_hqq_available,
     is_torch_available,
@@ -900,6 +902,9 @@ class AwqConfig(QuantizationConfigMixin):
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
+            # Only cuda device can run this function
+            if not torch.cuda.is_available():
+                raise ValueError("LLM-AWQ backend is only supported on CUDA")
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if major < 8:
@@ -1253,9 +1258,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         run_compressed: bool = True,
         **kwargs,
     ):
-        from compressed_tensors.config import SparsityCompressionConfig
-        from compressed_tensors.quantization import QuantizationConfig
-
+        if is_compressed_tensors_available():
+            from compressed_tensors.config import SparsityCompressionConfig
+            from compressed_tensors.quantization import QuantizationConfig
+        else:
+            raise ImportError(
+                "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
+            )
         self.quantization_config = None
         self.sparsity_config = None
 
@@ -1418,8 +1427,6 @@ class HiggsConfig(QuantizationConfigMixin):
         tune_metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        if modules_to_not_convert is None:
-            modules_to_not_convert = ["lm_head"]
         if tune_metadata is None:
             tune_metadata = {}
         self.quant_method = QuantizationMethod.HIGGS
@@ -1452,7 +1459,7 @@ class TorchAoConfig(QuantizationConfigMixin):
 
     Args:
         quant_type (`str`):
-            The type of quantization we want to use, currently supporting: `int4_weight_only`, `int8_weight_only` and `int8_dynamic_activation_int8_weight`.
+            The type of quantization we want to use, currently supporting: `int4_weight_only`, `int8_weight_only`, `int8_dynamic_activation_int8_weight` and `autoquant`.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1464,9 +1471,31 @@ class TorchAoConfig(QuantizationConfigMixin):
     Example:
 
     ```python
+    from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+    # specific quantization method
     quantization_config = TorchAoConfig("int4_weight_only", group_size=32)
     # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
     model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+
+    # autoquant
+    # `autoquant` is a convenient way for users to search for the best quantization for each layer
+    # `min_sqnr` is an option to control the accuracy of the model, higher value means the model is more
+    # accurate, we can start with 30 and adjust it to larger or smaller (e.g. 40, 20)
+    # defaults to None, which means we'll try to get the best performing quantized model without
+    # considering accuracy
+    quantization_config = TorchAoConfig("autoquant", min_sqnr=30)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+    # run through example inputs, quantization methods will be selected based on the shape of example input
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    input_text = "What are we having for dinner?"
+    input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+    MAX_NEW_TOKENS = 1000
+    model.generate(**input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static")
+    # manually ran finalize_autoquant if needed
+    if hasattr(quantized_model, "finalize_autoquant"):
+      print("finalizing autoquant")
+      quantized_model.finalize_autoquant()
     ```
     """
 
@@ -1487,8 +1516,8 @@ class TorchAoConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         if is_torchao_available():
-            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
-                raise ValueError("Requires torchao 0.4.0 version and above")
+            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.7.0"):
+                raise ValueError("Requires torchao 0.7.0 version and above")
         else:
             raise ValueError(
                 "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
@@ -1516,6 +1545,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def _get_torchao_quant_type_to_method(self):
         if is_torchao_available():
             from torchao.quantization import (
+                autoquant,
                 int4_weight_only,
                 int8_dynamic_activation_int8_weight,
                 int8_weight_only,
@@ -1525,6 +1555,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 "int4_weight_only": int4_weight_only,
                 "int8_weight_only": int8_weight_only,
                 "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+                "autoquant": autoquant,
             }
         else:
             raise ValueError(
@@ -1533,11 +1564,36 @@ class TorchAoConfig(QuantizationConfigMixin):
 
     def get_apply_tensor_subclass(self):
         _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
-        return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
+        quant_type_kwargs = self.quant_type_kwargs.copy()
+        if (
+            not torch.cuda.is_available()
+            and is_torchao_available()
+            and self.quant_type == "int4_weight_only"
+            and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+        ):
+            from torchao.dtypes import Int4CPULayout
+
+            quant_type_kwargs["layout"] = Int4CPULayout()
+        return _STR_TO_METHOD[self.quant_type](**quant_type_kwargs)
 
     def __repr__(self):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary, converting any `torchao.dtypes.Layout`
+        dataclasses to simple dicts.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        d = super().to_dict()
+        if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
+            layout = d["quant_type_kwargs"]["layout"]
+            layout = dataclasses.asdict(layout)
+            d["quant_type_kwargs"]["layout"] = layout
+        return d
 
 
 @dataclass
@@ -1597,8 +1653,6 @@ class SpQRConfig(QuantizationConfigMixin):
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        if modules_to_not_convert is None:
-            modules_to_not_convert = []
         self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
@@ -1619,10 +1673,6 @@ class SpQRConfig(QuantizationConfigMixin):
             raise ValueError("SpQR currently only supports beta1 = 16")
         if self.beta2 != 16:
             raise ValueError("SpQR currently only supports beta2 = 16")
-
-        if self.modules_to_not_convert is not None and not isinstance(self.modules_to_not_convert, list):
-            raise ValueError("modules_to_not_convert must be a list of strings")
-
         if not isinstance(self.shapes, dict):
             raise TypeError("shapes must be a dict")
 
