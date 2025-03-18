@@ -1,14 +1,16 @@
-- sections:
+- title: Get started
+  sections:
   - local: index
     title: Transformers
   - local: installation
     title: Installation
   - local: quicktour
     title: Quickstart
-  title: Get started
-- isExpanded: false
+- title: Base classes
+  isExpanded: False
   sections:
-  - sections:
+  - title: Models
+    sections:
     - local: models
       title: Loading models
     - local: custom_models
@@ -29,8 +31,8 @@
       title: The Transformer model family
     - local: attention
       title: Attention mechanisms
-    title: Models
-  - sections:
+  - title: Preprocessors
+    sections:
     - local: fast_tokenizers
       title: Tokenizers
     - local: image_processors
@@ -45,11 +47,11 @@
       title: Summary of the tokenizers
     - local: pad_truncation
       title: Padding and truncation
-    title: Preprocessors
-  title: Base classes
-- isExpanded: false
+- title: Inference
+  isExpanded: False
   sections:
-  - sections:
+  - title: Pipeline API
+    sections:
     - local: pipeline_tutorial
       title: Pipeline
     - local: pipeline_gradio
@@ -58,8 +60,8 @@
       title: Web server inference
     - local: add_new_pipeline
       title: Adding a new pipeline
-    title: Pipeline API
-  - sections:
+  - title: LLMs
+    sections:
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
@@ -80,8 +82,8 @@
       title: Getting the most out of LLMs
     - local: perplexity
       title: Perplexity of fixed-length models
-    title: LLMs
-  - sections:
+  - title: Chat with models
+    sections:
     - local: conversations
       title: Chat basics
     - local: chat_templating
@@ -92,8 +94,8 @@
       title: Template writing
     - local: chat_extras
       title: Tools and RAG
-    title: Chat with models
-  - sections:
+  - title: Optimization
+    sections:
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_one
@@ -104,15 +106,15 @@
       title: CPU
     - local: tf_xla
       title: XLA
-    title: Optimization
   - local: agents
     title: Agents
   - local: tools
     title: Tools
-  title: Inference
-- isExpanded: false
+- title: Training
+  isExpanded: False
   sections:
-  - sections:
+  - title: Trainer API
+    sections:
     - local: trainer
       title: Trainer
     - local: training
@@ -121,8 +123,8 @@
       title: Optimizers
     - local: hpo_train
       title: Hyperparameter search
-    title: Trainer API
-  - sections:
+  - title: Distributed training
+    sections:
     - local: gpu_selection
       title: GPU selection
     - local: accelerate
@@ -137,8 +139,8 @@
       title: Distributed CPUs
     - local: perf_train_gpu_many
       title: Parallelism methods
-    title: Distributed training
-  - sections:
+  - title: Hardware
+    sections:
     - local: perf_train_gpu_one
       title: GPU
     - local: perf_train_cpu
@@ -149,13 +151,12 @@
       title: Apple Silicon
     - local: perf_hardware
       title: Build your own machine
-    title: Hardware
   - local: peft
     title: PEFT
   - local: model_memory_anatomy
     title: Model training anatomy
-  title: Training
-- isExpanded: false
+- title: Quantization
+  isExpanded: False
   sections:
   - local: quantization/overview
     title: Overview
@@ -195,8 +196,8 @@
     title: VPTQ
   - local: quantization/contribute
     title: Contribute
-  title: Quantization
-- isExpanded: false
+- title: Export to production
+  isExpanded: False
   sections:
   - local: serialization
     title: ONNX
@@ -206,11 +207,13 @@
     title: ExecuTorch
   - local: torchscript
     title: TorchScript
-  title: Export to production
-- isExpanded: false
+- title: Resources
+  isExpanded: False
   sections:
-  - sections:
-    - sections:
+  - title: Task recipes
+    sections:
+    - title: Natural language processing
+      sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
@@ -227,14 +230,14 @@
         title: Summarization
       - local: tasks/multiple_choice
         title: Multiple choice
-      title: Natural language processing
-    - sections:
+    - title: Audio
+      sections:
       - local: tasks/audio_classification
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
-      title: Audio
-    - sections:
+    - title: Computer vision
+      sections:
       - local: tasks/image_classification
         title: Image classification
       - local: tasks/semantic_segmentation
@@ -259,8 +262,8 @@
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
         title: Knowledge Distillation for Computer Vision
-      title: Computer vision
-    - sections:
+    - title: Multimodal
+      sections:
       - local: tasks/image_captioning
         title: Image captioning
       - local: tasks/document_question_answering
@@ -275,8 +278,6 @@
         title: Image-text-to-text
       - local: tasks/video_text_to_text
         title: Video-text-to-text
-      title: Multimodal
-    title: Task recipes
   - local: run_scripts
     title: Training scripts
   - local: glossary
@@ -289,8 +290,8 @@
     title: Community resources
   - local: troubleshooting
     title: Troubleshoot
-  title: Resources
-- isExpanded: false
+- title: Contribute
+  isExpanded: False
   sections:
   - local: contributing
     title: Contribute to Transformers
@@ -298,10 +299,11 @@
     title: Transformers model tests
   - local: pr_checks
     title: Pull request checks
-  title: Contribute
-- isExpanded: false
+- title: API
+  isExpanded: False
   sections:
-  - sections:
+  - title: Main classes
+    sections:
     - local: main_classes/agent
       title: Agents and Tools
     - local: model_doc/auto
@@ -348,9 +350,10 @@
       title: Feature Extractor
     - local: main_classes/image_processor
       title: Image Processor
-    title: Main classes
-  - sections:
-    - sections:
+  - title: Models
+    sections:
+    - title: Text models
+      sections:
       - local: model_doc/albert
         title: ALBERT
       - local: model_doc/bamba
@@ -659,8 +662,8 @@
         title: Zamba
       - local: model_doc/zamba2
         title: Zamba2
-      title: Text models
-    - sections:
+    - title: Vision models
+      sections:
       - local: model_doc/beit
         title: BEiT
       - local: model_doc/bit
@@ -787,8 +790,8 @@
         title: YOLOS
       - local: model_doc/zoedepth
         title: ZoeDepth
-      title: Vision models
-    - sections:
+    - title: Audio models
+      sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
       - local: model_doc/bark
@@ -857,16 +860,16 @@
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
         title: XLSR-Wav2Vec2
-      title: Audio models
-    - sections:
+    - title: Video models
+      sections:
       - local: model_doc/timesformer
         title: TimeSformer
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
-      title: Video models
-    - sections:
+    - title: Multimodal models
+      sections:
       - local: model_doc/align
         title: ALIGN
       - local: model_doc/altclip
@@ -971,8 +974,6 @@
         title: Pixtral
       - local: model_doc/qwen2_5_vl
         title: Qwen2.5-VL
-      - local: model_doc/long_vita
-        title: Long_Vita
       - local: model_doc/qwen2_audio
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
@@ -1011,14 +1012,14 @@
         title: VisualBERT
       - local: model_doc/xclip
         title: X-CLIP
-      title: Multimodal models
-    - sections:
+    - title: Reinforcement learning models
+      sections:
       - local: model_doc/decision_transformer
         title: Decision Transformer
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
-      title: Reinforcement learning models
-    - sections:
+    - title: Time series models
+      sections:
       - local: model_doc/autoformer
         title: Autoformer
       - local: model_doc/informer
@@ -1029,13 +1030,12 @@
         title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
-      title: Time series models
-    - sections:
+    - title: Graph models
+      sections:
       - local: model_doc/graphormer
         title: Graphormer
-      title: Graph models
-    title: Models
-  - sections:
+  - title: Internal helpers
+    sections:
     - local: internal/modeling_utils
       title: Custom Layers and Utilities
     - local: internal/pipelines_utils
@@ -1054,5 +1054,4 @@
       title: General Utilities
     - local: internal/time_series_utils
       title: Utilities for Time Series
-    title: Internal helpers
-  title: API
+      
