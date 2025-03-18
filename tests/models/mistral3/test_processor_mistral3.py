@@ -59,9 +59,13 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_chat_template(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
-        expected_prompt = "<s>[INST][IMG]What is shown in this image?[/INST]"
+        expected_prompt = "<s>[SYSTEM_PROMPT][/SYSTEM_PROMPT][INST][IMG]What is shown in this image?[/INST]"
 
         messages = [
+            {
+                "role": "system",
+                "content": "",
+            },
             {
                 "role": "user",
                 "content": [
@@ -81,6 +85,10 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_token_index = 10
 
         messages = [
+            {
+                "role": "system",
+                "content": "",
+            },
             {
                 "role": "user",
                 "content": [
