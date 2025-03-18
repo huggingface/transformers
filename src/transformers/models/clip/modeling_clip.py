@@ -82,6 +82,24 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 def prepare_hidden_states_indices(
     output_hidden_states: Union[bool, List[int]], num_hidden_layers: int
 ) -> Dict[int, int]:
+    """
+    Prepares indices for `output_hidden_states` to support selecting specific layers.
+
+    Args:
+        output_hidden_states (`bool` or `List[int]`):
+            When `bool` and `True`, returns indices of all layers.
+            When `bool` and `False`, returns empty dict.
+            When `List[int]`, returns indices of selected layers, negative indices are wrapped.
+        num_hidden_layers (`int`):
+            Number of hidden layers from the model's config.
+    Example:
+        prepare_hidden_states_indices(
+            output_hidden_states=[1, 3, -1],
+            num_hidden_layers=10,
+        )
+        {0: 1, 1: 3, 2: 10}
+        Order of the selected indices is maintained in the returned hidden states.
+    """
     if not output_hidden_states:
         return {}
     elif output_hidden_states is True:

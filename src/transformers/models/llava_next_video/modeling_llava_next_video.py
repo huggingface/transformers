@@ -559,11 +559,12 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
+        output_hidden_states = (
+            [vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer
+        )
         image_features = self.vision_tower(
             pixel_values,
-            output_hidden_states=[vision_feature_layer]
-            if isinstance(vision_feature_layer, int)
-            else vision_feature_layer,
+            output_hidden_states=output_hidden_states,
         )
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -860,11 +861,12 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
+        output_hidden_states = (
+            [vision_feature_layer] if isinstance(vision_feature_layer, int) else vision_feature_layer
+        )
         video_features = self.vision_tower(
             pixel_values,
-            output_hidden_states=[vision_feature_layer]
-            if isinstance(vision_feature_layer, int)
-            else vision_feature_layer,
+            output_hidden_states=output_hidden_states,
         )
 
         # If we have one vision feature layer, return the corresponding hidden states,
