@@ -7,22 +7,23 @@ import torch.utils.checkpoint
 from torch import nn, einsum
 import torch.nn.functional as F
 
-from ...modeling_outputs import ModelOutput
 
 from transformers import Blip2QFormerModel
 from transformers.generation import GenerationMixin
 from transformers.modeling_utils import PreTrainedModel
-from ..auto import AutoModelForCausalLM
-from .configuration_granite_speech import (
-    GraniteSpeechConfig,
-    GraniteSpeechEncoderConfig,
-)
-from ...utils import (
+from transformers.modeling_outputs import ModelOutput
+from transformers.models.auto import AutoModelForCausalLM
+from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_peft_available,
     logging,
     replace_return_docstrings,
+)
+
+from .configuration_granite_speech import (
+    GraniteSpeechConfig,
+    GraniteSpeechEncoderConfig,
 )
 
 logger = logging.get_logger(__name__)
