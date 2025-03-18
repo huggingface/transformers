@@ -479,70 +479,6 @@ class JanusVisionEncoderLayer(nn.Module):
         return (hidden_states, attn_weights) if output_attentions else (hidden_states,)
 
 
-class JanusVisionAttentionPoolLatent(nn.Module):
-    def __init__(self, config: JanusVisionConfig):
-        super().__init__()
-
-        self.latent_len = getattr(config, "latent_len", 1)
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.mlp_ratio = getattr(config, "mlp_ratio", 4.0)
-        self.scale = self.head_dim**-0.5
-
-        # Learnable latent query (probe)
-        self.latent = nn.Parameter(torch.zeros(1, self.latent_len, self.hidden_size))
-
-        # Linear layers for QKV projection
-        self.q = nn.Linear(self.hidden_size, self.hidden_size)
-        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size)
-        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size)
-        self.projection_layer = nn.Linear(self.hidden_size, self.hidden_size)
-
-        # Normalization & MLP
-        self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = JanusVisionMLP(config)
-
-        self.proj_drop = nn.Dropout(getattr(config, "dropout", 0.0))
-
-    def forward(self, hidden_states: torch.Tensor):
-        batch_size, seq_len, _ = hidden_states.shape
-
-        # Expand learnable latent tokens for batch
-        q_latent = self.latent.expand(batch_size, -1, -1)  # (B, latent_len, hidden_size)
-
-        # Compute Q projection from latent tokens
-        query_states = self.q(q_latent)  # (B, latent_len, hidden_size)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.view(batch_size, self.latent_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
-        attn_weights = attn_weights * self.scale
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        attn_output = torch.matmul(attn_weights, value_states)  # (B, num_heads, latent_len, head_dim)
-
-        # Validate shape
-        if attn_output.size() != (batch_size, self.num_heads, self.latent_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, self.latent_len, self.head_dim)},"
-                f" but is {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, self.latent_len, self.hidden_size)
-
-        output = self.projection_layer(attn_output)
-        output = self.proj_drop(output)
-
-        output = output + self.mlp(self.layer_norm(output))
-
-        return output[:, 0]
-
-
 class JanusVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -656,9 +592,6 @@ class JanusVisionTransformer(nn.Module):
         self.embeddings = JanusVisionEmbeddings(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = JanusVisionEncoder(config)
-        self.use_head = True if not hasattr(config, "use_vision_head") else config.use_vision_head
-        if self.use_head:
-            self.head = JanusVisionAttentionPoolLatent(config)
 
     @add_start_docstrings_to_model_forward(JANUS_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=JanusVisionConfig)

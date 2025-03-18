@@ -54,6 +54,7 @@ MAPPINGS = {
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm(?=\.|\s|$)": r"\g<pre>layer_norm",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm1(?=\.|\s|$)": r"\g<pre>layer_norm1",
     r"(?P<pre>\b(vision_model|model\.vision_model)\b.*\.)norm2(?=\.|\s|$)": r"\g<pre>layer_norm2",
+    r"\b(model\.vision_model\.vision_model\.head|vision_model\.vision_tower\.attn_pool)\.[^\s$]*": None,
     # VQ Model
     r"gen_vision_model": "model.vqmodel",
     r"(?P<pre>\b(gen_vision_model|model\.vqmodel)\b.*\.)decoder\.conv_blocks(?=\.|\s|$)": r"\g<pre>decoder.up",

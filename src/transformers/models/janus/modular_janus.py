@@ -406,70 +406,6 @@ class JanusVisionEncoderLayer(nn.Module):
         return (hidden_states, attn_weights) if output_attentions else (hidden_states,)
 
 
-class JanusVisionAttentionPoolLatent(nn.Module):
-    def __init__(self, config: JanusVisionConfig):
-        super().__init__()
-
-        self.latent_len = getattr(config, "latent_len", 1)
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.mlp_ratio = getattr(config, "mlp_ratio", 4.0)
-        self.scale = self.head_dim**-0.5
-
-        # Learnable latent query (probe)
-        self.latent = nn.Parameter(torch.zeros(1, self.latent_len, self.hidden_size))
-
-        # Linear layers for QKV projection
-        self.q = nn.Linear(self.hidden_size, self.hidden_size)
-        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size)
-        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size)
-        self.projection_layer = nn.Linear(self.hidden_size, self.hidden_size)
-
-        # Normalization & MLP
-        self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = JanusVisionMLP(config)
-
-        self.proj_drop = nn.Dropout(getattr(config, "dropout", 0.0))
-
-    def forward(self, hidden_states: torch.Tensor):
-        batch_size, seq_len, _ = hidden_states.shape
-
-        # Expand learnable latent tokens for batch
-        q_latent = self.latent.expand(batch_size, -1, -1)  # (B, latent_len, hidden_size)
-
-        # Compute Q projection from latent tokens
-        query_states = self.q(q_latent)  # (B, latent_len, hidden_size)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.view(batch_size, self.latent_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
-        attn_weights = attn_weights * self.scale
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        attn_output = torch.matmul(attn_weights, value_states)  # (B, num_heads, latent_len, head_dim)
-
-        # Validate shape
-        if attn_output.size() != (batch_size, self.num_heads, self.latent_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, self.latent_len, self.head_dim)},"
-                f" but is {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, self.latent_len, self.hidden_size)
-
-        output = self.projection_layer(attn_output)
-        output = self.proj_drop(output)
-
-        output = output + self.mlp(self.layer_norm(output))
-
-        return output[:, 0]
-
-
 class JanusVisionEncoder(SiglipEncoder):
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
@@ -483,9 +419,6 @@ class JanusVisionTransformer(SiglipVisionTransformer, nn.Module):
         self.embeddings = JanusVisionEmbeddings(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = JanusVisionEncoder(config)
-        self.use_head = True if not hasattr(config, "use_vision_head") else config.use_vision_head
-        if self.use_head:
-            self.head = JanusVisionAttentionPoolLatent(config)
 
 
 class JanusVisionModel(SiglipVisionModel):
@@ -1674,8 +1607,6 @@ class JanusVisionConfig(SiglipVisionConfig):
             Whether to normalize the query and key matrices.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        use_vision_head (`bool`, *optional*, defaults to `True`):
-            Whether to use a Vision specific Attention Pool head.
         depth (`int`, *optional*, defaults to 2):
             Number of hidden layers in the aligner module.
         num_image_tokens (`int`, *optional*, defaults to 576):
@@ -1703,7 +1634,6 @@ class JanusVisionConfig(SiglipVisionConfig):
         projection_dropout=0.0,
         use_qk_norm=False,
         initializer_range=0.02,
-        use_vision_head=True,
         depth=2,
         num_image_tokens=576,
         **kwargs,
@@ -1729,7 +1659,6 @@ class JanusVisionConfig(SiglipVisionConfig):
         self.projection_dropout = projection_dropout
         self.use_qk_norm = use_qk_norm
         self.initializer_range = initializer_range
-        self.use_vision_head = use_vision_head
         self.depth = depth
         self.num_image_tokens = num_image_tokens
 
