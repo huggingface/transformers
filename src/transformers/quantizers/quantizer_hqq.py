@@ -169,7 +169,12 @@ class HqqHfQuantizer(HfQuantizer):
                 and tensor_name != "bias"
             )
         else:
-            return isinstance(module, torch.nn.Linear) and tensor_name == "weight"
+            # we need a special path for bias since hqq overwrote load_state_dict for this layer
+            return (
+                isinstance(module, torch.nn.Linear)
+                and tensor_name == "weight"
+                or (isinstance(module, HQQLinear) and tensor_name == "bias")
+            )
 
     def create_quantized_param(
         self,
@@ -193,6 +198,10 @@ class HqqHfQuantizer(HfQuantizer):
         layer_name = ".".join(param_name.split(".")[:-1])
         parent_module = find_parent(model, layer_name)
         node = layer_name.split(".")[-1]
+
+        if tensor_name == "bias":
+            # this should already be set
+            return
 
         # set module state_dict
         module_state_dict = {}
