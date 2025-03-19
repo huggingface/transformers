@@ -16,6 +16,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
@@ -91,16 +92,12 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -109,6 +106,7 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -119,10 +117,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma2 has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
         pass
 
     @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
