@@ -47,13 +47,11 @@ class GraniteSpeechProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         audios: Union[torch.Tensor, List[torch.Tensor]] = None,
         device: str = "cpu",
         **kwargs,
     ) -> BatchFeature:
-
-        assert text is not None, "You have to provide text"
 
         speech_inputs = {}
         text_inputs = {}
