@@ -223,8 +223,9 @@ def check_dummies(overwrite: bool = False):
                     f.write(dummy_files[backend])
             else:
                 # Temporary fix to help people identify which objects introduced are not correctly protected.
-                code_excerpt = ""
-                for _actual, _dummy in zip(actual_dummies['torch'].split('class'), dummy_files['torch'].split("class")):
+                for _actual, _dummy in zip(
+                    actual_dummies["torch"].split("class"), dummy_files["torch"].split("class")
+                ):
                     if _actual != _dummy:
                         actual_broken = _actual
                         dummy_broken = _dummy
