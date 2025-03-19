@@ -143,6 +143,29 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=84)
             self.assertEqual(image_processor.size, {"height": 84, "width": 84})
 
+    def test_without_pan_and_scan(self):
+        """
+        Disable do_pan_and_scan parameter.
+        """
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, do_pan_and_scan=False)
+
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
+
+            # Test not batched input
+            encoded_images = image_processor(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = (1, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched
+            encoded_images = image_processor(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (7, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
     def test_pan_and_scan(self):
         """
         Enables Pan and Scan path by choosing the correct input image resolution. If you are changing
