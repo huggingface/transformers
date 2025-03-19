@@ -269,6 +269,7 @@ examples_torch_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
+    pytest_num_workers=4,
 )
 
 
@@ -276,6 +277,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
+    pytest_num_workers=4,
 )
 
 
