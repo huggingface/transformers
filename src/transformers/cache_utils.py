@@ -8,8 +8,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import torch
 from packaging import version
 
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
+
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_optimum_quanto_available, logging
+from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
 
 
 if is_hqq_available():
@@ -535,12 +537,70 @@ class DynamicCache(Cache):
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
+def _flatten_dynamic_cache(
+    dynamic_cache: DynamicCache,
+):
+    """Flattens DynamicCache into flat list of tensors for `torch.export.export` to consume"""
+    if not isinstance(dynamic_cache, DynamicCache):
+        raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
+
+    if not is_torch_greater_or_equal_than_2_6:
+        logger.warning_once(
+            "DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
+        )
+
+    # NOTE it seems _seen_tokens is deprecated, so probably doesn't need tracking
+    dictionary = {
+        "key_cache": getattr(dynamic_cache, "key_cache"),
+        "value_cache": getattr(dynamic_cache, "value_cache"),
+    }
+    return torch.utils._pytree._dict_flatten(dictionary)
+
+
+def _flatten_with_keys_dynamic_cache(dynamic_cache: DynamicCache):
+    dictionary = {
+        "key_cache": getattr(dynamic_cache, "key_cache"),
+        "value_cache": getattr(dynamic_cache, "value_cache"),
+    }
+    return torch.utils._pytree._dict_flatten_with_keys(dictionary)
+
+
+def _unflatten_dynamic_cache(
+    values,
+    context: torch.utils._pytree.Context,
+):
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+    cache = DynamicCache()
+    for k, v in dictionary.items():
+        setattr(cache, k, v)
+    return cache
+
+
+def _flatten_dynamic_cache_for_fx(cache, spec):
+    dictionary = {
+        "key_cache": getattr(cache, "key_cache"),
+        "value_cache": getattr(cache, "value_cache"),
+    }
+    return torch.utils._pytree.tree_flatten(dictionary)[0]
+
+
+torch.utils._pytree.register_pytree_node(
+    DynamicCache,
+    _flatten_dynamic_cache,
+    _unflatten_dynamic_cache,
+    serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+    flatten_with_keys_fn=_flatten_with_keys_dynamic_cache,
+)
+# TODO (tmanlaibaatar) This won't be needed in torch 2.7.
+torch.fx._pytree.register_pytree_flatten_spec(DynamicCache, _flatten_dynamic_cache_for_fx)
+
+
 class OffloadedCache(DynamicCache):
     """
-    A drop-in replacement for DynamicCache that conserves GPU memory at the expense of more CPU memory.
+    A drop-in replacement for DynamicCache that conserves accelerator(GPU, XPU) memory at the expense of more CPU memory.
     Useful for generating from models with very long context.
 
-    In addition to the default CUDA stream, where all forward() computations happen,
+    In addition to the default accelerator stream, where all forward() computations happen,
     this class uses another stream, the prefetch stream, which it creates itself.
     Since scheduling of operations on separate streams happens independently, this class uses
     the prefetch stream to asynchronously prefetch the KV cache of layer k+1 when layer k is executing.
@@ -549,17 +609,21 @@ class OffloadedCache(DynamicCache):
     """
 
     def __init__(self) -> None:
-        if not torch.cuda.is_available():
-            raise RuntimeError("OffloadedCache can only be used with a GPU")
+        if not (torch.cuda.is_available() or (is_torch_greater_or_equal("2.7") and torch.xpu.is_available())):
+            raise RuntimeError(
+                "OffloadedCache can only be used with a GPU" + (" or XPU" if is_torch_greater_or_equal("2.7") else "")
+            )
+
         super().__init__()
         self.original_device = []
-        self.prefetch_stream = torch.cuda.Stream()
+        self.prefetch_stream = None
+        self.prefetch_stream = torch.Stream() if is_torch_greater_or_equal("2.7") else torch.cuda.Stream()
         self.beam_idx = None  # used to delay beam search operations
 
     def prefetch_layer(self, layer_idx: int):
         "Starts prefetching the next layer cache"
         if layer_idx < len(self):
-            with torch.cuda.stream(self.prefetch_stream):
+            with self.prefetch_stream if is_torch_greater_or_equal("2.7") else torch.cuda.stream(self.prefetch_stream):
                 # Prefetch next layer tensors to GPU
                 device = self.original_device[layer_idx]
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device, non_blocking=True)
@@ -577,7 +641,10 @@ class OffloadedCache(DynamicCache):
         "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
         if layer_idx < len(self):
             # Evict the previous layer if necessary
-            torch.cuda.current_stream().synchronize()
+            if is_torch_greater_or_equal("2.7"):
+                torch.accelerator.current_stream().synchronize()
+            else:
+                torch.cuda.current_stream().synchronize()
             self.evict_previous_layer(layer_idx)
             # Load current layer cache to its original device if not already there
             original_device = self.original_device[layer_idx]
