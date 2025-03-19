@@ -29,6 +29,7 @@ from ..models import auto as auto_module
 from ..models.auto.configuration_auto import model_type_to_module_name
 from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
+from .add_fast_image_processor import add_fast_image_processor
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -66,6 +67,9 @@ class ModelPatterns:
         image_processor_class (`str`, *optional*):
             The image processor class associated with this model (leave to `None` for models that don't use an image
             processor).
+        image_processor_fast_class (`str`, *optional*):
+            The fast image processor class associated with this model (leave to `None` for models that don't use a fast
+            image processor).
         feature_extractor_class (`str`, *optional*):
             The feature extractor class associated with this model (leave to `None` for models that don't use a feature
             extractor).
@@ -82,6 +86,7 @@ class ModelPatterns:
     config_class: Optional[str] = None
     tokenizer_class: Optional[str] = None
     image_processor_class: Optional[str] = None
+    image_processor_fast_class: Optional[str] = None
     feature_extractor_class: Optional[str] = None
     processor_class: Optional[str] = None
 
@@ -107,6 +112,7 @@ ATTRIBUTE_TO_PLACEHOLDER = {
     "config_class": "[CONFIG_CLASS]",
     "tokenizer_class": "[TOKENIZER_CLASS]",
     "image_processor_class": "[IMAGE_PROCESSOR_CLASS]",
+    "image_processor_fast_class": "[IMAGE_PROCESSOR_FAST_CLASS]",
     "feature_extractor_class": "[FEATURE_EXTRACTOR_CLASS]",
     "processor_class": "[PROCESSOR_CLASS]",
     "checkpoint": "[CHECKPOINT]",
@@ -339,7 +345,13 @@ def replace_model_patterns(
     # contains the camel-cased named, but will be treated before.
     attributes_to_check = ["config_class"]
     # Add relevant preprocessing classes
-    for attr in ["tokenizer_class", "image_processor_class", "feature_extractor_class", "processor_class"]:
+    for attr in [
+        "tokenizer_class",
+        "image_processor_class",
+        "image_processor_fast_class",
+        "feature_extractor_class",
+        "processor_class",
+    ]:
         if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
             attributes_to_check.append(attr)
 
@@ -763,10 +775,10 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         tokenizer_class = None
     image_processor_classes = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
     if isinstance(image_processor_classes, tuple):
-        image_processor_class = image_processor_classes[0]  # we take the slow image processor class.
+        image_processor_class, image_processor_fast_class = image_processor_classes
     else:
         image_processor_class = image_processor_classes
-
+        image_processor_fast_class = None
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
@@ -800,6 +812,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         image_processor_class=image_processor_class,
+        image_processor_fast_class=image_processor_fast_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
@@ -957,6 +970,7 @@ def add_model_to_main_init(
                 processing_classes = [
                     old_model_patterns.tokenizer_class,
                     old_model_patterns.image_processor_class,
+                    old_model_patterns.image_processor_fast_class,
                     old_model_patterns.feature_extractor_class,
                     old_model_patterns.processor_class,
                 ]
@@ -1034,7 +1048,7 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
     "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
-    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_class}"),'],
+    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_classes}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
@@ -1068,14 +1082,27 @@ def add_model_to_auto_classes(
                     )
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
-            elif "{image_processor_class}" in pattern:
+            elif "{image_processor_classes}" in pattern:
                 if (
                     old_model_patterns.image_processor_class is not None
                     and new_model_patterns.image_processor_class is not None
                 ):
-                    new_patterns.append(
-                        pattern.replace("{image_processor_class}", old_model_patterns.image_processor_class)
-                    )
+                    if (
+                        old_model_patterns.image_processor_fast_class is not None
+                        and new_model_patterns.image_processor_fast_class is not None
+                    ):
+                        new_patterns.append(
+                            pattern.replace(
+                                '"{image_processor_classes}"',
+                                f'("{old_model_patterns.image_processor_class}", "{old_model_patterns.image_processor_fast_class}")',
+                            )
+                        )
+                    else:
+                        new_patterns.append(
+                            pattern.replace(
+                                '"{image_processor_classes}"', f'("{old_model_patterns.image_processor_class}",)'
+                            )
+                        )
             elif "{feature_extractor_class}" in pattern:
                 if (
                     old_model_patterns.feature_extractor_class is not None
@@ -1101,7 +1128,6 @@ def add_model_to_auto_classes(
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
-
             add_content_to_file(full_name, new_model_line, add_after=old_model_line)
 
     # Tokenizers require special handling
@@ -1198,6 +1224,10 @@ def duplicate_doc_file(
                 # We only add the image processor if necessary
                 if old_model_patterns.image_processor_class != new_model_patterns.image_processor_class:
                     new_blocks.append(new_block)
+            elif "ImageProcessorFast" in block_class:
+                # We only add the image processor if necessary
+                if old_model_patterns.image_processor_fast_class != new_model_patterns.image_processor_fast_class:
+                    new_blocks.append(new_block)
             elif "FeatureExtractor" in block_class:
                 # We only add the feature extractor if necessary
                 if old_model_patterns.feature_extractor_class != new_model_patterns.feature_extractor_class:
@@ -1281,6 +1311,7 @@ def create_new_model_like(
     add_copied_from: bool = True,
     frameworks: Optional[List[str]] = None,
     old_checkpoint: Optional[str] = None,
+    create_fast_image_processor: bool = False,
 ):
     """
     Creates a new model module like a given model of the Transformers library.
@@ -1295,6 +1326,8 @@ def create_new_model_like(
         old_checkpoint (`str`, *optional*):
             The name of the base checkpoint for the old model. Should be passed along when it can't be automatically
             recovered from the `model_type`.
+        create_fast_image_processor (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a fast image processor to the new model, if the old model had only a slow one.
     """
     # Retrieve all the old model info.
     model_info = retrieve_info_for_model(model_type, frameworks=frameworks)
@@ -1309,7 +1342,13 @@ def create_new_model_like(
         )
 
     keep_old_processing = True
-    for processing_attr in ["image_processor_class", "feature_extractor_class", "processor_class", "tokenizer_class"]:
+    for processing_attr in [
+        "image_processor_class",
+        "image_processor_fast_class",
+        "feature_extractor_class",
+        "processor_class",
+        "tokenizer_class",
+    ]:
         if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
             keep_old_processing = False
 
@@ -1416,7 +1455,11 @@ def create_new_model_like(
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
     insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
 
-    # 6. Warn the user for duplicate patterns
+    # 6. Add fast image processor if necessary
+    if create_fast_image_processor:
+        add_fast_image_processor(model_name=new_model_patterns.model_lower_cased)
+
+    # 7. Warn the user for duplicate patterns
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
         print(
             "The model you picked has the same name for the model type and the checkpoint name "
@@ -1484,6 +1527,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
                 self.add_copied_from,
                 self.frameworks,
                 self.old_checkpoint,
+                self.create_fast_image_processor,
             ) = get_user_input()
 
         self.path_to_repo = path_to_repo
@@ -1503,6 +1547,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             add_copied_from=self.add_copied_from,
             frameworks=self.frameworks,
             old_checkpoint=self.old_checkpoint,
+            create_fast_image_processor=self.create_fast_image_processor,
         )
 
 
@@ -1523,7 +1568,7 @@ def get_user_field(
         is_valid_answer (`Callable`, *optional*):
             If set, the question will be asked until this function returns `True` on the provided answer.
         convert_to (`Callable`, *optional*):
-            If set, the answer will be passed to this function. If this function raises an error on the procided
+            If set, the answer will be passed to this function. If this function raises an error on the provided
             answer, the question will be asked again.
         fallback_message (`str`, *optional*):
             A message that will be displayed each time the question is asked again to the user.
@@ -1594,6 +1639,7 @@ def get_user_input():
     old_model_info = retrieve_info_for_model(old_model_type)
     old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
     old_image_processor_class = old_model_info["model_patterns"].image_processor_class
+    old_image_processor_fast_class = old_model_info["model_patterns"].image_processor_fast_class
     old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
     old_processor_class = old_model_info["model_patterns"].processor_class
     old_frameworks = old_model_info["frameworks"]
@@ -1634,7 +1680,13 @@ def get_user_input():
 
     old_processing_classes = [
         c if not isinstance(c, tuple) else c[0]
-        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        for c in [
+            old_image_processor_class,
+            old_image_processor_fast_class,
+            old_feature_extractor_class,
+            old_tokenizer_class,
+            old_processor_class,
+        ]
         if c is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
@@ -1645,9 +1697,11 @@ def get_user_input():
     )
     if keep_processing:
         image_processor_class = old_image_processor_class
+        image_processor_fast_class = old_image_processor_fast_class
         feature_extractor_class = old_feature_extractor_class
         processor_class = old_processor_class
         tokenizer_class = old_tokenizer_class
+        create_fast_image_processor = False
     else:
         if old_tokenizer_class is not None:
             tokenizer_class = get_user_field(
@@ -1663,6 +1717,13 @@ def get_user_input():
             )
         else:
             image_processor_class = None
+        if old_image_processor_fast_class is not None:
+            image_processor_fast_class = get_user_field(
+                "What will be the name of the fast image processor class for this model? ",
+                default_value=f"{model_camel_cased}ImageProcessorFast",
+            )
+        else:
+            image_processor_fast_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
                 "What will be the name of the feature extractor class for this model? ",
@@ -1677,6 +1738,16 @@ def get_user_input():
             )
         else:
             processor_class = None
+        if old_image_processor_class is not None and old_image_processor_fast_class is None:
+            create_fast_image_processor = get_user_field(
+                "A fast image processor can be created from the slow one, but modifications might be needed. "
+                "Should we add a fast image processor class for this model (recommended, yes/no)? ",
+                convert_to=convert_to_bool,
+                default_value="yes",
+                fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+            )
+        else:
+            create_fast_image_processor = False
 
     model_patterns = ModelPatterns(
         model_name,
@@ -1688,6 +1759,7 @@ def get_user_input():
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         image_processor_class=image_processor_class,
+        image_processor_fast_class=image_processor_fast_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
@@ -1706,13 +1778,14 @@ def get_user_input():
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
     )
+
     if all_frameworks:
         frameworks = None
     else:
         frameworks = get_user_field(
-            "Please enter the list of framworks you want (pt, tf, flax) separated by spaces",
+            "Please enter the list of frameworks you want (pt, tf, flax) separated by spaces",
             is_valid_answer=lambda x: all(p in ["pt", "tf", "flax"] for p in x.split(" ")),
         )
         frameworks = list(set(frameworks.split(" ")))
 
-    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint)
+    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint, create_fast_image_processor)

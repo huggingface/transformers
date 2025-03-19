@@ -24,7 +24,7 @@ from math import isnan
 
 from transformers import is_tf_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from ..test_modeling_tf_common import ids_tensor
 
@@ -47,20 +47,6 @@ if is_tf_available():
         TFSharedEmbeddings,
     )
     from transformers.modeling_tf_utils import keras
-
-    if _tf_gpu_memory_limit is not None:
-        gpus = tf.config.list_physical_devices("GPU")
-        for gpu in gpus:
-            # Restrict TensorFlow to only allocate x GB of memory on the GPUs
-            try:
-                tf.config.set_logical_device_configuration(
-                    gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
-                )
-                logical_gpus = tf.config.list_logical_devices("GPU")
-                print("Logical GPUs", logical_gpus)
-            except RuntimeError as e:
-                # Virtual devices must be set before GPUs have been initialized
-                print(e)
 
 
 @require_tf
