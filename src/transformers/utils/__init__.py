@@ -61,6 +61,7 @@ from .generic import (
     is_torch_dtype,
     is_torch_tensor,
     reshape,
+    return_tuple_if_requested,
     squeeze,
     strtobool,
     tensor_size,

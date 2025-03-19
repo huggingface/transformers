@@ -18,6 +18,8 @@ import warnings
 
 import numpy as np
 
+from transformers.configuration_utils import PretrainedConfig
+from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_flax, require_tf, require_torch
 from transformers.utils import (
     expand_dims,
@@ -27,6 +29,7 @@ from transformers.utils import (
     is_tf_available,
     is_torch_available,
     reshape,
+    return_tuple_if_requested,
     squeeze,
     transpose,
 )
@@ -271,3 +274,38 @@ class ValidationDecoratorTester(unittest.TestCase):
         with self.assertWarns(UserWarning):
             kwargs = func3(1, extra_arg=2, extra_arg2=3, extra_arg3=4)
         self.assertEqual(kwargs, {"extra_arg": 2, "extra_arg2": 3})
+
+
+class ReturnTupleIfRequestedTester(unittest.TestCase):
+    def test_decorator(self):
+        # Simple model class for testing return_tuple_if_requested decorator.
+        class SimpleTestModel:
+            def __init__(self, config):
+                self.config = config
+
+            @return_tuple_if_requested
+            def forward(self, x):
+                return BaseModelOutput(
+                    last_hidden_state=x,
+                    hidden_states=None,
+                    attentions=None,
+                )
+
+        # test nothing is set
+        config = PretrainedConfig()
+        model = SimpleTestModel(config)
+        output = model.forward(10)
+        self.assertIsInstance(
+            output, BaseModelOutput, "output should be a BaseModelOutput when return_dict is not set"
+        )
+
+        # test all explicit cases
+        for config_return_dict in [True, False, None]:
+            for return_dict in [True, False, None]:
+                config = PretrainedConfig(return_dict=config_return_dict)
+                model = SimpleTestModel(config)
+                output = model.forward(10, return_dict=return_dict)
+
+                expected_type = tuple if config_return_dict is False or return_dict is False else BaseModelOutput
+                message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
+                self.assertIsInstance(output, expected_type, message)

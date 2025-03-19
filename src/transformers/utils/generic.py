@@ -902,3 +902,28 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
         return is_timm_config_dict(config_dict)
 
     return False
+
+
+def return_tuple_if_requested(func):
+    """
+    Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
+    use_return_dict=False is set in the config.
+
+    Note:
+        output.to_tuple() convert output to tuple skipping all `None` values.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
+        is_configured_to_return_tuple = self.config.use_return_dict is False
+        output = func(self, *args, **kwargs)
+        # if hasattr(self, "config") and hasattr(self.config, "use_return_dict"):
+        #     is_configured_to_return_tuple = self.config.use_return_dict is False
+        # else:
+        #     is_configured_to_return_tuple = False
+        if is_requested_to_return_tuple or is_configured_to_return_tuple:
+            output = output.to_tuple()
+        return output
+
+    return wrapper
