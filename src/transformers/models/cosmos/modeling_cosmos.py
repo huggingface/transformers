@@ -1670,7 +1670,6 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        encoder_hidden_states = torch.load("/raid/raushan/Cosmos/encoder_hidden_states.pt", weights_only=True)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
