@@ -156,12 +156,13 @@ class TimesFmPositionalEmbedding(nn.Module):
         Returns:
             [B, seqlen, D] if `position` is specified, else [1, seqlen, D]
         """
+        if position is None and seq_length is None:
+            raise ValueError("Either position or seq_length must be provided")
         if position is None:
-            assert seq_length is not None
             # [1, seqlen]
             position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)
-        else:
-            assert position.ndim == 2, position.shape
+        elif position.ndim != 2:
+            raise ValueError(f"position must be 2-dimensional, got shape {position.shape}")
 
         num_timescales = self.embedding_dims // 2
         log_timescale_increment = math.log(float(self.max_timescale) / float(self.min_timescale)) / max(
