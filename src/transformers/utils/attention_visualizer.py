@@ -37,10 +37,10 @@ BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
 
 
-def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_window=None):
+def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_window=None, token_type_ids=None):
     """
     Generates an attention matrix from a given attention mask.
-
+    
     Optionally applies a sliding window mask (e.g., for Gemma2/3) and
     marks regions where image tokens occur based on the specified `img_token`.
     """
@@ -56,48 +56,47 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     output = []
 
     for i, k in enumerate(words):
-        if img_token in k and not first_img_idx:
+        if k == img_token and not first_img_idx:
             first_img_idx = i
-        if first_img_idx > 0 and (img_token not in k or i == n - 1):
+            mask[i, i] = 2  # Mark yellow regions
+        if first_img_idx > 0 and (k != img_token or i == n - 1):
             if i == n - 1:
                 i += 1
-            mask[first_img_idx:i, first_img_idx:i] = 2
+            mask[first_img_idx:i, first_img_idx:i] = 2  # Mark yellow regions
             first_img_idx = 0
 
-    # Generate sliding window mask (size = 4), but exclude img_token
+    # Generate sliding window mask (size = 4), excluding img_token
+    sliding_window_mask = None
     if sliding_window is not None:
         sliding_window_mask = [
             [
-                1 if (0 <= i - j < sliding_window) or img_token in words[i] and img_token in words[j] else 0
+                1 if (0 <= i - j < sliding_window) else 0
                 for j in range(n)
             ]
             for i in range(n)
         ]
 
     row_dummy = " ".join(
-        f"{YELLOW}{BLACK_SQUARE}{RESET}"
-        if img_token in words[j] and mask[0, j] and img_token in words[0]
-        else f"{GREEN}{BLACK_SQUARE}{RESET}"
-        if 0 == j
-        else BLACK_SQUARE
-        if mask[0, j]
-        else WHITE_SQUARE
+        f"{YELLOW}{BLACK_SQUARE}{RESET}" if mask[0, j] else
+        f"{GREEN}{BLACK_SQUARE}{RESET}" if 0 == j else
+        BLACK_SQUARE if mask[0, j] else WHITE_SQUARE
         for j in range(n)
     )
+    
     # Print headers
-    legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: img tokens"
+    legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: token_type_ids"
     output.append(" " + legend)
     f_string = " " * (max_word_length + 5) + "Attention Matrix".ljust(len(row_dummy) // 2)
     if sliding_window is not None:
-        f_string += "\t\tSliding Window Mask"
+        f_string += "Sliding Window Mask"
     output.append(f_string)
 
     vertical_header = []
     for idx, word in enumerate(words):
-        if img_token not in word:
-            vertical_header += [list(str(idx).rjust(len(str(n))))]
+        if  mask[idx, idx] == 2:
+            vertical_header.append([f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))])
         else:
-            vertical_header += [[f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]]
+            vertical_header.append(list(str(idx).rjust(len(str(n)))))
 
     vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
 
@@ -139,6 +138,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     return "\n".join(output)
 
 
+
 class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
         config = AutoConfig.from_pretrained(model_name)
@@ -152,7 +152,7 @@ class AttentionMaskVisualizer:
 
         if mapped_cls is None:
             raise ValueError(f"Model name {model_name} is not supported for attention visualization")
-
+        self.mapped_cls = mapped_cls
         class _ModelWrapper(mapped_cls, nn.Module):
             def __init__(self, config, model_name):
                 nn.Module.__init__(self)
@@ -174,11 +174,19 @@ class AttentionMaskVisualizer:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             img = Image.open(requests.get(img, stream=True).raw)
             processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=5)
-            image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
-            self.image_token = image_token
+            if hasattr(processor, "image_token"):
+                image_token = processor.image_token
+            else:
+                image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
+            
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
+
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
+
+
+            self.image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
+            
             attention_mask = inputs["attention_mask"]
             if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
@@ -200,13 +208,13 @@ class AttentionMaskVisualizer:
             **kwargs,
         ).bool()
         top_bottom_border = "##" * (
-            len(f"Attention visualization for {self.config.model_type}") + 4
+            len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length
         side_border = "##"
         print(f"\n{top_bottom_border}")
         print(
             "##"
-            + f"  Attention visualization for \033[1m{self.config.model_type}:{self.repo_id}\033[0m".center(
+            + f"  Attention visualization for \033[1m{self.config.model_type}:{self.repo_id}\033[0m {self.mapped_cls.__name__}".center(
                 len(top_bottom_border)
             )
             + "    "
@@ -218,6 +226,7 @@ class AttentionMaskVisualizer:
             attention_mask,
             img_token=self.image_token,
             sliding_window=getattr(self.config, "sliding_window", None),
+            token_type_ids=kwargs.get("token_type_ids", None),
         )
         print(f_string)
         print(f"{top_bottom_border}")
