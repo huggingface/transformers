@@ -24,8 +24,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
 )
 from ...modeling_utils import (
-    PreTrainedModel,
     ALL_ATTENTION_FUNCTIONS,
+    PreTrainedModel,
 )
 from ...processing_utils import Unpack
 from ...utils import (
