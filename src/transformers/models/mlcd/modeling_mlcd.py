@@ -585,6 +585,14 @@ class MLCDPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, MLCDAttention):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, MLCDMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
