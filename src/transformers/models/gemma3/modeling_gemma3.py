@@ -133,13 +133,18 @@ class Gemma3RMSNorm(nn.Module):
         dtype = x.dtype
 
         if dtype == torch.float16:
-            x = x.clamp_(-65504, 65504).float()
+            self.eps = max(self.eps, 1e-5)
+            x = x.clamp_(-65504, 65504).float()  # replaces inf with max val
         else:
             x = x.float()
         # Llama does x.to(float16) * w whilst Gemma3 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
         output = self._norm(x)
         output *= 1.0 + self.weight.float()
+
+        if dtype == torch.float16:
+            output = output.clamp_(-65504, 65504)
+
         return output.to(dtype)
 
     def extra_repr(self):
