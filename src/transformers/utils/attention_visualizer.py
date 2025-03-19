@@ -38,6 +38,13 @@ WHITE_SQUARE = "⬚"
 
 
 def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_window=None):
+    """
+    Generates an attention matrix from a given attention mask.
+
+    Optionally applies a sliding window mask (e.g., for Gemma2/3) and
+    marks regions where image tokens occur based on the specified `img_token`.
+    
+    """
     mask = mask.int()
     if mask.ndim == 3:
         mask = mask[0, :, :]
@@ -69,9 +76,9 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
 
     row_dummy = " ".join(
         f"{YELLOW}{BLACK_SQUARE}{RESET}"
-        if img_token in words[j] and mask[i, j] and img_token in words[i]
+        if img_token in words[j] and mask[0, j] and img_token in words[0]
         else f"{GREEN}{BLACK_SQUARE}{RESET}"
-        if i == j
+        if 0 == j
         else BLACK_SQUARE
         if mask[0, j]
         else WHITE_SQUARE
@@ -137,7 +144,7 @@ class AttentionMaskVisualizer:
             config.sliding_window = 5
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
-        except Exception:
+        except Exception as e:
             mapped_cls = _get_model_class(config, MODEL_FOR_PRETRAINING_MAPPING)
 
         if mapped_cls is None:
