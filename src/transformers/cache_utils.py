@@ -9,7 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_optimum_quanto_available, logging
+from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
 
 
 if is_hqq_available():
@@ -537,10 +537,10 @@ class DynamicCache(Cache):
 
 class OffloadedCache(DynamicCache):
     """
-    A drop-in replacement for DynamicCache that conserves GPU memory at the expense of more CPU memory.
+    A drop-in replacement for DynamicCache that conserves accelerator(GPU, XPU) memory at the expense of more CPU memory.
     Useful for generating from models with very long context.
 
-    In addition to the default CUDA stream, where all forward() computations happen,
+    In addition to the default accelerator stream, where all forward() computations happen,
     this class uses another stream, the prefetch stream, which it creates itself.
     Since scheduling of operations on separate streams happens independently, this class uses
     the prefetch stream to asynchronously prefetch the KV cache of layer k+1 when layer k is executing.
@@ -549,17 +549,21 @@ class OffloadedCache(DynamicCache):
     """
 
     def __init__(self) -> None:
-        if not torch.cuda.is_available():
-            raise RuntimeError("OffloadedCache can only be used with a GPU")
+        if not (torch.cuda.is_available() or (is_torch_greater_or_equal("2.7") and torch.xpu.is_available())):
+            raise RuntimeError(
+                "OffloadedCache can only be used with a GPU" + (" or XPU" if is_torch_greater_or_equal("2.7") else "")
+            )
+
         super().__init__()
         self.original_device = []
-        self.prefetch_stream = torch.cuda.Stream()
+        self.prefetch_stream = None
+        self.prefetch_stream = torch.Stream() if is_torch_greater_or_equal("2.7") else torch.cuda.Stream()
         self.beam_idx = None  # used to delay beam search operations
 
     def prefetch_layer(self, layer_idx: int):
         "Starts prefetching the next layer cache"
         if layer_idx < len(self):
-            with torch.cuda.stream(self.prefetch_stream):
+            with self.prefetch_stream if is_torch_greater_or_equal("2.7") else torch.cuda.stream(self.prefetch_stream):
                 # Prefetch next layer tensors to GPU
                 device = self.original_device[layer_idx]
                 self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device, non_blocking=True)
@@ -577,7 +581,10 @@ class OffloadedCache(DynamicCache):
         "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
         if layer_idx < len(self):
             # Evict the previous layer if necessary
-            torch.cuda.current_stream().synchronize()
+            if is_torch_greater_or_equal("2.7"):
+                torch.accelerator.current_stream().synchronize()
+            else:
+                torch.cuda.current_stream().synchronize()
             self.evict_previous_layer(layer_idx)
             # Load current layer cache to its original device if not already there
             original_device = self.original_device[layer_idx]
