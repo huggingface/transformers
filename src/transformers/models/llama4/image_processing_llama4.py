@@ -635,17 +635,16 @@ class Llama4ImageProcessor(BaseImageProcessor):
                         global_tile = self.normalize(
                             image=global_tile, mean=image_mean, std=image_std, input_data_format=input_data_format
                         )
-                    processed_image = np.concat([processed_image, np.expand_dims(global_tile, axis=0)], axis=0)
+                    processed_image = np.concatenate([processed_image, np.expand_dims(global_tile, axis=0)], axis=0)
 
             processed_images.append(processed_image)
         # flatten processed_images
         if is_torch_available() and is_torchvision_available():
-            images = torch.cat(processed_images, dim=0)
+            images = processed_images
         else:
-            images = list(np.concat(processed_images, axis=0))
+            images = processed_images
             images = [
-                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                for image in images
+                [to_channel_dimension_format(chunk, data_format, input_channel_dim=input_data_format) for chunk in image] for image in images
             ]
 
         return BatchFeature(data={"pixel_values": images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors)
