@@ -317,7 +317,6 @@ def model_addition_debugger_context(model, debug_path: str = None):
     inputs = processor(text=prompt, images=random_image, return_tensors="pt")
 
     # call forward method (not .generate!)
-    # with torch.no_grad():
     with model_addition_debugger_context(model):
         output = model.forward(**inputs)
     ```
