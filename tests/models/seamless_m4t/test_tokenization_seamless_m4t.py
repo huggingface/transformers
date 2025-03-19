@@ -302,7 +302,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     "Şeful ONU declară că nu există o soluţie militară în Siria",
                     "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al"
                     ' Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi'
-                    " că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
+                    " că noi arme nu for face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
                 ]
                 try:
                     batch = tokenizer.prepare_seq2seq_batch(
