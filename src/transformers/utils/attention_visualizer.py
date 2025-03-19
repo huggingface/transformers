@@ -82,7 +82,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
         BLACK_SQUARE if mask[0, j] else WHITE_SQUARE
         for j in range(n)
     )
-    
+
     # Print headers
     legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: token_type_ids"
     output.append(" " + legend)
@@ -124,7 +124,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
         if sliding_window is not None:
             sliding_window_row = " ".join(
                 f"{YELLOW}{BLACK_SQUARE}{RESET}"
-                if img_token in words[j] and sliding_window_mask[i][j] and img_token in words[i]
+                if img_token in words[j] and img_token in words[i]
                 else f"{GREEN}{BLACK_SQUARE}{RESET}"
                 if i == j
                 else BLACK_SQUARE
@@ -178,7 +178,7 @@ class AttentionMaskVisualizer:
                 image_token = processor.image_token
             else:
                 image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
-            
+
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
 
@@ -186,7 +186,7 @@ class AttentionMaskVisualizer:
 
 
             self.image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
-            
+
             attention_mask = inputs["attention_mask"]
             if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
