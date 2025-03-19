@@ -20,7 +20,6 @@
 # limitations under the License.
 
 
-import math
 from typing import Optional
 
 import torch
@@ -52,18 +51,14 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["HGNetV2ConvLayer"]
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
-        elif isinstance(module, nn.Linear):
-            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
-                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                nn.init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
+                module.bias.data.zero_()
+        elif isinstance(module, nn.BatchNorm2d):
+            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 class HGNetV2LearnableAffineBlock(nn.Module):
