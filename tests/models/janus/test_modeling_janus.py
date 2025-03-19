@@ -96,7 +96,7 @@ class JanusVisionText2TextModelTester:
             "num_key_value_heads": 1,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 37,
+            "mlp_ratio": 2,
             "dropout": 0.1,
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
@@ -213,6 +213,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
             del inputs["pixel_values"]
+            del inputs["generation_mode"]
 
             wte = model.get_input_embeddings()
             inputs["inputs_embeds"] = wte(input_ids)
@@ -233,6 +234,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
             del inputs["pixel_values"]
+            del inputs["generation_mode"]
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
 
@@ -242,7 +244,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
             torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
-        # Copied from SiglipModelTesterMixin
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -288,12 +289,10 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
             self.skipTest(reason="ModelTester is not configured to run training tests")
         """
         We skip some parameters when checking for gradient checkpointing:
-        - VQ model, as its training is not supported
-        - JanusVisionAttentionPoolLatent, which is the layer responsible for generating sentence-level representations
-        that are matched with images on Siglip, as the forward pass of our models---which is what is used to check
-        gradients in this test---does not include the forward pass on this layer.
+        - VQ model, as its training is not supported.
+        - A few other modules used for image generation.
         """
-        skip_patterns = ["vision_model.vision_model.head", "vqmodel", "gen_embed", "gen_aligner", "gen_head"]
+        skip_patterns = ["vqmodel", "gen_embed", "gen_aligner", "gen_head"]
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):

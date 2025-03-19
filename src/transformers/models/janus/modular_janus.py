@@ -128,7 +128,7 @@ class JanusVisionConfig(SiglipVisionConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, and `"gelu_new"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of the hidden size of the MLPs relative to `hidden_size`.
+            Ratio of MLP hidden dimensionality to embedding dimensionality.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys, and values in the attention layers.
         hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
@@ -184,9 +184,10 @@ class JanusVisionConfig(SiglipVisionConfig):
             hidden_act=hidden_act,
             **kwargs,
         )
+        del self.intermediate_size
 
+        self.mlp_ratio = mlp_ratio
         self.attention_bias = attention_bias
-        self.intermediate_size = int(hidden_size * mlp_ratio)
         self.hidden_dropout_rate = hidden_dropout_rate
         self.projection_dim = projection_dim
         self.projection_dropout = projection_dropout
@@ -579,9 +580,10 @@ class JanusVisionMLP(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.config = config
+        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
         self.activation_fn = ACT2FN[config.hidden_act]  # Gelu act
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.fc1 = nn.Linear(config.hidden_size, self.intermediate_size)
+        self.fc2 = nn.Linear(self.intermediate_size, config.hidden_size)
         self.dropout1 = nn.Dropout(config.hidden_dropout_rate)
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 
@@ -1318,7 +1320,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         if len(input_ids.shape) != 2:
             raise ValueError(
-                f"Expected input ids as input of shape (batch_size, seq_len), but got {input_ids.shape}"
+                f"Expected input ids of shape (batch_size, seq_len), but got {input_ids.shape}"
                 "Passing `inputs embeds` is not supported currently."
             )
 
@@ -1357,11 +1359,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask = attention_mask.repeat(2, 1)
         model_kwargs["attention_mask"] = attention_mask
 
-        input_tokens[batch_size:, :].masked_fill_(
-            (input_tokens[batch_size:, :] != generation_config.bos_token_id)
-            & (input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]),
-            generation_config.pad_token_id,
+        # Mask all the tokens that are neither BOS nor BOI with pad token in the unconditional logits.
+        mask = (input_tokens[batch_size:, :] != generation_config.bos_token_id) & (
+            input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]
         )
+        input_tokens[batch_size:, :].masked_fill_(mask, generation_config.pad_token_id)
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 

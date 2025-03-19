@@ -64,7 +64,7 @@ class JanusVisionConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, and `"gelu_new"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of the hidden size of the MLPs relative to `hidden_size`.
+            Ratio of MLP hidden dimensionality to embedding dimensionality.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys, and values in the attention layers.
         hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
@@ -111,7 +111,6 @@ class JanusVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
-        self.intermediate_size = int(hidden_size * mlp_ratio)
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
@@ -121,6 +120,7 @@ class JanusVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
+        self.mlp_ratio = mlp_ratio
         self.attention_bias = attention_bias
         self.hidden_dropout_rate = hidden_dropout_rate
         self.projection_dim = projection_dim
