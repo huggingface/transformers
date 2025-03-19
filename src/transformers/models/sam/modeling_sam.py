@@ -31,8 +31,8 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
-    return_tuple_if_requested,
 )
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
@@ -1118,7 +1118,7 @@ class SamVisionEncoder(nn.Module):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @return_tuple_if_requested
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1326,9 +1326,6 @@ class SamModel(SamPreTrainedModel):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         """
         vision_output = self.vision_encoder(
             pixel_values,
@@ -1371,7 +1368,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @return_tuple_if_requested
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SAM_INPUTS_DOCSTRING)
     def forward(
         self,
