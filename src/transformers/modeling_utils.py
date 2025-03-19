@@ -791,7 +791,7 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                tensor_device,  # the rank
+                os.environ["RANK"],  # the rank
                 device_mesh,
             )
         else:
@@ -4060,9 +4060,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not torch.distributed.is_initialized():
                 try:
-                    logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
-                    rank = int(os.environ["RANK"])
-                    world_size = int(os.environ["WORLD_SIZE"])
+                    rank = int(os.environ["LOCAL_RANK"])
+                    world_size = int(os.environ["ROLE_WORLD_SIZE"]) 
+                    logger.warning(
+                        "Tensor Parallel requires torch.distributed to be initialized first."
+                        f"Initializing with world size {world_size} on rank {rank}"
+                    )
                     torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
                     torch.cuda.set_device(rank)
                 except Exception as e:
@@ -4075,12 +4078,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_type = torch._C._get_accelerator().type
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            tp_device = torch.device(device_type, int(os.environ["LOCAL_RANK"]))
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
 
             # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
 
         if is_fsdp_enabled():
@@ -4914,6 +4916,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_mesh is not None:
             # When using TP, the device map is a single device for all parameters
             tp_device = list(device_map.values())[0]
+            print(f"TP DEVICE: {tp_device} {os.environ["RANK"]}")
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
@@ -4936,7 +4939,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         name,
                         casting_dtype,
                         to_contiguous,
-                        tp_device.index,
+                        os.environ["RANK"],
                         device_mesh,
                     )
 

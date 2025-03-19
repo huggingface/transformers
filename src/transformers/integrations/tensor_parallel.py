@@ -204,6 +204,7 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        # this op cannot be asynch, otherwise it completely breaks the outputs of models
         torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False)
         return outputs
 
@@ -266,7 +267,7 @@ class ColwiseParallel(TensorParallelLayer):
 
         # transform the input layouts to the desired layouts of ColwiseParallel
         if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -291,7 +292,7 @@ class ColwiseParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         # outputs is a shard on last dimension DTensor, i.e. Shard(-1)
         if outputs.placements != output_layouts:
-            outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         # back to local tensor
         return outputs.to_local() if use_local_output else outputs
 
@@ -519,6 +520,7 @@ def shard_and_distribute_module(
     tp_plan = model._tp_plan
     module_to_tp = model.get_submodule(param_name)
     current_module_plan = None
+    rank = int(rank)
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
         current_module_plan = tp_plan[generic_param_name]

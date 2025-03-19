@@ -108,17 +108,19 @@ class Llama4TextMLP(nn.Module):
         down_proj = self.activation_fn(self.gate_proj(x)) * self.up_proj(x)
         return self.down_proj(down_proj)
 
-
 class Llama4TextL2Norm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int=None, eps: float = 1e-6):
         super().__init__()
-        self.eps = 1e-6
+        self.eps = eps
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
+
+    def extra_repr(self):
+        return f"eps={self.eps}"
 
 
 class Llama4TextRMSNorm(nn.Module):
@@ -191,10 +193,8 @@ class Llama4TextRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4TextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
+        self.rope_type = "llama3"
+
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -235,12 +235,11 @@ class Llama4TextRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
 
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
         freqs_cis = freqs_cis * self.attention_scaling
-
         return freqs_cis
 
 
@@ -320,7 +319,7 @@ class Llama4TextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
+        self.qk_norm = Llama4TextL2Norm()
 
     def forward(
         self,
@@ -1756,12 +1755,13 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 projected_embeddings=image_features,
             )
             projected_image_embeddings = self.multi_modal_projector(image_embeddings_pre_scatter)
+            projected_image_embeddings = torch.load("/fsx/arthur/projected_image_embeddings")
             # FIXME This should be more or less robust but
             # it is not elegant at all. We can do a lot better
             final_mask = special_image_mask[:, :, 0, None]
             inputs_embeds = inputs_embeds * ~final_mask.to(
                 inputs_embeds.device
-            ) + projected_image_embeddings * final_mask.to(inputs_embeds.device)
+            ) + projected_image_embeddings.to(inputs_embeds.device) * final_mask.to(inputs_embeds.device)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
