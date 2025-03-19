@@ -1509,11 +1509,10 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # Default to "text" generation if mode isn't provided
         generation_mode = kwargs.pop("generation_mode", "text")
         if generation_mode == "text":
-            # Set to prevent running UnbatchedCFG processor.
-            generation_config.guidance_scale = None
-            self.generation_config.guidance_scale = None
+            # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
-                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config, **kwargs
+                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config,
+                guidance_scale=None, **kwargs
             )
 
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
