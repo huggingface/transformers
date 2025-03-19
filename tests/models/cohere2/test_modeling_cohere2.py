@@ -16,6 +16,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
@@ -81,6 +82,7 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -89,6 +91,7 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -99,10 +102,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 
     @unittest.skip("Cohere2 has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
         pass
 
     @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")

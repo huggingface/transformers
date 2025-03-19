@@ -613,6 +613,7 @@ _import_structure = {
     ],
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
+    "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
     "models.mlcd": ["MLCDVisionConfig"],
     "models.mllama": [
@@ -2941,6 +2942,12 @@ else:
             "MistralPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral3"].extend(
+        [
+            "Mistral3ForConditionalGeneration",
+            "Mistral3PreTrainedModel",
+        ]
+    )
     _import_structure["models.mixtral"].extend(
         [
             "MixtralForCausalLM",
@@ -4111,7 +4118,6 @@ else:
     )
     _import_structure["optimization"] = [
         "Adafactor",
-        "AdamW",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -5795,6 +5801,7 @@ if TYPE_CHECKING:
         MimiConfig,
     )
     from .models.mistral import MistralConfig
+    from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
     from .models.mlcd import MLCDVisionConfig
     from .models.mllama import (
@@ -7852,6 +7859,10 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
+        from .models.mistral3 import (
+            Mistral3ForConditionalGeneration,
+            Mistral3PreTrainedModel,
+        )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForQuestionAnswering,
@@ -8758,7 +8769,6 @@ if TYPE_CHECKING:
         # Optimization
         from .optimization import (
             Adafactor,
-            AdamW,
             get_constant_schedule,
             get_constant_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
