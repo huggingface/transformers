@@ -170,6 +170,7 @@ from . import (
     mgp_str,
     mimi,
     mistral,
+    mistral3,
     mixtral,
     mllama,
     mluke,
