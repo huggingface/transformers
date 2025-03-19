@@ -60,7 +60,10 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     # Generate sliding window mask (size = 4), but exclude img_token
     if sliding_window is not None:
         sliding_window_mask = [
-            [1 if (0 <= i - j < sliding_window) or img_token in words[i] and img_token in words[j] else 0 for j in range(n)]
+            [
+                1 if (0 <= i - j < sliding_window) or img_token in words[i] and img_token in words[j] else 0
+                for j in range(n)
+            ]
             for i in range(n)
         ]
 
@@ -79,7 +82,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     print(" " + legend)
     f_string = " " * (max_word_length + 5) + "Attention Matrix".ljust(len(row_dummy))
     if sliding_window is not None:
-        f_string+= "Sliding Window Mask"
+        f_string += "Sliding Window Mask"
     print(f_string)
     vertical_header = []
     for idx, word in enumerate(words):
@@ -91,7 +94,11 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
 
     for row in vertical_header:
-        print((max_word_length + 5) * " " + " ".join(row) + "    |    " + " ".join(row) if sliding_window is not None else "")
+        print(
+            (max_word_length + 5) * " " + " ".join(row) + "    |    " + " ".join(row)
+            if sliding_window is not None
+            else ""
+        )
 
     for i, word in enumerate(words):
         word_repr = repr(word).ljust(max_word_length)
@@ -133,7 +140,6 @@ class AttentionMaskVisualizer:
         except Exception:
             mapped_cls = _get_model_class(config, MODEL_FOR_PRETRAINING_MAPPING)
 
-
         if mapped_cls is None:
             raise ValueError(f"Model name {model_name} is not supported for attention visualization")
 
@@ -154,7 +160,6 @@ class AttentionMaskVisualizer:
     def visualize_attention_mask(self, input_sentence: str, suffix=""):
         model = self.model
         kwargs = {}
-        suffix_tokens = [""]
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             img = Image.open(requests.get(img, stream=True).raw)
@@ -164,7 +169,6 @@ class AttentionMaskVisualizer:
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
-            suffix_tokens = processor.tokenizer.tokenize(suffix)
             attention_mask = inputs["attention_mask"]
             if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
@@ -199,5 +203,10 @@ class AttentionMaskVisualizer:
             + side_border
         )
         print(f"{top_bottom_border}")
-        generate_attention_matrix_from_mask(tokens, attention_mask, img_token=self.image_token, sliding_window=getattr(self.config, "sliding_window", None))
+        generate_attention_matrix_from_mask(
+            tokens,
+            attention_mask,
+            img_token=self.image_token,
+            sliding_window=getattr(self.config, "sliding_window", None),
+        )
         print(f"{top_bottom_border}")
