@@ -71,7 +71,7 @@ def retrieve_images_in_messages(
     """
     if images is None:
         images = []
-    elif not isinstance(images, Iterable):
+    elif not isinstance(images, (Iterable)) or isinstance(images, str):
         images = [images]
     idx_images = 0
     for message in messages:
@@ -102,6 +102,8 @@ def retrieve_images_in_messages(
                     )
 
     # The number of images passed should be consistent with the number of images in the chat without an image key
+    print("idx_images: ", idx_images)
+    print("images: ", images)
     if idx_images != len(images):
         raise ValueError(
             "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
