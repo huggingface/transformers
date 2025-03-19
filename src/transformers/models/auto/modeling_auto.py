@@ -1663,7 +1663,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
         a nested text decoder section, uses that section instead.
 
         Under the hood, multimodal models mapped by AutoModelForCausalLM assume the text decoder receives its own
-        config, rather than the config for the whole model.
+        config, rather than the config for the whole model. This is used e.g. to load the text-only part of a VLM.
         """
         return config.get_text_config(decoder=True)
 
