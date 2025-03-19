@@ -1511,6 +1511,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if generation_mode == "text":
             # Set to prevent running UnbatchedCFG processor.
             generation_config.guidance_scale = None
+            self.generation_config.guidance_scale = None
             return super().generate(
                 inputs=inputs, attention_mask=attention_mask, generation_config=generation_config, **kwargs
             )
