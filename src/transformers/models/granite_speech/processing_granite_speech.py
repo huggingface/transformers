@@ -59,24 +59,28 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text_inputs = {}
 
         text = self._get_validated_text(text)
-        audios = self._get_validated_audios(audios)
-        # TODO: assert that len(audios) == count(audio_token, text)
+        expected_num_audios = sum(t.count(self.audio_token) for t in text)
         
         if audios is not None:
+            audios, audio_lengths = self._get_validated_audios(audios)
+            if len(audio_lengths) != expected_num_audios:
+                raise ValueError("Text/Audio mismatch. The number of audios and audio tokens do not match")
+            
             # Calculate Mel features & the number of placeholders we will need
             speech_inputs["input_features"] = self.feature_extractor(
                 audios,
                 device=device,
             )
             num_audio_features = self.feature_extractor._get_num_audio_features(
-                speech_inputs["input_features"],
+                audio_lengths
             )
 
             # duplicate the audio placeholders to match the feature dims
             text = self._expand_audio_placeholders(text, num_audio_features)
-
-        if text is not None:
-            text_inputs = self.tokenizer(text, **kwargs)
+        else:
+            assert expected_num_audios == 0, "no audio is provided, expecting no audio tokens."
+        
+        text_inputs = self.tokenizer(text, padding=True, **kwargs)
         return BatchFeature(data={**text_inputs, **speech_inputs})
 
     def _expand_audio_placeholders(self, text: list[str], num_audio_features: int):
