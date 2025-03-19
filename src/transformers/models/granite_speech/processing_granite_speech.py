@@ -105,9 +105,17 @@ class GraniteSpeechProcessor(ProcessorMixin):
 
     def _get_validated_audios(self, audios):
         # todo: if this is a list, collate and keep track of audio lengths
-        if audios is not None and not isinstance(audios, torch.Tensor):
-            raise TypeError("Invalid audios provided! Audio should be a torch tensor.")
-        return audios
+        if isinstance(audios, torch.Tensor):
+            lengths = [audios.shape[-1]] * audios.shape[0]
+            return audios, lengths
+        elif isinstance(audios, list) and isinstance(audios[0], torch.Tensor):
+            lengths = [audio.shape[-1] for audio in audios]
+            padding = [max(lengths) - length for length in lengths]
+            padded = [torch.nn.functional.pad(audio, (0, pad)) for audio, pad in zip(audios, padding)]
+            audios = torch.cat(padded, dim=0)
+            return audios, lengths
+        
+        raise TypeError("Invalid audio provided. Audio should be a Tensor or a list of Tensors.")
 
 
 __all__ = ["GraniteSpeechProcessor"]
