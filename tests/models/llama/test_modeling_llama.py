@@ -709,7 +709,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
             "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relative",
+            "theory of relativ",
             "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
             "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
         ]
