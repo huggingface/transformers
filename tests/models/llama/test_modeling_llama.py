@@ -426,7 +426,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -707,7 +709,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
             "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
+            "theory of relative",
             "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
             "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
         ]
