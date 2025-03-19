@@ -1567,6 +1567,9 @@ class CosmosTextModel(CosmosTextPreTrainedModel):
         is reached. For example with `num_width_grid=2` and `num_height_grid=3`, the temporal position will be `[0, 0, 0, 0, 0, 0, 1, 1, ...]`.
         In other words, the ids are updted every `num_width_grid * num_height_grid` positions.
         """
+        if self.config.is_video_to_world:
+            seq_length -= 1
+
         num_temporal_grid, num_height_grid, num_width_grid = self.config.rope_latent_shape
         one_frame_len = num_height_grid * num_width_grid
         w_grids = math.ceil(seq_length / num_width_grid)
@@ -2046,6 +2049,7 @@ class CosmosModel(CosmosPreTrainedModel):
                 output_hidden_states=True,
                 output_attentions=True,
             )
+            encoder_hidden_states = output.last_hidden_state
             if encoder_attention_mask is not None:
                 lengths = encoder_attention_mask.sum(dim=1)
                 for batch_id in range(encoder_hidden_states.shape[0]):
