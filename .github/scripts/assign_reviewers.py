@@ -22,12 +22,12 @@ from collections import Counter
 from pathlib import Path
 
 def pattern_to_regex(pattern):
-    start_anchor = pattern.startswith("/")
-    pattern = re.escape(pattern)
+    if pattern.startswith("/"):
+        pattern = "^" + re.escape(pattern[1:])
+    else:
+        pattern = re.escape(pattern)
     # Replace `*` with "any number of non-slash characters"
     pattern = pattern.replace(r"\*", "[^/]*")
-    if start_anchor:
-        pattern = "^" + pattern
     return pattern
 
 def get_file_owners(file_path, codeowners_lines):
