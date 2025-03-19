@@ -32,13 +32,13 @@ import tempfile
 import threading
 import time
 import unittest
-from collections import defaultdict
+from collections import UserDict, defaultdict
 from collections.abc import Mapping
 from dataclasses import MISSING, fields
-from functools import wraps
+from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -3042,3 +3042,78 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+
+
+# Type definition of key used in `Expectations` class.
+DeviceProperties = tuple[Union[str, None], Union[int, None]]
+
+
+@cache
+def get_device_properties(self) -> DeviceProperties:
+    """
+    Get environment device properties.
+    """
+    if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+        import torch
+
+        major, _ = torch.cuda.get_device_capability()
+        if IS_ROCM_SYSTEM:
+            return ("rocm", major)
+        else:
+            return ("cuda", major)
+    else:
+        return (torch_device, None)
+
+
+class Expectations(UserDict[DeviceProperties, Any]):
+    def get_expectation(self) -> Any:
+        """
+        Find best matching expectation based on environment device properties.
+        """
+        return self.find_expectation(get_device_properties())
+
+    @staticmethod
+    def is_default(key: DeviceProperties) -> bool:
+        return all(p is None for p in key)
+
+    @staticmethod
+    def score(key: DeviceProperties, other: DeviceProperties) -> int:
+        """
+        Returns score indicating how similar two instances of the `Properties` tuple are.
+        Points are calculated using bits, but documented as int.
+        Rules are as follows:
+            * Matching `type` gives 8 points.
+            * Semi-matching `type`, for example cuda and rocm, gives 4 points.
+            * Matching `major` (compute capability major version) gives 2 points.
+            * Default expectation (if present) gives 1 points.
+        """
+        (device_type, major) = key
+        (other_device_type, other_major) = other
+
+        score = 0b0
+        if device_type == other_device_type:
+            score |= 0b1000
+        elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
+            score |= 0b100
+
+        if major == other_major and other_major is not None:
+            score |= 0b10
+
+        if Expectations.is_default(other):
+            score |= 0b1
+
+        return int(score)
+
+    def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
+        """
+        Find best matching expectation based on provided device properties.
+        """
+        (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
+
+        if Expectations.score(key, result_key) == 0:
+            raise ValueError(f"No matching expectation found for {key}")
+
+        return result
+
+    def __repr__(self):
+        return f"{self.data}"
