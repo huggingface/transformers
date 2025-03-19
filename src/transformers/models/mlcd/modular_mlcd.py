@@ -12,22 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import (
+    PreTrainedModel,
+    ALL_ATTENTION_FUNCTIONS,
+)
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
 )
 from ..clip.modeling_clip import (
@@ -35,20 +38,15 @@ from ..clip.modeling_clip import (
     CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
-    CLIPFlashAttention2,
-    CLIPSdpaAttention,
     CLIPVisionEmbeddings,
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
+from ..llama.modeling_llama import eager_attention_forward
 from ..qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
     apply_rotary_pos_emb_vision,
 )
-
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -118,6 +116,7 @@ class MLCDVisionConfig(PretrainedConfig):
         intermediate_size=8192,
         num_hidden_layers=48,
         num_attention_heads=16,
+        num_key_value_groups=1,
         num_channels=3,
         image_size=336,
         patch_size=14,
@@ -134,6 +133,7 @@ class MLCDVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_groups = num_key_value_groups
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
@@ -144,37 +144,43 @@ class MLCDVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
+class MLCDConfig(MLCDVisionConfig):
+    pass
+
+
 class MLCDMLP(CLIPMLP):
     pass
 
 
 class MLCDRotaryEmbedding(VisionRotaryEmbedding):
-    def forward(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        """Calculate sequence length from grid, and then get the RoPE for MLCDVisionModel"""
+    def forward(self, num_patches_height: int, num_patches_width: int) -> torch.Tensor:
+        """
+        Calculate the Rotary Position Embedding (RoPE) for MLCDVisionModel based on the grid size.
 
-        t, h, w = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
+        Args:
+            num_patches_height (int): Number of patches in the height dimension.
+            num_patches_width (int): Number of patches in the width dimension.
 
-        # Generate hpos_ids and wpos_ids for the maximum grid size
-        hpos_ids = torch.arange(h.max()).unsqueeze(1).expand(-1, w.max())
-        wpos_ids = torch.arange(w.max()).unsqueeze(0).expand(h.max(), -1)
+        Returns:
+            torch.Tensor: Rotary positional embeddings for the given grid size.
+        """
+        # Generate position IDs for height and width dimensions
+        hpos_ids = (
+            torch.arange(num_patches_height, device=self.inv_freq.device).unsqueeze(1).expand(-1, num_patches_width)
+        )
+        wpos_ids = (
+            torch.arange(num_patches_width, device=self.inv_freq.device).unsqueeze(0).expand(num_patches_height, -1)
+        )
 
-        # Expand hpos_ids and wpos_ids to match the batch size
-        hpos_ids = hpos_ids.unsqueeze(0).expand(len(grid_thw), -1, -1)
-        wpos_ids = wpos_ids.unsqueeze(0).expand(len(grid_thw), -1, -1)
+        # Flatten and stack the position IDs
+        pos_ids = torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1)
 
-        # Slice hpos_ids and wpos_ids to match the actual grid sizes
-        hpos_ids = [hpos_ids[i, : h[i], : w[i]] for i in range(len(grid_thw))]
-        wpos_ids = [wpos_ids[i, : h[i], : w[i]] for i in range(len(grid_thw))]
-
-        # Stack and flatten hpos_ids and wpos_ids, then repeat according to t
-        pos_ids = [torch.stack([hpos_ids[i].flatten(), wpos_ids[i].flatten()], dim=-1) for i in range(len(grid_thw))]
-        pos_ids = [pos_ids[i].repeat(t[i], 1) for i in range(len(grid_thw))]
-        pos_ids = torch.cat(pos_ids, dim=0)
-
-        # Get the rotary positional embeddings
-        max_grid_size = grid_thw[:, 1:].max()
+        # Generate the full rotary positional embeddings for the maximum grid size
+        max_grid_size = max(num_patches_height, num_patches_width)
         seq = torch.arange(max_grid_size, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
+
+        # Select and flatten the embeddings based on the position IDs
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
 
         return rotary_pos_emb
@@ -206,15 +212,20 @@ class MLCDAttention(CLIPAttention):
         https://arxiv.org/abs/2104.09864
     """
 
+    def __init__(self, config: MLCDVisionConfig):
+        super().__init__(config)
+        self.num_key_value_groups = config.num_key_value_groups
+        self.is_causal = False
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch_size, seq_length, _ = hidden_states.size()
+        batch_size, seq_length = hidden_states.shape[:-1]
 
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
         query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
@@ -239,205 +250,39 @@ class MLCDAttention(CLIPAttention):
         key_states = key_states.permute(0, 2, 1, 3).contiguous()
         value_states = value_states.permute(0, 2, 1, 3).contiguous()
 
-        k_v_seq_len = key_states.shape[-2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
-
-        if attn_weights.size() != (batch_size, self.num_heads, seq_length, k_v_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size, self.num_heads, seq_length, k_v_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, seq_length, k_v_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_length, k_v_seq_len)}, but is {attention_mask.size()}"
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (batch_size, self.num_heads, seq_length, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, seq_length, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        if not output_attentions:
-            attn_weights = None
-
-        attn_output = attn_output.permute(2, 0, 1, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
-        attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
-        attn_output = self.out_proj(attn_output)
-        attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
-        return attn_output, attn_weights
-
-
-class MLCDFlashAttention2(CLIPFlashAttention2):
-    """
-    MLCDAttention flash attention module. This module inherits from `MLCDAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        output_attentions = False
-
-        batch_size, seq_length, _ = hidden_states.size()
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos().unsqueeze(0).float()
-            sin = emb.sin().unsqueeze(0).float()
-        else:
-            cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        # Each of shape: [batch_size, num_heads, seq_length, head_dim]
-        query_states = query_states.permute(0, 2, 1, 3).contiguous()
-        key_states = key_states.permute(0, 2, 1, 3).contiguous()
-        value_states = value_states.permute(0, 2, 1, 3).contiguous()
-
-        dropout_rate = self.dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32.
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            seq_length,
-            dropout=dropout_rate,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scale,
             is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            **kwargs,
         )
 
-        attn_output = attn_output.permute(2, 0, 1, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
+        attn_output = attn_output.permute(1, 0, 2, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
         attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
         attn_output = self.out_proj(attn_output)
         attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
-
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
-
-
-class MLCDSdpaAttention(CLIPSdpaAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Seq x Hidden Size"""
-
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "MLCDVisionModel is using MLCDSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                rotary_pos_emb=rotary_pos_emb,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-            )
-        batch_size, seq_length, _ = hidden_states.size()
-
-        # Each of shape: [batch_size, seq_length, num_heads, head_dim]
-        query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos().unsqueeze(0).float()
-            sin = emb.sin().unsqueeze(0).float()
-        else:
-            cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        # Each of shape: [batch_size, num_heads, seq_length, head_dim]
-        query_states = query_states.permute(0, 2, 1, 3).contiguous()
-        key_states = key_states.permute(0, 2, 1, 3).contiguous()
-        value_states = value_states.permute(0, 2, 1, 3).contiguous()
-
-        attn_output = F.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-        )
-        attn_output = attn_output.permute(2, 0, 1, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
-        attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
-        attn_output = self.out_proj(attn_output)
-        attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
-        return attn_output, None
 
 
 class MLCDEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MLCDVisionConfig):
         super().__init__(config)
+        self.self_attn = MLCDAttention(config)
 
     def forward(
         self,
@@ -490,17 +335,6 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
 
 
 class MLCDEncoder(CLIPEncoder):
-    """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`MLCDEncoderLayer`].
-
-    Args:
-        config: MLCDVisionConfig
-    """
-
-    def __init__(self, config: MLCDVisionConfig):
-        super().__init__(config)
-
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -625,8 +459,9 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        twh = (1, pixel_values.size(3) // self.config.patch_size, pixel_values.size(2) // self.config.patch_size)
-        rotary_pos_emb = self.vision_rotary_embedding(torch.tensor([twh], device=pixel_values.device))
+        num_patches_height = pixel_values.shape[-2] // self.config.patch_size
+        num_patches_width = pixel_values.shape[-1] // self.config.patch_size
+        rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
 
         hidden_states = self.embeddings(pixel_values)
@@ -681,6 +516,8 @@ class MLCDPreTrainedModel(PreTrainedModel):
     config_class = MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
+
+    _supports_flash_attn_2 = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -690,14 +527,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, MLCDSdpaAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, MLCDMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor

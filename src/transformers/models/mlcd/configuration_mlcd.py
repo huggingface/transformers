@@ -86,6 +86,7 @@ class MLCDVisionConfig(PretrainedConfig):
         intermediate_size=8192,
         num_hidden_layers=48,
         num_attention_heads=16,
+        num_key_value_groups=1,
         num_channels=3,
         image_size=336,
         patch_size=14,
@@ -102,6 +103,7 @@ class MLCDVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_groups = num_key_value_groups
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
@@ -110,6 +112,10 @@ class MLCDVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+
+
+class MLCDConfig(MLCDVisionConfig):
+    pass
 
 
 __all__ = ["MLCDVisionConfig"]

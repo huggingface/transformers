@@ -126,7 +126,6 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
-    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = MLCDVisionModelTester(self)
