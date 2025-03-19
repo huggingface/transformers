@@ -2656,6 +2656,7 @@ else:
         [
             "HGNetV2Backbone",
             "HGNetV2PreTrainedModel",
+            "HGNetV2ForImageClassification",
         ]
     )
     _import_structure["models.hiera"].extend(
@@ -7736,6 +7737,7 @@ if TYPE_CHECKING:
         )
         from .models.hgnet_v2 import (
             HGNetV2Backbone,
+            HGNetV2ForImageClassification,
             HGNetV2PreTrainedModel,
         )
         from .models.hiera import (

@@ -668,6 +668,38 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
+class DFineConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_d_fine_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by DFineFrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/DFine_pytorch/src/nn/backbone/presnet.py#L142
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
+
+
 class DFineEncoderLayer(nn.Module):
     def __init__(self, config: DFineConfig):
         super().__init__()
@@ -1309,41 +1341,6 @@ class DFineDecoder(DFinePreTrainedModel):
         )
 
 
-class DFineConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_d_fine_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by DFineFrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/DFine_pytorch/src/nn/backbone/presnet.py#L142
-
-    Convolutional backbone using the modeling_hgnet_v2.py.
-    https://github.com/Peterande/D-FINE/blob/master/src/nn/backbone/hgnetv2.py
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
-
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
-
-
 @add_start_docstrings(
     """
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
@@ -1353,6 +1350,8 @@ class DFineConvEncoder(nn.Module):
 class DFineModel(DFinePreTrainedModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
+
+        # Create backbone
         self.backbone = DFineConvEncoder(config)
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
         num_backbone_outs = len(config.decoder_in_channels)

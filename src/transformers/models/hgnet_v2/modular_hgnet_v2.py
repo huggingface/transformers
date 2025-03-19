@@ -20,17 +20,16 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
+    ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...utils.backbone_utils import BackboneConfigMixin, BackboneMixin, get_aligned_output_features_output_indices
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
@@ -39,7 +38,7 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a HGNet-V2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of D-FINE-X-COCO "[vladislavbro/dfine_x_coco"](https://huggingface.co/vladislavbro/dfine_x_coco").
+    defaults will yield a similar configuration to that of D-FINE-X-COCO B4 "[vladislavbro/dfine_x_coco"](https://huggingface.co/vladislavbro/dfine_x_coco").
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -165,7 +164,7 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = HGNetV2Config
-    base_model_prefix = ""
+    base_model_prefix = "hgnetv2"
     main_input_name = "pixel_values"
     _no_split_modules = ["HGNetV2ConvLayer"]
 
@@ -559,4 +558,103 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         )
 
 
-__all__ = ["HGNetV2Config", "HGNetV2Backbone", "HGNetV2PreTrainedModel"]
+@add_start_docstrings(
+    """
+    HGNetV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """,
+    HGNet_V2_START_DOCSTRING,
+)
+class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
+    def __init__(self, config: HGNetV2Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.embedder = HGNetV2Embeddings(config)
+        self.encoder = HGNetV2Encoder(config)
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+
+        # classification head
+        self.classifier = nn.ModuleList([self.avg_pool, self.flatten])
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(HGNet_V2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> ImageClassifierOutputWithNoAttention:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> import torch
+        >>> import requests
+        >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
+        >>> from PIL import Image
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> model = HGNetV2ForImageClassification.from_pretrained("vladislavbro/hgnet-v2")
+        >>> processor = AutoImageProcessor.from_pretrained("vladislavbro/hgnet-v2")
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        >>> outputs.logits.shape
+        torch.Size([1, 2])
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        embedding_output = self.embedder(pixel_values)
+        outputs = self.encoder(embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        last_hidden_state = outputs[0]
+        for layer in self.classifier:
+            last_hidden_state = layer(last_hidden_state)
+        logits = self.fc(last_hidden_state)
+        loss = None
+
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return (loss,) + output if loss is not None else output
+
+        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["HGNetV2Config", "HGNetV2Backbone", "HGNetV2PreTrainedModel", "HGNetV2ForImageClassification"]

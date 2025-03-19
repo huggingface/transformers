@@ -27,7 +27,6 @@ from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 from ..rt_detr.modeling_rt_detr import (
-    RTDetrConvEncoder,
     RTDetrConvNormLayer,
     RTDetrDecoder,
     RTDetrDecoderLayer,
@@ -836,19 +835,9 @@ class DFineDecoder(RTDetrDecoder):
         )
 
 
-class DFineConvEncoder(RTDetrConvEncoder):
-    """
-    Convolutional backbone using the modeling_hgnet_v2.py.
-    https://github.com/Peterande/D-FINE/blob/master/src/nn/backbone/hgnetv2.py
-    """
-
-    pass
-
-
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
-        self.backbone = DFineConvEncoder(config)
         del self.decoder_input_proj
         self.encoder = DFineHybridEncoder(config=config)
         num_backbone_outs = len(config.decoder_in_channels)

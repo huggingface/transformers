@@ -15,19 +15,23 @@
 
 import unittest
 
+import torch
+from torch import nn
+
 from transformers import HGNetV2Config
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
-    from transformers import HGNetV2Backbone
+    from transformers import HGNetV2Backbone, HGNetV2ForImageClassification
 
 
-class DFineResNetModelTester:
+class HGNetV2ModelTester:
     def __init__(
         self,
         parent,
@@ -140,6 +144,14 @@ class DFineResNetModelTester:
         self.parent.assertEqual(len(model.channels), 1)
         self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.num_labels
+        model = HGNetV2ForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -154,4 +166,119 @@ class RTDetrResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     config_class = HGNetV2Config
 
     def setUp(self):
-        self.model_tester = DFineResNetModelTester(self)
+        self.model_tester = HGNetV2ModelTester(self)
+
+
+@require_torch
+class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some tests of test_modeling_common.py, as TextNet does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (HGNetV2ForImageClassification, HGNetV2Backbone) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-classification": HGNetV2ForImageClassification}
+        if is_torch_available()
+        else {}
+    )
+
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    test_torch_exportable = True
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = HGNetV2ModelTester(self)
+
+
+    @unittest.skip(reason="HGNetV2 does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="HGNetV2 does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="HGNetV2 does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="HGNetV2 does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="HGNetV2 does not have a model")
+    def test_model(self):
+        pass
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, module in model.named_modules():
+                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+                    self.assertTrue(
+                        torch.all(module.weight == 1),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                    self.assertTrue(
+                        torch.all(module.bias == 0),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            self.assertEqual(len(hidden_states), self.model_tester.num_stages + 1)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        layers_type = ["preactivation", "bottleneck"]
+        for model_class in self.all_model_classes:
+            for layer_type in layers_type:
+                config.layer_type = layer_type
+                inputs_dict["output_hidden_states"] = True
+                check_hidden_states_output(inputs_dict, config, model_class)
+
+                # check that output_hidden_states also work using config
+                del inputs_dict["output_hidden_states"]
+                config.output_hidden_states = True
+
+                check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="Retain_grad is not supposed to be tested")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="TextNet does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    @unittest.skip(reason="HGNetV2 does not use model")
+    def test_model_from_pretrained(self):
+        pass
+

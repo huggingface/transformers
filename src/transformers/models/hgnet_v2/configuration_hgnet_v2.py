@@ -28,7 +28,7 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a HGNet-V2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of D-FINE-X-COCO "[vladislavbro/dfine_x_coco"](https://huggingface.co/vladislavbro/dfine_x_coco").
+    defaults will yield a similar configuration to that of D-FINE-X-COCO B4 "[vladislavbro/dfine_x_coco"](https://huggingface.co/vladislavbro/dfine_x_coco").
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 

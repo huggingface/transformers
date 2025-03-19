@@ -18,10 +18,16 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-A HGNet-V2 (High Performance GPU Net) image classification model. 
+A HGNet-V2 (High Performance GPU Net) image classification model.
+HGNet arhtictecture was proposed in [HGNET: A Hierarchical Feature Guided Network for Occupancy Flow Field Prediction](https://arxiv.org/abs/2407.01097) by
+Zhan Chen, Chen Tang, Lu Xiong
+
+The abstract from the HGNET paper is the following:
+
+*Predicting the motion of multiple traffic participants has always been one of the most challenging tasks in autonomous driving. The recently proposed occupancy flow field prediction method has shown to be a more effective and scalable representation compared to general trajectory prediction methods. However, in complex multi-agent traffic scenarios, it remains difficult to model the interactions among various factors and the dependencies among prediction outputs at different time steps. In view of this, we propose a transformer-based hierarchical feature guided network (HGNET), which can efficiently extract features of agents and map information from visual and vectorized inputs, modeling multimodal interaction relationships. Second, we design the Feature-Guided Attention (FGAT) module to leverage the potential guiding effects between different prediction targets, thereby improving prediction accuracy. Additionally, to enhance the temporal consistency and causal relationships of the predictions, we propose a Time Series Memory framework to learn the conditional distribution models of the prediction outputs at future time steps from multivariate time series. The results demonstrate that our model exhibits competitive performance, which ranks 3rd in the 2024 Waymo Occupancy and Flow Prediction Challenge.*
 
 This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber). 
-The original code can be found [here](https://github.com/Peterande/D-FINE/blob/master/src/nn/backbone/hgnetv2.py).
+The original code can be found [here](https://github.com/PaddlePaddle/PaddleDetection/blob/develop/ppdet/modeling/backbones/hgnet_v2.py).
 
 ## HGNetV2Config
 
@@ -31,4 +37,10 @@ The original code can be found [here](https://github.com/Peterande/D-FINE/blob/m
 ## HGNetV2Backbone
 
 [[autodoc]] HGNetV2Backbone
+    - forward
+
+
+## HGNetV2ForImageClassification
+
+[[autodoc]] HGNetV2ForImageClassification
     - forward
