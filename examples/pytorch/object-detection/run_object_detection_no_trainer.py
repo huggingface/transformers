@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.49.0.dev0")
+check_min_version("4.50.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -255,6 +255,12 @@ def parse_args():
         type=int,
         default=1333,
         help="Image longest size will be resized to this value, then image will be padded to square.",
+    )
+    parser.add_argument(
+        "--use_fast",
+        type=bool,
+        default=True,
+        help="Use a fast torchvision-base image processor if it is supported for a given model.",
     )
     parser.add_argument(
         "--cache_dir",
@@ -482,6 +488,7 @@ def main():
         size={"max_height": args.image_square_size, "max_width": args.image_square_size},
         do_pad=True,
         pad_size={"height": args.image_square_size, "width": args.image_square_size},
+        use_fast=args.use_fast,
         **common_pretrained_args,
     )
 

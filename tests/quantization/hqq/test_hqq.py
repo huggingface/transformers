@@ -19,6 +19,7 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
     require_accelerate,
+    require_hqq,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -86,6 +87,7 @@ MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 
 @require_torch_gpu
+@require_hqq
 class HqqConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -100,6 +102,7 @@ class HqqConfigTest(unittest.TestCase):
 @slow
 @require_torch_gpu
 @require_accelerate
+@require_hqq
 class HQQTest(unittest.TestCase):
     def tearDown(self):
         cleanup()
@@ -122,6 +125,7 @@ class HQQTest(unittest.TestCase):
 @require_torch_gpu
 @require_torch_multi_gpu
 @require_accelerate
+@require_hqq
 class HQQTestMultiGPU(unittest.TestCase):
     def tearDown(self):
         cleanup()
@@ -144,6 +148,29 @@ class HQQTestMultiGPU(unittest.TestCase):
 @slow
 @require_torch_gpu
 @require_accelerate
+@require_hqq
+class HQQTestBias(unittest.TestCase):
+    def tearDown(self):
+        cleanup()
+
+    def test_fp16_quantized_model(self):
+        """
+        Simple LLM model testing fp16 with bias
+        """
+        quant_config = HqqConfig(nbits=8, group_size=64)
+
+        hqq_runner = HQQLLMRunner(
+            model_id="facebook/opt-125m", quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+        )
+
+        check_hqqlayer(self, hqq_runner.model.model.decoder.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
+
+
+@slow
+@require_torch_gpu
+@require_accelerate
+@require_hqq
 class HQQSerializationTest(unittest.TestCase):
     def tearDown(self):
         cleanup()

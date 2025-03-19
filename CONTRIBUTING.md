@@ -221,10 +221,10 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 
    If you're modifying documents under the `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
-   make sure you install the documentation builder:
+   make sure you install the [documentation builder](https://github.com/huggingface/doc-builder).
 
    ```bash
-   pip install ".[docs]"
+   pip install hf-doc-builder
    ```
 
    Run the following command from the root of the repository:
@@ -343,8 +343,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 Like the slow tests, there are other environment variables available which are not enabled by default during testing:
 - `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
-- `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
-- `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
 
 More environment variables and additional information can be found in the [testing_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py).
 

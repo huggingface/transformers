@@ -193,7 +193,7 @@ class GenerationConfigTest(unittest.TestCase):
             generation_config_bad_temperature.update(temperature=None)
         self.assertEqual(len(captured_warnings), 0)
 
-        # Impossible sets of contraints/parameters will raise an exception
+        # Impossible sets of constraints/parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
         with self.assertRaises(ValueError):
@@ -258,6 +258,12 @@ class GenerationConfigTest(unittest.TestCase):
 
         config = GenerationConfig()
         self.assertEqual(config.get_generation_mode(assistant_model="foo"), GenerationMode.ASSISTED_GENERATION)
+
+    def test_static_cache_without_cache_config(self):
+        """Regression test for #35026 -- static cache should work without a cache config."""
+        config = GenerationConfig(cache_implementation="static")
+        self.assertEqual(config.cache_implementation, "static")
+        self.assertEqual(config.cache_config, None)
 
 
 class GenerationConfigSerializationTest(unittest.TestCase):
