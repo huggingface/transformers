@@ -15,7 +15,7 @@
 """
 Feature extractor class for Speech Granite
 """
-from typing import Optional
+from typing import Optional, List
 import math
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from transformers.utils import logging, is_torch_available, is_torchaudio_available
@@ -91,14 +91,27 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             return x.detach().cpu()
         return x
 
-    def _get_num_audio_features(self, logmel: BatchFeature) -> int:
-        """Gets the (variable length) variable length number of features
-        (i.e., projector output) for the sequence being considered.
+    
+    def _get_num_audio_features(self, audio_lengths: List[int]) -> List[int]:
         """
-        # todo: (Avihu) maybe it's better to return a list (length of each sample in the batch)
-        seq_len = logmel.shape[1]
-        nblocks = math.ceil(seq_len / self.projector_window_size)
+        Gets the (variable length) variable length number of features
+        (i.e., projector output) for the sequences being considered.
+        """
+        hop_length = self.melspec_kwargs["hop_length"]
+        effective_window_size = self.projector_window_size // self.projector_downsample_rate
+
+        projector_lengths = []
+        for raw_length in audio_lengths:
+            # mel sequence length computation
+            mel_length = raw_length // hop_length + 1
+            # encoder frame takes two mel features
+            encoder_length = mel_length // 2
+            nblocks = math.ceil(encoder_length / self.projector_window_size)
+            # projector output length
+            projector_length = nblocks * effective_window_size
+            projector_lengths.append(projector_length)
         
-        return nblocks * self.projector_window_size // self.projector_downsample_rate
+        return projector_lengths
+
         
 __all__ = ["GraniteSpeechFeatureExtractor"]
