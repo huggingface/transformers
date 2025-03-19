@@ -883,10 +883,9 @@ class JanusVQVAE(ChameleonVQVAE):
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
+        output = JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
 
-        if not return_dict:
-            return (decoded_pixel_values, embedding_loss)
-        return JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
+        return output if return_dict else output.to_tuple()
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -1197,11 +1196,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -1210,11 +1209,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return JanusCausalLMOutputWithPast(
+        output = JanusCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1222,6 +1217,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+        return output if return_dict else output.to_tuple()
 
     def prepare_inputs_for_generation(
         self,
