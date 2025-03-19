@@ -89,16 +89,6 @@ transcription[0]
 </hfoption>
 </hfoptions>
 
-Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
-
-```py
-from transformers import WhisperForConditionalGeneration, AutoProcessor
-
-model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3-turbo")
-processor = AutoProcessor.from_pretrained("openai/whisper-large-v3-turbo")
-model.visualize_attention_mask(processor, "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
-```
-
 ## Notes
 
 - Whisper relies on [`~GenerationMixin.generate`] for inference.

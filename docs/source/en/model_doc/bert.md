@@ -90,16 +90,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 </hfoption>
 </hfoptions>
 
-Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
-
-```py
-from transformers import AutoModelForMaskedLM, AutoTokenizer
-
-model = AutoModelForMaskedLM.from_pretrained("google-bert/bert-base-uncased")
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-model.visualize_attention_mask(tokenizer, "Plants create [MASK] through a process known as photosynthesis.")
-```
-
 ## Notes
 
 - Inputs should be padded on the right because BERT uses absolute position embeddings.

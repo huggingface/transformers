@@ -110,11 +110,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
-model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b")
-tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
-model.visualize_attention_mask(tokenizer, "Plants create energy through a process known as")
+visualizer = AttentionMaskVisualizer("huggyllama/llama-7b")
+visualizer("Plants create energy through a process known as")
 ```
 
 ## Notes

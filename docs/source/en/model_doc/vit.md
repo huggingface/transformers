@@ -86,16 +86,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 </hfoption>
 </hfoptions>
 
-Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
-
-```py
-from transformers import AutoModelForImageClassification, AutoProcessor
-
-model = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224")
-processor = AutoProcessor.from_pretrained("google/vit-base-patch16-224")
-model.visualize_attention_mask(processor, "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
-```
-
 ## Notes
 
 - The best results are obtained with supervised pretraining, and during fine-tuning, it can be better to use images with a resolution higher than 224x224.
