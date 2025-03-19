@@ -249,7 +249,7 @@ class ReformerModelTester:
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        # set all position encodings to zero so that postions don't matter
+        # set all position encodings to zero so that positions don't matter
         with torch.no_grad():
             embedding = model.embeddings.position_embeddings.embedding
             embedding.weight = nn.Parameter(torch.zeros(embedding.weight.shape).to(torch_device))
@@ -603,7 +603,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -716,7 +715,6 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ReformerModel,

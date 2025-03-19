@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.49.0.dev0"
+__version__ = "4.50.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -101,6 +101,7 @@ _import_structure = {
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
+        "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
         "DataCollatorForSOP",
@@ -140,6 +141,7 @@ _import_structure = {
         "is_ray_available",
         "is_ray_tune_available",
         "is_sigopt_available",
+        "is_swanlab_available",
         "is_tensorboard_available",
         "is_wandb_available",
     ],
@@ -193,6 +195,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.autoformer": ["AutoformerConfig"],
+    "models.aya_vision": ["AyaVisionConfig", "AyaVisionProcessor"],
     "models.bamba": ["BambaConfig"],
     "models.bark": [
         "BarkCoarseConfig",
@@ -471,6 +474,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
+    "models.gemma3": ["Gemma3Config", "Gemma3Processor", "Gemma3TextConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -495,6 +499,7 @@ _import_structure = {
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
     "models.granitemoe": ["GraniteMoeConfig"],
+    "models.granitemoeshared": ["GraniteMoeSharedConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -608,6 +613,7 @@ _import_structure = {
     ],
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
+    "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
         "MllamaConfig",
@@ -774,6 +780,13 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.siglip2": [
+        "Siglip2Config",
+        "Siglip2Processor",
+        "Siglip2TextConfig",
+        "Siglip2VisionConfig",
+    ],
+    "models.smolvlm": ["SmolVLMConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -1004,6 +1017,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_hpu_available",
         "is_torch_mlu_available",
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
@@ -1023,10 +1037,12 @@ _import_structure = {
         "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
+        "FineGrainedFP8Config",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
     ],
@@ -1246,6 +1262,7 @@ else:
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -1278,13 +1295,14 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
-    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.siglip2"].append("Siglip2ImageProcessor")
+    _import_structure["models.smolvlm"].extend(["SmolVLMImageProcessor"])
     _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -1318,6 +1336,8 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
+    _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -1325,6 +1345,7 @@ else:
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
+    _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
@@ -1586,6 +1607,7 @@ else:
             "AutoformerPreTrainedModel",
         ]
     )
+    _import_structure["models.aya_vision"].extend(["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"])
     _import_structure["models.bamba"].extend(
         [
             "BambaForCausalLM",
@@ -2435,6 +2457,14 @@ else:
             "Gemma2PreTrainedModel",
         ]
     )
+    _import_structure["models.gemma3"].extend(
+        [
+            "Gemma3ForCausalLM",
+            "Gemma3ForConditionalGeneration",
+            "Gemma3PreTrainedModel",
+            "Gemma3TextModel",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2535,6 +2565,14 @@ else:
             "GraniteMoeForCausalLM",
             "GraniteMoeModel",
             "GraniteMoePreTrainedModel",
+        ]
+    )
+
+    _import_structure["models.granitemoeshared"].extend(
+        [
+            "GraniteMoeSharedForCausalLM",
+            "GraniteMoeSharedModel",
+            "GraniteMoeSharedPreTrainedModel",
         ]
     )
     _import_structure["models.grounding_dino"].extend(
@@ -2901,6 +2939,12 @@ else:
             "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mistral3"].extend(
+        [
+            "Mistral3ForConditionalGeneration",
+            "Mistral3PreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -3544,6 +3588,25 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.siglip2"].extend(
+        [
+            "Siglip2ForImageClassification",
+            "Siglip2Model",
+            "Siglip2PreTrainedModel",
+            "Siglip2TextModel",
+            "Siglip2VisionModel",
+        ]
+    )
+    _import_structure["models.smolvlm"].extend(
+        [
+            "SmolVLMForConditionalGeneration",
+            "SmolVLMModel",
+            "SmolVLMPreTrainedModel",
+            "SmolVLMProcessor",
+            "SmolVLMVisionConfig",
+            "SmolVLMVisionTransformer",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5187,6 +5250,7 @@ if TYPE_CHECKING:
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForMultipleChoice,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSeq2Seq,
         DataCollatorForSOP,
@@ -5223,6 +5287,7 @@ if TYPE_CHECKING:
         is_ray_available,
         is_ray_tune_available,
         is_sigopt_available,
+        is_swanlab_available,
         is_tensorboard_available,
         is_wandb_available,
     )
@@ -5277,6 +5342,10 @@ if TYPE_CHECKING:
     )
     from .models.autoformer import (
         AutoformerConfig,
+    )
+    from .models.aya_vision import (
+        AyaVisionConfig,
+        AyaVisionProcessor,
     )
     from .models.bamba import BambaConfig
     from .models.bark import (
@@ -5579,6 +5648,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
+    from .models.gemma3 import Gemma3Config, Gemma3Processor, Gemma3TextConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -5602,6 +5672,7 @@ if TYPE_CHECKING:
     from .models.gptj import GPTJConfig
     from .models.granite import GraniteConfig
     from .models.granitemoe import GraniteMoeConfig
+    from .models.granitemoeshared import GraniteMoeSharedConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5724,6 +5795,7 @@ if TYPE_CHECKING:
         MimiConfig,
     )
     from .models.mistral import MistralConfig
+    from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
         MllamaConfig,
@@ -5917,6 +5989,13 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.siglip2 import (
+        Siglip2Config,
+        Siglip2Processor,
+        Siglip2TextConfig,
+        Siglip2VisionConfig,
+    )
+    from .models.smolvlm import SmolVLMConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -6173,6 +6252,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_hpu_available,
         is_torch_mlu_available,
         is_torch_musa_available,
         is_torch_neuroncore_available,
@@ -6194,10 +6274,12 @@ if TYPE_CHECKING:
         CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
+        FineGrainedFP8Config,
         GPTQConfig,
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        SpQRConfig,
         TorchAoConfig,
         VptqConfig,
     )
@@ -6390,6 +6472,7 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
+        from .models.gemma3 import Gemma3ImageProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
@@ -6438,13 +6521,14 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
-        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.siglip2 import Siglip2ImageProcessor
+        from .models.smolvlm import SmolVLMImageProcessor
         from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
@@ -6474,6 +6558,8 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.gemma3 import Gemma3ImageProcessorFast
+        from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -6481,6 +6567,7 @@ if TYPE_CHECKING:
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.siglip import SiglipImageProcessorFast
+        from .models.siglip2 import Siglip2ImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     try:
@@ -6710,6 +6797,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
@@ -7397,6 +7485,12 @@ if TYPE_CHECKING:
             Gemma2Model,
             Gemma2PreTrainedModel,
         )
+        from .models.gemma3 import (
+            Gemma3ForCausalLM,
+            Gemma3ForConditionalGeneration,
+            Gemma3PreTrainedModel,
+            Gemma3TextModel,
+        )
         from .models.git import (
             GitForCausalLM,
             GitModel,
@@ -7474,6 +7568,11 @@ if TYPE_CHECKING:
             GraniteMoeForCausalLM,
             GraniteMoeModel,
             GraniteMoePreTrainedModel,
+        )
+        from .models.granitemoeshared import (
+            GraniteMoeSharedForCausalLM,
+            GraniteMoeSharedModel,
+            GraniteMoeSharedPreTrainedModel,
         )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
@@ -7752,6 +7851,10 @@ if TYPE_CHECKING:
             MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
+        )
+        from .models.mistral3 import (
+            Mistral3ForConditionalGeneration,
+            Mistral3PreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
@@ -8254,6 +8357,21 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.siglip2 import (
+            Siglip2ForImageClassification,
+            Siglip2Model,
+            Siglip2PreTrainedModel,
+            Siglip2TextModel,
+            Siglip2VisionModel,
+        )
+        from .models.smolvlm import (
+            SmolVLMForConditionalGeneration,
+            SmolVLMModel,
+            SmolVLMPreTrainedModel,
+            SmolVLMProcessor,
+            SmolVLMVisionConfig,
+            SmolVLMVisionTransformer,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
