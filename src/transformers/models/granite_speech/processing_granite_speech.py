@@ -83,19 +83,21 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(text, padding=True, **kwargs)
         return BatchFeature(data={**text_inputs, **speech_inputs})
 
-    def _expand_audio_placeholders(self, text: list[str], num_audio_features: int):
+    def _expand_audio_placeholders(self, text: list[str], num_audio_features: List[int]):
         """
         Expands audio placeholders in the formatted text to match the number of
         features of the corresponding embeddings; we can use the resulting text
         to conveniently mask the audio features into the text embeddings.
         """
         prompt_strings = []
+        i = 0
         for sample in text:
             while self.audio_token in sample:
-                # todo: (Avihu): this assumes all audios have the same length.
-                sample = sample.replace(self.audio_token, "<placeholder>" * num_audio_features, 1)
-                prompt_strings.append(sample)
-            prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
+                sample = sample.replace(self.audio_token, "<placeholder>" * num_audio_features[i], 1)
+                i += 1
+            prompt_strings.append(sample)
+        
+        prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
         return prompt_strings
 
     ##### Validation
