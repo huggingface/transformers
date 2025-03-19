@@ -299,12 +299,13 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices")
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices")
     def test_assisted_decoding_sample(self):
         pass
