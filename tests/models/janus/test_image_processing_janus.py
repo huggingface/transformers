@@ -199,5 +199,3 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_numpy_4_channels(self):
         pass
 
-    def test_image_processor_preprocess_arguments(self):
-        super().test_image_processor_preprocess_arguments()

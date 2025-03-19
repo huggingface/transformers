@@ -1506,10 +1506,10 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # Default to "text" generation if mode isn't provided
         generation_mode = kwargs.pop("generation_mode", "text")
         if generation_mode == "text":
-            # Set to prevent running UnbatchedCFG processor.
-            generation_config.guidance_scale = None
+            # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
-                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config, **kwargs
+                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config,
+                guidance_scale=None, **kwargs
             )
 
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
@@ -1541,7 +1541,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             inputs, generation_config.bos_token_id, model_kwargs
         )
 
-        batch_size, seq_len = input_ids.shape
         dtype, device = input_ids.dtype, input_ids.device
 
         if len(input_ids.shape) != 2:
@@ -1576,6 +1575,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             expand_size=generation_config.num_return_sequences,
             **model_kwargs,
         )
+
+        # Should only get shape after self._expand_inputs_for_generation
+        batch_size, seq_len = input_ids.shape
 
         # 7. Prepare input and model caches
         num_image_tokens = self.model.vision_model.config.num_image_tokens
@@ -1624,7 +1626,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         for i in range(num_image_tokens):
             model_inputs = self.prepare_inputs_for_generation(
-                inputs_embeds=inputs_embeds, input_ids=input_tokens, attention_mask=attention_mask, **model_kwargs
+                inputs_embeds=inputs_embeds, input_ids=input_tokens, **model_kwargs
             )
 
             model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)

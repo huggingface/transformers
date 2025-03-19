@@ -65,7 +65,7 @@ messages = [
 
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
-model = JanusForConditionalGeneration.from_pretrained(daesmodel_id,     
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
         torch_dtype=torch.bfloat16,
         device_map="auto")
 
@@ -103,22 +103,26 @@ image_urls = [
 ]
 
 messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "What’s the difference between"},
-            {"type": "image", "url": image_urls[0]},
-            {"type": "text", "text": " and "},
-            {"type": "image", "url": image_urls[1]}
-        ]
-    },
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "url": image_urls[2]},
-            {"type": "text", "text": "What do you see in this image?"}
-        ]
-    }
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What’s the difference between"},
+                {"type": "image", "url": image_urls[0]},
+                {"type": "text", "text": " and "},
+                {"type": "image", "url": image_urls[1]}
+            ]
+        }
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": image_urls[2]},
+                {"type": "text", "text": "What do you see in this image?"}
+            ]
+        }
+    ]
 ]
 
 # Load model and processor
@@ -132,6 +136,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     generation_mode="text",
     tokenize=True,
+    padding=True,
     return_dict=True,
     return_tensors="pt"
 ).to(model.device, dtype=torch.bfloat16)
