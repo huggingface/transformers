@@ -1180,7 +1180,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
