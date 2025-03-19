@@ -69,8 +69,8 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, GraniteSpeechFeatureExtractor)
 
-    def test_requires_audio_or_text(self):
-        """Ensure we require at audio, text, or both."""
+    def test_requires_text(self):
+        """Ensure we require text"""
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
         processor = GraniteSpeechProcessor(
@@ -78,8 +78,8 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             feature_extractor=feature_extractor,
         )
 
-        with pytest.raises(ValueError):
-            processor(text=None, audios=None)
+        with pytest.raises(TypeError):
+            processor(text=None)
 
     def test_bad_text_fails(self):
         """Ensure we gracefully fail if text is the wrong type."""
@@ -152,7 +152,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
 
         # Make sure the number of audio tokens matches the number of features
         num_expected_features = processor.feature_extractor._get_num_audio_features(
-            inputs["input_features"],
+            vec_dims[1:],
         )
         num_audio_tokens = int(torch.sum(inputs["input_ids"] == audio_token_id))
         assert num_expected_features == num_audio_tokens
