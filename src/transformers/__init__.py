@@ -1029,10 +1029,6 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.model_debugging_utils": [
-        "model_addition_debugger",
-        "model_addition_debugger_context",
-    ],
     "utils.quantization_config": [
         "AqlmConfig",
         "AwqConfig",
@@ -1373,6 +1369,10 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["model_debugging_utils"] = [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
         "Cache",
@@ -6269,12 +6269,6 @@ if TYPE_CHECKING:
         logging,
     )
 
-    # Debugging
-    from .utils.model_debugging_utils import (
-        model_addition_debugger,
-        model_addition_debugger_context,
-    )
-
     # bitsandbytes config
     from .utils.quantization_config import (
         AqlmConfig,
@@ -6595,6 +6589,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
+        # Debugging
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
+            )
         from .cache_utils import (
             Cache,
             CacheConfig,

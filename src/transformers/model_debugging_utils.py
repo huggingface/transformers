@@ -20,7 +20,7 @@ import os
 import re
 from contextlib import contextmanager
 
-from ..utils import is_torch_available
+from .utils import is_torch_available
 
 
 if is_torch_available():
@@ -28,9 +28,9 @@ if is_torch_available():
     import torch.distributed.tensor
     from torch import nn
 
-    from ..modeling_utils import PreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
-from . import logging
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
