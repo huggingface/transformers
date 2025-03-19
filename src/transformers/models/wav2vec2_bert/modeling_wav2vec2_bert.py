@@ -35,9 +35,6 @@ from ...utils import (
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
-if is_peft_available():
-    from peft.tuners.lora import LoraLayer
-
 # General docstring
 _CONFIG_FOR_DOC = "Wav2Vec2BertConfig"
 
@@ -1456,6 +1453,9 @@ class TDNNLayer(nn.Module):
         self.activation = nn.ReLU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if is_peft_available():
+            from peft.tuners.lora import LoraLayer
+
         if is_peft_available():
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(

@@ -44,14 +44,6 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
-if is_deepspeed_zero3_enabled():
-    import deepspeed
-
-
-if is_peft_available():
-    from peft.tuners.lora import LoraLayer
-
-
 logger = logging.get_logger(__name__)
 
 # Base docstring
@@ -125,6 +117,8 @@ class UniSpeechSatPositionalConvEmbedding(nn.Module):
             weight_norm = nn.utils.parametrizations.weight_norm
 
         if is_deepspeed_zero3_enabled():
+            import deepspeed
+
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):
@@ -1550,16 +1544,6 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         logits = extract_features
         loss = quantized_features = codevector_perplexity = None
 
-        # layer normalization (has no effect when `config.do_stable_layer_norm == False`)
-        #        extract_features = self.layer_norm_for_extract(extract_features)
-        #        quantized_features, codevector_perplexity = self.quantizer(extract_features)
-        #
-        # project quantized features twice
-        #        quantized_features = self.project_q(quantized_features)
-        #        quantized_features = self.project_hid(quantized_features)
-        #
-        #        loss = None
-        #        logits = quantized_features
         if not return_dict:
             if loss is not None:
                 return (loss, logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
@@ -2018,6 +2002,9 @@ class TDNNLayer(nn.Module):
         self.activation = nn.ReLU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if is_peft_available():
+            from peft.tuners.lora import LoraLayer
+
         if is_peft_available():
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(

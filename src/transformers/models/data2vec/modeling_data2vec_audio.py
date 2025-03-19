@@ -41,10 +41,6 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
-if is_peft_available():
-    from peft.tuners.lora import LoraLayer
-
-
 logger = logging.get_logger(__name__)
 
 # Base docstring
@@ -1570,6 +1566,9 @@ class TDNNLayer(nn.Module):
         self.activation = nn.ReLU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if is_peft_available():
+            from peft.tuners.lora import LoraLayer
+
         if is_peft_available():
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(

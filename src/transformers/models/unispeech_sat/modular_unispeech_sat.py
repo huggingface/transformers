@@ -501,16 +501,6 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         logits = extract_features
         loss = quantized_features = codevector_perplexity = None
 
-        # layer normalization (has no effect when `config.do_stable_layer_norm == False`)
-        #        extract_features = self.layer_norm_for_extract(extract_features)
-        #        quantized_features, codevector_perplexity = self.quantizer(extract_features)
-        #
-        # project quantized features twice
-        #        quantized_features = self.project_q(quantized_features)
-        #        quantized_features = self.project_hid(quantized_features)
-        #
-        #        loss = None
-        #        logits = quantized_features
         if not return_dict:
             if loss is not None:
                 return (loss, logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]

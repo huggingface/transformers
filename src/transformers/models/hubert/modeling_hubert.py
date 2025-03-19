@@ -29,10 +29,6 @@ from ...utils import (
 from .configuration_hubert import HubertConfig
 
 
-if is_deepspeed_zero3_enabled():
-    import deepspeed
-
-
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
@@ -66,6 +62,8 @@ class HubertPositionalConvEmbedding(nn.Module):
                 weight_norm = nn.utils.parametrizations.weight_norm
 
             if is_deepspeed_zero3_enabled():
+                import deepspeed
+
                 with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                     self.conv = weight_norm(self.conv, name="weight", dim=2)
                 if hasattr(self.conv, "parametrizations"):
@@ -963,6 +961,8 @@ class HubertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
+                import deepspeed
+
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
                         nn.init.kaiming_normal_(module.weight.data)

@@ -621,6 +621,7 @@ class ModuleMapper(CSTVisitor, ABC):
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
         self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
+        self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
         # this keeps track of objects imported from modeling files (`from .configuration import Config`) -> `Config` should not be a dependency
         self.objects_imported_from_modeling = set()
@@ -677,7 +678,7 @@ class ModuleMapper(CSTVisitor, ABC):
 
     def visit_If(self, node):
         # If we are inside a function, do not add the import to the list of imports
-        if self.current_function is None:
+        if self.current_function is None and self.current_class is None:
             for stmt in node.body.body:
                 if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                     self.imports.append(node)
@@ -685,6 +686,10 @@ class ModuleMapper(CSTVisitor, ABC):
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
         self.classes[node.name.value] = node
+        self.current_class = node.name.value
+
+    def leave_ClassDef(self, node):
+        self.current_class = None
 
     def visit_Name(self, node: cst.Call):
         """This is used to create a mapping from module-scope functions and assignments to objects used inside them."""

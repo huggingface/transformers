@@ -41,10 +41,6 @@ if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
-if is_deepspeed_zero3_enabled():
-    import deepspeed
-
-
 logger = logging.get_logger(__name__)
 
 # Base docstring
@@ -117,6 +113,8 @@ class UniSpeechPositionalConvEmbedding(nn.Module):
             weight_norm = nn.utils.parametrizations.weight_norm
 
         if is_deepspeed_zero3_enabled():
+            import deepspeed
+
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):

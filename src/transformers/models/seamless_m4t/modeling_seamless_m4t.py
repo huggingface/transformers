@@ -46,10 +46,6 @@ from ...utils import (
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
-if is_deepspeed_zero3_enabled():
-    import deepspeed
-
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/hf-seamless-m4t-medium"
@@ -329,6 +325,8 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
             weight_norm = nn.utils.parametrizations.weight_norm
 
         if is_deepspeed_zero3_enabled():
+            import deepspeed
+
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):
