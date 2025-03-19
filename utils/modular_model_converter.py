@@ -535,7 +535,7 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_DOCSTRING"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
 
 # Top-level variables that match the following patterns will use the value in the `modular_xxx.py` file only if they are not None
 ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE = [r"_DOCSTRING"]
