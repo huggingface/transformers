@@ -13,15 +13,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import functools
 import json
 import os
 import re
 from contextlib import contextmanager
 
-import torch
-import torch.distributed.tensor
-from torch import nn
+from ..utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.distributed.tensor
+    from torch import nn
 
 from ..modeling_utils import PreTrainedModel
 from . import logging
@@ -30,9 +35,6 @@ from . import logging
 logger = logging.get_logger(__name__)
 
 # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-_init_weights = True
-_is_quantized = False
-_is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
 
