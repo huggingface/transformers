@@ -1029,6 +1029,10 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.model_debugging_utils": [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ],
     "utils.quantization_config": [
         "AqlmConfig",
         "AwqConfig",
@@ -6263,6 +6267,12 @@ if TYPE_CHECKING:
         is_torchvision_available,
         is_vision_available,
         logging,
+    )
+
+    # Debugging
+    from .utils.model_debugging_utils import (
+        model_addition_debugger,
+        model_addition_debugger_context,
     )
 
     # bitsandbytes config
