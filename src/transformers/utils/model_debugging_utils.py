@@ -36,7 +36,6 @@ _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
 
-
 def _is_rank_zero():
     """Return True if rank=0 or we aren't running distributed."""
     if not (_torch_distributed_available and torch.distributed.is_initialized()):
@@ -106,6 +105,7 @@ def prune_outputs_if_children(node):
         for child in node["children"]:
             prune_outputs_if_children(child)
 
+
 def log_model_debug_trace(debug_path, model):
     if debug_path:
         try:
@@ -120,7 +120,8 @@ def log_model_debug_trace(debug_path, model):
         prune_outputs_if_children(model._call_tree)
         json.dump(model._call_tree, outfile, indent=2)
 
-def _attach_debugger_logic(model, class_name, debug_path:str):
+
+def _attach_debugger_logic(model, class_name, debug_path: str):
     # Prepare data structures on the model object
     model._call_tree = {"module_path": class_name, "inputs": None, "outputs": None, "children": []}
     model._debugger_model_call_stack = []
@@ -276,7 +277,7 @@ def model_addition_debugger(cls):
 
 
 @contextmanager
-def model_addition_debugger_context(model, debug_path: str=None):
+def model_addition_debugger_context(model, debug_path: str = None):
     """
     # Model addition debugger - context manager for model adders
     This context manager is a power user tool intended for model adders.
@@ -320,4 +321,3 @@ def model_addition_debugger_context(model, debug_path: str=None):
         yield model
     finally:
         pass
-
