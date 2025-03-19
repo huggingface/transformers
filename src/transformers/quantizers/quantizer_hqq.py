@@ -124,7 +124,14 @@ class HqqHfQuantizer(HfQuantizer):
             # valid modules are Linear layers that have HQQLinear state_dict. We ignore skip_modules and any layers with Linear state_dict() params
             _valid_modules = set()
             _find_hqq_quantizable_layers(model, _valid_modules)
-            _valid_modules -= set(model.config.quantization_config["skip_modules"])
+
+            # Remove skipped modules
+            _skipped_modules = set()
+            for _module in _valid_modules:
+                for _skip_module in model.config.quantization_config["skip_modules"]:
+                    if _skip_module in _module:
+                        _skipped_modules.add(_module)
+            _valid_modules -= _skipped_modules
 
             # Append new expected layers based on _ref_keys
             _ref_keys = HQQLinear(
