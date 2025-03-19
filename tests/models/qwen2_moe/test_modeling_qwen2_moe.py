@@ -89,6 +89,7 @@ class Qwen2MoeModelTester:
         pad_token_id=0,
         bos_token_id=1,
         scope=None,
+        qkv_bias=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -127,6 +128,7 @@ class Qwen2MoeModelTester:
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.qkv_bias = qkv_bias
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -181,6 +183,7 @@ class Qwen2MoeModelTester:
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
+            qkv_bias=self.qkv_bias,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen2Moe
