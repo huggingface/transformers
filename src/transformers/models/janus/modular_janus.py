@@ -1027,8 +1027,6 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
-    # def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
-    #     return self.language_model._prepare_4d_causal_attention_mask_with_cache_position(*args, **kwargs)
 
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
