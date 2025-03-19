@@ -183,7 +183,7 @@ class TimesFmAttention(nn.Module):
 
     def __init__(self, config: TimesFmConfig, layer_idx: int):
         super().__init__()
-        self.attn_implementation = config._attn_implementation
+        self.config = config
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
         self.layer_idx = layer_idx
@@ -229,14 +229,14 @@ class TimesFmAttention(nn.Module):
             )
 
         attention_interface: Callable = eager_attention_forward
-        if self.attn_implementation != "eager":
-            if self.attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
