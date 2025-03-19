@@ -40,7 +40,7 @@ WHITE_SQUARE = "⬚"
 def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_window=None, token_type_ids=None):
     """
     Generates an attention matrix from a given attention mask.
-    
+
     Optionally applies a sliding window mask (e.g., for Gemma2/3) and
     marks regions where image tokens occur based on the specified `img_token`.
     """
@@ -68,18 +68,16 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     # Generate sliding window mask (size = 4), excluding img_token
     sliding_window_mask = None
     if sliding_window is not None:
-        sliding_window_mask = [
-            [
-                1 if (0 <= i - j < sliding_window) else 0
-                for j in range(n)
-            ]
-            for i in range(n)
-        ]
+        sliding_window_mask = [[1 if (0 <= i - j < sliding_window) else 0 for j in range(n)] for i in range(n)]
 
     row_dummy = " ".join(
-        f"{YELLOW}{BLACK_SQUARE}{RESET}" if mask[0, j] else
-        f"{GREEN}{BLACK_SQUARE}{RESET}" if 0 == j else
-        BLACK_SQUARE if mask[0, j] else WHITE_SQUARE
+        f"{YELLOW}{BLACK_SQUARE}{RESET}"
+        if mask[0, j]
+        else f"{GREEN}{BLACK_SQUARE}{RESET}"
+        if 0 == j
+        else BLACK_SQUARE
+        if mask[0, j]
+        else WHITE_SQUARE
         for j in range(n)
     )
 
@@ -93,7 +91,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
 
     vertical_header = []
     for idx, word in enumerate(words):
-        if  mask[idx, idx] == 2:
+        if mask[idx, idx] == 2:
             vertical_header.append([f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))])
         else:
             vertical_header.append(list(str(idx).rjust(len(str(n)))))
@@ -138,7 +136,6 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     return "\n".join(output)
 
 
-
 class AttentionMaskVisualizer:
     def __init__(self, model_name: str):
         config = AutoConfig.from_pretrained(model_name)
@@ -153,6 +150,7 @@ class AttentionMaskVisualizer:
         if mapped_cls is None:
             raise ValueError(f"Model name {model_name} is not supported for attention visualization")
         self.mapped_cls = mapped_cls
+
         class _ModelWrapper(mapped_cls, nn.Module):
             def __init__(self, config, model_name):
                 nn.Module.__init__(self)
@@ -183,7 +181,6 @@ class AttentionMaskVisualizer:
                 input_sentence = input_sentence.replace("<img>", image_token)
 
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
-
 
             self.image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
 
