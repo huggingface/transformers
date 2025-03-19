@@ -17,7 +17,7 @@ import math
 import unittest
 
 from transformers import LlamaConfig
-from transformers.models.efficientloftr.modular_efficientloftr import EfficientLoFTRConfig
+from transformers.models.efficientloftr.configuration_efficientloftr import EfficientLoFTRConfig
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
 
