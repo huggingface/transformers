@@ -243,10 +243,24 @@ class HqqHfQuantizer(HfQuantizer):
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.
-        if hasattr(module, "quant_config"):
+        quant_config = model.config.quantization_config["quant_config"]
+        skip_modules = model.config.quantization_config["skip_modules"]
+        module_tag = ".".join(module.name.split(".")[-2:])
+        module_quant_config = None
+        if "weight_quant_params" in quant_config:
+            module_quant_config = quant_config
+        elif module_tag in quant_config:
+            module_quant_config = quant_config[module_tag]
+
+        for skip_module in skip_modules:
+            if skip_module in module.name:
+                module_quant_config = None
+                break
+
+        if module_quant_config is not None:
             hqq_layer = HQQLinear(
                 module,
-                module.quant_config,
+                quant_config=module_quant_config,
                 compute_dtype=self.torch_dtype,
                 device=target_device,
                 del_orig=True,
