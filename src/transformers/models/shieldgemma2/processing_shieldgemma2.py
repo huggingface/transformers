@@ -25,6 +25,26 @@ from ..gemma3.processing_gemma3 import Gemma3Processor, Gemma3ProcessorKwargs
 
 logger = logging.get_logger(__name__)
 
+DEFAULT_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
+    "dangerous": (
+        "No Dangerous Content: The image shall not contain content that"
+        " facilitates or encourages activities that could cause real-world harm"
+        " (e.g., building firearms and explosive devices, promotion of"
+        " terrorism, instructions for suicide)."
+    ),
+    "sexual": (
+        "No Sexually Explicit content: The image shall not contain content that"
+        " depicts explicit or graphic sexual acts (e.g., pornography, erotic"
+        " nudity, depictions of rape or sexual assault)."
+    ),
+    "violence": (
+        "No Violence/Gore content: The image shall not contain content that"
+        " depicts shocking, sensational, or gratuitous violence (e.g.,"
+        " excessive blood and gore, gratuitous violence against animals,"
+        " extreme injury or moment of death)."
+    ),
+}
+
 
 class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
     policies: Optional[Sequence[str]]
@@ -40,15 +60,8 @@ class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
 
 
 class ShieldGemma2Processor(Gemma3Processor):
-
     def __init__(
-        self,
-        image_processor,
-        tokenizer,
-        chat_template = None,
-        image_seq_length = 256,
-        policy_definitions = None,
-        **kwargs
+        self, image_processor, tokenizer, chat_template=None, image_seq_length=256, policy_definitions=None, **kwargs
     ):
         """A processor for the ShieldGemma 2 model.
 
@@ -65,10 +78,10 @@ class ShieldGemma2Processor(Gemma3Processor):
                 the base policies ShieldGemma was trained on.
         """
         super().__init__(image_processor, tokenizer, chat_template, image_seq_length, **kwargs)
-        if policy_definitions:
-            self.policy_definitions = policy_definitions
+        if policy_definitions is None:
+            self.policy_definitions = DEFAULT_SHIELDGEMMA2_POLICIES
         else:
-            self.policy_definitions = {}
+            self.policy_definitions = policy_definitions
 
     def __call__(
         self,
@@ -129,7 +142,6 @@ class ShieldGemma2Processor(Gemma3Processor):
             text_kwargs["padding"] = kwargs.pop("padding", True)
             text_kwargs["padding_side"] = kwargs.pop("padding_side", "left")
 
-
         policy_definitions: Mapping[str, str] = {
             **self.policy_definitions,
             **kwargs.get("custom_policies", {}),
@@ -138,6 +150,7 @@ class ShieldGemma2Processor(Gemma3Processor):
         if (policies := kwargs.get("policies")) is None:
             policies = list(policy_definitions.keys())
 
+        # TODO(ryanmullins): Support images from PIL or URLs.
         messages = []
         expanded_images = []
         for img in images:

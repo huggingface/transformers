@@ -212,7 +212,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs
+            **lm_kwargs,
         )
         logits = outputs.logits
         selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]

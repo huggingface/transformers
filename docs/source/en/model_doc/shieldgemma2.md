@@ -85,7 +85,16 @@ output = model(**inputs)
 print(output.probabilities)
 ```
 
-## ShieldGemmaForImageClassification
 
-[[autodoc]] Shieldgemma2ForTokenClassification
+## ShieldGemma2Processor
+
+[[autodoc]] ShieldGemma2Processor
+
+## ShieldGemma2Config
+
+[[autodoc]] ShieldGemma2Config
+
+## ShieldGemma2ForImageClassification
+
+[[autodoc]] ShieldGemma2ForImageClassification
     - forward

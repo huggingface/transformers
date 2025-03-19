@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Mapping
 import json
 import os
 import shutil
 import tempfile
 import unittest
+from collections.abc import Mapping
 
 from parameterized import parameterized
+
 from transformers import GemmaTokenizer, ShieldGemma2Processor
 from transformers.testing_utils import get_tests_dir, require_vision
 from transformers.utils import is_vision_available
@@ -95,29 +96,6 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "policy_definitions": _SHIELDGEMMA2_POLICIES,
         }
 
-    def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_components = self.prepare_components()
-        processor_kwargs = self.prepare_processor_dict()
-        processor = self.processor_class(**processor_components, **processor_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            do_rescale=True,
-            rescale_factor=-1,
-            padding="max_length",
-            max_length=674,
-        )
-
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 674)
-
     def test_policy_definitions_saved_in_config(self):
         processor_config_path = os.path.join(self.tmpdirname, "processor_config.json")
 
@@ -128,11 +106,13 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("policy_definitions", json_dict)
         self.assertIs(len(json_dict["policy_definitions"]), 3)
 
-    @parameterized.expand([
-        ("all_policies", None, 3),
-        ("selected_policies", ["dangerous", "violence"], 2),
-        ("single_policy", ["sexual"], 1),
-    ])
+    @parameterized.expand(
+        [
+            ("all_policies", None, 3),
+            ("selected_policies", ["dangerous", "violence"], 2),
+            ("single_policy", ["sexual"], 1),
+        ]
+    )
     def test_with_default_policies(self, name, policies, expected_batch_size):
         processor = self.get_processor()
 
@@ -144,14 +124,16 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
         self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
 
-    @parameterized.expand([
-        ("all_policies", None, 6),
-        ("selected_policies_from_both", ["cbrne", "dangerous", "specialized_advice", "violence"], 4),
-        ("selected_policies_from_custom", ["cbrne", "specialized_advice"], 2),
-        ("selected_policies_from_default", ["dangerous", "violence"], 2),
-        ("single_policy_from_custom", ["ip"], 1),
-        ("single_policy_from_default", ["sexual"], 1),
-    ])
+    @parameterized.expand(
+        [
+            ("all_policies", None, 6),
+            ("selected_policies_from_both", ["cbrne", "dangerous", "specialized_advice", "violence"], 4),
+            ("selected_policies_from_custom", ["cbrne", "specialized_advice"], 2),
+            ("selected_policies_from_default", ["dangerous", "violence"], 2),
+            ("single_policy_from_custom", ["ip"], 1),
+            ("single_policy_from_default", ["sexual"], 1),
+        ]
+    )
     def test_with_custom_policies(self, name, policies, expected_batch_size):
         processor = self.get_processor()
 

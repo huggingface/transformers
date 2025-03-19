@@ -14,11 +14,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma3 model."""
 
-from io import BytesIO
 import unittest
+from io import BytesIO
 
-from PIL import Image
 import requests
+from PIL import Image
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -31,6 +31,7 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
+
     from transformers import ShieldGemma2ForImageClassification, ShieldGemma2Processor
 
 
@@ -38,7 +39,6 @@ if is_torch_available():
 @require_torch_gpu
 # @require_read_token
 class ShieldGemma2IntegrationTest(unittest.TestCase):
-
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
