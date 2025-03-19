@@ -6590,10 +6590,6 @@ if TYPE_CHECKING:
         from .utils.dummy_pt_objects import *
     else:
         # Debugging
-        from .model_debugging_utils import (
-            model_addition_debugger,
-            model_addition_debugger_context,
-            )
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6678,6 +6674,10 @@ if TYPE_CHECKING:
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
+        )
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
