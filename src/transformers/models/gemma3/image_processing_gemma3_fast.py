@@ -277,17 +277,17 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         processed_images = []
         batch_num_crops = []
 
-        for image_list in images:
+        for images_list in images:
             if do_pan_and_scan:
                 images_list, num_crops = self._process_images_for_pan_and_scan(
-                    images=image_list,
+                    images=images_list,
                     do_pan_and_scan=do_pan_and_scan,
                     pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
                     pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
                     pan_and_scan_min_ratio_to_activate=pan_and_scan_min_ratio_to_activate,
                 )
             else:
-                num_crops = [[0] for images in images_list]
+                num_crops = [[0] for _ in images_list]
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
