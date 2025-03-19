@@ -1543,11 +1543,10 @@ class GenerationMixin:
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
         function handles retrocompatibility with respect to configuration files.
         """
-        # TODO joao: when we can detect `fullgraph=True` in `torch.compile` (https://github.com/pytorch/pytorch/pull/120400)
-        # replace `is_torchdynamo_compiling` by the corresponding check. As it is, we are being too restrictive with
-        # the parameterization in `fullgraph=False` so as to enable `fullgraph=True`.
+        # parameterization priority:
+        # kwargs > non-global default values in `generation_config` > `model.generation_config` > GenerationConfig()
+        # TODO (joao): per-model generation config classes.
 
-        # priority: `generation_config` argument > `model.generation_config` (the default generation config)
         using_model_generation_config = False
         if generation_config is None:
             # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
@@ -1575,35 +1574,29 @@ class GenerationMixin:
             generation_config = self.generation_config
             using_model_generation_config = True
 
-        # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
-        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled -- an
-        # exception will be raised in `_validate_model_kwargs`
-        if not is_torchdynamo_compiling():
-            generation_config = copy.deepcopy(generation_config)
+        generation_config = copy.deepcopy(generation_config)
 
-            # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
-            # TODO (joao): per-model generation config classes.
-            if not using_model_generation_config:
-                modified_values = {}
-                default_generation_config = GenerationConfig()
-                for key, default_value in default_generation_config.__dict__.items():
-                    if key.startswith("_"):  # metadata
-                        continue
-                    custom_gen_config_value = getattr(generation_config, key)
-                    model_gen_config_value = getattr(self.generation_config, key)
-                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
-                        modified_values[key] = model_gen_config_value
-                        setattr(generation_config, key, model_gen_config_value)
-                if len(modified_values) > 0:
-                    logger.warning_once(
-                        f"`generation_config` default values have been modified to match model-specific defaults: "
-                        f"{modified_values}. If this is not desired, please set these values explicitly."
-                    )
+        # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
+        if not using_model_generation_config:
+            modified_values = {}
+            default_generation_config = GenerationConfig()
+            for key, default_value in default_generation_config.__dict__.items():
+                if key.startswith("_"):  # metadata
+                    continue
+                custom_gen_config_value = getattr(generation_config, key)
+                model_gen_config_value = getattr(self.generation_config, key)
+                if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                    modified_values[key] = model_gen_config_value
+                    setattr(generation_config, key, model_gen_config_value)
+            if len(modified_values) > 0:
+                logger.warning_once(
+                    f"`generation_config` default values have been modified to match model-specific defaults: "
+                    f"{modified_values}. If this is not desired, please set these values explicitly."
+                )
 
-            # Finally, apply any passed kwargs
-            model_kwargs = generation_config.update(**kwargs)
-        else:
-            model_kwargs = kwargs
+        # Finally, apply any passed kwargs
+        model_kwargs = generation_config.update(**kwargs)
+
         return generation_config, model_kwargs
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
