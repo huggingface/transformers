@@ -14,8 +14,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma3 model."""
 
+import tempfile
 import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -23,6 +25,7 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
+    GenerationConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -75,6 +78,7 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -83,6 +87,7 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -277,6 +282,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
@@ -285,6 +291,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
+    @pytest.mark.generate
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
@@ -332,6 +339,18 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     )
     def test_flex_attention_with_grads(self):
         pass
+
+    def test_automodelforcausallm(self):
+        """
+        Regression test for #36741 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
+        `AutoModelForCausalLM.from_pretrained` pulls the text config before loading the model
+        """
+        config = self.model_tester.get_config()
+        model = Gemma3ForConditionalGeneration(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            self.assertIsInstance(for_causal_lm, Gemma3ForCausalLM)
 
 
 @slow
@@ -415,6 +434,39 @@ class Gemma3IntegrationTest(unittest.TestCase):
             'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
             "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
         ]  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_4b_crops(self):
+        model_id = "gg-hf-g/gemma-3-4b-it"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+        ).to(torch_device)
+
+        crop_config = {
+            "images_kwargs": {
+                "do_pan_and_scan": True,
+                "pan_and_scan_max_num_crops": 448,
+                "pan_and_scan_min_crop_size": 32,
+                "pan_and_scan_min_ratio_to_activate": 0.3,
+            }
+        }
+
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+            **crop_config,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
+        EXPECTED_TEXTS = ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nDescribe this image in detail.\nmodel\nHere's a detailed description of the image:\n\n**Overall Impression:**\n\nThe image is a close-up shot of a garden scene featuring several"]  # fmt: skip
+        self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_multiimage(self):
@@ -514,6 +566,37 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertTrue(input_size > model.config.sliding_window)
 
         out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+
+        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+    def test_generation_beyond_sliding_window_with_generation_config(self):
+        """
+        Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
+        ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
+        """
+        model_id = "gg-hf-g/gemma-3-1b-it"
+        attn_implementation = "sdpa"
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+        ).to(torch_device)
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        generation_config = GenerationConfig(max_new_tokens=20)
+
+        out = model.generate(**inputs, generation_config=generation_config)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
