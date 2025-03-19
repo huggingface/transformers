@@ -46,4 +46,13 @@ Use the Space below to help you pick a quantization method depending on your har
 If you are new to quantization, we recommend checking out these beginner-friendly quantization courses in collaboration with DeepLearning.AI.
 
 * [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
-* [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth
+* [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth)
+
+## User-Friendly Quantization Tools
+
+If you are looking for a user-friendly quantization experience, you can use the following community spaces and notebooks: 
+
+* [Bitsandbytes Space](https://huggingface.co/spaces/bnb-community/bnb-my-repo)
+* [GGUF Space](https://huggingface.co/spaces/ggml-org/gguf-my-repo)
+* [MLX Space](https://huggingface.co/spaces/mlx-community/mlx-my-repo)
+* [AuoQuant Notebook](https://colab.research.google.com/drive/1b6nqC7UZVt8bx4MksX7s656GXPM-eWw4?usp=sharing#scrollTo=ZC9Nsr9u5WhN)
