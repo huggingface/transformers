@@ -301,8 +301,6 @@ class SamHQMaskDecoder(nn.Module):
 
         if has_intermediate:
             vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
-        else:
-            vit_features = None
 
         embed_encode = self.encoder_conv1(image_embeddings)
         embed_encode = self.activation(self.encoder_norm(embed_encode))
@@ -366,8 +364,6 @@ class SamHQMaskDecoder(nn.Module):
             else:
                 current_mlp = self.hq_mask_mlp
             hyper_in_list += [current_mlp(mask_tokens_out[:, :, mask_token_index, :])]
-
-
 
         hyper_in = torch.stack(hyper_in_list, dim=2)
         _, num_channels, height, width = upscaled_embedding.shape

@@ -151,15 +151,16 @@ class SamHQProcessor(ProcessorMixin):
         """
         Normalize and convert the image processor output to the expected format.
         """
+
         # Helper function to convert arrays to tensors with proper dimensions
         def to_tensor(array, min_dim):
             """
             Convert numpy array to tensor and ensure proper dimensionality.
-            
+
             Args:
                 array: The numpy array to convert
                 min_dim: The minimum number of dimensions the result should have
-                
+
             Returns:
                 The converted array or tensor with proper dimensions
             """
@@ -167,23 +168,25 @@ class SamHQProcessor(ProcessorMixin):
                 array = torch.from_numpy(array)
                 return array.unsqueeze(1) if array.ndim < min_dim else array
             return array
-            
+
         # Helper function to normalize coordinates for multiple inputs
         def normalize_batch_coordinates(inputs, is_bounding_box=False):
             """
             Normalize coordinates based on original sizes.
-            
+
             Args:
                 inputs: List of coordinate arrays
                 is_bounding_box: Whether inputs are bounding boxes
-                
+
             Returns:
                 Normalized coordinates as list
             """
             if len(original_sizes) != len(inputs):
                 # Use first original size for all inputs
                 return [
-                    self._normalize_coordinates(self.target_size, item, original_sizes[0], is_bounding_box=is_bounding_box)
+                    self._normalize_coordinates(
+                        self.target_size, item, original_sizes[0], is_bounding_box=is_bounding_box
+                    )
                     for item in inputs
                 ]
             else:
@@ -272,60 +275,55 @@ class SamHQProcessor(ProcessorMixin):
         are, it converts the coordinates of the points and bounding boxes. If a user passes directly a `torch.Tensor`,
         it is converted to a `numpy.ndarray` and then to a `list`.
         """
+
         def preprocess_input(inp, error_message, expected_nesting=1, dtype=None):
             """
             Preprocess input by converting torch tensors to numpy arrays and validating structure.
-            
+
             Args:
                 inp: The input to process
                 error_message: Error message if validation fails
                 expected_nesting: Expected nesting level (1 for points/labels, 2 for boxes)
                 dtype: Optional data type for numpy array conversion
-                
+
             Returns:
                 Processed input as list of numpy arrays or None
             """
             if inp is None:
                 return None
-                
+
             # Convert torch tensor to list if applicable
             if hasattr(inp, "numpy"):
                 inp = inp.numpy().tolist()
-            
+
             # Validate structure based on expected nesting
             valid = isinstance(inp, list)
             current = inp
-            
+
             for _ in range(expected_nesting):
                 if not valid or not current:
                     break
                 valid = valid and isinstance(current[0], list)
                 current = current[0] if current else None
-                
+
             if not valid:
                 raise ValueError(error_message)
-            
+
             # Convert to numpy arrays
             return [np.array(item, dtype=dtype) for item in inp]
-        
+
         # Process each input type
-        input_points = preprocess_input(
-            input_points,
-            "Input points must be a list of list of floating points."
-        )
-        
-        input_labels = preprocess_input(
-            input_labels,
-            "Input labels must be a list of list integers."
-        )
-        
+        input_points = preprocess_input(input_points, "Input points must be a list of list of floating points.")
+
+        input_labels = preprocess_input(input_labels, "Input labels must be a list of list integers.")
+
         input_boxes = preprocess_input(
             input_boxes,
             "Input boxes must be a list of list of list of floating points.",
             expected_nesting=2,
-            dtype=np.float32
+            dtype=np.float32,
         )
-        
+
         return input_points, input_labels, input_boxes
 
     @property

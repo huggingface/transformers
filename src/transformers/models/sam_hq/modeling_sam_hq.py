@@ -1036,8 +1036,6 @@ class SamHQMaskDecoder(nn.Module):
 
         if has_intermediate:
             vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
-        else:
-            vit_features = None
 
         embed_encode = self.encoder_conv1(image_embeddings)
         embed_encode = self.activation(self.encoder_norm(embed_encode))

@@ -681,43 +681,35 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
         model.to(torch_device)
         model.eval()
-        
+
         raw_image = prepare_image()
         input_points = [[[400, 650]]]
         input_labels = [[1]]
-        
+
         inputs = processor(
-            images=raw_image, 
-            input_points=input_points, 
-            input_labels=input_labels, 
-            return_tensors="pt"
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
-        
+
         with torch.no_grad():
             outputs = model(**inputs)
-        
+
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9137), atol=1e-4))
-
 
     def test_inference_mask_generation_without_labels(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
         processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
         model.to(torch_device)
         model.eval()
-        
+
         raw_image = prepare_image()
         input_points = [[[400, 650]]]
-        
-        inputs = processor(
-            images=raw_image, 
-            input_points=input_points, 
-            return_tensors="pt"
-        ).to(torch_device)
-        
+
+        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+
         with torch.no_grad():
             outputs = model(**inputs)
-        
+
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9137), atol=1e-3))
 
@@ -726,43 +718,35 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
         model.to(torch_device)
         model.eval()
-        
+
         raw_image = prepare_image()
         input_points = [[[400, 650], [800, 650]]]
         input_labels = [[1, 1]]
-        
+
         inputs = processor(
-            images=raw_image, 
-            input_points=input_points, 
-            input_labels=input_labels, 
-            return_tensors="pt"
+            images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
-        
+
         with torch.no_grad():
             outputs = model(**inputs)
-        
+
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8859), atol=1e-3))
-
 
     def test_inference_mask_generation_two_points_without_labels(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
         processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
         model.to(torch_device)
         model.eval()
-        
+
         raw_image = prepare_image()
         input_points = [[[400, 650], [800, 650]]]
-        
-        inputs = processor(
-            images=raw_image, 
-            input_points=input_points, 
-            return_tensors="pt"
-        ).to(torch_device)
-        
+
+        inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
+
         with torch.no_grad():
             outputs = model(**inputs)
-        
+
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8859), atol=1e-4))
 
