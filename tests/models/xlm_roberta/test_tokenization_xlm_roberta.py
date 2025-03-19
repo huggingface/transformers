@@ -258,7 +258,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_base_hard_symbols(self):
         symbols = (
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
-            " add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth"
+            " add words that should not exist and be tokenized to <unk>, such as saoneuhaoesuth"
         )
         original_tokenizer_encodings = [
             0,
