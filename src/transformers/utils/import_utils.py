@@ -95,6 +95,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
+TORCHAO_MIN_VERSION = "0.4.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -191,7 +192,7 @@ _tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
-_torchao_available = _is_package_available("torchao")
+_torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
@@ -1061,7 +1062,9 @@ def is_torch_greater_or_equal(library_version: str):
     if not _is_package_available("torch"):
         return False
 
-    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+    return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
+        library_version
+    )
 
 
 def is_torchdistx_available():
@@ -1277,8 +1280,8 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
-def is_torchao_available():
-    return _torchao_available
+def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION):
+    return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
 def is_speech_available():
