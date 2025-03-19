@@ -17,6 +17,7 @@
 import tempfile
 import unittest
 
+import numpy as np
 from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
 from transformers.models.janus.convert_janus_weights_to_hf import CHAT_TEMPLATE
 from transformers.utils import is_vision_available
@@ -436,3 +437,18 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="np",
         )
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
+
+    def test_processor_postprocess(self):
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
+
+        input_str = "lower newer"
+        orig_image_input = self.prepare_image_inputs()
+        orig_image = np.array(orig_image_input).transpose(2, 0, 1)
+
+        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="np")
+        normalized_image_input = inputs.pixel_values
+        unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="np")["pixel_values"]
+
+        # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
+        self.assertTrue(np.abs(orig_image - unnormalized_images).max() >= 1)
