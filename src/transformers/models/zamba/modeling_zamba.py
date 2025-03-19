@@ -45,7 +45,6 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1228,7 +1227,6 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1326,7 +1324,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
             #              (we can't check exception 3 while compiling)
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)

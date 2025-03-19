@@ -209,13 +209,13 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -885,7 +885,7 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     # Doesn't run generation tests. TODO: fix generation tests for Blip2ForConditionalGeneration
     all_generative_model_classes = ()
