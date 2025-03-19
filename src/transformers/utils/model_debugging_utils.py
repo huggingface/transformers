@@ -28,7 +28,8 @@ if is_torch_available():
     import torch.distributed.tensor
     from torch import nn
 
-from ..modeling_utils import PreTrainedModel
+    from ..modeling_utils import PreTrainedModel
+
 from . import logging
 
 
