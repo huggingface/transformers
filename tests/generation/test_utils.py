@@ -2703,13 +2703,17 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
     def test_cache_dependant_input_preparation_exporting(self):
-        self.assertFalse(is_torchdynamo_exporting())  # otherwise this test does not compare two different implementation
+        self.assertFalse(
+            is_torchdynamo_exporting()
+        )  # otherwise this test does not compare two different implementation
         # Case 1
         input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)[:, :0]
         inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
         cache_position = torch.range(0, 7, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
         torch.testing.assert_close(eager1, export1)
         torch.testing.assert_close(eager2, export2)
 
@@ -2718,7 +2722,9 @@ class UtilsFunctionsTest(unittest.TestCase):
         inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
         cache_position = torch.range(0, 7, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
         torch.testing.assert_close(eager1, export1)
         torch.testing.assert_close(eager2, export2)
 
@@ -2727,7 +2733,9 @@ class UtilsFunctionsTest(unittest.TestCase):
         inputs_embeds = None
         cache_position = torch.range(0, 7, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
         torch.testing.assert_close(eager1, export1)
         torch.testing.assert_close(eager2, export2)
 
@@ -2736,7 +2744,9 @@ class UtilsFunctionsTest(unittest.TestCase):
         inputs_embeds = None
         cache_position = torch.range(0, 7, dtype=torch.int64)
         eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(input_ids, inputs_embeds, cache_position)
+        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
+            input_ids, inputs_embeds, cache_position
+        )
         torch.testing.assert_close(eager1, export1)
         torch.testing.assert_close(eager2, export2)
 
