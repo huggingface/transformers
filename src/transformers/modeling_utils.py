@@ -4982,7 +4982,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         error_msgs = []
 
         # Use multiprocessing Pool for parallel execution, off by default
-        if json.loads(os.environ.get("ENABLE_PARALLEL_LOADING", "false")):
+        if json.loads(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")):
             num_workers = json.loads(os.environ.get("PARALLEL_LOADING_WORKERS", "8"))
             logger.info(f"Loading model weights in parallel with {num_workers} workers...")
             state_dict_modules_list = []
