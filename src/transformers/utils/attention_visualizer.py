@@ -43,7 +43,6 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
 
     Optionally applies a sliding window mask (e.g., for Gemma2/3) and
     marks regions where image tokens occur based on the specified `img_token`.
-    
     """
     mask = mask.int()
     if mask.ndim == 3:
@@ -54,6 +53,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     n = len(words)
     max_word_length = max(len(repr(word)) for word in words)
     first_img_idx = 0
+    output = []
 
     for i, k in enumerate(words):
         if img_token in k and not first_img_idx:
@@ -86,11 +86,12 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     )
     # Print headers
     legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: img tokens"
-    print(" " + legend)
-    f_string = " " * (max_word_length + 5) + "Attention Matrix".ljust(len(row_dummy))
+    output.append(" " + legend)
+    f_string = " " * (max_word_length + 5) + "Attention Matrix".ljust(len(row_dummy) // 2)
     if sliding_window is not None:
-        f_string += "Sliding Window Mask"
-    print(f_string)
+        f_string += "\t\tSliding Window Mask"
+    output.append(f_string)
+
     vertical_header = []
     for idx, word in enumerate(words):
         if img_token not in word:
@@ -101,7 +102,7 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     vertical_header = list(map(list, zip(*vertical_header)))  # Transpose
 
     for row in vertical_header:
-        print(
+        output.append(
             (max_word_length + 5) * " " + " ".join(row) + "    |    " + " ".join(row)
             if sliding_window is not None
             else ""
@@ -133,7 +134,9 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
                 for j in range(n)
             )
 
-        print(f"{colored_word}: {str(i).rjust(2)} {row_display}    |    {sliding_window_row}")
+        output.append(f"{colored_word}: {str(i).rjust(2)} {row_display}    |    {sliding_window_row}")
+
+    return "\n".join(output)
 
 
 class AttentionMaskVisualizer:
@@ -144,7 +147,7 @@ class AttentionMaskVisualizer:
             config.sliding_window = 5
         try:
             mapped_cls = _get_model_class(config, MODEL_MAPPING)
-        except Exception as e:
+        except Exception:
             mapped_cls = _get_model_class(config, MODEL_FOR_PRETRAINING_MAPPING)
 
         if mapped_cls is None:
@@ -210,10 +213,11 @@ class AttentionMaskVisualizer:
             + side_border
         )
         print(f"{top_bottom_border}")
-        generate_attention_matrix_from_mask(
+        f_string = generate_attention_matrix_from_mask(
             tokens,
             attention_mask,
             img_token=self.image_token,
             sliding_window=getattr(self.config, "sliding_window", None),
         )
+        print(f_string)
         print(f"{top_bottom_border}")
