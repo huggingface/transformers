@@ -22,6 +22,7 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_flax, require_tf, require_torch
 from transformers.utils import (
+    can_return_tuple,
     expand_dims,
     filter_out_non_signature_kwargs,
     flatten_dict,
@@ -29,7 +30,6 @@ from transformers.utils import (
     is_tf_available,
     is_torch_available,
     reshape,
-    return_tuple_if_requested,
     squeeze,
     transpose,
 )
@@ -276,24 +276,31 @@ class ValidationDecoratorTester(unittest.TestCase):
         self.assertEqual(kwargs, {"extra_arg": 2, "extra_arg2": 3})
 
 
-class ReturnTupleIfRequestedTester(unittest.TestCase):
-    def test_decorator(self):
-        # Simple model class for testing return_tuple_if_requested decorator.
-        class SimpleTestModel:
+
+@require_torch
+class CanReturnTupleDecoratorTester(unittest.TestCase):
+
+    def _get_model(self, config):
+        # Simple model class for testing can_return_tuple decorator.
+        class SimpleTestModel(torch.nn.Module):
             def __init__(self, config):
+                super().__init__()
                 self.config = config
 
-            @return_tuple_if_requested
+            @can_return_tuple
             def forward(self, x):
                 return BaseModelOutput(
                     last_hidden_state=x,
                     hidden_states=None,
                     attentions=None,
                 )
+        return SimpleTestModel(config)
+
+    def test_decorator_eager(self):
 
         # test nothing is set
         config = PretrainedConfig()
-        model = SimpleTestModel(config)
+        model = self._get_model(config)
         output = model.forward(10)
         self.assertIsInstance(
             output, BaseModelOutput, "output should be a BaseModelOutput when return_dict is not set"
@@ -303,9 +310,29 @@ class ReturnTupleIfRequestedTester(unittest.TestCase):
         for config_return_dict in [True, False, None]:
             for return_dict in [True, False, None]:
                 config = PretrainedConfig(return_dict=config_return_dict)
-                model = SimpleTestModel(config)
-                output = model.forward(10, return_dict=return_dict)
+                model = self._get_model(config)
+                output = model(10, return_dict=return_dict)
 
                 expected_type = tuple if config_return_dict is False or return_dict is False else BaseModelOutput
                 message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
+
+    def test_decorator_compiled(self):
+        config = PretrainedConfig()
+        model = self._get_model(config)
+        compiled_model = torch.compile(model)
+        output = compiled_model(torch.tensor(10))
+        self.assertIsInstance(output, BaseModelOutput)
+
+    def test_decorator_torch_export(self):
+        config = PretrainedConfig()
+        model = self._get_model(config)
+        torch.export.export(model, args=(torch.tensor(10),))
+
+    def test_decorator_torchscript(self):
+        config = PretrainedConfig(return_dict=False)
+        model = self._get_model(config)
+        inputs = torch.tensor(10)
+        traced_module = torch.jit.trace(model, inputs)
+        output = traced_module(inputs)
+        self.assertIsInstance(output, tuple)
