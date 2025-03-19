@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 import numpy as np
 import typing_extensions
 
+from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .image_utils import (
     ChannelDimension,
@@ -420,6 +421,7 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
+    sampling_rate: Optional[int] = 16_000
     sample_indices_fn: Optional[Callable] = None
 
 
@@ -1339,15 +1341,23 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = chat_template_kwargs.get("tokenize")
         return_dict = chat_template_kwargs.get("return_dict")
         sample_indices_fn = chat_template_kwargs.get("sample_indices_fn")
+        sampling_rate = chat_template_kwargs.pop("sampling_rate")
 
         if tokenize:
             batch_images, batch_videos = [], []
+            batch_audios = []
             batch_video_metadata = []
             for conversation in conversations:
                 images, videos = [], []
                 video_metadata = []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    audio_fnames = [
+                        content[key]
+                        for content in message["content"]
+                        for key in ["audio", "url", "path"]
+                        if key in content and content["type"] == "audio"
+                    ]
                     image_fnames = [
                         vision_info[key]
                         for vision_info in visuals
@@ -1360,6 +1370,10 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
                     ]
+
+                    # Audio models do not accept nested list of audios (yet!)
+                    for fname in audio_fnames:
+                        batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     for fname in image_fnames:
                         images.append(load_image(fname))
                     for fname in video_fnames:
@@ -1426,6 +1440,7 @@ class ProcessorMixin(PushToHubMixin):
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
+                audios=batch_audios if batch_audios else None,
                 **kwargs,
             )
             if return_dict:
