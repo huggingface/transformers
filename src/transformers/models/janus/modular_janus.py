@@ -23,7 +23,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
-from ..blip_2.modeling_blip_2 import Blip2VisionModel
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -61,6 +60,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel
+from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
     ChameleonVQVAE,
@@ -1028,7 +1028,6 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
-
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1276,8 +1275,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if generation_mode == "text":
             # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
-                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config,
-                guidance_scale=None, **kwargs
+                inputs=inputs,
+                attention_mask=attention_mask,
+                generation_config=generation_config,
+                guidance_scale=None,
+                **kwargs,
             )
 
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
@@ -1308,7 +1310,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
-
         dtype, device = input_ids.dtype, input_ids.device
 
         if len(input_ids.shape) != 2:
@@ -1344,11 +1345,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             **model_kwargs,
         )
 
-        # Should only get shape after self._expand_inputs_for_generation
-        batch_size, seq_len = input_ids.shape
-
         # 7. Prepare input and model caches
         num_image_tokens = self.model.vision_model.config.num_image_tokens
+        batch_size, seq_len = input_ids.shape
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
         attention_mask = model_kwargs.pop("attention_mask", None)

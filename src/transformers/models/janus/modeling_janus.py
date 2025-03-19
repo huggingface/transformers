@@ -1258,9 +1258,6 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
-    # def _prepare_4d_causal_attention_mask_with_cache_position(self, *args, **kwargs):
-    #     return self.language_model._prepare_4d_causal_attention_mask_with_cache_position(*args, **kwargs)
-
     @add_start_docstrings_to_model_forward(JANUS_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1508,8 +1505,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if generation_mode == "text":
             # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
-                inputs=inputs, attention_mask=attention_mask, generation_config=generation_config,
-                guidance_scale=None, **kwargs
+                inputs=inputs,
+                attention_mask=attention_mask,
+                generation_config=generation_config,
+                guidance_scale=None,
+                **kwargs,
             )
 
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
@@ -1540,7 +1540,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
-
         dtype, device = input_ids.dtype, input_ids.device
 
         if len(input_ids.shape) != 2:
@@ -1576,11 +1575,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             **model_kwargs,
         )
 
-        # Should only get shape after self._expand_inputs_for_generation
-        batch_size, seq_len = input_ids.shape
-
         # 7. Prepare input and model caches
         num_image_tokens = self.model.vision_model.config.num_image_tokens
+        batch_size, seq_len = input_ids.shape
 
         input_tokens = input_ids.repeat(2, 1)  # Double batch size for conditional/unconditional logits
         attention_mask = model_kwargs.pop("attention_mask", None)

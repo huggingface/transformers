@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+
 from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
 from transformers.models.janus.convert_janus_weights_to_hf import CHAT_TEMPLATE
 from transformers.utils import is_vision_available
