@@ -177,11 +177,7 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     """
 
     all_model_classes = (HGNetV2ForImageClassification, HGNetV2Backbone) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-classification": HGNetV2ForImageClassification}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-classification": HGNetV2ForImageClassification} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False
@@ -192,7 +188,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
 
     def setUp(self):
         self.model_tester = HGNetV2ModelTester(self)
-
 
     @unittest.skip(reason="HGNetV2 does not output attentions")
     def test_attention_outputs(self):
@@ -281,4 +276,3 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     @unittest.skip(reason="HGNetV2 does not use model")
     def test_model_from_pretrained(self):
         pass
-
