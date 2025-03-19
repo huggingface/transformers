@@ -731,8 +731,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniThinkerPreTrainedModel):
         self.n_window = config.n_window
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
-        self.register_buffer(
-            "positional_embedding", sinusoids(self.max_source_positions, embed_dim).to(torch.bfloat16)
+        self.positional_embedding = Parameter(
+            sinusoids(self.max_source_positions, embed_dim).to(torch.bfloat16), requires_grad=False
         )
         self.audio_bos_eos_token = nn.Embedding(2, config.output_dim)
         self.layers = nn.ModuleList([Qwen2_5OmniAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
