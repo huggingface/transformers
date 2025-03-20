@@ -13,8 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for FAST."""
-from ...utils.import_utils import is_cv2_available, is_torch_available, is_scipy_available, requires_backends
+
 import math
+from typing import Dict, Optional, Union
+
+import numpy as np
+
+from ...image_transforms import get_resize_output_image_size, resize
+from ...image_utils import ChannelDimension, PILImageResampling
+from ...utils.import_utils import is_cv2_available, is_scipy_available, is_torch_available, requires_backends
+
+
 if is_cv2_available():
     import cv2
 
@@ -32,11 +41,11 @@ from transformers.models.textnet.image_processing_textnet import TextNetImagePro
 def connected_components(image, connectivity=8):
     """
     Computes connected components of a binary image using SciPy.
-    
+
     Parameters:
         image (np.ndarray): Binary input image (0s and 1s)
         connectivity (int): Connectivity, 4 or 8 (default is 8)
-    
+
     Returns:
         labels (np.ndarray): Labeled output image
         num_labels (int): Number of labels found
@@ -45,9 +54,10 @@ def connected_components(image, connectivity=8):
         structure = np.ones((3, 3), dtype=np.int32)  # 8-connectivity
     else:
         structure = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.int32)  # 4-connectivity
-    
+
     labels, num_labels = ndi.label(image, structure=structure)
     return num_labels, labels
+
 
 def compute_min_area_rect(points):
     """
@@ -69,13 +79,12 @@ def compute_min_area_rect(points):
     edge_angles = np.arctan2(edges[:, 1], edges[:, 0])
     edge_angles = np.unique(edge_angles)
 
-    min_area = float('inf')
+    min_area = float("inf")
     best_box = None
 
     for angle in edge_angles:
         # Rotate points by -angle (clockwise)
-        R = np.array([[np.cos(-angle), -np.sin(-angle)],
-                      [np.sin(-angle),  np.cos(-angle)]])
+        R = np.array([[np.cos(-angle), -np.sin(-angle)], [np.sin(-angle), np.cos(-angle)]])
         rotated = points @ R.T
 
         # Bounding box in rotated space
@@ -91,8 +100,7 @@ def compute_min_area_rect(points):
 
     min_x, min_y, max_x, max_y, angle, w, h = best_box
     center_rotated = np.array([(min_x + max_x) / 2, (min_y + max_y) / 2])
-    R_inv = np.array([[np.cos(angle), -np.sin(angle)],
-                      [np.sin(angle),  np.cos(angle)]])
+    R_inv = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     center = center_rotated @ R_inv.T
 
     angle_deg = np.degrees(angle)
@@ -104,7 +112,8 @@ def compute_min_area_rect(points):
         angle_deg += 180
 
     return (tuple(center), (w, h), angle_deg)
-        
+
+
 def get_box_points(rect):
     """
     Computes the four corner points of a rotated rectangle in OpenCV's order.
@@ -129,14 +138,18 @@ def get_box_points(rect):
     a = np.sin(angle) * 0.5
 
     # compute four corners
-    points = np.array([
-        [cx - a * h - b * w, cy + b * h - a * w],  # top-left
-        [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
-        [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
-        [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)]   # bottom-left
-    ], dtype=np.float32)
+    points = np.array(
+        [
+            [cx - a * h - b * w, cy + b * h - a * w],  # top-left
+            [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
+            [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
+            [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)],  # bottom-left
+        ],
+        dtype=np.float32,
+    )
 
     return points
+
 
 class FastImageProcessor(TextNetImageProcessor):
     def resize(
@@ -184,7 +197,7 @@ class FastImageProcessor(TextNetImageProcessor):
             height += self.size_divisor - (height % self.size_divisor)
         if width % self.size_divisor != 0:
             width += self.size_divisor - (width % self.size_divisor)
-        #TODO: would be great to find a more efficient way in modular
+        # TODO: would be great to find a more efficient way in modular
         # as we're only adding this line of code
         self.img_size = (height, width)
         return resize(
@@ -195,12 +208,13 @@ class FastImageProcessor(TextNetImageProcessor):
             input_data_format=input_data_format,
             **kwargs,
         )
+
     def _max_pooling(self, input_tensor, scale=1):
         kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
         padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2
-        
+
         pooling = nn.MaxPool2d(kernel_size=kernel_size, stride=1, padding=padding)
-        
+
         pooled_output = pooling(input_tensor)
         return pooled_output
 
@@ -241,7 +255,6 @@ class FastImageProcessor(TextNetImageProcessor):
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
         labels_ = []
         for kernel in kernels.numpy():
-
             ret, label_ = connected_components(kernel)
             labels_.append(label_)
         labels_ = np.array(labels_)
@@ -314,7 +327,7 @@ class FastImageProcessor(TextNetImageProcessor):
                 bounding_box = get_box_points(rect) * scales
 
             elif bounding_box_type == "poly":
-                requires_backend(self, "cv2")
+                requires_backends(self, "cv2")
                 binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
                 # cv2.findContours is too complex to replicate :(
@@ -325,6 +338,7 @@ class FastImageProcessor(TextNetImageProcessor):
             scores.append(score_i)
 
         return bounding_boxes, scores
+
 
 __all__ = [
     "FastImageProcessor",

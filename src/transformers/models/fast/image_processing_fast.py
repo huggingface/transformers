@@ -40,7 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
-from ...utils.import_utils import is_cv2_available, is_scipy_available, is_torch_available
+from ...utils.import_utils import is_cv2_available, is_scipy_available, is_torch_available, requires_backends
 
 
 if is_cv2_available():
@@ -598,7 +598,7 @@ class FastImageProcessor(BaseImageProcessor):
                 bounding_box = get_box_points(rect) * scales
 
             elif bounding_box_type == "poly":
-                requires_backend(self, "cv2")
+                requires_backends(self, "cv2")
                 binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
                 # cv2.findContours is too complex to replicate :(

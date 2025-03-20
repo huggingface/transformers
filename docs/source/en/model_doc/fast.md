@@ -26,6 +26,13 @@ with arbitrary shape, as well as a GPU-parallel post-processing to efficiently a
 time overhead. (2) We search the network architecture tailored for text detection, leading to more powerful features 
 than most networks that are searched for image classification.
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/fast_architecture.png"
+alt="drawing" width="600"/>
+
+<small> FAST architecture taken from the <a href="https://arxiv.org/abs/2111.02394">original paper.</a> </small>
+
+This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari), [Raghavan](https://huggingface.co/Raghavan), and [qubvel-hf](https://huggingface.co/qubvel-hf).
+
 ## FastConfig
 
 [[autodoc]] FastConfig

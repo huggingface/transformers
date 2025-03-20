@@ -20,6 +20,7 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 class FastConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastForSceneTextRecognition`]. It is used to
@@ -43,15 +44,15 @@ class FastConfig(PretrainedConfig):
         neck_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 256, 512]`):
             Denotes the in channels of FastRepConvLayer in neck module.
         neck_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`):
-            Denotes the number of output channels for each FastRepConvLayer in the neck module. 
+            Denotes the number of output channels for each FastRepConvLayer in the neck module.
             This list should be of the same length as `neck_in_channels`.
         neck_kernel_size (`List[Tuple[int, int]]`, *optional*, defaults to `[(3, 3), (3, 3), (3, 3), (3, 3)]`):
-            Denotes the kernel size for each FastRepConvLayer in the neck module. 
-            This list should be of the same length as `neck_in_channels`. 
+            Denotes the kernel size for each FastRepConvLayer in the neck module.
+            This list should be of the same length as `neck_in_channels`.
             Each element is a tuple of two integers, specifying the height and width of the kernel.
         neck_stride (`List[Tuple[int, int]]`, *optional*, defaults to `[(1, 1), (1, 1), (1, 1), (1, 1)]`):
-            Denotes the stride for each FastRepConvLayer in the neck module. 
-            This list should be of the same length as `neck_in_channels`. 
+            Denotes the stride for each FastRepConvLayer in the neck module.
+            This list should be of the same length as `neck_in_channels`.
             Each element is a tuple of two integers, specifying the stride along the height and width.
         head_pooling_size (`int`, *optional*, defaults to 9):
             Denotes the pooling size for the head layer. This integer specifies the size of the pooling window.
@@ -197,5 +198,6 @@ class FastConfig(PretrainedConfig):
             [`FastConfig`]: An instance of a configuration object
         """
         return cls(backbone_config=backbone_config, **kwargs)
+
 
 __all__ = ["FastConfig"]

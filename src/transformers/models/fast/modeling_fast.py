@@ -17,7 +17,6 @@
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,7 +30,6 @@ if is_timm_available():
 
 
 from transformers import (
-    AutoBackbone,
     FastConfig,
     PreTrainedModel,
     add_start_docstrings,
@@ -66,6 +64,7 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 @dataclass
 class FastForSceneTextRecognitionOutput(ModelOutput):
     """
@@ -92,14 +91,10 @@ def get_same_padding(kernel_size):
         return padding1, padding2
     return kernel_size // 2
 
+
 class FastRepConvLayer(nn.Module):
     def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: Tuple[int, int],
-        stride: int = 1,
-        bias: bool = False
+        self, in_channels: int, out_channels: int, kernel_size: Tuple[int, int], stride: int = 1, bias: bool = False
     ) -> None:
         super().__init__()
 
@@ -152,11 +147,9 @@ class FastRepConvLayer(nn.Module):
         else:
             self.horizontal_conv = nn.Identity()
             self.horizontal_batch_norm = nn.Identity()
-        
-        #TODO: check if needed
-        self.rbr_identity = (
-            nn.BatchNorm2d(out_channels) if out_channels == in_channels and stride == 1 else None
-        )
+
+        # TODO: check if needed
+        self.rbr_identity = nn.BatchNorm2d(out_channels) if out_channels == in_channels and stride == 1 else None
 
     def forward(self, hidden_states: torch.Tensor):
         # if self.training:
@@ -173,7 +166,6 @@ class FastRepConvLayer(nn.Module):
             rbr_identity = self.rbr_identity(hidden_states)
         else:
             rbr_identity = 0
-
 
         return self.activation(main + vertical + horizontal + rbr_identity)
 
@@ -271,7 +263,6 @@ class FASTHead(nn.Module):
         return hidden_states
 
 
-
 @add_start_docstrings(
     """FAST (faster arbitararily-shaped text detector) proposes an accurate and efficient scene text detection
     framework, termed FAST (i.e., faster arbitrarily-shaped text detector).FAST has two new designs. (1) They design a
@@ -312,7 +303,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             kernel_size=config.head_pooling_size // 2 + 1, stride=1, padding=(config.head_pooling_size // 2) // 2
         )
         self.post_init()
-
 
     @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FastForSceneTextRecognitionOutput, config_class=_CONFIG_FOR_DOC)
@@ -365,19 +355,15 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         loss = None
         if labels:
             upsampled_output = F.interpolate(
-                text_detection_output, 
-                size=(pixel_values.size(2), pixel_values.size(3)), 
-                mode="bilinear"
+                text_detection_output, size=(pixel_values.size(2), pixel_values.size(3)), mode="bilinear"
             )
             loss = self.loss_function()
             kernels = upsampled_output[:, 0, :, :]  # 4*640*640
-            texts = self.pooling_1s(kernels) # 4*640*640 
+            texts = self.pooling_1s(kernels)  # 4*640*640
             loss = loss(upsampled_output, labels, texts)
-            
+
         text_detection_output = F.interpolate(
-            text_detection_output,
-            size=(pixel_values.size(2) // 4, pixel_values.size(3) // 4),
-            mode="bilinear"
+            text_detection_output, size=(pixel_values.size(2) // 4, pixel_values.size(3) // 4), mode="bilinear"
         )
 
         if not return_dict:
@@ -389,5 +375,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
             last_hidden_state=text_detection_output,
             hidden_states=all_hidden_states if output_hidden_states else None,
         )
+
 
 __all__ = ["FastPreTrainedModel", "FastForSceneTextRecognition"]

@@ -29,7 +29,6 @@ from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.testing_utils import (
     require_torch,
     require_vision,
-    slow,
     torch_device,
 )
 

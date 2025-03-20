@@ -16,13 +16,15 @@
 
 import unittest
 
+import numpy as np
 import requests
 
-from transformers.testing_utils import require_torch, require_vision, require_cv2, slow
-from transformers.utils import is_torch_available, is_vision_available, is_cv2_available
 from transformers.models.fast.image_processing_fast import compute_min_area_rect, get_box_points
+from transformers.testing_utils import require_cv2, require_torch, require_vision
+from transformers.utils import is_cv2_available, is_torch_available, is_vision_available
+
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-import numpy as np
+
 
 if is_torch_available():
     import torch
@@ -34,6 +36,7 @@ if is_vision_available():
 
 if is_cv2_available():
     import cv2
+
 
 class FastImageProcessingTester(unittest.TestCase):
     def __init__(
@@ -159,12 +162,14 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # TODO: check how to not hard code this
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
-        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bounding_box_type="rect")
+        final_out = image_processor.post_process_text_detection(
+            output, target_sizes, threshold, bounding_box_type="rect"
+        )
 
-        #TODO: align bbox format with transformer models
+        # TODO: align bbox format with transformer models
         assert final_out[0]["boxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.91862
-    
+
     @require_cv2
     def test_get_box_points_against_cv2(self):
         for _ in range(10):
@@ -180,5 +185,6 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             my_box_sorted = np.array(sorted(my_box, key=lambda x: (x[0], x[1])))
             cv2_box_sorted = np.array(sorted(cv2_box, key=lambda x: (x[0], x[1])))
 
-            assert np.allclose(my_box_sorted, cv2_box_sorted, atol=5), \
-                f"Box points mismatch:\n{my_box_sorted}\nvs\n{cv2_box_sorted}"
+            assert np.allclose(
+                my_box_sorted, cv2_box_sorted, atol=5
+            ), f"Box points mismatch:\n{my_box_sorted}\nvs\n{cv2_box_sorted}"

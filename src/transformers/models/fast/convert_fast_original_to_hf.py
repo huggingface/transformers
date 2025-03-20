@@ -47,6 +47,7 @@ rename_key_mappings = {
     "final.conv.weight": "final_conv.weight",
 }
 
+
 def get_model_config(model_config, model_type, size, min_area, bounding_box_type, loss_bg):
     model_config_map = {
         "tiny": {
@@ -65,16 +66,22 @@ def get_model_config(model_config, model_type, size, min_area, bounding_box_type
             "expected_boxes": [157, 149, 158, 66, 348, 68, 347, 151],
         },
     }
-    
+
     if model_type not in model_config_map:
         raise ValueError(f"Unknown model type: {model_type}")
 
     logits_config = model_config_map[model_type]
     config = prepare_config(
-        logits_config["config_url"], size, model_config["detection_head"]["pooling_size"], min_area, bounding_box_type, loss_bg
+        logits_config["config_url"],
+        size,
+        model_config["detection_head"]["pooling_size"],
+        min_area,
+        bounding_box_type,
+        loss_bg,
     )
-    
+
     return config, logits_config["expected_logits"], logits_config["expected_boxes"]
+
 
 def prepare_config(size_config_url, size, pooling_size, min_area, bounding_box_type, loss_bg):
     config_dict = json.loads(requests.get(size_config_url).text)
@@ -181,6 +188,7 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bounding_box_t
     )
 
     return fast_config
+
 
 def convert_fast_checkpoint(
     checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately
