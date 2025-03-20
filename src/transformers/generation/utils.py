@@ -156,7 +156,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: Optional[torch.LongTensor] = None
+    sequences: torch.LongTensor
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -201,7 +201,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: Optional[torch.LongTensor] = None
+    sequences: torch.LongTensor
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -246,7 +246,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: Optional[torch.LongTensor] = None
+    sequences: torch.LongTensor
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
@@ -300,7 +300,7 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: Optional[torch.LongTensor] = None
+    sequences: torch.LongTensor
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
