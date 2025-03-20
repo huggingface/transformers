@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 Llama 2-Chat is trained with supervised fine-tuning (SFT), and reinforcement learning with human feedback (RLHF) - rejection sampling and proximal policy optimization (PPO) - is applied to the fine-tuned model to align the chat model with human preferences.
 
-You can find all the original Llama 2 checkpoints under the [Llama 2 Family collection](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b).
+You can find all the original Llama 2 checkpoints under the [Llama 2 Family](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b) collection.
 
 > [!TIP]
 > Click on the Llama 2 models in the right sidebar for more examples of how to apply Llama to different language tasks.
@@ -107,7 +107,7 @@ output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
+Use the [`~transformers.utils.AttentionMaskVisualizer`] to better understand what tokens the model can and cannot attend to.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer

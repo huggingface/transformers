@@ -33,7 +33,7 @@ You can find all the original Llama checkpoints under the [Huggy Llama](https://
 > [!TIP]
 > Click on the Llama models in the right sidebar for more examples of how to apply Llama to different language tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -107,7 +107,7 @@ output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use the `visualize_attention_mask` method to better understand what tokens the model can and cannot attend to.
+Use the [`~transformers.utils.AttentionMaskVisualizer`] utility to better understand what tokens the model can and cannot attend to.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
