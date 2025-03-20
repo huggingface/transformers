@@ -870,15 +870,11 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         # Add chat template as kwarg before returning because most models don't have processor config
-        default_chat_template = None
-        if resolved_raw_chat_template_file is not None:
-            with open(resolved_raw_chat_template_file, encoding="utf-8") as reader:
-                default_chat_template = reader.read()
-        elif resolved_chat_template_file is not None:
+        if resolved_chat_template_file is not None:
             # This is the legacy path
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
                 chat_template_json = json.loads(reader.read())
-                default_chat_template = chat_template_json["chat_template"]
+                chat_templates = chat_template_json["chat_template"]
                 if resolved_additional_chat_template_files:
                     raise ValueError(
                         "Cannot load chat template due to conflicting files - this checkpoint combines "
@@ -886,13 +882,15 @@ class ProcessorMixin(PushToHubMixin):
                         "supported. To resolve this error, replace the legacy chat_template.json file "
                         "with a modern chat_template.jinja file."
                     )
-        chat_templates = {
-            template_name: open(template_file, "r", encoding="utf-8").read()
-            for template_name, template_file in resolved_additional_chat_template_files.items()
-        }
-        if default_chat_template is not None:
-            chat_templates["default"] = default_chat_template
-        if "default" in chat_templates and len(chat_templates) == 1:
+        else:
+            chat_templates = {
+                template_name: open(template_file, "r", encoding="utf-8").read()
+                for template_name, template_file in resolved_additional_chat_template_files.items()
+            }
+            if resolved_raw_chat_template_file is not None:
+                with open(resolved_raw_chat_template_file, "r", encoding="utf-8") as reader:
+                    chat_templates["default"] = reader.read()
+        if isinstance(chat_templates, dict) and "default" in chat_templates and len(chat_templates) == 1:
             chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
 
         if chat_templates:
