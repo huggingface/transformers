@@ -27,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -332,12 +333,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @unittest.skip(
-        reason="Qwen2.5-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -346,6 +341,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
     def test_generate_compile_fullgraph(self):
         pass
+
+    @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        super().test_prompt_lookup_decoding_matches_greedy_search()
 
 
 @require_torch

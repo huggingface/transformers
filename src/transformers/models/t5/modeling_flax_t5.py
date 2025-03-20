@@ -247,7 +247,7 @@ class FlaxT5Attention(nn.Module):
             relative_buckets += (relative_position > 0) * num_buckets
             relative_position = jnp.abs(relative_position)
         else:
-            relative_position = -jnp.clip(relative_position, a_max=0)
+            relative_position = -jnp.clip(relative_position, max=0)
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -258,7 +258,7 @@ class FlaxT5Attention(nn.Module):
         relative_position_if_large = max_exact + (
             jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(relative_position_if_large, max=num_buckets - 1)
 
         relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
 
@@ -291,7 +291,7 @@ class FlaxT5Attention(nn.Module):
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
+        states from previous steps. This function is slightly adapted from the official Flax repository:
         https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.

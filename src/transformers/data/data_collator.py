@@ -843,6 +843,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         if self.random_replace_prob < 0 or self.random_replace_prob > 1:
             raise ValueError("random_replace_prob should be between 0 and 1.")
 
+        self.mlm_probability = float(self.mlm_probability)
+        self.mask_replace_prob = float(self.mask_replace_prob)
+        self.random_replace_prob = float(self.random_replace_prob)
+
         if self.tf_experimental_compile:
             import tensorflow as tf
 
@@ -1789,16 +1793,19 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - concatate the entire mini batch into single long sequence [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+
+    <Tip warning={true}>
+
+    Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence.
+    Make sure your attention computation is able to handle it!
+
+    </Tip>
     """
 
     def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
         self.separator_id = separator_id
-        warnings.warn(
-            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
-            "Make sure your attention computation is able to handle it!"
-        )
 
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:

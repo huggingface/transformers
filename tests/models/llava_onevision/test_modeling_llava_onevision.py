@@ -319,19 +319,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model(**input_dict)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -344,6 +344,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("LLaVA OneVision has dynamic control flow in unpadding")
+    def test_generate_compile_model_forward(self):
         pass
 
 

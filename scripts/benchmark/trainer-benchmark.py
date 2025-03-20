@@ -18,7 +18,7 @@
 #
 # --variations allows you to compare variations in multiple dimensions.
 #
-# as the first dimention has 2 options and the second 3 in our example, this will run the trainer 6
+# as the first dimension has 2 options and the second 3 in our example, this will run the trainer 6
 # times adding one of:
 #
 #    1. --tf32 0 --fp16 0
