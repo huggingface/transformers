@@ -4725,7 +4725,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
-            revision=self.args.revision
+            revision=self.args.revision,
         )
 
         push_jobs = [model_push_job]
@@ -4741,7 +4741,7 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
-                revision=self.args.revision
+                revision=self.args.revision,
             )
             push_jobs.append(checkpoint_push)
 

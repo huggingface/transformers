@@ -1390,7 +1390,9 @@ class TrainingArguments:
     )
     hub_always_push: Optional[str] = field(
         default=None,
-        metadata={"help": "The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash."},
+        metadata={
+            "help": "The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash."
+        },
     )
     gradient_checkpointing: bool = field(
         default=False,
