@@ -225,7 +225,7 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
             break  # exit the loop after finding one (unsure, but should be just one call.)
 
 
-@export(backends=("torch", "banana"))
+@export(backends=("torch",))
 def model_addition_debugger(cls):
     """
     # Model addition debugger - a model adder tracer
