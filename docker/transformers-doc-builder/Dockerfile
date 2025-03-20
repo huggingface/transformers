@@ -3,6 +3,8 @@ LABEL maintainer="Hugging Face"
 
 RUN apt update
 RUN git clone https://github.com/huggingface/transformers
+RUN git fetch origin
+RUN git checkout metadata_job_2
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder ./transformers[dev]
 RUN apt-get -y update && apt-get install -y libsndfile1-dev && apt install -y tesseract-ocr
