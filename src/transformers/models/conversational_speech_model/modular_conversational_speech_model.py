@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Dict
 from dataclasses import dataclass
 
 import math
@@ -21,7 +21,6 @@ import os
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ..llama.modeling_llama import LlamaModel, LlamaForCausalLM, LlamaForCausalLM, KwargsForCausalLM
 from ..llama.configuration_llama import LlamaConfig
@@ -35,6 +34,7 @@ from ...generation.stopping_criteria import (
     StoppingCriteriaList,
     StoppingCriteria
 )
+from ...configuration_utils import PretrainedConfig
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import rope_config_validation
@@ -58,9 +58,9 @@ logger = logging.get_logger(__name__)
 class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
     def __init__(
         self,
+        num_codebooks=32,
+        backbone_hidden_size=2048,
         vocab_size=2051,
-        audio_vocab_size=2048,
-        audio_num_codebooks=32,
         hidden_size=1024,
         intermediate_size=8192,
         num_hidden_layers=4,
@@ -84,9 +84,9 @@ class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
         head_dim=None,
         **kwargs,
     ):
+        self.num_codebooks = num_codebooks
         self.vocab_size = vocab_size
-        self.audio_vocab_size = audio_vocab_size
-        self.audio_num_codebooks = audio_num_codebooks
+        self.backbone_hidden_size = backbone_hidden_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -124,12 +124,12 @@ class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
         )
 
 
-class ConversationalSpeechModelConfig(LlamaConfig):
+class ConversationalSpeechModelBackboneConfig(LlamaConfig):
     def __init__(
         self,
+        num_codebooks=32,
+        codebook_vocab_size=2051,
         vocab_size=128256,
-        audio_vocab_size=2048,
-        audio_num_codebooks=32,
         hidden_size=2048,
         intermediate_size=8192,
         num_hidden_layers=16,
@@ -153,9 +153,9 @@ class ConversationalSpeechModelConfig(LlamaConfig):
         head_dim=None,
         **kwargs,
     ):
+        self.num_codebooks = num_codebooks
+        self.codebook_vocab_size = codebook_vocab_size
         self.vocab_size = vocab_size
-        self.audio_vocab_size = audio_vocab_size
-        self.audio_num_codebooks = audio_num_codebooks
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -193,6 +193,59 @@ class ConversationalSpeechModelConfig(LlamaConfig):
         )
 
 
+class ConversationalSpeechModelConfig(PretrainedConfig):
+    model_type = "conversational_speech_model"
+
+    def __init__(
+        self,
+        backbone_config: Dict=None,
+        depth_decoder_config: Dict=None,
+        initializer_range=0.02,
+        tie_codebook_embeddings=True,
+        **kwargs,
+    ):
+        if backbone_config is None:
+            backbone_config = {}
+            logger.info("backbone_config is None. Initializing the backbone with default values.")
+
+        if depth_decoder_config is None:
+            depth_decoder_config = {}
+            logger.info("depth_decoder_config is None. Initializing the depth decoder with default values.")
+
+        self.backbone_config = ConversationalSpeechModelBackboneConfig(**backbone_config)
+        self.depth_decoder_config = ConversationalSpeechModelDepthDecoderConfig(**depth_decoder_config)
+        
+        if self.backbone_config.num_codebooks != self.depth_decoder_config.num_codebooks:
+            raise ValueError(
+                f"{self.backbone_config.__class__.__name__} and {self.depth_decoder_config.__class__.__name__} "
+                "`num_codebooks` must be the same."
+            )
+        
+        if self.backbone_config.codebook_vocab_size != self.depth_decoder_config.vocab_size:
+            raise ValueError(
+                f"{self.backbone_config.__class__.__name__} `codebook_vocab_size` and {self.depth_decoder_config.__class__.__name__} "
+                "`vocab_size` must be the same."
+            )
+        
+        if self.backbone_config.hidden_size != self.depth_decoder_config.backbone_hidden_size:
+            raise ValueError(
+                f"{self.backbone_config.__class__.__name__} `hidden_size` and {self.depth_decoder_config.__class__.__name__} "
+                "`backbone_hidden_size` must be the same."
+            )
+
+        self.initializer_range = initializer_range
+        self.tie_codebook_embeddings = tie_codebook_embeddings
+        self.vocab_size = self.backbone_config.codebook_vocab_size
+        self.hidden_size = self.backbone_config.hidden_size
+        self.num_codebooks = self.backbone_config.num_codebooks
+
+        # disable tie_word_embeddings as it does not apply here
+        kwargs["tie_word_embeddings"] = False
+
+        super().__init__(**kwargs)
+     
+
+
 @dataclass
 class ConversationalSpeechModelOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
@@ -208,11 +261,10 @@ class ConversationalSpeechModelOutputWithPast(ModelOutput):
     backbone_loss: Optional[torch.FloatTensor] = None
 
 class ConversationalSpeechModelEmbeddings(nn.Module):
-    def __init__(self, audio_vocab_size, audio_num_codebooks):
+    def __init__(self, num_codebooks, codebook_vocab_size, backbone_hidden_size):
         super().__init__()
-        self.audio_vocab_size = audio_vocab_size
-        self.audio_num_codebooks = audio_num_codebooks
-        self.audio_embed_tokens = nn.Embedding((audio_vocab_size + 3) * audio_num_codebooks, audio_vocab_size)
+        self.codebook_vocab_size = codebook_vocab_size
+        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), backbone_hidden_size)   
 
     def forward(self, input_ids, codebook_idxs):
         """
@@ -222,8 +274,8 @@ class ConversationalSpeechModelEmbeddings(nn.Module):
             codebook_idxs (`torch.Tensor`): 
                 Corresponding codebook indices of shape (batch_size, seq_length)
         """
-        offset = codebook_idxs * (self.audio_vocab_size + 3)
-        return self.audio_embed_tokens(input_ids + offset)
+        offset = codebook_idxs * self.codebook_vocab_size
+        return self.embed_audio_tokens(input_ids + offset)
 
 
 class ConversationalSpeechModelDepthDecoder(LlamaModel):
@@ -231,10 +283,8 @@ class ConversationalSpeechModelDepthDecoder(LlamaModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.audio_vocab_size = config.audio_vocab_size
-        self.audio_num_codebooks = config.audio_num_codebooks
-        self.embed_tokens = ConversationalSpeechModelEmbeddings(config.audio_vocab_size, config.audio_num_codebooks)
-        self.inputs_embeds_projector = nn.Linear(config.audio_vocab_size, config.hidden_size, bias=False)
+        self.embed_tokens = ConversationalSpeechModelEmbeddings(config.num_codebooks, config.vocab_size, config.backbone_hidden_size)
+        self.inputs_embeds_projector = nn.Linear(config.backbone_hidden_size, config.hidden_size, bias=False)
 
     def forward(
         self,
@@ -364,12 +414,11 @@ class ConversationalSpeechModelDepthDecoder(LlamaModel):
 
 
 class ConversationalSpeechModelCodebooksHead(nn.Module):
-    def __init__(self, config):
+    def __init__(self, hidden_size, num_codebooks, vocab_size):
         super().__init__()
-        self.audio_vocab_size = config.audio_vocab_size
-        self.audio_num_codebooks = config.audio_num_codebooks
+        self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(
-            torch.empty(self.audio_num_codebooks, config.hidden_size, config.audio_vocab_size + 3)
+            torch.empty(self.num_codebooks, hidden_size, vocab_size)
         )
 
     def reset_parameters(self):
@@ -389,9 +438,11 @@ class ConversationalSpeechModelCodebooksHead(nn.Module):
 
 
 class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
+    _tied_weights_keys = None
+
     def __init__(self, config):
         super().__init__(config)
-        self.codebooks_head = ConversationalSpeechModelCodebooksHead(config)
+        self.codebooks_head = ConversationalSpeechModelCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)
         self.model = ConversationalSpeechModelDepthDecoder(config)
 
     def forward(
@@ -465,13 +516,12 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
 
 
 class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
-    def __init__(self, config):
+    def __init__(self, hidden_size, vocab_size,  num_codebooks, codebook_vocab_size):
         super().__init__()
-        self.num_codebooks = config.audio_num_codebooks
-        self.embed_text_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.embed_audio_tokens = nn.Embedding((config.audio_vocab_size + 3) * config.audio_num_codebooks, config.hidden_size)
+        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size)
+        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), hidden_size)
     
-        audio_tokens_offsets = torch.arange(self.num_codebooks) * (config.audio_vocab_size + 3)
+        audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
         self.register_buffer("audio_tokens_offsets", audio_tokens_offsets)
 
     def forward(self, input_ids):
@@ -495,16 +545,18 @@ class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
 class ConversationalSpeechModelBackboneModel(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(config)
+        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(config.hidden_size, config.vocab_size, config.num_codebooks, config.codebook_vocab_size)
 
 
 class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
+    _tied_weights_keys = ["backbone_model.embed_tokens.embed_audio_tokens.weight", "depth_decoder.model.embed_tokens.embed_audio_tokens.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         del self.model
         self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM(config.depth_decoder_config)
-        self.backbone_model = ConversationalSpeechModelBackboneModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.audio_vocab_size + 3, bias=False)
+        self.backbone_model = ConversationalSpeechModelBackboneModel(config.backbone_config)
+    
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -554,12 +606,12 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
         if labels is not None:
             backbone_labels = labels[:, :, 0] if labels is not None else None
             backbone_loss = self.loss_function(
-                logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.audio_vocab_size + 3, **kwargs
+                logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
             )
 
-            depth_decoder_input_ids = input_ids[:, :, :self.config.audio_num_codebooks].view(-1, self.config.audio_num_codebooks)
-            backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.audio_vocab_size)
-            depth_decoder_labels = labels[:, :, :self.config.audio_num_codebooks].view(-1, self.config.audio_num_codebooks)
+            depth_decoder_input_ids = input_ids[:, :, :self.config.num_codebooks].view(-1, self.config.num_codebooks)
+            backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.hidden_size)
+            depth_decoder_labels = labels[:, :, :self.config.num_codebooks].view(-1, self.config.num_codebooks)
 
             depth_decoder_outputs = self.depth_decoder(
                 input_ids=depth_decoder_input_ids,
@@ -613,7 +665,6 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
         scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # keep track of which sequences are already finished
