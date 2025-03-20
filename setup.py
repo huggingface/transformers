@@ -121,8 +121,8 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.4.1,<=0.4.13",
-    "jaxlib>=0.4.1,<=0.4.13",
+    "jax>=0.4.27,<=0.4.38",
+    "jaxlib>=0.4.27,<=0.4.38",
     "jieba",
     "jinja2>=3.1.0",
     "kenlm",
@@ -130,8 +130,9 @@ _deps = [
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "librosa",
-    "nltk<=3.8.1",
     "natten>=0.14.6,<0.15.0",
+    "nltk<=3.8.1",
+    "num2words",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -149,8 +150,10 @@ _deps = [
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
     "pytest-asyncio",
+    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
+    "pytest-order",
     "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
@@ -161,7 +164,7 @@ _deps = [
     "ruff==0.5.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.1",
+    "safetensors>=0.4.3",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
@@ -314,7 +317,7 @@ extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("av")
-
+extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
@@ -323,6 +326,8 @@ extras["testing"] = (
         "pytest-asyncio",
         "pytest-rich",
         "pytest-xdist",
+        "pytest-order",
+        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
@@ -364,6 +369,7 @@ extras["all"] = (
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
+    + extras["num2words"]
 )
 
 
@@ -383,6 +389,7 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["num2words"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]

@@ -289,6 +289,13 @@ class FuyuProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Gemma3ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class GLPNFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -633,6 +640,13 @@ class SegGptImageProcessor(metaclass=DummyObject):
 
 
 class SiglipImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class Siglip2ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

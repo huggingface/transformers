@@ -30,6 +30,7 @@ from ..utils import (
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
+    is_torch_hpu_available,
     is_torch_npu_available,
 )
 from . import BaseTransformersCLICommand
@@ -94,6 +95,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             pt_version = torch.__version__
             pt_cuda_available = torch.cuda.is_available()
             pt_npu_available = is_torch_npu_available()
+            pt_hpu_available = is_torch_hpu_available()
 
         tf_version = "not installed"
         tf_cuda_available = "NA"
@@ -127,7 +129,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             flax_version = flax.__version__
             jax_version = jax.__version__
             jaxlib_version = jaxlib.__version__
-            jax_backend = jax.lib.xla_bridge.get_backend().platform
+            jax_backend = jax.default_backend()
 
         info = {
             "`transformers` version": version,
@@ -149,6 +151,9 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             if pt_cuda_available:
                 info["Using GPU in script?"] = "<fill in>"
                 info["GPU type"] = torch.cuda.get_device_name()
+            elif pt_hpu_available:
+                info["Using HPU in script?"] = "<fill in>"
+                info["HPU type"] = torch.hpu.get_device_name()
             elif pt_npu_available:
                 info["Using NPU in script?"] = "<fill in>"
                 info["NPU type"] = torch.npu.get_device_name()
