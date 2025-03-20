@@ -1214,25 +1214,26 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     else:
                         supported_models_names.append(model.__name__)
             supported_models = supported_models_names
-        
+
         # Check if the model is a PEFT model
         model_class_name = self.model.__class__.__name__
         is_peft_model = False
         try:
             import peft
+
             peft_model_classes = [
-                "PeftModel", 
-                "PeftModelForSequenceClassification", 
-                "PeftModelForCausalLM", 
-                "PeftModelForSeq2SeqLM", 
-                "PeftModelForTokenClassification", 
-                "PeftModelForQuestionAnswering", 
-                "PeftModelForFeatureExtraction"
+                "PeftModel",
+                "PeftModelForSequenceClassification",
+                "PeftModelForCausalLM",
+                "PeftModelForSeq2SeqLM",
+                "PeftModelForTokenClassification",
+                "PeftModelForQuestionAnswering",
+                "PeftModelForFeatureExtraction",
             ]
             is_peft_model = model_class_name in peft_model_classes or isinstance(self.model, peft.PeftModel)
         except ImportError:
             pass
-        
+
         if model_class_name not in supported_models and not is_peft_model:
             logger.error(
                 f"The model '{model_class_name}' is not supported for {self.task}. Supported models are"
