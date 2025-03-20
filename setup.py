@@ -197,6 +197,8 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "natsort",
+    "decord",
 ]
 
 
