@@ -22,7 +22,6 @@ from torch import nn
 from transformers.models.llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
-    LlavaMultiModalProjector,
     LlavaPreTrainedModel,
 )
 
@@ -39,9 +38,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "AyaVisionConfig"
 
 
-class AyaVisionMultiModalProjector(LlavaMultiModalProjector):
+class AyaVisionMultiModalProjector(nn.Module):
     def __init__(self, config: AyaVisionConfig):
-        LlavaMultiModalProjector().__init__()
+        super().__init__()
         self.config = config
         self.downsample_factor = config.downsample_factor
         self.alignment_intermediate_size = getattr(
@@ -201,6 +200,16 @@ AYA_VISION_INPUTS_DOCSTRING = """
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
+    def tie_weights(self):
+        return self.language_model.tie_weights()
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        # update vocab size
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
+        return model_embeds
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
