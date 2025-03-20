@@ -140,7 +140,7 @@ class Gemma3Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
-        array_ids = np.array(text_inputs["input_ids"])
+        array_ids = text_inputs["input_ids"]
         mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
         mm_token_type_ids[array_ids == self.image_token_id] = 1
         text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs

@@ -469,6 +469,55 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    def test_model_4b_batch_crops(self):
+        model_id = "gg-hf-g/gemma-3-4b-it"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+        ).to(torch_device)
+        crop_config = {
+            "images_kwargs": {
+                "do_pan_and_scan": True,
+                "pan_and_scan_max_num_crops": 448,
+                "pan_and_scan_min_crop_size": 32,
+                "pan_and_scan_min_ratio_to_activate": 0.3,
+            }
+        }
+        messages_2 = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                    },
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Are these images identical?"},
+                ],
+            },
+        ]
+
+        inputs = self.processor.apply_chat_template(
+            [self.messages, messages_2],
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            add_generation_prompt=True,
+            **crop_config,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
+        EXPECTED_TEXTS = [
+            "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach",
+            "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nWhile they all feature a brown cow prominently in the foreground, the backgrounds and overall scenes are quite different",
+        ]  # fmt: skip
+        self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
     def test_model_4b_multiimage(self):
         model_id = "gg-hf-g/gemma-3-4b-it"
 
