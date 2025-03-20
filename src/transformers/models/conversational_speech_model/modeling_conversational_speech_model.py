@@ -26,7 +26,6 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -77,30 +76,26 @@ class ConversationalSpeechModelOutputWithPast(ModelOutput):
     depth_decoder_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     depth_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     depth_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    backbone_loss: Optional[torch.FloatTensor] = None
 
 
-class ConversationalSpeechModelEmbeddings(nn.Embedding):
-    def __init__(self, *args, audio_vocab_size=None, audio_num_codebooks=None, **kwargs):
+class ConversationalSpeechModelEmbeddings(nn.Module):
+    def __init__(self, audio_vocab_size, audio_num_codebooks):
+        super().__init__()
         self.audio_vocab_size = audio_vocab_size
         self.audio_num_codebooks = audio_num_codebooks
-        super().__init__(*args, **kwargs)
+        self.audio_embed_tokens = nn.Embedding((audio_vocab_size + 3) * audio_num_codebooks, audio_vocab_size)
 
-    def reset_parameters(self):
-        for i in range(self.audio_num_codebooks):
-            nn.init.normal_(self.weight[i * (self.audio_vocab_size + 3) : (i + 1) * (self.audio_vocab_size + 3)])
-        self._fill_padding_idx_with_zero()
-
-    def forward(self, input, codebook_idxs):
-        offsets = codebook_idxs * (self.audio_vocab_size + 3)
-        return F.embedding(
-            input + offsets,
-            self.weight,
-            self.padding_idx,
-            self.max_norm,
-            self.norm_type,
-            self.scale_grad_by_freq,
-            self.sparse,
-        )
+    def forward(self, input_ids, codebook_idxs):
+        """
+        Args:
+            input_ids (`torch.Tensor`):
+                Codebooks ids of shape (batch_size, seq_length)
+            codebook_idxs (`torch.Tensor`):
+                Corresponding codebook indices of shape (batch_size, seq_length)
+        """
+        offset = codebook_idxs * (self.audio_vocab_size + 3)
+        return self.audio_embed_tokens(input_ids + offset)
 
 
 class ConversationalSpeechModelRMSNorm(nn.Module):
@@ -542,18 +537,15 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = ConversationalSpeechModelEmbeddings(
-            num_embeddings=(config.audio_vocab_size + 3) * config.audio_num_codebooks,
-            embedding_dim=config.audio_vocab_size,
-            audio_vocab_size=config.audio_vocab_size,
-            audio_num_codebooks=config.audio_num_codebooks,
-        )
+        self.embed_tokens = ConversationalSpeechModelEmbeddings(config.audio_vocab_size, config.audio_num_codebooks)
         self.layers = nn.ModuleList(
             [ConversationalSpeechModelDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = ConversationalSpeechModelRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = ConversationalSpeechModelRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.audio_vocab_size = config.audio_vocab_size
+        self.audio_num_codebooks = config.audio_num_codebooks
         self.inputs_embeds_projector = nn.Linear(config.audio_vocab_size, config.hidden_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -581,16 +573,15 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        # input_ids shape (batch_size, seq_length, num_codebooks)
-        # we need to have backbone_hidden_states shape (batch_size, seq_length, hidden_size)
-        # we can run it like (batch_size * seq_length, num_codebooks)
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if backbone_last_hidden_states is None:
+            raise ValueError("You must be provided backbone_last_hidden_states.")
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
@@ -610,19 +601,18 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
             device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_seq_length, device=device)
 
-        codebook_idxs = cache_position.clone()
-        is_first_codebook = codebook_idxs[0] == 0
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids, cache_position.unsqueeze(0))
-            if is_first_codebook:
-                if backbone_last_hidden_states is None:
-                    raise ValueError("backbone_last_hidden_states must be provided when input_ids is provided.")
-                inputs_embeds = torch.cat([backbone_last_hidden_states.unsqueeze(1), inputs_embeds], dim=1)
-                cache_position = torch.cat([cache_position, cache_position[-1:] + 1], dim=-1)
-                if position_ids is not None:
-                    position_ids = torch.cat([position_ids, position_ids[:, -1:] + 1], dim=-1)
 
-        if not is_first_codebook:
+        codebook_idxs = cache_position.clone()
+        has_first_codebook = codebook_idxs[0] == 0
+        if has_first_codebook:
+            # condition on backbone_last_hidden_states by concatenating it to the first position
+            inputs_embeds = torch.cat([backbone_last_hidden_states.unsqueeze(1), inputs_embeds], dim=1)
+            cache_position = torch.cat([cache_position, cache_position[-1:] + 1], dim=-1)
+            if position_ids is not None:
+                position_ids = torch.cat([position_ids, position_ids[:, -1:] + 1], dim=-1)
+        else:
             cache_position = cache_position.clone()
             position_ids = position_ids.clone()
             cache_position += 1
@@ -822,21 +812,6 @@ class ConversationalSpeechModelDepthDecoder(ConversationalSpeechModelPreTrainedM
 
         return causal_mask
 
-    def _get_last_position_id(self, input_ids, inputs_embeds, past_key_values, position_ids, cache_position):
-        if position_ids is not None:
-            return position_ids[-1]
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            if inputs_embeds is not None:
-                last_cache_position = past_seen_tokens + inputs_embeds.shape[1]
-            else:
-                last_cache_position = past_seen_tokens + input_ids.shape[1]
-
-        # what about the else? at least position_ids/ cache_position should be provided
-
-        return last_cache_position
-
 
 class ConversationalSpeechModelCodebooksHead(nn.Module):
     def __init__(self, config):
@@ -846,9 +821,6 @@ class ConversationalSpeechModelCodebooksHead(nn.Module):
         self.weight = nn.Parameter(
             torch.empty(self.audio_num_codebooks, config.hidden_size, config.audio_vocab_size + 3)
         )
-        # we only need audio_num_codebooks - 1
-        # can be shortcutted to avoid last computation (codebook 32)
-        self.reset_parameters()
 
     def reset_parameters(self):
         for i in range(self.audio_num_codebooks - 1):
@@ -858,7 +830,7 @@ class ConversationalSpeechModelCodebooksHead(nn.Module):
         if last_cache_position is None:
             codebook_weight = self.weight
         else:
-            n_kept_logits = last_cache_position
+            n_kept_logits = hidden_states.shape[1]
             codebook_weight = self.weight[last_cache_position - n_kept_logits + 1 : last_cache_position + 1]
 
         return torch.einsum("bsh,sho->bso", hidden_states, codebook_weight)
@@ -977,7 +949,8 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(ConversationalSpeechModel
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         if isinstance(logits_to_keep, int):
             if logits_to_keep == 0:
-                slice_indices = slice(1, None)  # Skip the first logit
+                # skip idx 0 logits since it's for the concatenated backbone last hidden state
+                slice_indices = slice(1, None)
             else:
                 slice_indices = slice(-logits_to_keep, None)
         else:
@@ -1310,7 +1283,7 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.audio_vocab_size + 3, bias=False)
         self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM(config.depth_decoder_config)
         self.backbone_model = ConversationalSpeechModelBackboneModel(config)
 
@@ -1340,13 +1313,12 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,  # shape (batch_size, seq_length, num_codebooks)
-        first_codebook_input_ids: Optional[torch.LongTensor] = None,  # shape (batch_size, seq_length)
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,  # shape (batch_size, seq_length, num_codebooks)
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1393,9 +1365,6 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # first codeboook label is for the backbone model
-        backbone_labels = labels[:, :, 0] if labels is not None else None  # shape (batch_size, seq_length)
-
         backbone_outputs = self.backbone_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1404,7 +1373,7 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,  # enforce to be True ?
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
@@ -1416,12 +1385,16 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
         backbone_logits = self.lm_head(backbone_hidden_states[:, slice_indices, :])
 
         loss = None
+        backbone_loss = None
+        depth_decoder_loss = None
         depth_decoder_outputs = None
         if labels is not None:
+            backbone_labels = labels[:, :, 0] if labels is not None else None
             backbone_loss = self.loss_function(
                 logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.audio_vocab_size + 3, **kwargs
             )
-            decoder_input_ids = input_ids[:, :, : self.config.audio_num_codebooks].view(
+
+            depth_decoder_input_ids = input_ids[:, :, : self.config.audio_num_codebooks].view(
                 -1, self.config.audio_num_codebooks
             )
             backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.audio_vocab_size)
@@ -1430,12 +1403,8 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
             )
 
             depth_decoder_outputs = self.depth_decoder(
-                input_ids=decoder_input_ids,
+                input_ids=depth_decoder_input_ids,
                 backbone_last_hidden_states=backbone_last_hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,  # test ???
-                inputs_embeds=inputs_embeds,  # test ???
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1448,10 +1417,20 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
 
         return ConversationalSpeechModelOutputWithPast(
             loss=loss,
+            backbone_loss=backbone_loss,
+            depth_decoder_loss=depth_decoder_loss,
             logits=backbone_logits,
             past_key_values=backbone_outputs.past_key_values,
             hidden_states=backbone_outputs.hidden_states,
             attentions=backbone_outputs.attentions,
+            depth_decoder_logits=depth_decoder_outputs.logits if depth_decoder_outputs is not None else None,
+            depth_decoder_past_key_values=depth_decoder_outputs.past_key_values
+            if depth_decoder_outputs is not None
+            else None,
+            depth_decoder_hidden_states=depth_decoder_outputs.hidden_states
+            if depth_decoder_outputs is not None
+            else None,
+            depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
 
     def _sample(
@@ -1606,7 +1585,7 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
 
     def generate(self, input_ids, **kwargs):
         inputs_embeds = self.backbone_model.get_input_embeddings()(input_ids)
-        return super().generate(inputs_embeds=inputs_embeds, **kwargs)
+        return super().generate(inputs_embeds=inputs_embeds, output_hidden_states=True, **kwargs)
 
 
 __all__ = [
