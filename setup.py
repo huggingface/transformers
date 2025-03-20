@@ -129,6 +129,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "kernels>=0.3.2,<0.4",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -411,6 +412,7 @@ extras["torchhub"] = deps_list(
     "filelock",
     "huggingface-hub",
     "importlib_metadata",
+    "kernels",
     "numpy",
     "packaging",
     "protobuf",
@@ -432,6 +434,7 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
+    deps["kernels"],  # download kernels from the Hub
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
