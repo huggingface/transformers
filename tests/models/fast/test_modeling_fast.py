@@ -327,11 +327,11 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference(self):
-        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast-tiny")
+        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/FAST-tiny-model")
 
-        image_processor = FastImageProcessor.from_pretrained("jadechoghari/fast-tiny")
+        image_processor = FastImageProcessor.from_pretrained("jadechoghari/FAST-tiny-model")
 
         def prepare_image():
             image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"

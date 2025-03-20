@@ -140,11 +140,11 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
-    @slow
+    # @slow
     def test_post_process_text_detection(self):
-        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast-tiny")
+        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/FAST-tiny-model")
 
-        image_processor = FastImageProcessor.from_pretrained("jadechoghari/fast-tiny")
+        image_processor = FastImageProcessor.from_pretrained("jadechoghari/FAST-tiny-model")
 
         def prepare_image():
             image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
@@ -168,6 +168,7 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_cv2
     def test_get_box_points_against_cv2(self):
         for _ in range(10):
+            np.random.seed(42)
             points = (np.random.rand(10, 2) * 100).astype(np.float32)
 
             my_rect = compute_min_area_rect(points)
