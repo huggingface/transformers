@@ -25,7 +25,7 @@ import re
 
 import numpy as np
 import torch
-import decord
+import cv2
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature
@@ -120,18 +120,16 @@ class ImageProcessor:
         ]
 
     def save_video_frames(self, vid_path, max_fps=1, num_frames=8):
+        cap = cv2.VideoCapture(vid_path)
+        if not cap.isOpened():
+            raise ValueError(f"Unable to open video file: {vid_path}")
 
-        vid = decord.VideoReader(vid_path, num_threads=1)
-
-        step_size = len(vid) / (num_frames + 1)
-        # step_size = max(1, step_size)
-        fps = vid.get_avg_fps()
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        step_size = total_frames / (num_frames + 1)
         step_size = max(fps / max_fps, step_size)
-
-        # indices = [int(i * step_size) for i in range(1, num_frames + 1)]
         indices = [int(i * step_size) for i in range(0, num_frames)]
-        indices = [i for i in indices if i < len(vid)]
-
+        indices = [i for i in indices if i < total_frames]
         num_frames = len(indices)
 
         frame_paths = self.get_frame_paths(vid_path + ".saved_frames", num_frames)
@@ -139,27 +137,36 @@ class ImageProcessor:
         if flag:
             return frame_paths
 
-        images = [vid[i].asnumpy() for i in indices]
-        images = [Image.fromarray(arr) for arr in images]
+        images = []
+        for index in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+            ret, frame = cap.read()
+            if ret:
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                images.append(Image.fromarray(rgb_frame))
 
         for im, pth in zip(images, frame_paths):
             im.save(pth)
         return frame_paths
 
     def get_video_frames(self, vid_path, max_fps=1, num_frames=8):
-        vid = decord.VideoReader(vid_path, num_threads=1)
+        cap = cv2.VideoCapture(vid_path)
+        if not cap.isOpened():
+            raise ValueError(f"Unable to open video file: {vid_path}")
 
-        step_size = len(vid) / (num_frames + 1)
-        # step_size = max(1, step_size)
-        fps = vid.get_avg_fps()
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        step_size = total_frames / (num_frames + 1)
         step_size = max(fps / max_fps, step_size)
-
-        # indices = [int(i * step_size) for i in range(1, num_frames + 1)]
         indices = [int(i * step_size) for i in range(0, num_frames)]
-        indices = [i for i in indices if i < len(vid)]
-        
-        images = [vid[i].asnumpy() for i in indices]
-        images = [Image.fromarray(arr) for arr in images]
+        indices = [i for i in indices if i < total_frames]
+        images = []
+        for index in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+            ret, frame = cap.read()
+            if ret:
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                images.append(Image.fromarray(rgb_frame))
         return images
 
     def process_video(self, video_file_or_dir, max_num_frame=8, max_fps=1):

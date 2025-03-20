@@ -197,7 +197,6 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
-    "decord",
 ]
 
 
@@ -317,7 +316,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("av", "decord")
+extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
@@ -347,8 +346,6 @@ extras["testing"] = (
         "tensorboard",
         "pydantic",
         "sentencepiece",
-        "decord",
-        "torch",
     )
     + extras["retrieval"]
     + extras["modelcreation"]

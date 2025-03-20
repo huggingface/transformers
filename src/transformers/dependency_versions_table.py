@@ -102,5 +102,4 @@ deps = {
     "pytest-rich": "pytest-rich",
     "libcst": "libcst",
     "rich": "rich",
-    "decord": "decord",
 }
