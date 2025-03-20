@@ -30,8 +30,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from flash_attn.bert_padding import pad_input, unpad_input
-from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func as flash_attn_unpadded_qkvpacked_func
 from timm.models.layers import DropPath
 
 from transformers import Qwen2ForCausalLM, Qwen2Model
@@ -48,11 +46,18 @@ from transformers.utils import LossKwargs, replace_return_docstrings
 
 from ...activations import ACT2FN
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings, logging
+from ...utils import add_start_docstrings, logging, is_flash_attn_2_available
 from .configuration_long_vita import Long_vitaConfig, Long_vitaVisionConfig
 
 
 logger = logging.get_logger(__name__)
+
+if is_flash_attn_2_available():
+    from flash_attn.bert_padding import pad_input, unpad_input
+    from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func as flash_attn_unpadded_qkvpacked_func
+    has_flash_attn = True
+else:
+    has_flash_attn = False
 
 
 class InternRMSNorm(nn.Module):
@@ -194,9 +199,6 @@ class InternVisionEmbeddings(nn.Module):
         )
         embeddings = embeddings + position_embedding.to(target_dtype)
         return embeddings
-
-
-has_flash_attn = False
 
 
 class InternAttention(nn.Module):

@@ -39,8 +39,6 @@ from transformers.modeling_outputs import (
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLPreTrainedModel
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import LossKwargs, replace_return_docstrings
-from flash_attn.bert_padding import pad_input, unpad_input
-from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func as flash_attn_unpadded_qkvpacked_func
 
 from ...activations import ACT2FN
 from ...processing_utils import Unpack
@@ -49,7 +47,13 @@ from .configuration_long_vita import Long_vitaConfig, Long_vitaVisionConfig
 
 
 logger = logging.get_logger(__name__)
-has_flash_attn = False
+
+if is_flash_attn_2_available():
+    from flash_attn.bert_padding import pad_input, unpad_input
+    from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func as flash_attn_unpadded_qkvpacked_func
+    has_flash_attn = True
+else:
+    has_flash_attn = False
 
 
 class InternRMSNorm(nn.Module):
