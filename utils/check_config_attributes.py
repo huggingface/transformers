@@ -228,6 +228,14 @@ SPECIAL_CASES_TO_ALLOW = {
     "GPTNeoXConfig": ["rotary_emb_base"],
     "Gemma3Config": ["boi_token_index", "eoi_token_index"],
     "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
+    "ShieldGemma2Config": [
+        "boi_token_index",
+        "eoi_token_index",
+        "initializer_range",
+        "mm_tokens_per_image",
+        "text_config",
+        "vision_config",
+    ],
 }
 
 
