@@ -189,6 +189,13 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             expected_output_image_shape = (9, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
+            # Test batched unbalanced, 9 images because we have base image + 2 crops per each item
+            encoded_images = image_processing(
+                [[image_inputs[0], image_inputs[1]], [image_inputs[2]]], return_tensors="pt"
+            ).pixel_values
+            expected_output_image_shape = (9, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
     def test_call_pil(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
