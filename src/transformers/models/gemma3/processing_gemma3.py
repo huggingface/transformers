@@ -113,7 +113,8 @@ class Gemma3Processor(ProcessorMixin):
                 )
 
             # Replace image tokens by the full expanded sequence
-            batch_num_crops = to_py_obj(image_inputs.pop("num_crops"))
+            num_crops = to_py_obj(image_inputs.pop("num_crops"))
+            batch_num_crops = [[num_crops.pop(0) for _ in range(len(images))] for images in batched_images]
             for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, batched_images, batch_num_crops)):
                 image_indexes = [m.start() for m in re.finditer(self.boi_token, prompt)]
 
