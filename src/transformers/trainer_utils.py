@@ -762,6 +762,9 @@ def has_length(dataset):
     except TypeError:
         # TypeError: len() of unsized object
         return False
+    except AttributeError:
+        # Ray DataSets raises an AttributeError: https://github.com/ray-project/ray/blob/master/python/ray/data/dataset.py#L5616
+        return False
 
 
 def denumpify_detensorize(metrics):
