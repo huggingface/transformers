@@ -17,7 +17,6 @@ Processor class for Speech Granite.
 """
 from typing import List, Union
 
-import numpy as np
 import torch
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.processing_utils import ProcessorMixin
@@ -88,11 +87,15 @@ class GraniteSpeechProcessor(ProcessorMixin):
         to conveniently mask the audio features into the text embeddings.
         """
         prompt_strings = []
-        i = 0
+        num_replaced = 0
         for sample in text:
             while self.audio_token in sample:
-                sample = sample.replace(self.audio_token, "<placeholder>" * num_audio_features[i], 1)
-                i += 1
+                sample = sample.replace(
+                    self.audio_token,
+                    "<placeholder>" * num_audio_features[num_replaced],
+                    1,
+                )
+                num_replaced += 1
             prompt_strings.append(sample)
         
         prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
