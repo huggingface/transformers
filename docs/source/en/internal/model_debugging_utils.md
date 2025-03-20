@@ -36,7 +36,7 @@ Because when porting models to transformers, even from python to python, model a
 
 ### Usage
 
-add the context manager to a model to debug
+Add this context manager as follows to debug a model:
 
 ```python
 import torch
@@ -60,10 +60,12 @@ prompt = "<image>Describe this image."
 inputs = processor(text=prompt, images=random_image, return_tensors="pt")
 
 # call forward method (not .generate!)
-with model_addition_debugger_context(model):
+with model_addition_debugger_context(model, "optional_path_to_your_output_file.json"):
     output = model.forward(**inputs)
 
-    """
+```
+
+
 [[autodoc]] utils.model_addition_debugger
 
 [[autodoc]] utils.model_addition_debugger_context
