@@ -877,7 +877,8 @@ class ProcessorMixin(PushToHubMixin):
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
                 chat_template_json = json.loads(reader.read())
                 chat_templates = chat_template_json["chat_template"]
-                if isinstance(chat_templates, dict):
+                if isinstance(chat_templates, (list, tuple)):
+                    # Un-flatten the list storage
                     chat_templates = {template["name"]: template["template"] for template in chat_templates}
                 if resolved_additional_chat_template_files:
                     raise ValueError(
