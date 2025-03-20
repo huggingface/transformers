@@ -325,7 +325,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         # resizing embeddings should result in successful loss computation
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         labels = torch.zeros(
-                    (self.batch_size, self.seq_length), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
 
         for model_class in self.all_model_classes:
