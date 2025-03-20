@@ -349,6 +349,19 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         return AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
 
     @slow
+    def test_device_map(self):
+        model_no_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+        model_with_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name, device_map="auto")
+        assert torch.equal(
+            model_no_device_map.model.decoder.embed_positions.weight,
+            model_with_device_map.model.decoder.embed_positions.weight,
+        )
+        assert torch.equal(
+            model_no_device_map.model.encoder.embed_positions.weight,
+            model_with_device_map.model.encoder.embed_positions.weight,
+        )
+
+    @slow
     @require_torch_fp16
     def test_pegasus_xsum_summary(self):
         assert self.tokenizer.model_max_length == 512
