@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   build:
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9c3331d9dae83268dae9f90b16f4fb1aff68f9c8
     with:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
@@ -17,4 +17,3 @@ jobs:
       languages: ar de en es fr hi it ko pt tr zh ja te
       custom_container: huggingface/transformers-doc-builder
       custom_runner: 'group: aws-general-8-plus'
-      doc_builder_revision: 9c3331d9dae83268dae9f90b16f4fb1aff68f9c8
