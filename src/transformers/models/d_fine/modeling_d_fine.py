@@ -38,6 +38,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_d_fine import DFineConfig
@@ -870,7 +871,7 @@ def get_contrastive_denoising_training_group(
         denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
     )
     # total denoising queries
-    num_denoising_queries = int(max_gt_num * 2 * num_groups_denoising_queries)
+    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
 
     if label_noise_ratio > 0:
         mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
@@ -975,7 +976,7 @@ class DFinePreTrainedModel(PreTrainedModel):
     config_class = DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"
-    _no_split_modules = [r"DFineConvEncoder", r"DFineEncoderLayer", r"DFineDecoderLayer"]
+    _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
 
     def _init_weights(self, module):
         """Initalize the weights"""
@@ -1451,13 +1452,14 @@ class DFineModel(DFinePreTrainedModel):
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
-                torch.arange(end=height, dtype=dtype, device=device),
-                torch.arange(end=width, dtype=dtype, device=device),
+                torch.arange(end=height, device=device).to(dtype),
+                torch.arange(end=width, device=device).to(dtype),
                 indexing="ij",
             )
             grid_xy = torch.stack([grid_x, grid_y], -1)
-            valid_wh = torch.tensor([width, height], device=device).to(dtype)
-            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
+            grid_xy = grid_xy.unsqueeze(0) + 0.5
+            grid_xy[..., 0] /= width
+            grid_xy[..., 1] /= height
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
         # define the valid range for anchor coordinates
@@ -1558,14 +1560,15 @@ class DFineModel(DFinePreTrainedModel):
         # Prepare encoder inputs (by flattening)
         source_flatten = []
         spatial_shapes_list = []
+        spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
         for level, source in enumerate(sources):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes_list.append(spatial_shape)
+            height, width = source.shape[-2:]
+            spatial_shapes[level, 0] = height
+            spatial_shapes[level, 1] = width
+            spatial_shapes_list.append((height, width))
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
         source_flatten = torch.cat(source_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
@@ -1599,8 +1602,7 @@ class DFineModel(DFinePreTrainedModel):
             anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
         else:
             anchors, valid_mask = self.anchors, self.valid_mask
-
-        anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
+            anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
@@ -2131,13 +2133,13 @@ class DFineHybridEncoder(nn.Module):
     def build_2d_sincos_position_embedding(
         width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
     ):
-        grid_w = torch.arange(int(width), dtype=dtype, device=device)
-        grid_h = torch.arange(int(height), dtype=dtype, device=device)
+        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
+        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
         grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
         pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
+        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
         omega = 1.0 / (temperature**omega)
 
         out_w = grid_w.flatten()[..., None] @ omega[None]
@@ -2193,6 +2195,7 @@ class DFineHybridEncoder(nn.Module):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+
         # encoder
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
@@ -2228,30 +2231,37 @@ class DFineHybridEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states[enc_ind],)
 
-        # broadcasting and fusion
+        # top-down FPN
         fpn_feature_maps = [hidden_states[-1]]
-        for idx in range(len(self.in_channels) - 1, 0, -1):
-            feat_high = fpn_feature_maps[0]
-            feat_low = hidden_states[idx - 1]
-            feat_high = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_high)
-            fpn_feature_maps[0] = feat_high
-            upsample_feat = F.interpolate(feat_high, scale_factor=2.0, mode="nearest")
-            fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
-            fpn_feature_maps.insert(0, fps_map)
+        for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
+            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            top_fpn_feature_map = fpn_feature_maps[-1]
+            # apply lateral block
+            top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
+            fpn_feature_maps[-1] = top_fpn_feature_map
+            # apply fpn block
+            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
+            fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
+            new_fpn_feature_map = fpn_block(fused_feature_map)
+            fpn_feature_maps.append(new_fpn_feature_map)
 
-        fpn_states = [fpn_feature_maps[0]]
-        for idx in range(len(self.in_channels) - 1):
-            feat_low = fpn_states[-1]
-            feat_high = fpn_feature_maps[idx + 1]
-            downsample_feat = self.downsample_convs[idx](feat_low)
-            hidden_states = self.pan_blocks[idx](
-                torch.concat([downsample_feat, feat_high.to(downsample_feat.device)], dim=1)
-            )
-            fpn_states.append(hidden_states)
+        fpn_feature_maps = fpn_feature_maps[::-1]
+
+        # bottom-up PAN
+        pan_feature_maps = [fpn_feature_maps[0]]
+        for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
+            top_pan_feature_map = pan_feature_maps[-1]
+            fpn_feature_map = fpn_feature_maps[idx + 1]
+            downsampled_feature_map = downsample_conv(top_pan_feature_map)
+            fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
+            new_pan_feature_map = pan_block(fused_feature_map)
+            pan_feature_maps.append(new_pan_feature_map)
 
         if not return_dict:
-            return tuple(v for v in [fpn_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
+            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 __all__ = ["DFineModel", "DFinePreTrainedModel", "DFineForObjectDetection"]
