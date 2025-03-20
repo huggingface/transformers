@@ -129,7 +129,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             flax_version = flax.__version__
             jax_version = jax.__version__
             jaxlib_version = jaxlib.__version__
-            jax_backend = jax.lib.xla_bridge.get_backend().platform
+            jax_backend = jax.default_backend()
 
         info = {
             "`transformers` version": version,
