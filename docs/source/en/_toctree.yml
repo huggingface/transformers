@@ -187,6 +187,8 @@
     title: Optimum
   - local: quantization/quanto
     title: Quanto
+  - local: quantization/quark
+    title: Quark
   - local: quantization/torchao
     title: torchao
   - local: quantization/spqr
