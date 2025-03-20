@@ -875,9 +875,17 @@ class ProcessorMixin(PushToHubMixin):
             with open(resolved_raw_chat_template_file, encoding="utf-8") as reader:
                 default_chat_template = reader.read()
         elif resolved_chat_template_file is not None:
+            # This is the legacy path
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
                 chat_template_json = json.loads(reader.read())
                 default_chat_template = chat_template_json["chat_template"]
+                if resolved_additional_chat_template_files:
+                    raise ValueError(
+                        "Cannot load chat template due to conflicting files - this checkpoint combines "
+                        "a legacy chat_template.json file with separate template files, which is not "
+                        "supported. To resolve this error, replace the legacy chat_template.json file "
+                        "with a modern chat_template.jinja file."
+                    )
         chat_templates = {
             template_name: open(template_file, "r", encoding="utf-8").read()
             for template_name, template_file in resolved_additional_chat_template_files.items()
