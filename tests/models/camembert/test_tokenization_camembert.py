@@ -147,7 +147,7 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue(all(item in tokenizer.added_tokens_decoder.items() for item in expected.items()))
             return tokenizer
 
-        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
+        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
