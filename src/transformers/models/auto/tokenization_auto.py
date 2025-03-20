@@ -493,6 +493,13 @@ else:
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "shieldgemma2",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("siglip", ("SiglipTokenizer" if is_sentencepiece_available() else None, None)),
             (
                 "siglip2",
