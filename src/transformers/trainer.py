@@ -166,7 +166,6 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
     is_torch_compile_available,
-    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -242,8 +241,6 @@ if is_accelerate_available():
     )
 
     DATA_SAMPLERS = [RandomSampler]
-    if version.parse(accelerate_version) > version.parse("1.3.0"):
-        from accelerate.utils import TorchTensorParallelPlugin
     if version.parse(accelerate_version) > version.parse("0.23.0"):
         from accelerate.data_loader import SeedableRandomSampler
 
@@ -1061,9 +1058,7 @@ class Trainer:
                 )
             else:
                 lengths = None
-            model_input_name = (
-                self.processing_class.model_input_names[0] if self.processing_class is not None else None
-            )
+            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             return LengthGroupedSampler(
                 self.args.eval_batch_size,
                 dataset=eval_dataset,
@@ -1421,6 +1416,11 @@ class Trainer:
         if args.optim == OptimizerNames.ADAFACTOR:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
+        elif args.optim == OptimizerNames.ADAMW_HF:
+            from .optimization import AdamW
+
+            optimizer_cls = AdamW
+            optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED]:
             from torch.optim import AdamW
 
@@ -2176,12 +2176,7 @@ class Trainer:
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
-        if (
-            (args.fp16_full_eval or args.bf16_full_eval)
-            and not args.do_train
-            and not self.is_model_parallel
-            and self.model_init is None
-        ):
+        if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train and not self.is_model_parallel:
             self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
@@ -2262,7 +2257,7 @@ class Trainer:
                 (self.model_wrapped,) = release_memory(self.model_wrapped)
                 self.model_wrapped = self.model
 
-                # Check for DeepSpeed *after* the initial pass and modify the config
+                # Check for DeepSpeed *after* the intial pass and modify the config
                 if self.is_deepspeed_enabled:
                     # Temporarily unset `self.args.train_batch_size`
                     original_bs = self.args.per_device_train_batch_size
@@ -2448,11 +2443,7 @@ class Trainer:
                 )
 
         # Update the references
-        for attr in ("model", "optimizer", "lr_scheduler"):
-            setattr(self.callback_handler, attr, getattr(self, attr))
-        self.callback_handler.train_dataloader = train_dataloader
-
-        self.state.init_training_references(self, max_steps, num_train_epochs, trial)
+        self.state.init_training_references(self, train_dataloader, max_steps, num_train_epochs, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(args.device)
@@ -2822,7 +2813,7 @@ class Trainer:
                     # Checkpoint must have been saved with the old smp api.
                     if hasattr(self.args, "fp16") and self.args.fp16 is True:
                         logger.warning(
-                            "Enabling FP16 and loading from smp < 1.10 checkpoint together is not supported."
+                            "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
                     state_dict = torch.load(
                         weights_file,
@@ -3137,10 +3128,9 @@ class Trainer:
             set_rng_state_for_device("CUDA", torch.cuda, checkpoint_rng_state, is_distributed)
         if is_torch_npu_available():
             set_rng_state_for_device("NPU", torch.npu, checkpoint_rng_state, is_distributed)
-        if is_torch_hpu_available():
-            set_rng_state_for_device("HPU", torch.hpu, checkpoint_rng_state, is_distributed)
         if is_torch_mlu_available():
             set_rng_state_for_device("MLU", torch.mlu, checkpoint_rng_state, is_distributed)
+
         if is_torch_musa_available():
             set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
@@ -3173,10 +3163,12 @@ class Trainer:
                 self.state.best_metric = float("-inf") if self.args.greater_is_better else float("inf")
 
             if operator(metric_value, self.state.best_metric):
-                self.state.best_metric = metric_value
+                run_dir = self._get_output_dir(trial=trial)
+                checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+                output_dir = os.path.join(run_dir, checkpoint_folder)
 
-                if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH]:
-                    self.state.best_global_step = self.state.global_step
+                self.state.best_metric = metric_value
+                self.state.best_model_checkpoint = output_dir
 
                 is_new_best_metric = True
 
@@ -3196,13 +3188,6 @@ class Trainer:
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
-
-        if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
-            best_checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.best_global_step}"
-            best_checkpoint_dir = os.path.join(run_dir, best_checkpoint_folder)
-
-            if os.path.exists(best_checkpoint_dir):
-                self.state.best_model_checkpoint = best_checkpoint_dir
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler
@@ -3256,12 +3241,6 @@ class Trainer:
                 rng_states["npu"] = torch.npu.random.get_rng_state_all()
             else:
                 rng_states["npu"] = torch.npu.random.get_rng_state()
-
-        if is_torch_hpu_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                rng_states["hpu"] = torch.hpu.random.get_rng_state_all()
-            else:
-                rng_states["hpu"] = torch.hpu.random.get_rng_state()
 
         if is_torch_mlu_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
@@ -3733,10 +3712,6 @@ class Trainer:
                 torch.npu.empty_cache()
             elif is_torch_mps_available(min_version="2.0"):
                 torch.mps.empty_cache()
-            elif is_torch_hpu_available():
-                logger.warning(
-                    "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                )
             else:
                 torch.cuda.empty_cache()
 
@@ -3886,7 +3861,8 @@ class Trainer:
 
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
-            self.push_to_hub(commit_message="Model save")
+            push_kwargs = self.args.hub_push_kwargs or {}
+            self.push_to_hub(commit_message="Model save", **push_kwargs) # Pass hub_push_kwargs here
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -3992,13 +3968,6 @@ class Trainer:
 
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
-        elif (
-            self.data_collator is not None
-            and hasattr(self.data_collator, "tokenizer")
-            and self.data_collator.tokenizer is not None
-        ):
-            logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
-            self.data_collator.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -4110,7 +4079,7 @@ class Trainer:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
-        # handle multiple eval datasets
+        # handle multipe eval datasets
         override = eval_dataset is not None
         eval_dataset = eval_dataset if override else self.eval_dataset
         if isinstance(eval_dataset, dict):
@@ -4718,6 +4687,7 @@ class Trainer:
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
+        push_kwargs = self.args.hub_push_kwargs or {} # Retrieve hub_push_kwargs
         model_push_job = upload_folder(
             repo_id=self.hub_model_id,
             folder_path=output_dir,
@@ -4725,6 +4695,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
+            **push_kwargs # Pass hub_push_kwargs here
         )
 
         push_jobs = [model_push_job]
@@ -4740,6 +4711,7 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
+                **push_kwargs # Pass hub_push_kwargs here
             )
             push_jobs.append(checkpoint_push)
 
@@ -4821,6 +4793,7 @@ class Trainer:
 
         # Wait for the current upload to be finished.
         self._finish_current_push()
+        push_kwargs = self.args.hub_push_kwargs or {} # Retrieve hub_push_kwargs
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
@@ -4829,6 +4802,7 @@ class Trainer:
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
             revision=revision,
+            **push_kwargs # Pass hub_push_kwargs here
         )
 
     #
@@ -5126,14 +5100,6 @@ class Trainer:
             args["dataloader_config"] = dataloader_config
         else:
             args.update(accelerator_config)
-        # tp is initialized at Accelerator init phase so
-        # args should be prepared here
-        if self.args.tp_size > 1:
-            self.is_tp_enabled = True
-            if version.parse(accelerate_version) > version.parse("1.3.0"):
-                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.args.tp_size)
-            else:
-                raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -5148,7 +5114,7 @@ class Trainer:
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
-        self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
+
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
@@ -5182,12 +5148,6 @@ class Trainer:
             raise ValueError(
                 "`auto_find_batch_size` isn't supported yet with DeepSpeed Zero-3. Please consider using Zero-2, Zero-1, or FSDP"
             )
-        if (
-            self.args.save_only_model
-            and self.is_fsdp_enabled
-            and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
-        ):
-            raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
