@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
-from typing import Dict, List, Tuple
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -91,7 +89,7 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -105,7 +103,7 @@ class SentencePieceExtractor:
 
 
 class GemmaSentencePieceExtractor(SentencePieceExtractor):
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -328,7 +326,7 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -397,7 +395,7 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
