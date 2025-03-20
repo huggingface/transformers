@@ -387,7 +387,7 @@ class FlaxLongT5Attention(nn.Module):
             relative_buckets += (relative_position > 0) * num_buckets
             relative_position = jnp.abs(relative_position)
         else:
-            relative_position = -jnp.clip(relative_position, a_max=0)
+            relative_position = -jnp.clip(relative_position, max=0)
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -398,7 +398,7 @@ class FlaxLongT5Attention(nn.Module):
         relative_position_if_large = max_exact + (
             jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(relative_position_if_large, max=num_buckets - 1)
 
         relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
 
@@ -672,7 +672,7 @@ class FlaxLongT5LocalAttention(nn.Module):
             relative_buckets += (relative_position > 0) * num_buckets
             relative_position = jnp.abs(relative_position)
         else:
-            relative_position = -jnp.clip(relative_position, a_max=0)
+            relative_position = -jnp.clip(relative_position, max=0)
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -683,7 +683,7 @@ class FlaxLongT5LocalAttention(nn.Module):
         relative_position_if_large = max_exact + (
             jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(relative_position_if_large, max=num_buckets - 1)
 
         relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
 
@@ -895,7 +895,7 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
             relative_buckets += (relative_position > 0) * num_buckets
             relative_position = jnp.abs(relative_position)
         else:
-            relative_position = -jnp.clip(relative_position, a_max=0)
+            relative_position = -jnp.clip(relative_position, max=0)
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -906,7 +906,7 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         relative_position_if_large = max_exact + (
             jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(relative_position_if_large, max=num_buckets - 1)
 
         relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
 
