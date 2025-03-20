@@ -914,7 +914,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
     def __init__(
         self,
-        eos_token_id: torch.Tensor = None,
+        eos_token_id: Optional[torch.Tensor] = None,
         num_output_tokens: int = 10,
         max_matching_ngram_size: Optional[int] = None,
         max_length: int = 20,
