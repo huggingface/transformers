@@ -276,10 +276,8 @@ class ValidationDecoratorTester(unittest.TestCase):
         self.assertEqual(kwargs, {"extra_arg": 2, "extra_arg2": 3})
 
 
-
 @require_torch
 class CanReturnTupleDecoratorTester(unittest.TestCase):
-
     def _get_model(self, config):
         # Simple model class for testing can_return_tuple decorator.
         class SimpleTestModel(torch.nn.Module):
@@ -294,10 +292,10 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                     hidden_states=None,
                     attentions=None,
                 )
+
         return SimpleTestModel(config)
 
     def test_decorator_eager(self):
-
         # test nothing is set
         config = PretrainedConfig()
         model = self._get_model(config)
