@@ -655,7 +655,7 @@ class ProcessorMixin(PushToHubMixin):
             with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
                 f.write(self.chat_template)
             logger.info(f"chat template saved in {output_raw_chat_template_file}")
-        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict) and len(self.chat_template) > 0:
+        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
             # New format for multiple templates is to save the default as chat_template.jinja
             # and the other templates in the chat_templates/ directory
             for template_name, template in self.chat_template.items():
@@ -669,7 +669,7 @@ class ProcessorMixin(PushToHubMixin):
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")
-        elif isinstance(self.chat_template, dict) and len(self.chat_template) > 0:
+        elif isinstance(self.chat_template, dict):
             # Legacy format for multiple templates:
             # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
             chat_template_json_string = (
