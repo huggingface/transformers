@@ -1216,13 +1216,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             # predictions, then just skip this candidate.
             if len(masked_lms) + len(index_set) > num_to_predict:
                 continue
-            is_any_index_covered = False
-            for index in index_set:
-                if index in covered_indexes:
-                    is_any_index_covered = True
-                    break
-            if is_any_index_covered:
-                continue
             for index in index_set:
                 covered_indexes.add(index)
                 masked_lms.append(index)
@@ -1793,16 +1786,19 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - concatate the entire mini batch into single long sequence [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+
+    <Tip warning={true}>
+
+    Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence.
+    Make sure your attention computation is able to handle it!
+
+    </Tip>
     """
 
     def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
         self.separator_id = separator_id
-        warnings.warn(
-            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
-            "Make sure your attention computation is able to handle it!"
-        )
 
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
