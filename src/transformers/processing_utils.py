@@ -69,7 +69,7 @@ from .utils import (
 
 logger = logging.get_logger(__name__)
 
-# Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
+# Dynamically import the Transformers module to grab the attribute classes of the processor from their names.
 transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
@@ -470,9 +470,9 @@ class ProcessorMixin(PushToHubMixin):
             # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
             class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
             if isinstance(class_name, tuple):
-                proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
+                proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
             else:
-                proper_class = getattr(transformers_module, class_name)
+                proper_class = self.get_possibly_dynamic_module(class_name)
 
             if not isinstance(arg, proper_class):
                 raise TypeError(
@@ -979,7 +979,7 @@ class ProcessorMixin(PushToHubMixin):
                     kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
-                if kwarg_value != "__empty__":
+                if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
                     used_keys.add(modality_key)
 
@@ -1069,7 +1069,7 @@ class ProcessorMixin(PushToHubMixin):
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-
+        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict.keys()})
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1100,21 +1100,63 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        """
+        Identify and instantiate the subcomponents of Processor classes, like image processors and
+        tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
+        subcomponents should be. Note that any subcomponents must either be library classes that are accessible in
+        the `transformers` root, or they must be custom code that has been registered with the relevant autoclass,
+        via methods like `AutoTokenizer.register()`. If neither of these conditions are fulfilled, this method
+        will be unable to find the relevant subcomponent class and will raise an error.
+        """
         args = []
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
-                use_fast = kwargs.get("use_fast", True)
+                classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
+                if attribute_name == "image_processor":
+                    # TODO: @yoni, change logic in v4.50 (when use_fast set to True by default)
+                    use_fast = kwargs.get("use_fast", None)
+                    if use_fast is None:
+                        logger.warning_once(
+                            "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
+                            "`use_fast=True` will be the default behavior in v4.50, even if the model was saved with a slow processor. "
+                            "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
+                        )
+                else:
+                    use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name)
+                attribute_class = cls.get_possibly_dynamic_module(class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
+
+    @staticmethod
+    def get_possibly_dynamic_module(module_name):
+        if hasattr(transformers_module, module_name):
+            return getattr(transformers_module, module_name)
+        lookup_locations = [
+            transformers_module.IMAGE_PROCESSOR_MAPPING,
+            transformers_module.TOKENIZER_MAPPING,
+            transformers_module.FEATURE_EXTRACTOR_MAPPING,
+        ]
+        for lookup_location in lookup_locations:
+            for custom_class in lookup_location._extra_content.values():
+                if isinstance(custom_class, tuple):
+                    for custom_subclass in custom_class:
+                        if custom_subclass is not None and custom_subclass.__name__ == module_name:
+                            return custom_subclass
+                elif custom_class is not None and custom_class.__name__ == module_name:
+                    return custom_class
+        else:
+            raise ValueError(
+                f"Could not find module {module_name} in `transformers`. If this is a custom class, "
+                f"it should be registered using the relevant `AutoClass.register()` function so that "
+                f"other functions can find it!"
+            )
 
     @property
     def model_input_names(self):
