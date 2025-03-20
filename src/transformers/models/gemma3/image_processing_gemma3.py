@@ -400,7 +400,6 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
-        print("num_crops", num_crops)
 
         data = {"pixel_values": processed_images, "num_crops": num_crops}
         return BatchFeature(data=data, tensor_type=return_tensors)
