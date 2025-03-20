@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     slow,
@@ -342,10 +343,10 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 @slow
 @require_torch_gpu
-# @require_read_token
+@require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = Gemma3Processor.from_pretrained("gg-hf-g/gemma-3-4b-it", padding_side="left")
+        self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self.messages = [
@@ -363,7 +364,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_4b_bf16(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -384,7 +385,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_batch(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -424,7 +425,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_crops(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -457,7 +458,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_multiimage(self):
-        model_id = "gg-hf-g/gemma-3-4b-it"
+        model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
@@ -490,7 +491,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_1b_text_only(self):
-        model_id = "gg-hf-g/gemma-3-1b-it"
+        model_id = "google/gemma-3-1b-it"
 
         model = Gemma3ForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
@@ -509,7 +510,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     # @require_torch_gpu
     # @mark.flash_attn_test
     # def test_model_4b_flash_attn(self):
-    #     model_id = "gg-hf-g/gemma-3-4b-it"
+    #     model_id = "google/gemma-3-4b-it"
     #
     #     model = Gemma3ForConditionalGeneration.from_pretrained(
     #         model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
@@ -535,7 +536,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
-        model_id = "gg-hf-g/gemma-3-1b-it"
+        model_id = "google/gemma-3-1b-it"
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
@@ -563,7 +564,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         Same as `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684 --
         ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
         """
-        model_id = "gg-hf-g/gemma-3-1b-it"
+        model_id = "google/gemma-3-1b-it"
         attn_implementation = "sdpa"
 
         input_text = [
