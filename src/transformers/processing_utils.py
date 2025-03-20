@@ -870,15 +870,15 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         # Add chat template as kwarg before returning because most models don't have processor config
+        default_chat_template = None
         if resolved_raw_chat_template_file is not None:
             with open(resolved_raw_chat_template_file, encoding="utf-8") as reader:
                 default_chat_template = reader.read()
         elif resolved_chat_template_file is not None:
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
-                text = reader.read()
-            default_chat_template = json.loads(text)["chat_template"]
-        else:
-            default_chat_template = None
+                chat_template_json = json.loads(reader.read())
+            if "chat_template" in chat_template_json:  # These files are sometimes empty in tests
+                default_chat_template = chat_template_json["chat_template"]
         chat_templates = {
             template_name: open(template_file, "r", encoding="utf-8").read()
             for template_name, template_file in resolved_additional_chat_template_files.items()
