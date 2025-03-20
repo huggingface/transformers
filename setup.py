@@ -347,7 +347,8 @@ extras["testing"] = (
         "tensorboard",
         "pydantic",
         "sentencepiece",
-        "decord"
+        "decord",
+        "torch",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
