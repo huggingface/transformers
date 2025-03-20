@@ -41,7 +41,6 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
-    is_vision_available,
     logging,
     requires_backends,
 )
@@ -49,9 +48,6 @@ from ...utils import (
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
