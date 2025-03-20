@@ -84,6 +84,8 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
         use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
             Whether to use Learnable Affine Blocks (LAB) in the network.
             LAB adds learnable scale and bias parameters after certain operations.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "hgnet_v2"
@@ -107,6 +109,7 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
         stage_kernel_size=[3, 3, 5, 5],
         stage_numb_of_layers=[6, 6, 6, 6],
         use_learnable_affine_block=False,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -129,6 +132,7 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
         self.stage_kernel_size = stage_kernel_size
         self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
+        self.initializer_range = initializer_range
 
         if not (
             len(stage_in_channels)
