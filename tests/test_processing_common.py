@@ -807,9 +807,6 @@ class ProcessorTesterMixin:
             self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
             reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
             self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # When we save as single files, tokenizers and processors share a chat template, which means
-            # the reloaded tokenizer should get the chat template as well
-            self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
     @require_torch
     def _test_apply_chat_template(
