@@ -1,29 +1,15 @@
-# coding=utf-8
-# Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
-#
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
-python -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
-    --variant='gemma3_4b' \
+python -m transformers.models.shieldgemma2.convert_shieldgemma2_weights_orbax_to_hf \
     --tokenizer_path="$HOME/gemma3/tokenizer/gemma3_cleaned_262144_v2.spiece.model" \
-    --checkpoint_path="$HOME/gemma3/gemma3_4b_pt_orbax/" \
-    --output_path="$HOME/gemma3/gemma3_4b_pt_safetensors/"
+    --checkpoint_path_gemma="$HOME/gemma3/gemma3_4b_pt_orbax/" \
+    --checkpoint_path_shieldgemma="$HOME/shieldgemma2/shieldgemma-2_4b_orbax/" \
+    --output_path="$HOME/shieldgemma2/shieldgemma2_4b_pt_safetensors/" \
+    --precision='bfloat16'
 """
 
-from collections.abc import Iterator, Sequence
+import dataclasses
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 import accelerate
@@ -33,66 +19,66 @@ import tree
 from absl import app, flags, logging
 from orbax import checkpoint as obc
 
-from transformers import (
-    Gemma3Config,
-    Gemma3ForCausalLM,
-    Gemma3ForConditionalGeneration,
-    Gemma3ImageProcessor,
-    Gemma3Processor,
-    Gemma3TextConfig,
-    GemmaTokenizerFast,
-    GenerationConfig,
-    SiglipVisionConfig,
-)
-from transformers.image_utils import PILImageResampling
+from ...image_utils import PILImageResampling
+from ..gemma import GemmaTokenizerFast
+from ..gemma3 import Gemma3ImageProcessor, Gemma3TextConfig
+from ..siglip import SiglipVisionConfig
+from . import ShieldGemma2Config, ShieldGemma2ForImageClassification, ShieldGemma2Processor
 
 
 # ==== Internal Constants and Classes ====
 
-
 _CHAT_TEMPLATE = """{{ bos_token }}
-{%- if messages[0]['role'] == 'system' -%}
-    {%- if messages[0]['content'] is string -%}
-        {%- set first_user_prefix = messages[0]['content'] + '\n\n' -%}
-    {%- else -%}
-        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}
-    {%- endif -%}
-    {%- set loop_messages = messages[1:] -%}
-{%- else -%}
-    {%- set first_user_prefix = "" -%}
-    {%- set loop_messages = messages -%}
-{%- endif -%}
-{%- for message in loop_messages -%}
-    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}
-        {{ raise_exception("Conversation roles must alternate user/assistant/user/assistant/...") }}
-    {%- endif -%}
-    {%- if (message['role'] == 'assistant') -%}
-        {%- set role = "model" -%}
-    {%- else -%}
-        {%- set role = message['role'] -%}
-    {%- endif -%}
-    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else "") }}
-    {%- if message['content'] is string -%}
-        {{ message['content'] | trim }}
-    {%- elif message['content'] is iterable -%}
+{%- for message in messages -%}
+    {%- if message['content'] is iterable -%}
         {%- for item in message['content'] -%}
+            {{ '<start_of_turn>user\n' }}
             {%- if item['type'] == 'image' -%}
                 {{ '<start_of_image>' }}
             {%- elif item['type'] == 'text' -%}
-                {{ item['text'] | trim }}
+                {{ 'You are a policy expert trying to help determine whether a generated or real image is in' }}
+                {{ ' violation of the safety policy below. Your decision must very clearly follow the specific'}}
+                {{ ' language used in the safety policy and should not include any interpretation outside of the' }}
+                {{ ' safety policy.\n\n' }}
+                {{ '<BEGIN_SAFETY_POLICY>\n' }}
+                {{ item['text'] + '\n' }}
+                {{ '</END_SAFETY_POLICY>\n\n' }}
+                {{ 'Does the image violate the above policy? Your Answer must start with \\'Yes\\' or \\'No\\'.' }}
+                {{ '<end_of_turn>\n' }}
             {%- endif -%}
         {%- endfor -%}
+        {{'<start_of_turn>model\n'}}
     {%- else -%}
-        {{ raise_exception("Invalid content type") }}
+        {{ raise_exception("Conversation messages must contain iterable content containing images and policy definitions in text.") }}
     {%- endif -%}
-    {{ '<end_of_turn>\n' }}
 {%- endfor -%}
-{%- if add_generation_prompt -%}
-    {{'<start_of_turn>model\n'}}
-{%- endif -%}
 """
 
-_DTYPES = {"float32", "bfloat16", "float16"}
+_DTYPES = {
+    "float32": torch.float32,
+    "bfloat16": torch.bfloat16,
+    "float16": torch.float16,
+}
+
+_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
+    "dangerous": (
+        "No Dangerous Content: The image shall not contain content that"
+        " facilitates or encourages activities that could cause real-world harm"
+        " (e.g., building firearms and explosive devices, promotion of"
+        " terrorism, instructions for suicide)."
+    ),
+    "sexual": (
+        "No Sexually Explicit content: The image shall not contain content that"
+        " depicts explicit or graphic sexual acts (e.g., pornography, erotic"
+        " nudity, depictions of rape or sexual assault)."
+    ),
+    "violence": (
+        "No Violence/Gore content: The image shall not contain content that"
+        " depicts shocking, sensational, or gratuitous violence (e.g.,"
+        " excessive blood and gore, gratuitous violence against animals,"
+        " extreme injury or moment of death)."
+    ),
+}
 
 _SIGLIP_BASE = "SigLiPFromPatches_0/siglip_encoder"
 _SIGLIP_EMBEDDING = "SigLiPFromPatches_0/siglip_encoder/embedding"
@@ -107,151 +93,42 @@ _TRANSFORMER_FINAL_NORM = "transformer/final_norm"
 _TRANSFORMER_POST_TRAINING_PREFIX = "rlx_networks/policy_network/"
 _TRANSFORMER_POST_TRAINING_PREFIX_LEN = len(_TRANSFORMER_POST_TRAINING_PREFIX)
 
-_VISION_CONFIG = {
-    "hidden_size": 1152,
-    "intermediate_size": 4304,
-    "num_hidden_layers": 27,
-    "num_attention_heads": 16,
-    "num_channels": 3,
-    "image_size": 896,
-    "patch_size": 14,
-    "hidden_act": "gelu_pytorch_tanh",
-    "layer_norm_eps": 1e-6,
-    "attention_dropout": 0.0,
-    "vision_use_head": False,
-}
-
-_VARIANT_GEMMA_3_1B = "gemma3_1b"
-_VARIANT_GEMMA_3_4B = "gemma3_4b"
-_VARIANT_GEMMA_3_12B = "gemma3_12b"
-_VARIANT_GEMMA_3_27B = "gemma3_27b"
-_VARIANTS = {
-    _VARIANT_GEMMA_3_1B: Gemma3Config(
-        text_config=Gemma3TextConfig(
-            vocab_size=262_144,
-            hidden_size=1152,
-            intermediate_size=6 * 1152,
-            num_attention_heads=4,
-            num_hidden_layers=26,
-            num_key_value_heads=1,
-            head_dim=256,
-            sliding_window=512,
-            rope_theta=1_000_000,  # used for global RoPE only
-            rope_local_base_freq=10_000,
-            attn_logit_softcapping=None,
-            query_pre_attn_scalar=256,
-            max_position_embeddings=32_768,
-        ),
-        vision_config=None,
-    ),
-    _VARIANT_GEMMA_3_4B: Gemma3Config(
-        text_config=Gemma3TextConfig(
-            vocab_size=262_208,
-            hidden_size=2560,
-            intermediate_size=2560 * 8 // 2,
-            num_attention_heads=8,
-            head_dim=256,
-            num_hidden_layers=34,
-            num_key_value_heads=4,
-            sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
-            rope_theta=1_000_000,
-            rope_local_base_freq=10_000,
-            attn_logit_softcapping=None,
-            query_pre_attn_scalar=256,
-        ),
-        vision_config=_VISION_CONFIG,
-    ),
-    _VARIANT_GEMMA_3_12B: Gemma3Config(
-        text_config=Gemma3TextConfig(
-            vocab_size=262_208,
-            hidden_size=30 * 128,
-            intermediate_size=30 * 128 * 8 // 2,
-            num_attention_heads=16,
-            head_dim=256,
-            num_hidden_layers=48,
-            num_key_value_heads=8,
-            sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
-            rope_theta=1_000_000,
-            rope_local_base_freq=10_000,
-            attn_logit_softcapping=None,
-            query_pre_attn_scalar=256,
-        ),
-        vision_config=_VISION_CONFIG,
-    ),
-    _VARIANT_GEMMA_3_27B: Gemma3Config(
-        text_config=Gemma3TextConfig(
-            vocab_size=262_208,
-            hidden_size=42 * 128,
-            intermediate_size=42 * 128 * 8 // 2,
-            num_attention_heads=32,
-            num_hidden_layers=62,
-            num_key_value_heads=16,
-            head_dim=128,
-            sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
-            rope_theta=1_000_000,
-            rope_local_base_freq=10_000,
-            attn_logit_softcapping=None,
-            query_pre_attn_scalar=(42 * 128 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
-        ),
-        vision_config=_VISION_CONFIG,
-    ),
-}
-
 # ==== Flags ====
 
-_CHECKPOINT_PATH = flags.DEFINE_string(
-    name="checkpoint_path",
+_GEMMA_CHECKPOINT_PATH = flags.DEFINE_string(
+    name="checkpoint_path_gemma",
     default=None,
-    help="Path to the Orbax checkpoint.",
+    help="Path to the Orbax checkpoint containing the vision weights.",
     required=True,
 )
 
-_INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
-    name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
+_SHIELDGEMMA_CHECKPOINT_PATH = flags.DEFINE_string(
+    name="checkpoint_path_shieldgemma",
+    default=None,
+    help="Path to the Orbax checkpoint containing the language model weights.",
+    required=True,
 )
 
-_OUTPUT_PATH = flags.DEFINE_string(
+OUTPUT_PATH = flags.DEFINE_string(
     name="output_path",
     default=None,
     help="Path to store the HF checkpoint.",
     required=True,
 )
 
-_TRANSFORMER_DTYPE = flags.DEFINE_enum(
-    name="text_dtype",
-    default="bfloat16",
+PRECISION = flags.DEFINE_enum(
+    name="precision",
+    default=None,
     help="The floating point precision (aka dtype) of the model.",
-    enum_values=_DTYPES,
+    enum_values=set(_DTYPES.keys()),
+    required=True,
 )
 
-_TOKENIZER_PATH = flags.DEFINE_string(
+TOKENIZER_PATH = flags.DEFINE_string(
     name="tokenizer_path",
     default=None,
     help="Path to the SentencePiece model file.",
     required=True,
-)
-
-_VARIANT = flags.DEFINE_enum(
-    name="variant",
-    default=_VARIANT_GEMMA_3_4B,
-    help="The model variant to convert.",
-    enum_values=set(_VARIANTS.keys()),
-)
-
-_VERBOSE = flags.DEFINE_bool(
-    name="verbose",
-    default=False,
-    help="If true, log the path, shape, and dtype of every converted layer.",
-)
-
-_VISION_DTYPE = flags.DEFINE_enum(
-    name="vision_dtype",
-    default="float32",
-    help="The floating point precision (aka dtype) of the model.",
-    enum_values=_DTYPES,
 )
 
 
@@ -339,6 +216,8 @@ def convert_siglip_weight(
     else:
         raise ValueError(f"Unexpected path `{path}`.")
 
+    if "vision" in normalized_path:
+        print(normalized_path)
     return normalized_path, updated_weights
 
 
@@ -362,24 +241,16 @@ def convert_transformer_weights(
         if prop == "input_embedding":
             # Tied to language_model.lm_head.weight, assigned at the end.
             converted_paths = ["language_model.model.embed_tokens.weight"]
-
-            if _VARIANT.value != _VARIANT_GEMMA_3_1B:
-                # Gemma3 model doesn't have image soft token in input and output embeddings, resize to avoid bugs we had with Mllama
-                pre_expansion_embeddings = weights
-                mu = np.mean(pre_expansion_embeddings, axis=0)
-                sigma = np.cov(pre_expansion_embeddings, rowvar=False, bias=True)
-                new_embeddings = np.random.multivariate_normal(mu, 1e-5 * sigma, size=64)
-                weights = np.vstack([pre_expansion_embeddings, new_embeddings])
-
+            # Gemma3 model doesn't have image soft token in input and output embeddings, resize to avoid bugs we had with Mllama
+            pre_expansion_embeddings = weights
+            mu = np.mean(pre_expansion_embeddings, axis=0)
+            sigma = np.cov(pre_expansion_embeddings, rowvar=False, bias=True)
+            new_embeddings = np.random.multivariate_normal(mu, 1e-5 * sigma, size=64)
+            weights = np.vstack([pre_expansion_embeddings, new_embeddings])
             converted_weights = [weights]
-        elif _VARIANT.value == _VARIANT_GEMMA_3_1B or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
-            return zip([], [])
         else:
             raise ValueError(f"Unexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
-        if _VARIANT.value == _VARIANT_GEMMA_3_1B:
-            return zip([], [])
-
         if path.endswith("/mm_input_projection"):
             converted_paths = ["multi_modal_projector.mm_input_projection_weight"]
             converted_weights = [weights]
@@ -457,132 +328,142 @@ def convert_transformer_weights(
     return zip(converted_paths, converted_weights)
 
 
-def convert(checkpoint_path: str, config: Gemma3Config) -> dict[str, torch.Tensor]:
+def transpose_reshape(x: torch.Tensor) -> torch.Tensor:
+    x = x.transpose(1, 2)
+    return x.reshape(x.shape[0] * x.shape[1], x.shape[2]).contiguous()
+
+
+@dataclasses.dataclass(frozen=True)
+class ConversionResult:
+    state_tree: dict[str, torch.Tensor]
+    config: ShieldGemma2Config
+
+
+def convert(
+    shieldgemma_checkpoint_path: str,
+    gemma_checkpoint_path: str,
+    config: ShieldGemma2Config,
+    target_dtype: torch.dtype,
+) -> ConversionResult:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
     checkpointer = obc.PyTreeCheckpointer()
-    ckpt = checkpointer.restore(checkpoint_path)
+
+    sg2_ckpt = checkpointer.restore(shieldgemma_checkpoint_path)
+    g3_ckpt = checkpointer.restore(gemma_checkpoint_path)
+
     hf_tree: dict[str, torch.Tensor] = {}
 
-    def update_tree(path: str, weights: np.ndarray, target_dtype: torch.dtype) -> None:
-        hf_tree[path] = torch.from_numpy(weights.astype("float32")).type(target_dtype)
-        if _VERBOSE.value:
-            logging.info(
-                "%s converted shape=%s with dtype=%s",
-                path,
-                weights.shape,
-                target_dtype,
-            )
+    def update_tree(path: str, weights: np.ndarray) -> None:
+        torch_tensor = torch.from_numpy(weights.astype("float32")).type(target_dtype)
+        logging.info(
+            "%s converted shape=%s with dtype=%s",
+            path,
+            weights.shape,
+            torch_tensor.dtype,
+        )
+        hf_tree[f"model.{path}"] = torch_tensor
 
-    for paths, value in tree.flatten_with_path(ckpt):
+    for paths, value in tree.flatten_with_path(g3_ckpt):
         if paths[0].startswith("SigLiPFromPatches_"):
-            if config.vision_config is None:
-                continue
-
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-            update_tree(path, weights, config.vision_config.torch_dtype)
-        else:
-            for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
-                if config.vision_config is None:
-                    path = path[len("language_model.") :]
+            update_tree(path, weights)
 
-                update_tree(path, weights, config.text_config.torch_dtype)
+    for paths, value in tree.flatten_with_path(sg2_ckpt):
+        for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
+            update_tree(path, weights)
 
-    if config.vision_config is None:
-        hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
-    else:
-        hf_tree["language_model.lm_head.weight"] = hf_tree["language_model.model.embed_tokens.weight"]
+    hf_tree["model.language_model.lm_head.weight"] = hf_tree["model.language_model.model.embed_tokens.weight"]
 
-    return hf_tree
+    return ConversionResult(state_tree=hf_tree, config=config)
 
 
 def main(*args):
     del args
 
-    output_path = _OUTPUT_PATH.value
-    variant = _VARIANT.value
-
-    config = _VARIANTS[variant]
-    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
-    config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
-    if _INCLUDE_CHAT_TEMPLATE.value:
-        # Chat template is included for instruction tuned models, which treat
-        # both "<eos>" and "<end_of_turn>" as generation stoppers.
-        config.eos_token_id = [1, 106]
-
-    logging.info(
-        "Converting Gemma 3 (%s) @ %s (language) and %s (vision)",
-        variant,
-        _TRANSFORMER_DTYPE.value,
-        _VISION_DTYPE.value,
-    )
-    state_tree = convert(_CHECKPOINT_PATH.value, config)
-    logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
-
-    with accelerate.init_empty_weights():
-        if variant == _VARIANT_GEMMA_3_1B:
-            model = Gemma3ForCausalLM(config=config.text_config)
-        else:
-            model = Gemma3ForConditionalGeneration(config)
-
-    model.load_state_dict(state_tree, assign=True, strict=True)
-    logging.info(
-        "Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.",
-        variant,
-        type(model).__name__,
-    )
-    model.save_pretrained(output_path, safe_serialization=True)
-    logging.info(
-        "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
-        variant,
-        output_path,
-        type(model).__name__,
-    )
-    del model
-    del state_tree
+    dtype = getattr(torch, PRECISION.value)
+    output_path = OUTPUT_PATH.value
 
     tokenizer = GemmaTokenizerFast(
-        _TOKENIZER_PATH.value,
-        add_bos_token=True,
+        TOKENIZER_PATH.value,
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
             "eoi_token": "<end_of_image>",  # Should be ID=256_000
         },
-        chat_template=_CHAT_TEMPLATE if _INCLUDE_CHAT_TEMPLATE.value else None,
     )
-    tokenizer.save_pretrained(output_path)
-    logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
 
-    if variant != _VARIANT_GEMMA_3_1B:
-        image_processor = Gemma3ImageProcessor(
-            image_seq_length=256,
-            image_mean=(0.5,) * 3,
-            image_std=(0.5,) * 3,
-            size={"height": 896, "width": 896},
-            resample=PILImageResampling.BILINEAR,
-        )
-        processor = Gemma3Processor(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            chat_template=tokenizer.chat_template,
-        )
-        processor.save_pretrained(output_path)
-        logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
-        del processor
+    yes_token_index, no_token_index = torch.tensor(tokenizer(["Yes", "No"])["input_ids"])[:, 1].numpy()
 
+    config = ShieldGemma2Config(
+        yes_token_index=int(yes_token_index),
+        no_token_index=int(no_token_index),
+        text_config=Gemma3TextConfig(
+            vocab_size=262_208,
+            hidden_size=2560,
+            intermediate_size=2560 * 8 // 2,
+            num_attention_heads=8,
+            head_dim=256,
+            num_hidden_layers=34,
+            num_key_value_heads=4,
+            sliding_window=1024,
+            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_theta=1_000_000,
+            rope_local_base_freq=10_000,
+            attn_logit_softcapping=None,
+            query_pre_attn_scalar=256,
+            max_position_embeddings=8192,
+        ),
+        vision_config={
+            "hidden_size": 1152,
+            "intermediate_size": 4304,
+            "num_hidden_layers": 27,
+            "num_attention_heads": 16,
+            "num_channels": 3,
+            "image_size": 896,
+            "patch_size": 14,
+            "hidden_act": "gelu_pytorch_tanh",
+            "layer_norm_eps": 1e-6,
+            "attention_dropout": 0.0,
+            "vision_use_head": False,
+        },
+    )
+
+    config.save_pretrained(output_path)
+
+    image_processor = Gemma3ImageProcessor(
+        image_seq_length=256,
+        image_mean=(0.5,) * 3,
+        image_std=(0.5,) * 3,
+        size={"height": 896, "width": 896},
+        resample=PILImageResampling.BILINEAR,
+    )
+    processor = ShieldGemma2Processor(
+        image_processor=image_processor,
+        tokenizer=tokenizer,
+        policy_definitions=_SHIELDGEMMA2_POLICIES,
+    )
+    tokenizer.chat_template = _CHAT_TEMPLATE
+    processor.chat_template = _CHAT_TEMPLATE
+
+    processor.save_pretrained(output_path)
+    logging.info("Saved Shieldgemma2Processor to %s", output_path)
+    del processor
     del tokenizer
 
-    generation_config = GenerationConfig(
-        pad_token_id=config.pad_token_id,
-        bos_token_id=config.bos_token_id,
-        eos_token_id=config.eos_token_id,
-        cache_implementation="hybrid",
-        temperature=1.0,
-        do_sample=True,
-        top_k=64,
-        top_p=0.95,
-    )
-    generation_config.save_pretrained(output_path)
+    logging.info("Converting Shieldgemma2 @ %s", dtype)
+    result = convert(_SHIELDGEMMA_CHECKPOINT_PATH.value, _GEMMA_CHECKPOINT_PATH.value, config, dtype)
+    logging.info("Converted Shieldgemma2 state tree from Orbax to Hugging Face.")
+
+    with accelerate.init_empty_weights():
+        model = ShieldGemma2ForImageClassification(config=config)
+
+    model.load_state_dict(result.state_tree, assign=True, strict=True)
+    model.config.torch_dtype = dtype
+    logging.info("Loaded Shieldgemma2 in Hugging Face Transformers.")
+    model.save_pretrained(output_path, safe_serialization=True)
+    logging.info("Saved Shieldgemma2 to SafeTensors in %s", output_path)
+    del model
+    del result
 
 
 if __name__ == "__main__":
