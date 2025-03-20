@@ -71,9 +71,9 @@ class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None, 
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
@@ -141,8 +141,9 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        codebook_pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=0,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
@@ -183,6 +184,7 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+        self.codebook_pad_token_id = codebook_pad_token_id
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -202,6 +204,7 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
         depth_decoder_config: Dict=None,
         initializer_range=0.02,
         tie_codebook_embeddings=True,
+        eos_token_id=None,
         **kwargs,
     ):
         if backbone_config is None:
@@ -260,11 +263,12 @@ class ConversationalSpeechModelOutputWithPast(ModelOutput):
     depth_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     backbone_loss: Optional[torch.FloatTensor] = None
 
+
 class ConversationalSpeechModelEmbeddings(nn.Module):
-    def __init__(self, num_codebooks, codebook_vocab_size, backbone_hidden_size):
+    def __init__(self, num_codebooks, codebook_vocab_size, backbone_hidden_size, codebook_padding_idx):
         super().__init__()
         self.codebook_vocab_size = codebook_vocab_size
-        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), backbone_hidden_size)   
+        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), backbone_hidden_size, codebook_padding_idx)   
 
     def forward(self, input_ids, codebook_idxs):
         """
@@ -283,7 +287,7 @@ class ConversationalSpeechModelDepthDecoder(LlamaModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = ConversationalSpeechModelEmbeddings(config.num_codebooks, config.vocab_size, config.backbone_hidden_size)
+        self.embed_tokens = ConversationalSpeechModelEmbeddings(config.num_codebooks, config.vocab_size, config.backbone_hidden_size, self.padding_idx)
         self.inputs_embeds_projector = nn.Linear(config.backbone_hidden_size, config.hidden_size, bias=False)
 
     def forward(
@@ -422,7 +426,7 @@ class ConversationalSpeechModelCodebooksHead(nn.Module):
         )
 
     def reset_parameters(self):
-        for i in range(self.audio_num_codebooks - 1):
+        for i in range(self.num_codebooks - 1):
             nn.init.kaiming_uniform_(
                 self.weight[i], a=math.sqrt(5)
             )
@@ -516,25 +520,36 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
 
 
 class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
-    def __init__(self, hidden_size, vocab_size,  num_codebooks, codebook_vocab_size):
+    def __init__(self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, padding_idx, codebook_padding_idx):
         super().__init__()
-        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size)
-        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), hidden_size)
-    
+        self.codebook_padding_idx = codebook_padding_idx
+        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size, padding_idx)
+        self.embed_audio_tokens = nn.Embedding(
+            (num_codebooks * codebook_vocab_size), hidden_size, codebook_padding_idx
+        )
+
         audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
         self.register_buffer("audio_tokens_offsets", audio_tokens_offsets)
 
     def forward(self, input_ids):
-        # input_ids should be of shape (batch_size, seq_length, num_codebooks + 1)
+        """
+        Args:
+            input_ids (`torch.Tensor` of shape (batch_size, seq_length, num_codebooks + 1)):
+                On last dimension, 32 first values are codebook tokens, and last value is a text token.
+        Returns:
+            `torch.Tensor` of shape (batch_size, seq_length, hidden_size):
+                Embedded tokens, summed over the last dimension according to input_ids_mask.
+        """
         text_tokens = input_ids[:, :, -1:]
+
         audio_tokens = input_ids[:, :, :-1]
+        # apply the offset only to the non-padded codebook tokens
+        audio_tokens_mask = (audio_tokens != self.codebook_padding_idx)
+        audio_tokens = audio_tokens + self.audio_tokens_offsets
+        audio_tokens *= audio_tokens_mask 
 
-        # id 0 means it should be masked in the sum
         text_embeds = self.embed_text_tokens(text_tokens)
-        text_embeds = text_embeds * text_tokens.bool().unsqueeze(-1)
-
-        audio_embeds = self.embed_audio_tokens(audio_tokens + self.audio_tokens_offsets)
-        audio_embeds = audio_embeds * audio_tokens.bool().unsqueeze(-1)
+        audio_embeds = self.embed_audio_tokens(audio_tokens)
 
         inputs_embeds = torch.cat([text_embeds, audio_embeds], dim=-2)
         inputs_embeds = inputs_embeds.sum(dim=-2)
@@ -545,7 +560,14 @@ class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
 class ConversationalSpeechModelBackboneModel(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(config.hidden_size, config.vocab_size, config.num_codebooks, config.codebook_vocab_size)
+        self.embed_tokens = ConversationalSpeechBackboneModelEmbeddings(
+            config.hidden_size,
+            config.vocab_size,
+            config.num_codebooks,
+            config.codebook_vocab_size,
+            self.padding_idx,
+            config.codebook_pad_token_id,
+        )
 
 
 class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
@@ -560,6 +582,7 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        input_ids_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -582,6 +605,7 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
 
         backbone_outputs = self.backbone_model(
             input_ids=input_ids,
+            input_ids_mask=input_ids_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -674,7 +698,7 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # expand input_ids to (batch_size, seq_length, num_codebooks)
-        input_ids = input_ids.reshape(batch_size, 0, self.config.audio_num_codebooks + 1)
+        input_ids = input_ids.reshape(batch_size, 0, self.config.num_codebooks + 1)
 
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), Cache):
@@ -761,8 +785,8 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
                 streamer.put(next_tokens.cpu())
 
             # for the eos stopping criteria, is it expected that the eos token is the same for each codebook !!!!
-            for_criteria_ids = (input_ids.sum(dim=2) / (self.config.audio_num_codebooks + 1)).to(torch.long)
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(for_criteria_ids, scores)
+            unfinished_sequences = unfinished_sequences & ~(input_ids[:, -1, :] == self.config.backbone_config.eos_token_id).all(-1) 
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
             cur_len += 1
 

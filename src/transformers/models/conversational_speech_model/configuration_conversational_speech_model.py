@@ -178,9 +178,9 @@ class ConversationalSpeechModelDepthDecoderConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
@@ -408,8 +408,9 @@ class ConversationalSpeechModelBackboneConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        codebook_pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=0,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
@@ -457,6 +458,7 @@ class ConversationalSpeechModelBackboneConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+        self.codebook_pad_token_id = codebook_pad_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -496,6 +498,7 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
         depth_decoder_config: Dict = None,
         initializer_range=0.02,
         tie_codebook_embeddings=True,
+        eos_token_id=None,
         **kwargs,
     ):
         if backbone_config is None:
