@@ -43,7 +43,7 @@ class GgufQuantizationTests(unittest.TestCase):
     Test cases for weights dequantization with GGUF models.
     Note: The quantization names should keep aligned with `GGMLQuantizationType` in gguf-py:
     https://github.com/ggerganov/llama.cpp/blob/4b0c638b9a68f577cb2066b638c9f622d91ee661/gguf-py/gguf/constants.py#L1545-L1576
-    So quantization like Q4_K_M or Q4_K_S dshouldn't be added to this tests.
+    So quantization like Q4_K_M or Q4_K_S shouldn't be added to this tests.
     """
 
     example_text = "Hello"
@@ -218,6 +218,49 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_gguf_errors_disk_offload(self):
+        from collections import OrderedDict
+
+        q2_k_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q2_K.name)
+        with self.assertRaises(RuntimeError):
+            AutoModelForCausalLM.from_pretrained(
+                self.gguf_model_id,
+                device_map=OrderedDict(
+                    [
+                        ("model.embed_tokens", "cpu"),
+                        ("lm_head", "cpu"),
+                        ("model.layers.0", "cpu"),
+                        ("model.layers.1", "cpu"),
+                        ("model.layers.2", "cpu"),
+                        ("model.layers.3", "cpu"),
+                        ("model.layers.4", "cpu"),
+                        ("model.layers.5", "cpu"),
+                        ("model.layers.6", "cpu"),
+                        ("model.layers.7", "cpu"),
+                        ("model.layers.8", "cpu"),
+                        ("model.layers.9", "cpu"),
+                        ("model.layers.10", "disk"),
+                        ("model.layers.11", "disk"),
+                        ("model.layers.12", "disk"),
+                        ("model.layers.13", "disk"),
+                        ("model.layers.14", "disk"),
+                        ("model.layers.15", "disk"),
+                        ("model.layers.16", "disk"),
+                        ("model.layers.17", "disk"),
+                        ("model.layers.18", "disk"),
+                        ("model.layers.19", "disk"),
+                        ("model.layers.20", "disk"),
+                        ("model.layers.21", "disk"),
+                        ("model.layers.22", "disk"),
+                        ("model.norm", "disk"),
+                        ("model.rotary_emb", "disk"),
+                    ]
+                ),
+                gguf_file=q2_k_gguf_model_id,
+                offload_folder="offload",
+                offload_state_dict=True,
+            )
 
 
 @require_gguf

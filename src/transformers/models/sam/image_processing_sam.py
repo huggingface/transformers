@@ -307,8 +307,6 @@ class SamImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Tuple[np.ndarray, Tuple[int, int], Tuple[int, int]]:
-        image = to_numpy_array(image)
-
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:
             image = convert_to_rgb(image)
@@ -1383,7 +1381,7 @@ def _mask_to_rle_pytorch(input_mask: "torch.Tensor"):
             continue
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
-        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
+        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1].item()]
         out.append({"size": [height, width], "counts": counts})
     return out
 
@@ -1403,7 +1401,7 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
     # Encode run length
     out = []
     for i in range(batch_size):
-        cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
+        cur_idxs = change_indices[change_indices[:, 0] == i][:, 1] + 1
         if len(cur_idxs) == 0:
             # No changes => either all 0 or all 1
             # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
@@ -1414,7 +1412,9 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
             continue
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
-        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
+        counts += (
+            [cur_idxs[0].numpy().item()] + btw_idxs.numpy().tolist() + [height * width - cur_idxs[-1].numpy().item()]
+        )
         out.append({"size": [height, width], "counts": counts})
     return out
 
