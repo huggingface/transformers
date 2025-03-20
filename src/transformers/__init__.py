@@ -715,6 +715,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.prompt_depth_anything": ["PromptDepthAnythingConfig"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -1304,6 +1305,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.prompt_depth_anything"].extend(["PromptDepthAnythingImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
@@ -1379,6 +1381,10 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["model_debugging_utils"] = [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
         "Cache",
@@ -3343,6 +3349,12 @@ else:
         [
             "Pop2PianoForConditionalGeneration",
             "Pop2PianoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.prompt_depth_anything"].extend(
+        [
+            "PromptDepthAnythingForDepthEstimation",
+            "PromptDepthAnythingPreTrainedModel",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -5931,6 +5943,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prompt_depth_anything import PromptDepthAnythingConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -6540,6 +6553,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.prompt_depth_anything import PromptDepthAnythingImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
@@ -6605,6 +6619,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
+        # Debugging
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6689,6 +6704,10 @@ if TYPE_CHECKING:
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
+        )
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
@@ -8179,6 +8198,10 @@ if TYPE_CHECKING:
         from .models.pop2piano import (
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
+        )
+        from .models.prompt_depth_anything import (
+            PromptDepthAnythingForDepthEstimation,
+            PromptDepthAnythingPreTrainedModel,
         )
         from .models.prophetnet import (
             ProphetNetDecoder,
