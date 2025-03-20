@@ -1313,9 +1313,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Gemma3 positions are 1-indexed
-
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
