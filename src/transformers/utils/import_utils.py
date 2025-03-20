@@ -1062,7 +1062,9 @@ def is_torch_greater_or_equal(library_version: str):
     if not _is_package_available("torch"):
         return False
 
-    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+    return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
+        library_version
+    )
 
 
 def is_torchdistx_available():

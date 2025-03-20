@@ -1580,7 +1580,9 @@ class TikTokenConverter:
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = additional_special_tokens
+        self.additional_special_tokens = (
+            additional_special_tokens.keys() if type(additional_special_tokens) is dict else additional_special_tokens
+        )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
@@ -1629,7 +1631,10 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
+
+        tokenizer.add_special_tokens(
+            [AddedToken(token, normalized=False, special=True) for token in self.additional_special_tokens]
+        )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
