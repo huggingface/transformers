@@ -480,6 +480,15 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
 
         self.encoder = CTCModel(config.encoder_config)
         self.projector = EncoderProjectorQFormer(config.projector_config)
+
+        if config.has_lora_adapter and not is_peft_available():
+            logger.warning(
+                "Config indicates that a lora adapter should be present, but "
+                "peft is not installed; this will cause the model to perform "
+                "incorrectly when audio inputs are provided. Please install "
+                "peft and reload the model!"
+            )
+
         self.post_init()
 
     def get_input_embeddings(self):
