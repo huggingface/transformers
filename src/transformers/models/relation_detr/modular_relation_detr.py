@@ -203,6 +203,7 @@ class RelationDetrImageProcessor(DetrImageProcessor):
             pad_size=pad_size,
             **kwargs,
         )
+        del self._valid_processor_keys
         self.size_divisor = size_divisor
 
     def prepare_annotation(
@@ -627,6 +628,9 @@ class RelationDetrImageProcessor(DetrImageProcessor):
         raise AttributeError("Not needed for RelationDetrImageProcessor.")
 
     def post_process_panoptic_segmentation(self, **kwargs):
+        raise AttributeError("Not needed for RelationDetrImageProcessor.")
+
+    def from_dict(cls, **kwargs):
         raise AttributeError("Not needed for RelationDetrImageProcessor.")
 
 
