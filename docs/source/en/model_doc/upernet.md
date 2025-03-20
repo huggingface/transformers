@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # UPerNet
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The UPerNet model was proposed in [Unified Perceptual Parsing for Scene Understanding](https://arxiv.org/abs/1807.10221)

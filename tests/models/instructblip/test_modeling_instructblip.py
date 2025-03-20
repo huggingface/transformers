@@ -205,13 +205,13 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -528,6 +528,12 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     @unittest.skip(reason="There's no base InstructBlipModel")
     def test_save_load_fast_init_to_base(self):
+        pass
+
+    @unittest.skip(
+        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     def test_forward_signature(self):

@@ -149,6 +149,28 @@ class HQQTestMultiGPU(unittest.TestCase):
 @require_torch_gpu
 @require_accelerate
 @require_hqq
+class HQQTestBias(unittest.TestCase):
+    def tearDown(self):
+        cleanup()
+
+    def test_fp16_quantized_model(self):
+        """
+        Simple LLM model testing fp16 with bias
+        """
+        quant_config = HqqConfig(nbits=8, group_size=64)
+
+        hqq_runner = HQQLLMRunner(
+            model_id="facebook/opt-125m", quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+        )
+
+        check_hqqlayer(self, hqq_runner.model.model.decoder.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
+
+
+@slow
+@require_torch_gpu
+@require_accelerate
+@require_hqq
 class HQQSerializationTest(unittest.TestCase):
     def tearDown(self):
         cleanup()

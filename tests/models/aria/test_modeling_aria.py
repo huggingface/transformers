@@ -241,19 +241,19 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
             torch.testing.assert_close(out_embeds, out_ids)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -286,8 +286,16 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
-    @unittest.skip(reason="Unsupported")
+    @unittest.skip(reason="Dynamic control flow due to MoE")
     def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Dynamic control flow due to MoE")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Dynamic control flow due to MoE")
+    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -428,6 +436,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_bitsandbytes
     def test_batched_generation(self):
         model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
 

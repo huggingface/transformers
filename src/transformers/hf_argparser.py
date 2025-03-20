@@ -201,7 +201,7 @@ class HfArgumentParser(ArgumentParser):
             else:
                 kwargs["required"] = True
         elif field.type is bool or field.type == Optional[bool]:
-            # Copy the currect kwargs to use to instantiate a `no_*` complement argument below.
+            # Copy the correct kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
 

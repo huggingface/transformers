@@ -365,41 +365,21 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model(**input_dict)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="CPU offload is not yet supported")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
-    )
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(
-        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
-    )
-    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
@@ -410,6 +390,10 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("LLaVA Next Video has dynamic control flow in unpadding")
+    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -446,12 +430,12 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = 'USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems'  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        EXPECTED_DECODED_TEXT = (
+            "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems",  # cuda output
+            "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while wearing a pair of glasses that are too large for them. The glasses are",  # xpu output
         )
+
+        self.assertTrue(self.processor.decode(output[0], skip_special_tokens=True) in EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
