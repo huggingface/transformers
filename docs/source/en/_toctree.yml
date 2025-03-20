@@ -187,6 +187,8 @@
     title: Optimum
   - local: quantization/quanto
     title: Quanto
+  - local: quantization/quark
+    title: Quark
   - local: quantization/torchao
     title: torchao
   - local: quantization/spqr
@@ -529,6 +531,8 @@
         title: MegatronGPT2
       - local: model_doc/mistral
         title: Mistral
+      - local: model_doc/mistral3
+        title: Mistral3
       - local: model_doc/mixtral
         title: Mixtral
       - local: model_doc/mluke
@@ -731,6 +735,8 @@
         title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
+      - local: model_doc/prompt_depth_anything
+        title: Prompt Depth Anything
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
       - local: model_doc/pvt_v2
