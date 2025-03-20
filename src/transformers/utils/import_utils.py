@@ -95,6 +95,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
+TORCHAO_MIN_VERSION = "0.4.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -191,7 +192,7 @@ _tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
-_torchao_available = _is_package_available("torchao")
+_torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
@@ -542,6 +543,12 @@ def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
 
+    if is_torch_hpu_available():
+        if is_habana_gaudi1():
+            return False
+        else:
+            return True
+
     import torch
 
     try:
@@ -572,6 +579,9 @@ def is_torch_bf16_available_on_device(device):
 
     if device == "cuda":
         return is_torch_bf16_gpu_available()
+
+    if device == "hpu":
+        return True
 
     try:
         x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
@@ -771,6 +781,61 @@ def is_torch_musa_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "musa") and torch.musa.is_available()
+
+
+@lru_cache
+def is_torch_hpu_available():
+    "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
+    if (
+        not _torch_available
+        or importlib.util.find_spec("habana_frameworks") is None
+        or importlib.util.find_spec("habana_frameworks.torch") is None
+    ):
+        return False
+
+    torch_hpu_min_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+        return False
+
+    import torch
+
+    if not hasattr(torch, "hpu") or not torch.hpu.is_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
+    # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
+    # This can be removed once Gaudi1 support is discontinued but for now we need it to keep using
+    # dl1.24xlarge Gaudi1 instances on AWS for testing.
+    # check if the device is Gaudi1 (vs Gaudi2, Gaudi3).
+    if htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi:
+        original_masked_fill_ = torch.Tensor.masked_fill_
+
+        def patched_masked_fill_(self, mask, value):
+            if self.dtype == torch.int64:
+                logger.warning_once(
+                    "In-place tensor.masked_fill_(mask, value) is not supported for int64 tensors on Gaudi1. "
+                    "This operation will be performed out-of-place using tensor[mask] = value."
+                )
+                self[mask] = value
+            else:
+                original_masked_fill_(self, mask, value)
+
+        torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    return True
+
+
+@lru_cache
+def is_habana_gaudi1():
+    if not is_torch_hpu_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+
+    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
+    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
 
 
 def is_torchdynamo_available():
@@ -997,7 +1062,9 @@ def is_torch_greater_or_equal(library_version: str):
     if not _is_package_available("torch"):
         return False
 
-    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+    return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
+        library_version
+    )
 
 
 def is_torchdistx_available():
@@ -1213,8 +1280,8 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
-def is_torchao_available():
-    return _torchao_available
+def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION):
+    return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
 def is_speech_available():
