@@ -128,8 +128,9 @@ def get_resize_output_image_size(
 
     if ratio > 1:
         # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
-        height = int(math.ceil(height / ratio))
-        width = int(math.ceil(width / ratio))
+        # Here we use floor to ensure the image is always smaller than the given "longest_edge"
+        height = int(math.floor(height / ratio))
+        width = int(math.floor(width / ratio))
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
