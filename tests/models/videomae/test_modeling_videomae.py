@@ -225,11 +225,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         return inputs_dict
 
-    @unittest.skip("`mse_cpu` not implemented for 'BFloat16'")
-    @require_torch_sdpa
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
