@@ -4,6 +4,18 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_prompt_depth_anything.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -394,6 +406,12 @@ PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
+            low-resolution depth sensor. It generally has shape (height, width), where height
+            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
+            will be used. If it is None, the output will be a monocular relative depth.
+            The values are recommended to be in meters, but this is not necessary.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
