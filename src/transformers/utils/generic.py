@@ -38,7 +38,13 @@ from .import_utils import (
     is_tf_available,
     is_torch_available,
     is_torch_fx_proxy,
+    is_torchdynamo_compiling,
 )
+
+
+if is_torch_available():
+    # required for @can_return_tuple decorator to work with torchdynamo
+    import torch  # noqa: F401
 
 
 class cached_property(property):
@@ -902,3 +908,70 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
         return is_timm_config_dict(config_dict)
 
     return False
+
+
+def set_arg_to_config_and_sub_configs(config, key, value):
+    """
+    Set a value to a config and all sub configs.
+    """
+    from ..configuration_utils import PretrainedConfig
+
+    setattr(config, key, value)
+    for attribute_name in dir(config):
+        attribute = getattr(config, attribute_name)
+        if isinstance(attribute, PretrainedConfig):
+            set_arg_to_config_and_sub_configs(attribute, key, value)
+
+
+def del_arg_from_config_and_sub_configs(config, key):
+    """
+    Delete a value from a config and all sub configs.
+    """
+    from ..configuration_utils import PretrainedConfig
+
+    delattr(config, key)
+    for attribute_name in dir(config):
+        attribute = getattr(config, attribute_name)
+        if isinstance(attribute, PretrainedConfig):
+            del_arg_from_config_and_sub_configs(attribute, key)
+
+
+def can_return_tuple(func):
+    """
+    Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
+    use_return_dict=False is set in the config.
+
+    Note:
+        output.to_tuple() convert output to tuple skipping all `None` values.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if is_torchdynamo_compiling():
+            return func(self, *args, **kwargs)
+
+        is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
+        is_configured_to_return_tuple = self.config.use_return_dict is False
+
+        # The following allows to convert output to tuple ONLY on top level forward call,
+        # while internal modules of the model will return Output objects
+        # to be able to use name-based attribute access in modeling code.
+
+        # We will check if we are on top level module, if so, turn off to tuple conversion for all
+        # underling calls.
+        is_top_level_module = getattr(self.config, "_is_in_top_level_forward_call", True)
+        if is_configured_to_return_tuple and is_top_level_module:
+            set_arg_to_config_and_sub_configs(self.config, "_is_in_top_level_forward_call", False)
+
+        try:
+            output = func(self, *args, **kwargs)
+            if is_requested_to_return_tuple or (is_configured_to_return_tuple and is_top_level_module):
+                output = output.to_tuple()
+        finally:
+            # Remove the flag after the model forward call is finished.
+            if is_configured_to_return_tuple and is_top_level_module:
+                del_arg_from_config_and_sub_configs(self.config, "_is_in_top_level_forward_call")
+
+        return output
+
+    return wrapper
