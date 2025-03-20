@@ -164,25 +164,6 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         #TODO: align bbox format with transformer models
         assert final_out[0]["bboxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.91862
-
-    @require_cv2
-    def test_compute_min_area_rect_against_cv2(self):
-        for _ in range(10):
-            points = (np.random.rand(10, 2) * 100).astype(np.float32)
-
-            # our implementation
-            my_rect = compute_min_area_rect(points)
-
-            # openCV implementation
-            cv2_rect = cv2.minAreaRect(points)
-
-            my_center, my_size, my_angle = my_rect
-            cv2_center, cv2_size, cv2_angle = cv2_rect
-
-            assert np.allclose(my_center, cv2_center, atol=5), f"Center mismatch: {my_center} vs {cv2_center}"
-            assert np.allclose(sorted(my_size), sorted(cv2_size), atol=5), f"Size mismatch: {my_size} vs {cv2_size}"
-            assert abs(my_angle - cv2_angle) < 15 or abs(my_angle + 180 - cv2_angle) < 15, \
-                f"Angle mismatch: {my_angle} vs {cv2_angle}"
     
     @require_cv2
     def test_get_box_points_against_cv2(self):

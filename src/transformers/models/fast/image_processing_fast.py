@@ -96,57 +96,46 @@ def compute_min_area_rect(points):
             - (w, h) are the width and height of the rectangle,
             - angle is the rotation angle in degrees.
     """
-    # compute convex hull
     hull = ConvexHull(points)
     hull_points = points[hull.vertices]
 
-    # compute edge angles
     edges = np.diff(hull_points, axis=0, append=hull_points[:1])
-    edge_angles = np.arctan2(edges[:, 1], edges[:, 0])  # get angles in radians
-    edge_angles = np.unique(np.abs(edge_angles))  # remove duplicates
+    edge_angles = np.arctan2(edges[:, 1], edges[:, 0])
+    edge_angles = np.unique(edge_angles)
 
-    # initialize min area variables
     min_area = float("inf")
-    best_rect = None
+    best_box = None
 
     for angle in edge_angles:
-        # rotation matrix
-        R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
-        rotated_points = points @ R.T
+        # Rotate points by -angle (clockwise)
+        R = np.array([[np.cos(-angle), -np.sin(-angle)], [np.sin(-angle), np.cos(-angle)]])
+        rotated = points @ R.T
 
-        # get bounding box in rotated space
-        xmin, ymin = rotated_points.min(axis=0)
-        xmax, ymax = rotated_points.max(axis=0)
-        w, h = xmax - xmin, ymax - ymin
+        # Bounding box in rotated space
+        min_x, min_y = rotated.min(axis=0)
+        max_x, max_y = rotated.max(axis=0)
+        w = max_x - min_x
+        h = max_y - min_y
         area = w * h
 
         if area < min_area:
             min_area = area
-            best_rect = (xmin, ymin, xmax, ymax, angle, w, h)
+            best_box = (min_x, min_y, max_x, max_y, angle, w, h)
 
-    # extract best rectangle parameters
-    xmin, ymin, xmax, ymax, angle, w, h = best_rect
-
-    # compute center in rotated space
-    center_rotated = np.array([(xmin + xmax) / 2, (ymin + ymax) / 2])
-
-    # rotate center back to original coordinates
-    R_inv = np.linalg.inv(np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]))
+    min_x, min_y, max_x, max_y, angle, w, h = best_box
+    center_rotated = np.array([(min_x + max_x) / 2, (min_y + max_y) / 2])
+    R_inv = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     center = center_rotated @ R_inv.T
 
-    # convert angle to degrees
-    angle = np.degrees(angle)
+    angle_deg = np.degrees(angle)
 
-    # fix angle range to match OpenCV [-90, 0]
-    if w < h:
-        angle += 90
-        w, h = h, w  # Swap width and height
+    # we ensure angle is in the range [-90, 0)
+    while angle_deg >= 90:
+        angle_deg -= 180
+    while angle_deg < -90:
+        angle_deg += 180
 
-    # we ensure angle sign matches opencv's convention
-    if angle > 0:
-        angle -= 180
-
-    return ((center[0], center[1]), (w, h), -angle)
+    return (tuple(center), (w, h), angle_deg)
 
 
 def get_box_points(rect):

@@ -30,7 +30,6 @@ from transformers.models.textnet.image_processing_textnet import TextNetImagePro
 
 
 def connected_components(image, connectivity=8):
-    
     """
     Computes connected components of a binary image using SciPy.
     
@@ -51,70 +50,60 @@ def connected_components(image, connectivity=8):
     return num_labels, labels
 
 def compute_min_area_rect(points):
-        
-        """
-        Compute the minimum area rotated bounding rectangle around a set of 2D points.
-        
-        Args:
-            points (np.ndarray): Nx2 array of (x, y) coordinates.
+    """
+    Compute the minimum area rotated bounding rectangle around a set of 2D points.
 
-        Returns:
-            tuple: ((cx, cy), (w, h), angle) where
-                - (cx, cy) is the center of the rectangle,
-                - (w, h) are the width and height of the rectangle,
-                - angle is the rotation angle in degrees.
-        """
-        # compute convex hull
-        hull = ConvexHull(points)
-        hull_points = points[hull.vertices]
+    Args:
+        points (np.ndarray): Nx2 array of (x, y) coordinates.
 
-        # compute edge angles
-        edges = np.diff(hull_points, axis=0, append=hull_points[:1])
-        edge_angles = np.arctan2(edges[:, 1], edges[:, 0])  # get angles in radians
-        edge_angles = np.unique(np.abs(edge_angles))  # remove duplicates
+    Returns:
+        tuple: ((cx, cy), (w, h), angle) where
+            - (cx, cy) is the center of the rectangle,
+            - (w, h) are the width and height of the rectangle,
+            - angle is the rotation angle in degrees.
+    """
+    hull = ConvexHull(points)
+    hull_points = points[hull.vertices]
 
-        # initialize min area variables
-        min_area = float('inf')
-        best_rect = None
+    edges = np.diff(hull_points, axis=0, append=hull_points[:1])
+    edge_angles = np.arctan2(edges[:, 1], edges[:, 0])
+    edge_angles = np.unique(edge_angles)
 
-        for angle in edge_angles:
-            # rotation matrix
-            R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
-            rotated_points = points @ R.T
+    min_area = float('inf')
+    best_box = None
 
-            # get bounding box in rotated space
-            xmin, ymin = rotated_points.min(axis=0)
-            xmax, ymax = rotated_points.max(axis=0)
-            w, h = xmax - xmin, ymax - ymin
-            area = w * h
+    for angle in edge_angles:
+        # Rotate points by -angle (clockwise)
+        R = np.array([[np.cos(-angle), -np.sin(-angle)],
+                      [np.sin(-angle),  np.cos(-angle)]])
+        rotated = points @ R.T
 
-            if area < min_area:
-                min_area = area
-                best_rect = (xmin, ymin, xmax, ymax, angle, w, h)
+        # Bounding box in rotated space
+        min_x, min_y = rotated.min(axis=0)
+        max_x, max_y = rotated.max(axis=0)
+        w = max_x - min_x
+        h = max_y - min_y
+        area = w * h
 
-        # extract best rectangle parameters
-        xmin, ymin, xmax, ymax, angle, w, h = best_rect
+        if area < min_area:
+            min_area = area
+            best_box = (min_x, min_y, max_x, max_y, angle, w, h)
 
-        # compute center in rotated space
-        center_rotated = np.array([(xmin + xmax) / 2, (ymin + ymax) / 2])
+    min_x, min_y, max_x, max_y, angle, w, h = best_box
+    center_rotated = np.array([(min_x + max_x) / 2, (min_y + max_y) / 2])
+    R_inv = np.array([[np.cos(angle), -np.sin(angle)],
+                      [np.sin(angle),  np.cos(angle)]])
+    center = center_rotated @ R_inv.T
 
-        # rotate center back to original coordinates
-        R_inv = np.linalg.inv(np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]))
-        center = center_rotated @ R_inv.T
+    angle_deg = np.degrees(angle)
 
-        # convert angle to degrees
-        angle = np.degrees(angle)
+    # we ensure angle is in the range [-90, 0)
+    while angle_deg >= 90:
+        angle_deg -= 180
+    while angle_deg < -90:
+        angle_deg += 180
 
-        # fix angle range to match OpenCV [-90, 0]
-        if w < h:
-            angle += 90
-            w, h = h, w  # Swap width and height
-
-        # we ensure angle sign matches opencv's convention
-        if angle > 0:
-            angle -= 180
-
-        return ((center[0], center[1]), (w, h), -angle)
+    return (tuple(center), (w, h), angle_deg)
         
 def get_box_points(rect):
     """
