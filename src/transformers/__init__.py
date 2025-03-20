@@ -578,6 +578,11 @@ _import_structure = {
         "LongformerTokenizer",
     ],
     "models.longt5": ["LongT5Config"],
+    "models.long_vita": [
+        "Long_vitaConfig",
+        "Long_vitaProcessor",
+        "Long_vitaVisionConfig",
+    ],
     "models.luke": [
         "LukeConfig",
         "LukeTokenizer",
@@ -722,11 +727,6 @@ _import_structure = {
     "models.qwen2_5_vl": [
         "Qwen2_5_VLConfig",
         "Qwen2_5_VLProcessor",
-    ],
-    "models.long_vita": [
-        "Long_vitaConfig",
-        "Long_vitaProcessor",
-        "Long_vitaVisionConfig",
     ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
@@ -2814,6 +2814,13 @@ else:
             "LongT5PreTrainedModel",
         ]
     )
+    _import_structure["models.long_vita"].extend(
+        [
+            "Long_vitaForConditionalGeneration",
+            "Long_vitaPreTrainedModel",
+            "Long_vitaVisionModel",
+        ]
+    )
     _import_structure["models.luke"].extend(
         [
             "LukeForEntityClassification",
@@ -3356,13 +3363,6 @@ else:
             "Qwen2_5_VLForConditionalGeneration",
             "Qwen2_5_VLModel",
             "Qwen2_5_VLPreTrainedModel",
-        ]
-    )
-    _import_structure["models.long_vita"].extend(
-        [
-            "Long_vitaForConditionalGeneration",
-            "Long_vitaPreTrainedModel",
-            "Long_vitaVisionModel",
         ]
     )
     _import_structure["models.qwen2_audio"].extend(
@@ -5749,6 +5749,11 @@ if TYPE_CHECKING:
         LongformerTokenizer,
     )
     from .models.longt5 import LongT5Config
+    from .models.long_vita import (
+        Long_vitaConfig,
+        Long_vitaProcessor,
+        Long_vitaVisionConfig,
+    )
     from .models.luke import (
         LukeConfig,
         LukeTokenizer,
@@ -5917,11 +5922,6 @@ if TYPE_CHECKING:
     from .models.qwen2_5_vl import (
         Qwen2_5_VLConfig,
         Qwen2_5_VLProcessor,
-    )
-    from .models.long_vita import (
-        Long_vitaConfig,
-        Long_vitaProcessor,
-        Long_vitaVisionConfig,
     )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
@@ -7748,6 +7748,11 @@ if TYPE_CHECKING:
             LongT5Model,
             LongT5PreTrainedModel,
         )
+        from .models.long_vita import (
+            Long_vitaForConditionalGeneration,
+            Long_vitaPreTrainedModel,
+            Long_vitaVisionModel,
+        )
         from .models.luke import (
             LukeForEntityClassification,
             LukeForEntityPairClassification,
@@ -8170,11 +8175,6 @@ if TYPE_CHECKING:
             Qwen2_5_VLForConditionalGeneration,
             Qwen2_5_VLModel,
             Qwen2_5_VLPreTrainedModel,
-        )
-        from .models.long_vita import (
-            Long_vitaForConditionalGeneration,
-            Long_vitaPreTrainedModel,
-            Long_vitaVisionModel,
         )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,

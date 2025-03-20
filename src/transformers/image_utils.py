@@ -158,7 +158,7 @@ def is_valid_image(img):
 
 def is_valid_list_of_images(images: List):
     return images and all(is_valid_image(image) for image in images)
-        
+
 
 def valid_images(imgs):
     # If we have an list of images, make sure every image is valid
