@@ -584,13 +584,24 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
     return torch.utils._pytree.tree_flatten(dictionary)[0]
 
 
-torch.utils._pytree.register_pytree_node(
-    DynamicCache,
-    _flatten_dynamic_cache,
-    _unflatten_dynamic_cache,
-    serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-    flatten_with_keys_fn=_flatten_with_keys_dynamic_cache,
-)
+if is_torch_greater_or_equal("2.2"):
+    torch.utils._pytree.register_pytree_node(
+        DynamicCache,
+        _flatten_dynamic_cache,
+        _unflatten_dynamic_cache,
+        serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+        flatten_with_keys_fn=_flatten_with_keys_dynamic_cache,
+    )
+else:
+    torch.utils._pytree._register_pytree_node(
+        DynamicCache,
+        _flatten_dynamic_cache,
+        _unflatten_dynamic_cache,
+        serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+        flatten_with_keys_fn=_flatten_with_keys_dynamic_cache,
+    )
+
+
 # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
 torch.fx._pytree.register_pytree_flatten_spec(DynamicCache, _flatten_dynamic_cache_for_fx)
 
