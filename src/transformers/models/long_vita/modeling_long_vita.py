@@ -119,7 +119,7 @@ class FlashAttention(nn.Module):
                     softmax_scale=self.softmax_scale,
                     causal=causal,
                 )
-                output = output.view(batch_size, seqlen, *output.shape[2:])
+                output = output.view(batch_size, -1, *output.shape[1:])
             else:
                 nheads = qkv.shape[-2]
                 x = qkv.view(batch_size, seqlen, -1)

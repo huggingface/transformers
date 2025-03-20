@@ -268,7 +268,7 @@ class ImageProcessor:
         else:
             image = img_or_path
 
-        return self.process_images([images])
+        return self.process_images([image])
 
     def process_anyres(self, img_or_path):
         if isinstance(img_or_path, str):
