@@ -194,7 +194,7 @@ class IJepaSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -527,9 +527,8 @@ IJEPA_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
-
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]
 
 IJEPA_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -641,7 +640,8 @@ class IJepaModel(IJepaPreTrainedModel):
         )
 
 
-_IMAGE_CLASS_CHECKPOINT = "facebook/ijepa_vith14_1k"
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "google/ijepa-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
