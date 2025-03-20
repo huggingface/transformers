@@ -402,8 +402,6 @@ class GenerationMixin:
             past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
             cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
-        assert cache_position is not None
-
         # 2. Generic cache-dependent input preparation
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
