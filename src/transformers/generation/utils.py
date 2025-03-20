@@ -156,7 +156,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: torch.LongTensor = None
+    sequences: Optional[torch.LongTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -201,7 +201,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: torch.LongTensor = None
+    sequences: Optional[torch.LongTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -246,7 +246,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: torch.LongTensor = None
+    sequences: Optional[torch.LongTensor] = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
@@ -300,7 +300,7 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
-    sequences: torch.LongTensor = None
+    sequences: Optional[torch.LongTensor] = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
@@ -401,6 +401,8 @@ class GenerationMixin:
         elif cache_position is None:
             past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
             cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
+
+        assert cache_position is not None
 
         # 2. Generic cache-dependent input preparation
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
@@ -698,7 +700,7 @@ class GenerationMixin:
         model_input_name: str,
         model_kwargs: Dict[str, torch.Tensor],
         decoder_start_token_id: torch.Tensor,
-        device: torch.device = None,
+        device: Optional[torch.device] = None,
     ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
         # 1. Check whether the user has defined `decoder_input_ids` manually. To facilitate in terms of input naming,
@@ -922,7 +924,7 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
-        device: str = None,
+        device: Optional[str] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
@@ -4809,7 +4811,7 @@ def _ranking_fast(
     return selected_idx
 
 
-def _split(data, full_batch_size: int, split_size: int = None):
+def _split(data, full_batch_size: int, split_size: int):
     """
     Takes care of three cases:
     1. data is a tensor: e.g. last_hidden_state, pooler_output etc. split them on the batch_size dim
