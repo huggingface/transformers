@@ -25,13 +25,13 @@ import re
 
 import numpy as np
 import torch
-import cv2
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput, VideoMetadata
+from ...image_utils import ImageInput, VideoInput, VideoMetadata, read_video_opencv
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs, AllKwargsForChatTemplate, ImagesKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import requires_backends
 
 
 IMG_TAG_TOKEN = "<image>"
@@ -120,6 +120,10 @@ class ImageProcessor:
         ]
 
     def save_video_frames(self, vid_path, max_fps=1, num_frames=8):
+        # Lazy import cv2
+        requires_backends(read_video_opencv, ["cv2"])
+        import cv2
+
         cap = cv2.VideoCapture(vid_path)
         if not cap.isOpened():
             raise ValueError(f"Unable to open video file: {vid_path}")
@@ -150,6 +154,10 @@ class ImageProcessor:
         return frame_paths
 
     def get_video_frames(self, vid_path, max_fps=1, num_frames=8):
+        # Lazy import cv2
+        requires_backends(read_video_opencv, ["cv2"])
+        import cv2
+
         cap = cv2.VideoCapture(vid_path)
         if not cap.isOpened():
             raise ValueError(f"Unable to open video file: {vid_path}")
