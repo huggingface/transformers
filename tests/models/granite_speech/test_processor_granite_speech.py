@@ -16,6 +16,7 @@ import json
 import tempfile
 import unittest
 import shutil
+from parameterized import parameterized
 
 import torch
 from transformers import AutoTokenizer, GPT2TokenizerFast
@@ -126,10 +127,14 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         with pytest.raises(TypeError):
             processor(text=None, audios=["foo"])
 
-    def test_audio_token_filling(self):
-        """Ensure correctly handle audio token filling; this is similar to
-        the way that llava model preprocesses its image tokens, and depends
-        on the input sequences feature length.
+    @parameterized.expand([
+        ([1, 269920], [171]),
+        ([2, 269920], [171, 171]),
+    ])
+    def test_audio_token_filling_same_len_feature_tensors(self, vec_dims, num_expected_features):
+        """Ensure audio token filling is handled correctly when we have
+        one or more audio inputs whose features are all the same length
+        stacked into a tensor.
         """
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -137,13 +142,12 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
         )
+        audios = torch.rand(vec_dims) - .5
 
-        vec_dims = [1, 269920]
-        wav = torch.rand(vec_dims) - .5
-
+        audio_tokens = processor.audio_token * vec_dims[0]
         inputs = processor(
-            text=f"{processor.audio_token} Can you transcribe this audio?",
-            audios=wav,
+            text=f"{audio_tokens} Can you compare this audio?",
+            audios=audios,
             return_tensors="pt"
         )
 
@@ -151,12 +155,44 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         audio_token_id = tokenizer.get_vocab()[processor.audio_token]
 
         # Make sure the number of audio tokens matches the number of features
-        num_expected_features = processor.feature_extractor._get_num_audio_features(
-            vec_dims[1:],
+        num_computed_features = processor.feature_extractor._get_num_audio_features(
+            [vec_dims[1] for _ in range(vec_dims[0])],
         )
         num_audio_tokens = int(torch.sum(inputs["input_ids"] == audio_token_id))
-        assert num_expected_features == num_audio_tokens
-        
+        assert sum(num_computed_features) == num_audio_tokens
+        assert num_expected_features == num_expected_features
+
+    def test_audio_token_filling_varying_len_feature_list(self):
+        """Ensure audio token filling is handled correctly when we have
+        multiple varying len audio sequences passed as a list.
+        """
+        tokenizer = self.get_tokenizer()
+        feature_extractor = self.get_feature_extractor()
+        processor = GraniteSpeechProcessor(
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+        )
+        vec_dims = [[1, 142100], [1, 269920]]
+        num_expected_features = [90, 171]
+        audios = [torch.rand(dims) - .5 for dims in vec_dims]
+
+        audio_tokens = processor.audio_token * len(vec_dims)
+        inputs = processor(
+            text=f"{audio_tokens} Can you compare this audio?",
+            audios=audios,
+            return_tensors="pt"
+        )
+
+        # Check the number of audio tokens
+        audio_token_id = tokenizer.get_vocab()[processor.audio_token]
+
+        # Make sure the number of audio tokens matches the number of features
+        num_calculated_features = processor.feature_extractor._get_num_audio_features(
+            [dims[1] for dims in vec_dims],
+        )
+        num_audio_tokens = int(torch.sum(inputs["input_ids"] == audio_token_id))
+        assert num_calculated_features == [90, 171]
+        assert sum(num_expected_features) == num_audio_tokens
 
     @require_torch_gpu
     def test_device_override(self):
