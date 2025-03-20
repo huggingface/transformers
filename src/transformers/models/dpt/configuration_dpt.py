@@ -292,5 +292,9 @@ class DPTConfig(PretrainedConfig):
         output["model_type"] = self.__class__.model_type
         return output
 
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if self.backbone_config is not None else {}
+
 
 __all__ = ["DPTConfig"]

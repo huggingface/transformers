@@ -28,7 +28,7 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -46,6 +46,7 @@ from transformers import (
     PretrainedConfig,
     TrainerCallback,
     TrainingArguments,
+    default_data_collator,
     enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
@@ -241,7 +242,7 @@ def bytes2megabytes(x):
     return int(x / 2**20)
 
 
-# Copied from acclerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
+# Copied from accelerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
 class TorchTracemalloc:
     def __enter__(self):
         gc.collect()
@@ -2975,6 +2976,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
             )
 
+    def test_save_collator_tokenizer_by_default(self):
+        class FakeCollator:
+            def __init__(self):
+                self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+                self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
+
+            def __call__(self, features: List[Any], return_tensors="pt") -> Dict[str, Any]:
+                return default_data_collator(features, return_tensors)
+
+        data_collator = FakeCollator()
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(
+            output_dir=tmp_dir, save_steps=5, save_safetensors=True, data_collator=data_collator
+        )
+        trainer.train()
+        loaded_tokenizer = AutoTokenizer.from_pretrained(os.path.join(tmp_dir, os.listdir(tmp_dir)[0]))
+        assert len(loaded_tokenizer) == len(trainer.data_collator.tokenizer), "Failed to load updated tokenizer"
+
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
@@ -4086,7 +4105,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Functional check
             self.assertAlmostEqual(loss, orig_loss)
 
-            # AOT Autograd recomputaion and nvfuser recomputation optimization
+            # AOT Autograd recomputation and nvfuser recomputation optimization
             # aggressively fuses the operations and reduce the memory footprint.
             self.assertGreater(orig_peak_mem, peak_mem * 2)
 
@@ -5375,16 +5394,6 @@ if is_torch_available():
     }
 
     optim_test_params = [
-        (
-            OptimizerNames.ADAMW_HF,
-            transformers.optimization.AdamW,
-            default_adam_kwargs,
-        ),
-        (
-            OptimizerNames.ADAMW_HF.value,
-            transformers.optimization.AdamW,
-            default_adam_kwargs,
-        ),
         (
             OptimizerNames.ADAMW_TORCH,
             torch.optim.AdamW,
