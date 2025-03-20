@@ -655,7 +655,7 @@ class ProcessorMixin(PushToHubMixin):
             with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
                 f.write(self.chat_template)
             logger.info(f"chat template saved in {output_raw_chat_template_file}")
-        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
+        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict) and len(self.chat_template) > 0:
             # New format for multiple templates is to save the default as chat_template.jinja
             # and the other templates in the chat_templates/ directory
             for template_name, template in self.chat_template.items():
@@ -669,7 +669,7 @@ class ProcessorMixin(PushToHubMixin):
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")
-        elif isinstance(self.chat_template, dict):
+        elif isinstance(self.chat_template, dict) and len(self.chat_template) > 0:
             # Legacy format for multiple templates:
             # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
             chat_template_json_string = (
@@ -888,7 +888,8 @@ class ProcessorMixin(PushToHubMixin):
         if "default" in chat_templates and len(chat_templates) == 1:
             chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
 
-        kwargs["chat_template"] = chat_templates
+        if chat_templates:
+            kwargs["chat_template"] = chat_templates
 
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
@@ -1401,7 +1402,9 @@ class ProcessorMixin(PushToHubMixin):
                 chat_template = self.chat_template["default"]
             elif isinstance(self.chat_template, dict):
                 raise ValueError(
-                    'The processor has multiple chat templates but none of them are named "default". You need to specify which one to use by passing the `chat_template` argument.'
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
+                    ' which one to use by passing the `chat_template` argument. Available templates are: '
+                    f'{", ".join(self.chat_template.keys())}'
                 )
             elif self.chat_template is not None:
                 chat_template = self.chat_template
