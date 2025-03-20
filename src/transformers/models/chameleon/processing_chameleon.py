@@ -121,6 +121,8 @@ class ChameleonProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+        elif isinstance(text, list):
+            text = text.copy()
         if text is None and images is None:
             raise ValueError("You must provide either text or images")
 

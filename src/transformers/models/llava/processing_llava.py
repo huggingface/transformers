@@ -150,6 +150,8 @@ class LlavaProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        elif isinstance(text, list):
+            text = text.copy()
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
