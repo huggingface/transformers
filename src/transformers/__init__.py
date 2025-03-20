@@ -774,6 +774,10 @@ _import_structure = {
     "models.seggpt": ["SegGptConfig"],
     "models.sew": ["SEWConfig"],
     "models.sew_d": ["SEWDConfig"],
+    "models.shieldgemma2": [
+        "ShieldGemma2Config",
+        "ShieldGemma2Processor",
+    ],
     "models.siglip": [
         "SiglipConfig",
         "SiglipProcessor",
@@ -1042,6 +1046,7 @@ _import_structure = {
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "QuarkConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -3585,6 +3590,7 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
+    _import_structure["models.shieldgemma2"].append("ShieldGemma2ForImageClassification")
     _import_structure["models.siglip"].extend(
         [
             "SiglipForImageClassification",
@@ -4115,7 +4121,6 @@ else:
     )
     _import_structure["optimization"] = [
         "Adafactor",
-        "AdamW",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -5987,6 +5992,10 @@ if TYPE_CHECKING:
     from .models.seggpt import SegGptConfig
     from .models.sew import SEWConfig
     from .models.sew_d import SEWDConfig
+    from .models.shieldgemma2 import (
+        ShieldGemma2Config,
+        ShieldGemma2Processor,
+    )
     from .models.siglip import (
         SiglipConfig,
         SiglipProcessor,
@@ -6283,6 +6292,7 @@ if TYPE_CHECKING:
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        QuarkConfig,
         SpQRConfig,
         TorchAoConfig,
         VptqConfig,
@@ -8360,6 +8370,9 @@ if TYPE_CHECKING:
             SEWDModel,
             SEWDPreTrainedModel,
         )
+        from .models.shieldgemma2 import (
+            ShieldGemma2ForImageClassification,
+        )
         from .models.siglip import (
             SiglipForImageClassification,
             SiglipModel,
@@ -8767,7 +8780,6 @@ if TYPE_CHECKING:
         # Optimization
         from .optimization import (
             Adafactor,
-            AdamW,
             get_constant_schedule,
             get_constant_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
