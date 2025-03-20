@@ -1592,7 +1592,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             "autoquant": autoquant,
         }
 
-    def get_quantize_config(self):
+    def get_apply_tensor_subclass(self):
         """Create the appropriate quantization method based on configuration."""
         if isinstance(self.quant_type, str):
             methods = self._get_torchao_quant_type_to_method()
