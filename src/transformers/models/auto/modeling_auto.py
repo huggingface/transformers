@@ -17,6 +17,7 @@
 import warnings
 from collections import OrderedDict
 
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from .auto_factory import (
     _BaseAutoBackboneClass,
@@ -1657,6 +1658,17 @@ _AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="languag
 
 class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
+
+    @classmethod
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+        """
+        Additional autoclass-specific config post-loading manipulation. In this specific autoclass, if the config has
+        a nested text decoder section, uses that section instead.
+
+        Under the hood, multimodal models mapped by AutoModelForCausalLM assume the text decoder receives its own
+        config, rather than the config for the whole model. This is used e.g. to load the text-only part of a VLM.
+        """
+        return config.get_text_config(decoder=True)
 
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
