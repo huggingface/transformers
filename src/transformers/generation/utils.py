@@ -1971,7 +1971,7 @@ class GenerationMixin:
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
 
-        Generates sequences of token ids for models with a language modeling head.
+        Generates sequences of token ids for models with a language modeling head. foo bar
 
         <Tip warning={true}>
 
