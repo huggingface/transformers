@@ -885,6 +885,8 @@ class ProcessorMixin(PushToHubMixin):
         }
         if default_chat_template is not None:
             chat_templates["default"] = default_chat_template
+        if "default" in chat_templates and len(chat_templates) == 1:
+            chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
 
         kwargs["chat_template"] = chat_templates
 
