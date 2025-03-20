@@ -248,6 +248,7 @@ from . import (
     seggpt,
     sew,
     sew_d,
+    shieldgemma2,
     siglip,
     siglip2,
     smolvlm,

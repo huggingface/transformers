@@ -16,7 +16,7 @@ import contextlib
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -59,15 +59,15 @@ class Seq2SeqTrainer(Trainer):
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         processing_class: Optional[
             Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
         ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
         compute_loss_func: Optional[Callable] = None,
-        compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
-        callbacks: Optional[List["TrainerCallback"]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        compute_metrics: Optional[Callable[["EvalPrediction"], dict]] = None,
+        callbacks: Optional[list["TrainerCallback"]] = None,
+        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         super().__init__(
@@ -143,10 +143,10 @@ class Seq2SeqTrainer(Trainer):
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Run evaluation and returns metrics.
 
@@ -199,7 +199,7 @@ class Seq2SeqTrainer(Trainer):
     def predict(
         self,
         test_dataset: Dataset,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "test",
         **gen_kwargs,
     ) -> "PredictionOutput":
@@ -263,11 +263,11 @@ class Seq2SeqTrainer(Trainer):
     def prediction_step(
         self,
         model: nn.Module,
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         **gen_kwargs,
-    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
 

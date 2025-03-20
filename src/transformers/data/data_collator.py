@@ -1216,13 +1216,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             # predictions, then just skip this candidate.
             if len(masked_lms) + len(index_set) > num_to_predict:
                 continue
-            is_any_index_covered = False
-            for index in index_set:
-                if index in covered_indexes:
-                    is_any_index_covered = True
-                    break
-            if is_any_index_covered:
-                continue
             for index in index_set:
                 covered_indexes.add(index)
                 masked_lms.append(index)
