@@ -447,13 +447,13 @@ _import_structure = {
     "models.esm": ["EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FalconConfig"],
     "models.falcon_mamba": ["FalconMambaConfig"],
+    "models.fast": ["FastConfig"],
     "models.fastspeech2_conformer": [
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
         "FastSpeech2ConformerTokenizer",
         "FastSpeech2ConformerWithHifiGanConfig",
     ],
-    "models.fast": ["FastConfig"],
     "models.flaubert": ["FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FlavaConfig",
@@ -1265,8 +1265,8 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
-    _import_structure["models.fast"].extend(["FastImageProcessor"])
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
+    _import_structure["models.fast"].extend(["FastImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
@@ -2377,18 +2377,18 @@ else:
             "FalconMambaPreTrainedModel",
         ]
     )
+    _import_structure["models.fast"].extend(
+        [
+            "FastForSceneTextRecognition",
+            "FastPreTrainedModel",
+        ]
+    )
     _import_structure["models.fastspeech2_conformer"].extend(
         [
             "FastSpeech2ConformerHifiGan",
             "FastSpeech2ConformerModel",
             "FastSpeech2ConformerPreTrainedModel",
             "FastSpeech2ConformerWithHifiGan",
-        ]
-    )
-    _import_structure["models.fast"].extend(
-        [
-            "FastForSceneTextRecognition",
-            "FastPreTrainedModel",
         ]
     )
     _import_structure["models.flaubert"].extend(
