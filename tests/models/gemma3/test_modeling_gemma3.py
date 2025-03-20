@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -506,29 +507,29 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     # TODO: raushan FA2 generates gibberish for no reason, check later
-    # @require_flash_attn
-    # @require_torch_gpu
-    # @mark.flash_attn_test
-    # def test_model_4b_flash_attn(self):
-    #     model_id = "google/gemma-3-4b-it"
-    #
-    #     model = Gemma3ForConditionalGeneration.from_pretrained(
-    #         model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-    #     ).to(torch_device)
-    #
-    #     inputs = self.processor.apply_chat_template(
-    #         self.messages,
-    #         tokenize=True,
-    #         return_dict=True,
-    #         return_tensors="pt",
-    #         add_generation_prompt=True,
-    #     ).to(torch_device)
-    #
-    #     output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-    #     output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-    #
-    #     EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nPlease look out that you are what Grammy and Vi- ||.xfairesr--ith alerts themselves are||ِّ\n\n**General Note:**']  # fmt: skip
-    #     self.assertEqual(output_text, EXPECTED_TEXTS)
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_model_4b_flash_attn(self):
+        model_id = "google/gemma-3-4b-it"
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+        ).to(torch_device)
+
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
