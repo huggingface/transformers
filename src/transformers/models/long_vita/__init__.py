@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 TYPE_CHECKING=True
 if TYPE_CHECKING:
-    from .configuration_long_vita import Long_vitaConfig, Long_vitaVisionConfig
-    from .modeling_long_vita import Long_vitaForConditionalGeneration, Long_vitaPreTrainedModel, Long_vitaVisionModel
-    from .processing_long_vita import Long_vitaProcessor
+    from .configuration_long_vita import *
+    from .modeling_long_vita import *
+    from .processing_long_vita import *
 else:
     import sys
 
