@@ -674,7 +674,9 @@ class ProcessorMixin(PushToHubMixin):
             # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
             chat_template_json_string = (
                 json.dumps(
-                    [{"name": k, "template": v} for k, v in self.chat_template.items()], indent=2, sort_keys=True
+                    {"chat_template": [{"name": k, "template": v} for k, v in self.chat_template.items()]},
+                    indent=2,
+                    sort_keys=True,
                 )
                 + "\n"
             )
