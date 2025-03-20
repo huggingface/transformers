@@ -755,7 +755,7 @@ def _load_state_dict_into_meta_model(
     is_safetensors: bool = False,
     keep_in_fp32_modules: Optional[List[str]] = None,
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
-    device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
+    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
     device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
@@ -2178,6 +2178,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
 
+        Under the hood, on classes where this function returns True, some generation-specific changes are triggered:
+        for instance, the model instance will have a populated `generation_config` attribute.
+
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
@@ -3359,7 +3362,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.info(
                     "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                 )
-                state_dict = model_to_save.get_adapter_state_dict()
+                state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
 
                 if save_peft_format:
                     logger.info(
@@ -4662,7 +4665,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         keep_in_fp32_modules: Optional[List[str]] = None,
-        device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
+        device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[Dict[str, str]] = None,
         weights_only: bool = True,
         _fast_init: bool = True,
