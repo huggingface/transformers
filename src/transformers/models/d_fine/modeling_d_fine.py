@@ -2101,6 +2101,7 @@ class DFineHybridEncoder(nn.Module):
         nn.Module.__init__(self)
         self.config = config
         self.in_channels = config.encoder_in_channels
+        self.num_fpn_stages = len(self.in_channels) - 1
         self.feat_strides = config.feat_strides
         self.encoder_hidden_dim = config.encoder_hidden_dim
         self.encode_proj_layers = config.encode_proj_layers
