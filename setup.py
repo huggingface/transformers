@@ -111,6 +111,7 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
+    "flax>=0.4.1",
     "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
