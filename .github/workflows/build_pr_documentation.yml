@@ -16,3 +16,5 @@ jobs:
       package: transformers
       languages: ar de en es fr hi it ko pt tr zh ja te
       custom_container: huggingface/transformers-doc-builder
+      custom_runner: 'group: aws-general-8-plus'
+      revision: runner_as_arg
