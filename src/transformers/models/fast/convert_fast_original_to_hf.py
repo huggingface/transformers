@@ -44,9 +44,10 @@ rename_key_mappings = {
     "neck.reduce_layer2": "neck.reduce_layers.1",
     "neck.reduce_layer3": "neck.reduce_layers.2",
     "neck.reduce_layer4": "neck.reduce_layers.3",
+    "final.conv.weight": "final_conv.weight",
 }
 
-def get_model_config(model_config, model_type, size, min_area, bbox_type, loss_bg):
+def get_model_config(model_config, model_type, size, min_area, bounding_box_type, loss_bg):
     model_config_map = {
         "tiny": {
             "config_url": tiny_config_url,
@@ -70,12 +71,12 @@ def get_model_config(model_config, model_type, size, min_area, bbox_type, loss_b
 
     logits_config = model_config_map[model_type]
     config = prepare_config(
-        logits_config["config_url"], size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
+        logits_config["config_url"], size, model_config["detection_head"]["pooling_size"], min_area, bounding_box_type, loss_bg
     )
     
     return config, logits_config["expected_logits"], logits_config["expected_boxes"]
 
-def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, loss_bg):
+def prepare_config(size_config_url, size, pooling_size, min_area, bounding_box_type, loss_bg):
     config_dict = json.loads(requests.get(size_config_url).text)
 
     backbone_config = {}
@@ -175,7 +176,7 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, los
         head_final_dropout_rate=config_dict["head"]["final"]["dropout_rate"],
         head_final_ops_order=config_dict["head"]["final"]["ops_order"],
         min_area=min_area,
-        bbox_type=bbox_type,
+        bounding_box_type=bounding_box_type,
         loss_bg=loss_bg,
     )
 
@@ -204,10 +205,10 @@ def convert_fast_checkpoint(
     test_config = content_model.get("test_cfg", None)
     data_config = content_model["data"]
     min_area = 250
-    bbox_type = "rect"
+    bounding_box_type = "rect"
     if test_config is not None:
         min_area = test_config.get("min_area", min_area)
-        bbox_type = test_config.get("bbox_type", bbox_type)
+        bounding_box_type = test_config.get("bounding_box_type", bounding_box_type)
         loss_bg = test_config.get("loss_emb", None) == "EmbLoss_v2"
 
     # determine model type from content
@@ -222,14 +223,14 @@ def convert_fast_checkpoint(
 
     # get model config
     config, expected_slice_logits, expected_slice_boxes = get_model_config(
-        model_config, model_type, size, min_area, bbox_type, loss_bg
+        model_config, model_type, size, min_area, bounding_box_type, loss_bg
     )
     size = data_config.get("train", {}).get("short_size", size)
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"shortest_edge": size},
         min_area=config.min_area,
-        bbox_type=config.bbox_type,
+        bounding_box_type=config.bounding_box_type,
         pooling_size=config.head_pooling_size,
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -270,11 +271,11 @@ def convert_fast_checkpoint(
     target_sizes = [(image.height, image.width)]
     threshold = 0.88
     text_locations = fast_image_processor.post_process_text_detection(
-        output, target_sizes, threshold, bbox_type="rect"
+        output, target_sizes, threshold, bounding_box_type="rect"
     )
 
-    # bboxes means bounding boxes
-    assert text_locations[0]["bboxes"][0] == expected_slice_boxes
+    assert text_locations[0]["boxes"][0] == expected_slice_boxes
+    breakpoint()
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")

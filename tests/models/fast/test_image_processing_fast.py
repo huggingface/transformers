@@ -53,7 +53,7 @@ class FastImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         min_area: int = 200,
         min_score: float = 0.88,
-        bbox_type: str = "rect",
+        bounding_box_type: str = "rect",
         pooling_size: int = 9,
     ):
         size = size if size is not None else {"height": 20, "width": 20}
@@ -73,7 +73,7 @@ class FastImageProcessingTester(unittest.TestCase):
         self.image_std = image_std
         self.min_area = min_area
         self.min_score = min_score
-        self.bbox_type = bbox_type
+        self.bounding_box_type = bounding_box_type
         self.pooling_size = pooling_size
 
     def prepare_image_processor_dict(self):
@@ -87,7 +87,7 @@ class FastImageProcessingTester(unittest.TestCase):
             "image_std": self.image_std,
             "min_area": self.min_area,
             "min_score": self.min_score,
-            "bbox_type": self.bbox_type,
+            "bounding_box_type": self.bounding_box_type,
             "pooling_size": self.pooling_size,
         }
 
@@ -159,10 +159,10 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # TODO: check how to not hard code this
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
-        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="rect")
+        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bounding_box_type="rect")
 
         #TODO: align bbox format with transformer models
-        assert final_out[0]["bboxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
+        assert final_out[0]["boxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.91862
     
     @require_cv2

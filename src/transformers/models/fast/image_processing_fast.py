@@ -489,7 +489,7 @@ class FastImageProcessor(BaseImageProcessor):
         pooled_output = pooling(input_tensor)
         return pooled_output
 
-    def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", image_size=None):
+    def post_process_text_detection(self, output, target_sizes, threshold, bounding_box_type="rect", image_size=None):
         """
         Post-processes the raw model output to generate bounding boxes and scores for text detection.
 
@@ -498,7 +498,7 @@ class FastImageProcessor(BaseImageProcessor):
             target_sizes (List[Tuple[int, int]]): Original image sizes (height, width) for each item in the batch.
                                                 Used to scale detection results back to original image dimensions.
             threshold (float): Confidence threshold for filtering low-score text regions.
-            bbox_type (str, optional): Type of bounding box to return. Must be one of:
+            bounding_box_type (str, optional): Type of bounding box to return. Must be one of:
                                     - "rect": rotated bounding rectangles
                                     - "poly": polygon boundaries
             image_size (Tuple[int, int], optional): Size (height, width) of the image used during inference.
@@ -506,7 +506,7 @@ class FastImageProcessor(BaseImageProcessor):
 
         Returns:
             List[Dict]: A list of dictionaries, each containing:
-                - "bboxes" (np.ndarray): Array of detected bounding boxes in the specified format.
+                - "boxes" (np.ndarray): Array of detected bounding boxes in the specified format.
                 - "scores" (np.ndarray): Corresponding confidence scores for each bounding box.
         """
         scale = 2
@@ -526,7 +526,7 @@ class FastImageProcessor(BaseImageProcessor):
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
         labels_ = []
         for kernel in kernels.numpy():
-            ret, label_ = self.connected_components(kernel)
+            ret, label_ = connected_components(kernel)
             labels_.append(label_)
         labels_ = np.array(labels_)
         labels_ = torch.from_numpy(labels_)
@@ -547,15 +547,15 @@ class FastImageProcessor(BaseImageProcessor):
             org_image_size = target_sizes[i]
             scales = (float(org_image_size[1]) / float(image_size[1]), float(org_image_size[0]) / float(image_size[0]))
 
-            bboxes, scores = self.generate_bbox(
-                keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
+            bounding_boxes, scores = self.generate_bounding_box(
+                keys[i], labels[i], score_maps[i], scales, threshold, bounding_box_type=bounding_box_type
             )
-            results.append({"bboxes": bboxes, "scores": scores})
+            results.append({"boxes": bounding_boxes, "scores": scores})
         final_results.update({"results": results})
 
         return results
 
-    def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
+    def generate_bounding_box(self, keys, label, score, scales, threshold, bounding_box_type):
         """
         Generates bounding boxes and corresponding confidence scores from instance labels and score maps.
 
@@ -566,17 +566,17 @@ class FastImageProcessor(BaseImageProcessor):
             scales (Tuple[float, float]): Scaling factors (width_scale, height_scale) used to map results
                                         back to original image dimensions.
             threshold (float): Minimum average score required for a region to be considered a valid detection.
-            bbox_type (str): Type of bounding box to generate for each instance. Options:
+            bounding_box_type (str): Type of bounding box to generate for each instance. Options:
                             - "rect": Minimum area rotated rectangle (via `compute_min_area_rect`).
                             - "poly": Polygonal contour (via `cv2.findContours`, requires OpenCV).
 
         Returns:
             Tuple[List[List[int]], List[float]]:
-                - List of bounding boxes (`bboxes`), each a flattened list of coordinates.
+                - List of bounding boxes (`bounding_boxes`), each a flattened list of coordinates.
                 - List of corresponding confidence scores (`scores`).
         """
         label_num = len(keys)
-        bboxes = []
+        bounding_boxes = []
         scores = []
         for index in range(1, label_num):
             i = keys[index]
@@ -591,24 +591,24 @@ class FastImageProcessor(BaseImageProcessor):
                 label[ind] = 0
                 continue
 
-            if bbox_type == "rect":
+            if bounding_box_type == "rect":
                 rect = compute_min_area_rect(points[:, ::-1])
                 alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
                 rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-                bbox = get_box_points(rect) * scales
+                bounding_box = get_box_points(rect) * scales
 
-            elif bbox_type == "poly":
+            elif bounding_box_type == "poly":
                 requires_backend(self, "cv2")
                 binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
                 # cv2.findContours is too complex to replicate :(
                 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                bbox = contours[0] * scales
-            bbox = bbox.astype("int32")
-            bboxes.append(bbox.reshape(-1).tolist())
+                bounding_box = contours[0] * scales
+            bounding_box = bounding_box.astype("int32")
+            bounding_boxes.append(bounding_box.reshape(-1).tolist())
             scores.append(score_i)
 
-        return bboxes, scores
+        return bounding_boxes, scores
 
 
 __all__ = ["FastImageProcessor"]
