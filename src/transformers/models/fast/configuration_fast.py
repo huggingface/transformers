@@ -56,7 +56,7 @@ class FastConfig(PretrainedConfig):
             Each element is a tuple of two integers, specifying the stride along the height and width.
         head_pooling_size (`int`, *optional*, defaults to 9):
             Denotes the pooling size for the head layer. This integer specifies the size of the pooling window.
-        head_dropout_ratio (`float`, *optional*, defaults to 0.0):
+        head_dropout_ratio (`float`, *optional*, defaults to `0.0`):
             Denotes the dropout ratio used in the dropout layer of the head. Should be a float between 0 and 1, where 0 means no dropout and 1 means full dropout.
         head_conv_in_channels (`int`, *optional*, defaults to 512):
             Denotes the in channels of first conv layer in head layer.

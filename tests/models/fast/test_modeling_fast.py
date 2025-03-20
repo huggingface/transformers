@@ -323,6 +323,10 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_generate_from_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Fast does not generate text")
+    def test_generation_tester_mixin_inheritance(self):
+        pass
+
 
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
