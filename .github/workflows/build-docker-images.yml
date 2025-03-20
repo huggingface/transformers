@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - metadata_job
+      - metadata_job_2
   repository_dispatch:
   workflow_call:
     inputs:
