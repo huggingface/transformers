@@ -877,6 +877,8 @@ class ProcessorMixin(PushToHubMixin):
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
                 chat_template_json = json.loads(reader.read())
                 chat_templates = chat_template_json["chat_template"]
+                if isinstance(chat_templates, dict):
+                    chat_templates = {template["name"]: template["template"] for template in chat_templates}
                 if resolved_additional_chat_template_files:
                     raise ValueError(
                         "Cannot load chat template due to conflicting files - this checkpoint combines "
