@@ -30,7 +30,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from einops import rearrange
 from flash_attn.bert_padding import pad_input, unpad_input
 from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func as flash_attn_unpadded_qkvpacked_func
 from timm.models.layers import DropPath
@@ -103,7 +102,7 @@ class FlashAttention(nn.Module):
             batch_size = qkv.shape[0]
             seqlen = qkv.shape[1]
             if key_padding_mask is None:
-                qkv = rearrange(qkv, "b s ... -> (b s) ...")
+                qkv = qkv.view(batch_size * seqlen, *qkv.shape[2:])
                 max_s = seqlen
                 cu_seqlens = torch.arange(
                     0, (batch_size + 1) * seqlen, step=seqlen, dtype=torch.int32, device=qkv.device
@@ -116,12 +115,12 @@ class FlashAttention(nn.Module):
                     softmax_scale=self.softmax_scale,
                     causal=causal,
                 )
-                output = rearrange(output, "(b s) ... -> b s ...", b=batch_size)
+                output = output.view(batch_size, seqlen, *output.shape[2:])
             else:
                 nheads = qkv.shape[-2]
-                x = rearrange(qkv, "b s three h d -> b s (three h d)")
+                x = qkv.view(batch_size, seqlen, -1)
                 x_unpad, indices, cu_seqlens, max_s = unpad_input(x, key_padding_mask)
-                x_unpad = rearrange(x_unpad, "nnz (three h d) -> nnz three h d", three=3, h=nheads)
+                x_unpad = x_unpad.view(x_unpad.shape[0], 3, nheads, -1)
                 output_unpad = flash_attn_unpadded_qkvpacked_func(
                     x_unpad,
                     cu_seqlens,
@@ -130,11 +129,8 @@ class FlashAttention(nn.Module):
                     softmax_scale=self.softmax_scale,
                     causal=causal,
                 )
-                output = rearrange(
-                    pad_input(rearrange(output_unpad, "nnz h d -> nnz (h d)"), indices, batch_size, seqlen),
-                    "b s (h d) -> b s h d",
-                    h=nheads,
-                )
+                output = pad_input(output_unpad.view(output_unpad.shape[0], -1), indices, batch_size, seqlen)
+                output = output.view(output.shape[0], output.shape[1], nheads, -1)
         else:
             assert max_s is not None
             output = flash_attn_unpadded_qkvpacked_func(
@@ -257,7 +253,7 @@ class InternAttention(nn.Module):
 
     def _flash_attn(self, x, key_padding_mask=None, need_weights=False):
         qkv = self.qkv(x)
-        qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
+        qkv = qkv.view(qkv.shape[0], qkv.shape[1], 3, self.num_heads, -1)
 
         if self.qk_normalization:
             q, k, v = qkv.unbind(2)
@@ -266,7 +262,7 @@ class InternAttention(nn.Module):
             qkv = torch.stack([q, k, v], dim=2)
 
         context, _ = self.inner_attn(qkv, key_padding_mask=key_padding_mask, need_weights=need_weights, causal=False)
-        outs = self.proj(rearrange(context, "b s h d -> b s (h d)"))
+        outs = self.proj(context.view(context.shape[0], context.shape[1], -1))
         outs = self.proj_drop(outs)
         return outs
 
