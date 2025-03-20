@@ -3887,7 +3887,7 @@ class Trainer:
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
             push_kwargs = self.args.hub_push_kwargs or {}
-            self.push_to_hub(commit_message="Model save", **push_kwargs) # Pass hub_push_kwargs here
+            self.push_to_hub(commit_message="Model save", **push_kwargs)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -4719,7 +4719,7 @@ class Trainer:
         else:
             commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-        push_kwargs = self.args.hub_push_kwargs or {} # Retrieve hub_push_kwargs
+        push_kwargs = self.args.hub_push_kwargs or {}
         model_push_job = upload_folder(
             repo_id=self.hub_model_id,
             folder_path=output_dir,
@@ -4727,7 +4727,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
-            **push_kwargs # Pass hub_push_kwargs here
+            **push_kwargs
         )
 
         push_jobs = [model_push_job]
@@ -4743,7 +4743,7 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
-                **push_kwargs # Pass hub_push_kwargs here
+                **push_kwargs
             )
             push_jobs.append(checkpoint_push)
 
@@ -4825,7 +4825,7 @@ class Trainer:
 
         # Wait for the current upload to be finished.
         self._finish_current_push()
-        push_kwargs = self.args.hub_push_kwargs or {} # Retrieve hub_push_kwargs
+        push_kwargs = self.args.hub_push_kwargs or {}
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
@@ -4834,7 +4834,7 @@ class Trainer:
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
             revision=revision,
-            **push_kwargs # Pass hub_push_kwargs here
+            **push_kwargs
         )
 
     #

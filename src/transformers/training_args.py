@@ -199,7 +199,7 @@ _VALID_DICT_FIELDS = [
     "deepspeed",
     "gradient_checkpointing_kwargs",
     "lr_scheduler_kwargs",
-    "hub_push_kwargs" # ADDED HERE
+    "hub_push_kwargs"
 ]
 
 
@@ -2916,7 +2916,7 @@ class TrainingArguments:
         token: Optional[str] = None,
         private_repo: Optional[bool] = None,
         always_push: bool = False,
-        hub_push_kwargs: Optional[Dict[str, Any]] = None, # ADDED HERE
+        hub_push_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
@@ -2960,7 +2960,7 @@ class TrainingArguments:
             always_push (`bool`, *optional*, defaults to `False`):
                 Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
                 finished.
-            hub_push_kwargs (`Dict[str, Any]`, *optional*): # ADDED HERE
+            hub_push_kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments to pass to the push_to_hub function when pushing automatically during training.
 
         Example:
@@ -2980,7 +2980,7 @@ class TrainingArguments:
         self.hub_token = token
         self.hub_private_repo = private_repo
         self.hub_always_push = always_push
-        self.hub_push_kwargs = hub_push_kwargs # ADDED HERE
+        self.hub_push_kwargs = hub_push_kwargs
         return self
 
     def set_optimizer(
