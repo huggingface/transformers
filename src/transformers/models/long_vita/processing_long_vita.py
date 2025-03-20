@@ -25,7 +25,6 @@ import re
 
 import numpy as np
 import torch
-import natsort
 import decord
 from PIL import Image
 
@@ -179,8 +178,7 @@ class ImageProcessor:
             if len(all_filepath) == 0:
                 return None
 
-            # all_filepath.sort()
-            all_filepath = natsort.natsorted(all_filepath)
+            all_filepath.sort()
             total_frame = len(all_filepath)
             if "ShareGPTVideo" in video_file_or_dir:
                 fps = 2

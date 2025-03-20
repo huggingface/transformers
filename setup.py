@@ -150,10 +150,8 @@ _deps = [
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
     "pytest-asyncio",
-    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
-    "pytest-order",
     "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
@@ -318,7 +316,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("av")
+extras["video"] = deps_list("av", "decord")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
@@ -328,8 +326,6 @@ extras["testing"] = (
         "pytest-asyncio",
         "pytest-rich",
         "pytest-xdist",
-        "pytest-order",
-        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
