@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,12 +23,12 @@ import math
 import os
 import sys
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
 from logging import StreamHandler
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -221,7 +220,7 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
 
 
 def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]],
+    scalars: list[Union[int, float]],
     num_total_examples: Optional[int] = None,
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
@@ -624,7 +623,7 @@ class LengthGroupedSampler(Sampler):
         self,
         batch_size: int,
         dataset: Optional[Dataset] = None,
-        lengths: Optional[List[int]] = None,
+        lengths: Optional[list[int]] = None,
         model_input_name: Optional[str] = None,
         generator=None,
     ):
@@ -675,7 +674,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         rank: Optional[int] = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[List[int]] = None,
+        lengths: Optional[list[int]] = None,
         model_input_name: Optional[str] = None,
     ):
         if dataset is None and lengths is None:
@@ -936,7 +935,7 @@ def _secs2timedelta(secs):
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format
 
@@ -1080,7 +1079,7 @@ def save_metrics(self, split, metrics, combined=True):
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path) as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
@@ -1300,7 +1299,7 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[Dict] = field(
+    gradient_accumulation_kwargs: Optional[dict] = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
