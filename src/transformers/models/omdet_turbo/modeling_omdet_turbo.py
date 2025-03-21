@@ -575,10 +575,9 @@ class OmDetTurboCSPRepLayer(nn.Module):
             self.conv3 = nn.Identity()
 
     def forward(self, hidden_state):
-        device = hidden_state.device
         hidden_state_1 = self.conv1(hidden_state)
-        hidden_state_1 = self.bottlenecks(hidden_state_1).to(device)
-        hidden_state_2 = self.conv2(hidden_state).to(device)
+        hidden_state_1 = self.bottlenecks(hidden_state_1)
+        hidden_state_2 = self.conv2(hidden_state)
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 

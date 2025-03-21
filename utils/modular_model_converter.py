@@ -253,10 +253,29 @@ def get_docstring_indent(docstring):
     return 0
 
 
+def is_full_docstring(new_docstring: str) -> bool:
+    """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
+    be merged with the existing old one.
+    """
+    # libcst returns the docstrinbgs with literal `r"""` quotes in front
+    new_docstring = new_docstring.split('"""', 1)[1]
+    # The docstring contains Args definition, so it is self-contained
+    if re.search(r"\n\s*Args:\n", new_docstring):
+        return True
+    # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
+    # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
+    match_object = re.search(r"\n([^\S\n]*)Returns:\n", new_docstring)
+    if match_object is not None:
+        full_indent = match_object.group(1)
+        striped_doc = new_docstring.strip("\n")
+        if striped_doc.startswith(full_indent + " " * 4) or striped_doc.startswith(full_indent + "\t"):
+            return True
+    return False
+
+
 def merge_docstrings(original_docstring, updated_docstring):
-    # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    if not re.findall(r"\n\s*Args:\n", updated_docstring):
+    if not is_full_docstring(updated_docstring):
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
@@ -518,6 +537,9 @@ def find_all_dependencies(
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
 ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
 
+# Top-level variables that match the following patterns will use the value in the `modular_xxx.py` file only if they are not None
+ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE = [r"_DOCSTRING"]
+
 
 class ClassDependencyMapper(CSTVisitor):
     """A visitor which is designed to analyze a single class node to get all its dependencies that are shared with the set of
@@ -649,9 +671,11 @@ class ModuleMapper(CSTVisitor, ABC):
             self.current_function = None
 
     def visit_If(self, node):
-        for stmt in node.body.body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports.append(node)
+        # If we are inside a function, do not add the import to the list of imports
+        if self.current_function is None:
+            for stmt in node.body.body:
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                    self.imports.append(node)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
@@ -833,13 +857,17 @@ class ModelFileMapper(ModuleMapper):
         """Update the global nodes with the assignment from the modular file.
 
         Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
-        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
-        big docstrings.
+        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE` and its value is not None, or if it matches a pattern in `ASSIGNMENTS_REGEX_TO_KEEP.
+        Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the big docstrings.
         """
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
 
-            if should_keep or assignment not in self.assignments:
+            should_keep_if_not_none = any(
+                re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE
+            ) and not (hasattr(node.body[0].value, "value") and node.body[0].value.value == "None")
+
+            if should_keep or should_keep_if_not_none or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
@@ -1066,8 +1094,7 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
-    "FastImageProcessorInitKwargs": "image_processing*_fast",
-    "FastImageProcessorPreprocessKwargs": "image_processing*_fast",
+    "FastImageProcessorKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1121,7 +1148,7 @@ def append_new_import_node(
 def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """Get all the imports needed in the `body`, from the list of `all_imports`.
     `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
-    Note: we need to use `isinstance` on scope assignements, m.matches apparently does not work here yet!
+    Note: we need to use `isinstance` on scope assignments, m.matches apparently does not work here yet!
     """
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
@@ -1595,7 +1622,7 @@ def get_class_node_and_dependencies(
 
 
 def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
-    """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
+    """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
     current_file_indices = defaultdict(lambda: 0)
 

@@ -289,6 +289,13 @@ class FuyuProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Gemma3ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class GLPNFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -577,6 +584,13 @@ class PoolFormerFeatureExtractor(metaclass=DummyObject):
 
 
 class PoolFormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class PromptDepthAnythingImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

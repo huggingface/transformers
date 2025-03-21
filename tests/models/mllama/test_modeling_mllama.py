@@ -392,7 +392,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     @pytest.mark.generate
-    # overriden because mllama has special cache for self and cross attentions
+    # overridden because mllama has special cache for self and cross attentions
     def test_past_key_values_format(self):
         # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
         # standard KV cache format is important for a consistent API (and for advanced generation methods).
@@ -414,7 +414,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
-            # some models have diffent num-head for query vs key/value so we need to assign correct value
+            # some models have different num-head for query vs key/value so we need to assign correct value
             # BUT only after `per_head_embed_dim` is set
             num_attention_heads = (
                 text_config.num_key_value_heads
@@ -444,7 +444,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                         past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
                     )
 
-    # overriden because mllama has special cache for self and cross attentions
+    # overridden because mllama has special cache for self and cross attentions
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
         self.assertIsInstance(decoder_past_key_values, Cache)
         self.assertListEqual(

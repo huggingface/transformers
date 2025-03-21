@@ -338,7 +338,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     @unittest.skip(
-        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
     def test_load_save_without_tied_weights(self):
         pass
@@ -433,7 +433,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_flash_attn_2_seq_to_seq_generation(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = M2M100ForConditionalGeneration.from_pretrained(
             "facebook/m2m100_418M", attn_implementation="flash_attention_2"
