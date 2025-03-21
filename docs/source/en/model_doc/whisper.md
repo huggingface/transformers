@@ -57,6 +57,7 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 <hfoption id="AutoModel">
 
 ```py
+# pip install datasets
 import torch
 from datasets import load_dataset
 from transformers import AutoProcessor, WhisperForConditionalGeneration
