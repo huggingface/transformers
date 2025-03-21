@@ -658,6 +658,7 @@ class Long_vitaProcessorKwargs(ProcessingKwargs, total=False):
         "videos_kwargs": {"fps": 2.0},
     }
 
+
 class Long_vitaImagesKwargs(ImagesKwargs, total=False):
     crop_to_patches: Optional[bool]
     min_patches: Optional[int]

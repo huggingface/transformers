@@ -77,7 +77,7 @@ messages = [
         ],
     },
 ]
-
+pipe = pipeline("image-text-to-text", model="VITA-MLLM/Long-VITA-16K_HF", device_map="sequential", chat_template=chat_template, torch_dtype=torch.bfloat16)
 outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
 outputs[0]["generated_text"]
 print(outputs[0]["generated_text"])
@@ -146,7 +146,7 @@ messages = [
             ],
         },
     ]
-
+pipe = pipeline("image-text-to-text", model="VITA-MLLM/Long-VITA-16K_HF", device_map="sequential", chat_template=chat_template, torch_dtype=torch.bfloat16)
 outputs = pipe(text=messages, max_new_tokens=50, return_full_text=False)
 outputs[0]["generated_text"]
 ```
