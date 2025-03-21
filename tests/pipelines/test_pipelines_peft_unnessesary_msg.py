@@ -1,7 +1,11 @@
 import torch
-
-from transformers import pipeline, AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 from peft import PeftModel
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    pipeline,
+)
 
 ADAPTER_PATH = "sajjadhadi/Disease-Diagnosis-Qwen2.5-0.5B"
 BASE_PATH = "Qwen/Qwen2.5-0.5B"
@@ -18,10 +22,8 @@ model = AutoModelForCausalLM.from_pretrained(
     BASE_PATH,
     quantization_config=BNB_CONFG,
     torch_dtype=torch.float16,
-    device_map = 'auto',
+    device_map="auto",
 )
-
-
 
 tokenizer = AutoTokenizer.from_pretrained(BASE_PATH)
 default_generator = pipeline(
@@ -32,20 +34,17 @@ default_generator = pipeline(
     torch_dtype=torch.float16,
     max_length=10,
     truncation=True,
-    max_new_tokens=10, 
+    max_new_tokens=10,  # 2. 후행 공백 제거
 )
 print(f"this is base model result: {default_generator(text)}")
-
-
 
 lora_model = PeftModel.from_pretrained(
     model,
     ADAPTER_PATH,
     quantization_config=BNB_CONFG,
     torch_dtype=torch.float16,
-    device_map = 'auto',
+    device_map="auto",
 )
-
 
 lora_generator = pipeline(
     task="text-generation",
@@ -58,6 +57,5 @@ lora_generator = pipeline(
     max_new_tokens=10,
 )
 print(f"this is lora model result: {lora_generator(text)}")
-
 
 print("\nIf no error message appears between the two outputs, the fix is working correctly!")
