@@ -70,6 +70,12 @@ _import_structure = {
         "replace_with_higgs_linear",
     ],
     "hqq": ["prepare_for_hqq_linear"],
+    "hub_kernels": [
+        "LayerRepository",
+        "register_kernel_mapping",
+        "replace_kernel_forward_from_hub",
+        "use_kernel_forward_from_hub",
+    ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
         "AzureMLCallback",
@@ -198,6 +204,12 @@ if TYPE_CHECKING:
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
+    from .hub_kernels import (
+        LayerRepository,
+        register_kernel_mapping,
+        replace_kernel_forward_from_hub,
+        use_kernel_forward_from_hub,
+    )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
         AzureMLCallback,
