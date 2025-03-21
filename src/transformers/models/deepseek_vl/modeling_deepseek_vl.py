@@ -13,9 +13,11 @@ from ...generation import GenerationMixin
 from ..siglip.modeling_siglip import SiglipVisionModel
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..sam.configuration_sam import SamVisionConfig
+# TODO: replace SamVisionEncoder with SamVisionModel
+# when https://github.com/huggingface/transformers/pull/36493 is merged
 from ..sam.modeling_sam import SamVisionEncoder
 from ..llama.modeling_llama import LlamaForCausalLM
-from .configuration_deepseek_vl import DeepseekVLVisionConfig, DeepseekVLConfig
+from .configuration_deepseek_vl import DeepseekVLConfig
 
 
 class DeepseekVLSamVisionNeck(nn.Module):
@@ -75,7 +77,8 @@ class DeepseekVLSamVisionEncoder(nn.Module):
         last_hidden_state = output[0]
         last_hidden_state = self.neck(last_hidden_state)
 
-        global_hidden_state = output[1][self.global_attn_index+1] # +1 for embedding layer
+        hidden_states = output[1]
+        global_hidden_state = hidden_states[self.global_attn_index+1] # +1 for embedding layer
         global_hidden_state = self.global_neck(global_hidden_state)
         global_hidden_state = self.neck(global_hidden_state)
 
@@ -106,51 +109,33 @@ class DeepseekVLSiglipVisionEncoder(nn.Module):
         return output
 
 
-class DeepseekVLVisionEncoder(nn.Module):
-    def __init__(self, config: DeepseekVLVisionConfig):
-        super().__init__()
-        self.config = config
-        self.use_high_res = config.use_high_res
-
-        # siglip is used for low resolution encoding
-        self.low_res_encoder = DeepseekVLSiglipVisionEncoder(config.low_res_config)
-        # sam is used for high resolution encoding
-        if self.use_high_res:
-            self.high_res_encoder = DeepseekVLSamVisionEncoder(config.high_res_config)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size, n_images, n_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.view(batch_size * n_images, n_channels, height, width)
-
-        low_res_encodings = self.low_res_encoder(pixel_values)
-        high_res_encodings = self.high_res_encoder(pixel_values) if self.use_high_res else None
-
-        return low_res_encodings, high_res_encodings
-
-
 class DeepseekVLAligner(nn.Module):
     def __init__(self, config: DeepseekVLConfig):
         super().__init__()
         self.config = config
-        self.use_high_res = config.vision_config.use_high_res
+        self.use_high_res_vision = config.use_high_res_vision
 
-        low_res_in_channels = config.vision_config.low_res_config.hidden_size
-        high_res_in_channels = config.vision_config.high_res_config.output_channels * 4
+        low_res_vision_in_channels = config.low_res_vision_config.hidden_size
+        high_res_vision_in_channels = config.high_res_vision_config.output_channels * 4
         out_channels = config.text_config.hidden_size
-        if self.use_high_res:
-            self.low_res_proj = nn.Linear(low_res_in_channels, out_channels // 2)
-            self.high_res_proj = nn.Linear(high_res_in_channels, out_channels // 2)
+        if self.use_high_res_vision:
+            self.low_res_vision_proj = nn.Linear(low_res_vision_in_channels, out_channels // 2)
+            self.high_res_vision_proj = nn.Linear(high_res_vision_in_channels, out_channels // 2)
         else:
-            self.low_res_proj = nn.Linear(low_res_in_channels, out_channels)
+            self.low_res_vision_proj = nn.Linear(low_res_vision_in_channels, out_channels)
 
         self.act = nn.GELU()
         self.proj = nn.Linear(out_channels, out_channels)
 
-    def forward(self, low_res_encodings: torch.Tensor, high_res_encodings: Optional[torch.Tensor]) -> torch.Tensor:
-        encodings = self.low_res_proj(low_res_encodings)
-        if self.use_high_res:
-            high_res_encodings = self.high_res_proj(high_res_encodings)
-            encodings = torch.concat([high_res_encodings, encodings], dim=-1)
+    def forward(
+            self,
+            low_res_vision_encodings: torch.Tensor,
+            high_res_vision_encodings: Optional[torch.Tensor] = None,
+        ) -> torch.Tensor:
+        encodings = self.low_res_vision_proj(low_res_vision_encodings)
+        if self.use_high_res_vision:
+            high_res_vision_encodings = self.high_res_vision_proj(high_res_vision_encodings)
+            encodings = torch.concat([high_res_vision_encodings, encodings], dim=-1)
 
         encodings = self.act(encodings)
         encodings = self.proj(encodings)
@@ -168,7 +153,11 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.vision_model = DeepseekVLVisionEncoder(config.vision_config)
+        self.use_high_res_vision = config.use_high_res_vision
+
+        self.low_res_vision_encoder = DeepseekVLSiglipVisionEncoder(config.low_res_vision_config)
+        if self.use_high_res_vision:
+            self.high_res_vision_encoder = DeepseekVLSamVisionEncoder(config.high_res_vision_config) 
         self.language_model = LlamaForCausalLM(config.text_config)
         self.aligner = DeepseekVLAligner(config)
 
@@ -179,10 +168,17 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_embeddings(self, pixel_values):
-        low_res_embeds, high_res_embeds = self.vision_model(pixel_values=pixel_values)
-        images_embeds = self.aligner(low_res_embeds, high_res_embeds)
-        # (batch_size * n_images, seq_len, hidden_size) -> (batch_size, n_images * seq_len, hidden_size)
-        images_embeds = images_embeds.reshape(pixel_values.shape[0], -1, images_embeds.shape[-1])
+        batch_size, n_images, n_channels, height, width = pixel_values.shape
+
+        pixel_values = pixel_values.view(batch_size * n_images, n_channels, height, width)
+
+        vision_encodings = (self.low_res_vision_encoder(pixel_values),)
+        if self.use_high_res_vision:
+            vision_encodings += (self.high_res_vision_encoder(pixel_values),)
+        images_embeds = self.aligner(*vision_encodings)
+
+        images_embeds = images_embeds.reshape(batch_size, -1, images_embeds.shape[-1])
+
         return images_embeds
 
     def forward(
@@ -223,7 +219,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         )
 
 
-class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):
+class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
