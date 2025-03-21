@@ -5918,9 +5918,8 @@ class AttentionInterface(object):
         # Allow local update of the default functions without impacting other instances
         self._local_mapping.update({key: value})
 
-    @classmethod
-    def valid_keys(cls):
-        return list(cls._global_mapping.keys())
+    def valid_keys(self):
+        return set(self._global_mapping.keys()) + set(self._local_mapping.keys())
 
 
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
