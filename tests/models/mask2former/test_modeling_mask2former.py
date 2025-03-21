@@ -542,6 +542,17 @@ class TestMask2FormerModelInitialization(unittest.TestCase):
         """Test that multiscale deformable attention is properly initialized"""
         for name, module in self.model.named_modules():
             if isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
+                # Check weight initialization
                 self.assertTrue(torch.all(module.sampling_offsets.weight.data == 0.0))
                 self.assertTrue(torch.all(module.attention_weights.weight.data == 0.0))
                 self.assertFalse(torch.all(module.value_proj.weight.data == 0.0))
+                
+                # For bias, use a small tolerance to account for floating point precision
+                if hasattr(module.sampling_offsets, 'bias') and module.sampling_offsets.bias is not None:
+                    # All values should be close to their intended values
+                    # This is more tolerant of floating point precision issues
+                    self.assertTrue(torch.allclose(
+                        module.sampling_offsets.bias.data, 
+                        module.sampling_offsets.bias.data.round(), 
+                        atol=1e-5
+                    ))

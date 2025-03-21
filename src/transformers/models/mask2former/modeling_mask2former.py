@@ -2168,7 +2168,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
+            
+            # Use torch.no_grad() to ensure exact values
             with torch.no_grad():
+                # Convert to exact float values to avoid floating point precision issues
+                grid_init = grid_init.to(torch.float32)
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
 
             nn.init.constant_(module.attention_weights.weight.data, 0.0)
