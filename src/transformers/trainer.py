@@ -2505,7 +2505,7 @@ class Trainer:
             for _ in range(total_updates):
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
-                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
+                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
                 for i, inputs in enumerate(batch_samples):
                     step += 1
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
@@ -5202,22 +5202,21 @@ class Trainer:
 
     def _fsdp_qlora_plugin_updates(self):
         if self.is_fsdp_enabled and _is_peft_model(self.model):
-            from peft import LoraConfig
+            from peft import PeftConfig
             from peft.utils.other import fsdp_auto_wrap_policy
 
-            if isinstance(self.model.active_peft_config, LoraConfig):
-                fsdp_plugin = self.accelerator.state.fsdp_plugin
-                fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
+            if isinstance(self.model.active_peft_config, PeftConfig):
+                self.accelerator.state.fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
             if (
                 getattr(self.model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
                 and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
                 and version.parse(accelerate_version) > version.parse("0.27.0")
             ):
-                fsdp_plugin.set_mixed_precision(
+                self.accelerator.state.fsdp_plugin.set_mixed_precision(
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def get_batch_samples(self, epoch_iterator, num_batches):
+    def get_batch_samples(self, epoch_iterator, num_batches, device):
         batch_samples = []
         num_items_in_batch = None
 
@@ -5249,11 +5248,12 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
-            num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
+        if num_items_in_batch is not None:
+            if self.args.average_tokens_across_devices:
+                num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
 
-        if torch.is_tensor(num_items_in_batch):
-            num_items_in_batch = num_items_in_batch.item()
+            if torch.is_tensor(num_items_in_batch):
+                num_items_in_batch = num_items_in_batch.to(device)
 
         return batch_samples, num_items_in_batch
 
